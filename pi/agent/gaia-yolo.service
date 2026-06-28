@@ -1,0 +1,17 @@
+[Unit]
+Description=GAIA YOLO Vision
+After=network.target
+# Gestito da gaia-agent — NON abilitare con systemctl enable
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/opt/gaia/Yolo-Scripts
+ExecStart=/opt/gaia/Yolo-Scripts/start.sh
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+Environment=MQTT_HOST=192.168.1.142
+
+[Install]

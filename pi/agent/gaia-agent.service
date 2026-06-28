@@ -1,0 +1,18 @@
+[Unit]
+Description=GAIA Agent — controller servizi Pi
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/opt/gaia/gaia-agent
+ExecStart=/opt/gaia/gaia-agent/start.sh
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+Environment=MQTT_HOST=192.168.1.142
+
+[Install]
+WantedBy=multi-user.target

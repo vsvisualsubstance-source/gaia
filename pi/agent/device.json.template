@@ -1,0 +1,10 @@
+{
+  "device_id": "pi-CONFIGURA",
+  "stanza": "ingresso",
+  "services": {
+    "yolo":      {"enabled": false},
+    "mediapipe": {"enabled": false},
+    "voice":     {"enabled": false}
+  },
+  "_nota": "device_id viene rilevato automaticamente dal MAC address se lasciato come 'pi-CONFIGURA'. Cambia 'stanza' con il nome della stanza del Pi."
+}

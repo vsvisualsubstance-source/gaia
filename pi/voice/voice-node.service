@@ -1,0 +1,20 @@
+[Unit]
+Description=GAIA Voice Node
+After=network.target sound.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/opt/gaia/voice-node
+ExecStart=/opt/gaia/voice-node/start.sh
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Configura stanza e MQTT host
+Environment=CAMERA_NAME=ingresso
+Environment=MQTT_HOST=192.168.1.142
+
+[Install]
+WantedBy=multi-user.target

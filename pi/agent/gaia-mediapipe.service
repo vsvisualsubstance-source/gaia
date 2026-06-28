@@ -1,0 +1,17 @@
+[Unit]
+Description=GAIA MediaPipe Vision
+After=network.target
+# Gestito da gaia-agent — NON abilitare con systemctl enable
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/opt/gaia/mediapipe-script
+ExecStart=/opt/gaia/mediapipe-script/start.sh
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+Environment=MQTT_HOST=192.168.1.142
+
+[Install]

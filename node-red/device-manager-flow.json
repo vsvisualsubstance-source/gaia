@@ -1,0 +1,388 @@
+[
+  {
+    "id": "tab-device-mgr",
+    "type": "tab",
+    "label": "GAIA Devices",
+    "disabled": false,
+    "info": "Gestione centralizzata dei Raspberry Pi GAIA.\nImporta: Menu → Import → seleziona questo file."
+  },
+
+  {
+    "id": "dm-status-in",
+    "type": "mqtt in",
+    "z": "tab-device-mgr",
+    "name": "Status Pi",
+    "topic": "gaia/device/+/status",
+    "qos": "0",
+    "datatype": "json",
+    "broker": "29b6d5926d1a95ec",
+    "nl": false,
+    "rap": true,
+    "rh": 1,
+    "inputs": 0,
+    "x": 150,
+    "y": 100,
+    "wires": [["dm-fn-register", "dm-debug"]]
+  },
+
+  {
+    "id": "dm-fn-register",
+    "type": "function",
+    "z": "tab-device-mgr",
+    "name": "Registra / aggiorna device",
+    "func": "const d = msg.payload;\nconst id = d.device_id;\nif (!id) return null;\n\nconst devices = flow.get('devices') || {};\ndevices[id] = {\n    device_id:    id,\n    stanza:       d.stanza,\n    ip:           d.ip,\n    capabilities: d.capabilities || {},\n    services:     d.services     || {},\n    config:       d.config       || {},\n    uptime:       d.uptime       || 0,\n    last_seen:    Date.now(),\n    online:       true\n};\nflow.set('devices', devices);\n\n// Conta dispositivi online\nconst online = Object.values(devices).filter(x => x.online).length;\nflow.set('devices_online', online);\n\nnode.status({ fill:'green', shape:'dot', text: online + ' device/s online' });\nreturn null;",
+    "outputs": 0,
+    "noerr": 0,
+    "x": 410,
+    "y": 100,
+    "wires": []
+  },
+
+  {
+    "id": "dm-debug",
+    "type": "debug",
+    "z": "tab-device-mgr",
+    "name": "Device Log",
+    "active": false,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "x": 410,
+    "y": 60,
+    "wires": []
+  },
+
+  {
+    "id": "dm-offline-check",
+    "type": "inject",
+    "z": "tab-device-mgr",
+    "name": "Check offline (ogni 60s)",
+    "props": [{"p": "payload"}],
+    "repeat": "60",
+    "crontab": "",
+    "once": false,
+    "onceDelay": "10",
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 190,
+    "y": 180,
+    "wires": [["dm-fn-offline"]]
+  },
+
+  {
+    "id": "dm-fn-offline",
+    "type": "function",
+    "z": "tab-device-mgr",
+    "name": "Marca offline > 90s",
+    "func": "const devices = flow.get('devices') || {};\nconst now = Date.now();\nconst TIMEOUT = 90000;\n\nlet changed = false;\nObject.keys(devices).forEach(id => {\n    const was_online = devices[id].online;\n    devices[id].online = (now - devices[id].last_seen) < TIMEOUT;\n    if (was_online && !devices[id].online) {\n        node.warn('Device offline: ' + id);\n        changed = true;\n    }\n});\n\nif (changed) flow.set('devices', devices);\n\nconst online = Object.values(devices).filter(x => x.online).length;\nflow.set('devices_online', online);\nnode.status({ fill: online > 0 ? 'green' : 'red', shape: 'dot', text: online + '/' + Object.keys(devices).length + ' online' });\nreturn null;",
+    "outputs": 0,
+    "noerr": 0,
+    "x": 430,
+    "y": 180,
+    "wires": []
+  },
+
+  {
+    "id": "dm-comment-commands",
+    "type": "comment",
+    "z": "tab-device-mgr",
+    "name": "── COMANDI SINGOLO DEVICE ──",
+    "info": "",
+    "x": 200,
+    "y": 280,
+    "wires": []
+  },
+
+  {
+    "id": "dm-in-device-id",
+    "type": "inject",
+    "z": "tab-device-mgr",
+    "name": "Seleziona device",
+    "props": [{"p": "device_id", "v": "pi-AABBCC", "vt": "str"}],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "topic": "",
+    "x": 180,
+    "y": 340,
+    "wires": [["dm-fn-enable-yolo", "dm-fn-disable-yolo", "dm-fn-enable-mediapipe", "dm-fn-disable-mediapipe", "dm-fn-enable-voice", "dm-fn-disable-voice", "dm-fn-restart-svc", "dm-fn-set-config", "dm-fn-reboot"]]
+  },
+
+  {
+    "id": "dm-fn-enable-yolo",
+    "type": "function",
+    "z": "tab-device-mgr",
+    "name": "Enable YOLO",
+    "func": "return { topic: 'gaia/device/' + msg.device_id + '/command',\n         payload: JSON.stringify({ action: 'enable', service: 'yolo' }) };",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 440,
+    "y": 300,
+    "wires": [["dm-mqtt-out"]]
+  },
+
+  {
+    "id": "dm-fn-disable-yolo",
+    "type": "function",
+    "z": "tab-device-mgr",
+    "name": "Disable YOLO",
+    "func": "return { topic: 'gaia/device/' + msg.device_id + '/command',\n         payload: JSON.stringify({ action: 'disable', service: 'yolo' }) };",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 440,
+    "y": 340,
+    "wires": [["dm-mqtt-out"]]
+  },
+
+  {
+    "id": "dm-fn-enable-mediapipe",
+    "type": "function",
+    "z": "tab-device-mgr",
+    "name": "Enable MediaPipe",
+    "func": "return { topic: 'gaia/device/' + msg.device_id + '/command',\n         payload: JSON.stringify({ action: 'enable', service: 'mediapipe' }) };",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 450,
+    "y": 380,
+    "wires": [["dm-mqtt-out"]]
+  },
+
+  {
+    "id": "dm-fn-disable-mediapipe",
+    "type": "function",
+    "z": "tab-device-mgr",
+    "name": "Disable MediaPipe",
+    "func": "return { topic: 'gaia/device/' + msg.device_id + '/command',\n         payload: JSON.stringify({ action: 'disable', service: 'mediapipe' }) };",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 450,
+    "y": 420,
+    "wires": [["dm-mqtt-out"]]
+  },
+
+  {
+    "id": "dm-fn-enable-voice",
+    "type": "function",
+    "z": "tab-device-mgr",
+    "name": "Enable Voice",
+    "func": "return { topic: 'gaia/device/' + msg.device_id + '/command',\n         payload: JSON.stringify({ action: 'enable', service: 'voice' }) };",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 430,
+    "y": 460,
+    "wires": [["dm-mqtt-out"]]
+  },
+
+  {
+    "id": "dm-fn-disable-voice",
+    "type": "function",
+    "z": "tab-device-mgr",
+    "name": "Disable Voice",
+    "func": "return { topic: 'gaia/device/' + msg.device_id + '/command',\n         payload: JSON.stringify({ action: 'disable', service: 'voice' }) };",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 430,
+    "y": 500,
+    "wires": [["dm-mqtt-out"]]
+  },
+
+  {
+    "id": "dm-fn-restart-svc",
+    "type": "function",
+    "z": "tab-device-mgr",
+    "name": "Restart servizio",
+    "func": "// Imposta msg.service prima di passare qui\n// es. msg.service = 'yolo'\nconst svc = msg.service || 'yolo';\nreturn { topic: 'gaia/device/' + msg.device_id + '/command',\n         payload: JSON.stringify({ action: 'restart', service: svc }) };",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 440,
+    "y": 540,
+    "wires": [["dm-mqtt-out"]]
+  },
+
+  {
+    "id": "dm-fn-set-config",
+    "type": "function",
+    "z": "tab-device-mgr",
+    "name": "Set Config completa",
+    "func": "// Esempio: configura un Pi con stanza + servizi\n// Personalizza msg.stanza e msg.services prima di inviare\nconst stanza   = msg.stanza   || 'soggiorno';\nconst services = msg.services || { yolo: true, mediapipe: false, voice: true };\n\nreturn { topic: 'gaia/device/' + msg.device_id + '/command',\n         payload: JSON.stringify({\n             action: 'set_config',\n             stanza: stanza,\n             services: Object.fromEntries(\n                 Object.entries(services).map(([k,v]) => [k, { enabled: !!v }])\n             )\n         }) };",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 440,
+    "y": 580,
+    "wires": [["dm-mqtt-out"]]
+  },
+
+  {
+    "id": "dm-fn-reboot",
+    "type": "function",
+    "z": "tab-device-mgr",
+    "name": "Reboot Pi",
+    "func": "return { topic: 'gaia/device/' + msg.device_id + '/command',\n         payload: JSON.stringify({ action: 'reboot' }) };",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 430,
+    "y": 620,
+    "wires": [["dm-mqtt-out"]]
+  },
+
+  {
+    "id": "dm-comment-broadcast",
+    "type": "comment",
+    "z": "tab-device-mgr",
+    "name": "── COMANDI BROADCAST (tutti i Pi) ──",
+    "info": "",
+    "x": 220,
+    "y": 700,
+    "wires": []
+  },
+
+  {
+    "id": "dm-bc-all-status",
+    "type": "inject",
+    "z": "tab-device-mgr",
+    "name": "Richiedi status a tutti",
+    "props": [{"p": "payload"}],
+    "repeat": "",
+    "crontab": "",
+    "once": true,
+    "onceDelay": "3",
+    "topic": "gaia/device/all/command",
+    "payload": "{\"action\":\"status\"}",
+    "payloadType": "str",
+    "x": 200,
+    "y": 760,
+    "wires": [["dm-mqtt-out"]]
+  },
+
+  {
+    "id": "dm-bc-enable-yolo",
+    "type": "inject",
+    "z": "tab-device-mgr",
+    "name": "Enable YOLO su tutti",
+    "props": [{"p": "payload"}, {"p": "topic", "v": "gaia/device/all/command", "vt": "str"}],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "topic": "",
+    "payload": "{\"action\":\"enable\",\"service\":\"yolo\"}",
+    "payloadType": "str",
+    "x": 190,
+    "y": 820,
+    "wires": [["dm-mqtt-out"]]
+  },
+
+  {
+    "id": "dm-bc-disable-all",
+    "type": "inject",
+    "z": "tab-device-mgr",
+    "name": "Stop tutto (tutti i Pi)",
+    "props": [{"p": "payload"}, {"p": "topic", "v": "gaia/device/all/command", "vt": "str"}],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "topic": "",
+    "payload": "{\"action\":\"set_config\",\"services\":{\"yolo\":{\"enabled\":false},\"mediapipe\":{\"enabled\":false},\"voice\":{\"enabled\":false}}}",
+    "payloadType": "str",
+    "x": 190,
+    "y": 860,
+    "wires": [["dm-mqtt-out"]]
+  },
+
+  {
+    "id": "dm-comment-ota",
+    "type": "comment",
+    "z": "tab-device-mgr",
+    "name": "── OTA UPDATE ──",
+    "info": "",
+    "x": 170,
+    "y": 940,
+    "wires": []
+  },
+
+  {
+    "id": "dm-ota-example",
+    "type": "function",
+    "z": "tab-device-mgr",
+    "name": "OTA: aggiorna main.py yolo",
+    "func": "// Modifica url, md5, filename e device_id prima di inviare\nreturn {\n    topic: 'gaia/device/' + (msg.device_id || 'all') + '/command',\n    payload: JSON.stringify({\n        action:   'ota_update',\n        service:  'yolo',\n        url:      'http://192.168.1.142:8080/ota/Yolo-Scripts/main.py',\n        md5:      msg.md5 || '',\n        filename: 'main.py'\n    })\n};",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 460,
+    "y": 1000,
+    "wires": [["dm-mqtt-out"]]
+  },
+
+  {
+    "id": "dm-ota-trigger",
+    "type": "inject",
+    "z": "tab-device-mgr",
+    "name": "Trigger OTA (esempio)",
+    "props": [{"p": "device_id", "v": "pi-AABBCC", "vt": "str"}],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "x": 190,
+    "y": 1000,
+    "wires": [["dm-ota-example"]]
+  },
+
+  {
+    "id": "dm-mqtt-out",
+    "type": "mqtt out",
+    "z": "tab-device-mgr",
+    "name": "→ Device",
+    "topic": "",
+    "qos": "0",
+    "retain": "false",
+    "broker": "29b6d5926d1a95ec",
+    "x": 730,
+    "y": 500,
+    "wires": []
+  },
+
+  {
+    "id": "dm-fn-list-devices",
+    "type": "function",
+    "z": "tab-device-mgr",
+    "name": "Lista device correnti",
+    "func": "const devices = flow.get('devices') || {};\nconst list = Object.values(devices).map(d => ({\n    id:           d.device_id,\n    stanza:       d.stanza,\n    ip:           d.ip,\n    online:       d.online,\n    camera:       d.capabilities.camera,\n    mic:          d.capabilities.mic,\n    services:     d.services,\n    last_seen_s:  Math.round((Date.now() - d.last_seen) / 1000)\n}));\nmsg.payload = list;\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 450,
+    "y": 1100,
+    "wires": [["dm-debug-list"]]
+  },
+
+  {
+    "id": "dm-inject-list",
+    "type": "inject",
+    "z": "tab-device-mgr",
+    "name": "Mostra device in debug",
+    "props": [{"p": "payload"}],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "x": 190,
+    "y": 1100,
+    "wires": [["dm-fn-list-devices"]]
+  },
+
+  {
+    "id": "dm-debug-list",
+    "type": "debug",
+    "z": "tab-device-mgr",
+    "name": "Lista device",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "x": 700,
+    "y": 1100,
+    "wires": []
+  }
+]
