@@ -1,0 +1,21 @@
+# GAIA MediaPipe Node — configurazione
+# Copia in /etc/gaia/mediapipe.conf e modifica per ogni Raspberry Pi
+
+# Nome della stanza/camera (usato come room ID nel brain)
+CAMERA_NAME=ingresso1
+
+# IP del broker MQTT (il miniPC con Node-RED)
+MQTT_HOST=192.168.1.142
+MQTT_PORT=1883
+
+# Indice webcam (0 = prima webcam USB)
+CAMERA_INDEX=0
+
+# Secondi tra una pubblicazione e l'altra
+PUBLISH_INTERVAL=1.0
+
+# 1 = nessuna finestra (headless, per Pi senza monitor)
+HEADLESS=1
+
+# Topic MQTT (non cambiare salvo necessità)
+TOPIC=gaia/mediapipe/pose

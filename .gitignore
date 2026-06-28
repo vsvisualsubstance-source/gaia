@@ -1,0 +1,54 @@
+# Claude Code sessions (privato)
+.claude/
+
+# Python
+venv/
+venv
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# YOLO models (scaricati automaticamente da install.sh)
+Yolo-Scripts/models/
+mediapipe-script/models/
+
+# Configurazioni locali con IP/credenziali
+/etc/gaia/
+
+# Dati personali voice enrollment
+script/voice_db.json
+
+# Log e dati runtime
+*.log
+mosquitto/log/
+mosquitto/data/
+
+# Backup locali
+backups/
+
+# Cartelle venv Pi (non devono finire nel repo)
+*/venv/
+
+# File temporanei OTA
+*.ota_tmp
+
+# Editor
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Wakeword models (grandi, non committare)
+wakeword_models/
+
+# Node-RED runtime (solo flows.json ci interessa)
+.node-red/
+
+# Ollama / OpenHAB (servizi separati)
+ollama/
+openhab/

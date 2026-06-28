@@ -1,0 +1,19 @@
+[Unit]
+Description=GAIA Admin API (tuning microfono, enrollment, dashboard)
+After=network.target gaia-listener.service
+
+[Service]
+Type=simple
+User=core
+WorkingDirectory=/home/core/core-node-0/script
+ExecStart=/home/core/core-node-0/venv/bin/python3 /home/core/core-node-0/script/gaia_admin.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+Environment=PYTHONUNBUFFERED=1
+Environment=HOME=/home/core
+
+[Install]
+WantedBy=multi-user.target

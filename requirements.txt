@@ -1,0 +1,11 @@
+numpy==2.4.6
+paho-mqtt
+pyaudio==0.2.14
+openwakeword
+resemblyzer
+webrtcvad==2.0.10
+mediapipe==0.10.35
+opencv-python==4.13.0.0
+faster-whisper==1.2.1
+torch==2.12.0+cu130
+soundfile==0.13.1
