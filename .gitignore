@@ -13,15 +13,31 @@ __pycache__/
 dist/
 build/
 
-# YOLO models (scaricati automaticamente da install.sh)
-Yolo-Scripts/models/
-mediapipe-script/models/
+# ── Pi scripts — modelli e binary scaricati da install.sh ─────────────────────
+pi/yolo/models/
+pi/mediapipe/models/
+pi/voice/models/
+pi/voice/bin/
 
+# Pi agent — device.json è Pi-specifico (generato da install.sh dal template)
+pi/agent/device.json
+
+# Cartelle venv Pi (non devono finire nel repo)
+*/venv/
+
+# File temporanei OTA
+*.ota_tmp
+
+# ── miniPC — dati personali e runtime ─────────────────────────────────────────
+# Dati personali voice enrollment
+minipc/script/voice_db.json
+
+# Wakeword models (file grandi)
+minipc/wakeword_models/
+
+# ── Shared ────────────────────────────────────────────────────────────────────
 # Configurazioni locali con IP/credenziali
 /etc/gaia/
-
-# Dati personali voice enrollment
-script/voice_db.json
 
 # Log e dati runtime
 *.log
@@ -31,20 +47,11 @@ mosquitto/data/
 # Backup locali
 backups/
 
-# Cartelle venv Pi (non devono finire nel repo)
-*/venv/
-
-# File temporanei OTA
-*.ota_tmp
-
 # Editor
 .vscode/
 *.swp
 *.swo
 .DS_Store
-
-# Wakeword models (grandi, non committare)
-wakeword_models/
 
 # Node-RED runtime (solo flows.json ci interessa)
 .node-red/

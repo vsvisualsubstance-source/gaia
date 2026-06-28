@@ -18,10 +18,10 @@ from resemblyzer import VoiceEncoder, preprocess_wav
 # ── Topic MQTT ────────────────────────────────────────────────────────────────
 MQTT_BROKER   = "localhost"
 MQTT_PORT     = 1883
-TOPIC_COMANDO = "casa/voce/comando"
-TOPIC_STATO   = "gaia/voce/stato"
-TOPIC_STATS   = "gaia/voce/stats"
-TOPIC_TTS     = "casa/tts/play"
+TOPIC_COMANDO = "gaia/voice/command/minipc"
+TOPIC_STATO   = "gaia/voice/status/minipc"
+TOPIC_STATS   = "gaia/voice/stats/minipc"
+TOPIC_TTS     = "gaia/voice/tts/minipc"
 TOPIC_ADMIN   = "gaia/admin/#"
 
 # ── Audio ─────────────────────────────────────────────────────────────────────
@@ -39,8 +39,8 @@ LISTEN_MAX_S           = 20
 LISTEN_SILENCE_FRAMES  = 50
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-DB_PATH     = os.path.expanduser("~/core-node-0/script/voice_db.json")
-CONFIG_PATH = os.path.expanduser("~/core-node-0/script/listener_config.json")
+DB_PATH     = os.path.expanduser("~/core-node-0/minipc/script/voice_db.json")
+CONFIG_PATH = os.path.expanduser("~/core-node-0/minipc/script/listener_config.json")
 
 # ── Logger ────────────────────────────────────────────────────────────────────
 logging.basicConfig(

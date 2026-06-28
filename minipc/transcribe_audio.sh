@@ -15,4 +15,4 @@ if [ ! -x "$PYTHON" ]; then
     exit 2
 fi
 
-"$PYTHON" /home/core/core-node-0/script/transcribe.py "$FILE"
+"$PYTHON" /home/core/core-node-0/minipc/script/transcribe.py "$FILE"

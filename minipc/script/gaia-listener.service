@@ -7,10 +7,10 @@ Wants=network.target
 Type=simple
 User=core
 SupplementaryGroups=audio
-WorkingDirectory=/home/core/core-node-0/script
+WorkingDirectory=/home/core/core-node-0/minipc/script
 # Attende 8s al primo avvio per garantire che il dispositivo USB sia pronto
 ExecStartPre=/bin/sleep 8
-ExecStart=/home/core/core-node-0/venv/bin/python3 /home/core/core-node-0/script/gaia_listener.py
+ExecStart=/home/core/core-node-0/venv/bin/python3 /home/core/core-node-0/minipc/script/gaia_listener.py
 Restart=on-failure
 RestartSec=15
 StandardOutput=journal
