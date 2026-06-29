@@ -1443,7 +1443,7 @@
     "type": "function",
     "z": "6087d338d264e627",
     "name": "Prepara prompt chat",
-    "func": "const brain = global.get('gaiaBrain') || {};\nconst userText = msg.payload.text || msg.payload.message || \"Ciao Gaia\";\nconst person = msg.payload.person || \"Abitante\";\nconst stanza = msg.payload.stanza || \"salotto\";\n\n// Contesto presenze\nlet peopleDesc = [];\nObject.entries(brain.presence || {}).forEach(([name, data]) => {\n    if (!data.present) return;\n    const room = data.room || stanza;\n    const roomData = brain.rooms[room] || {};\n    const act = roomData.activity || 'presente';\n    const actText = act === 'working' ? 'sta lavorando' : act === 'resting' ? 'sta riposando' : act === 'sitting' ? 'è seduto' : 'è presente';\n    peopleDesc.push(`${name.startsWith('unknown') ? 'una persona' : name} ${actText} in ${room}`);\n});\nconst contextPeople = peopleDesc.length ? peopleDesc.join(', ') : 'nessuno';\nconst mood = brain.mood?.state || 'neutra';\n\n// Rileva se la richiesta riguarda luci/azioni fisiche o stato interno\nconst ACTION_KEYWORDS = /\\b(luce|luci|lampada|lampadina|illumina|accend|spegn|dimm|abbass|alz|scena|colore|colori|luminosit|come stai|stato tuo|mostrami|fammi vedere|senti|umore)\\b/i;\nconst wantsAction = ACTION_KEYWORDS.test(userText);\n\nmsg.userText  = userText;\nmsg.person    = person;\nmsg.stanza    = stanza;\n\nconst actionHint = wantsAction ? `\n\nSe l'utente chiede di controllare le luci o vuole sapere come stai, aggiungi SOLO in fondo alla risposta (su riga separata) una riga ACTION con il JSON:\n- Accendi: ACTION:{\"tipo\":\"hue\",\"stanza\":\"${stanza}\",\"power\":true}\n- Spegni:  ACTION:{\"tipo\":\"hue\",\"stanza\":\"${stanza}\",\"power\":false}\n- Luminosità 0-100: ACTION:{\"tipo\":\"hue\",\"stanza\":\"${stanza}\",\"brightness\":60}\n- Scena (alba/relax/focus/sera/notte/festa/tempesta/natura): ACTION:{\"tipo\":\"hue\",\"stanza\":\"${stanza}\",\"scena\":\"relax\"}\n- Colore (rosso/blu/verde/viola/arancio/bianco/warm/cool): ACTION:{\"tipo\":\"hue\",\"stanza\":\"${stanza}\",\"colore\":\"blu\"}\n- Esprimi il tuo stato emotivo con le luci: ACTION:{\"tipo\":\"stato\"}\nInserisci ACTION solo se davvero rilevante, non sempre.` : '';\n\nmsg.payload = {\n    model: 'qwen2.5:3b-instruct-q4_K_M',\n    prompt: `Sei Gaia, la coscienza della casa. Umore: ${mood}. In casa: ${contextPeople}.\\n${person} dice: \"${userText}\"\\nRispondi in italiano, massimo 35 parole.${actionHint}`,\n    stream: false\n};\nreturn msg;",
+    "func": "const brain   = global.get('gaiaBrain') || {};\nconst userText = msg.payload.text || msg.payload.message || \"Ciao Gaia\";\nconst person   = msg.payload.person || \"Abitante\";\nconst stanza   = msg.payload.stanza || \"salotto\";\n\nlet peopleDesc = [];\nObject.entries(brain.presence || {}).forEach(([name, data]) => {\n    if (!data.present) return;\n    const room    = data.room || stanza;\n    const act     = (brain.rooms[room] || {}).activity || 'presente';\n    const actText = act === 'working' ? 'sta lavorando'\n                  : act === 'resting' ? 'sta riposando'\n                  : act === 'sitting' ? 'è seduto' : 'è presente';\n    peopleDesc.push(`${name.startsWith('unknown') ? 'una persona' : name} ${actText} in ${room}`);\n});\nconst contextPeople = peopleDesc.length ? peopleDesc.join(', ') : 'nessuno';\nconst mood = brain.mood?.state || 'neutra';\n\nmsg.userText = userText;\nmsg.person   = person;\nmsg.stanza   = stanza;\n\n// ── Rilevamento intent client-side ────────────────────────────────────────────\nconst ut = userText.toLowerCase();\nlet action = null;\n\n// Stato/emozione GAIA\nif (/come stai|fammi vedere|mostrami|tuo stato|che umore|senti oggi|esprimi/.test(ut)) {\n    action = { tipo: 'stato' };\n}\n// Accensione\nelse if (/\\baccend[ia]\\b/.test(ut) && /\\b(luce|luci|lampada|lampadina|tutto)\\b/.test(ut)) {\n    action = { tipo: 'hue', stanza, power: true };\n}\n// Spegnimento\nelse if (/\\bspegn[ia]\\b/.test(ut) && /\\b(luce|luci|lampada|lampadina|tutto)\\b/.test(ut)) {\n    action = { tipo: 'hue', stanza, power: false };\n}\n// Abbassa\nelse if (/\\b(abbass[ai]|dimm[ae]r?)\\b/.test(ut) && /\\b(luce|luci|luminosit)\\b/.test(ut)) {\n    action = { tipo: 'hue', stanza, brightness: 25 };\n}\n// Alza\nelse if (/\\b(alz[ai]|aumenta|pi[uù] luminoso)\\b/.test(ut) && /\\b(luce|luci|luminosit)\\b/.test(ut)) {\n    action = { tipo: 'hue', stanza, brightness: 85 };\n}\n// Scene per nome\nelse {\n    const sceneMap = { alba:1, relax:1, focus:1, sera:1, notte:1, festa:1, tempesta:1, natura:1 };\n    const sceneMatch = ut.match(/\\b(alba|relax|focus|sera|notte|festa|tempesta|natura)\\b/);\n    if (sceneMatch) {\n        action = { tipo: 'hue', stanza, scena: sceneMatch[1] };\n    }\n    // Colore per nome\n    if (!action) {\n        const colorMatch = ut.match(/\\b(rosso|verde|blu|giallo|arancio|viola|rosa|bianco|warm|cool|azzurro)\\b/);\n        if (colorMatch && /\\b(luce|luci|colore|metti|diventa)\\b/.test(ut)) {\n            const c = colorMatch[1] === 'azzurro' ? 'blu' : colorMatch[1];\n            action = { tipo: 'hue', stanza, colore: c };\n        }\n    }\n    // Temperatura colore diretta (es. \"luce calda\" / \"luce fredda\")\n    if (!action) {\n        if (/luce calda|luci calde/.test(ut)) action = { tipo: 'hue', stanza, colore: 'warm' };\n        else if (/luce fredda|luci fredde/.test(ut)) action = { tipo: 'hue', stanza, colore: 'cool' };\n    }\n    // Luminosità specifica % (es. \"metti le luci al 70%\")\n    if (!action) {\n        const pctMatch = ut.match(/(?:al|a)\\s+(\\d{1,3})\\s*%/);\n        if (pctMatch && /\\b(luce|luci|luminosit)\\b/.test(ut)) {\n            action = { tipo: 'hue', stanza, brightness: parseInt(pctMatch[1]) };\n        }\n    }\n}\n\nmsg.action_override = action;\n\n// Prompt Ollama — solo risposta naturale, senza istruzioni ACTION\nconst actionContext = action\n    ? (action.tipo === 'stato'\n        ? ' Stai per esprimere il tuo stato emotivo attraverso la luce.'\n        : ' Stai per eseguire il comando sulle luci.')\n    : '';\n\nmsg.payload = {\n    model:  'qwen2.5:3b-instruct-q4_K_M',\n    prompt: `Sei Gaia, la coscienza della casa. Umore: ${mood}. In casa: ${contextPeople}.${actionContext}\n${person} dice: \"${userText}\"\nRispondi in modo naturale in italiano, massimo 20 parole.`,\n    stream: false\n};\nreturn msg;",
     "outputs": 1,
     "timeout": "",
     "noerr": 0,
@@ -3277,7 +3277,7 @@
     "type": "function",
     "z": "6087d338d264e627",
     "name": "IntentParser",
-    "func": "// Separa ACTION:JSON dal testo di risposta\nlet text = (msg.payload && (msg.payload.message || msg.payload.response || '')) || msg.tts_text || '';\nlet action = null;\n\n// Cerca ACTION:{...} in fondo (anche su riga propria)\nconst actionRe = /\\n?ACTION:\\s*(\\{[^\\n\\r]+\\})\\s*$/m;\nconst m = text.match(actionRe);\nif (m) {\n    try { action = JSON.parse(m[1]); } catch(e) { action = null; }\n    text = text.replace(actionRe, '').trim();\n}\n\nmsg.payload = { person: msg.person || 'Gaia', message: text, ts: Date.now() };\nmsg.tts_text = text;\nmsg.action = action;\n\n// Out 1 → Prepara TTS (sempre)\n// Out 2 → ActionRouter (solo se action)\nreturn [msg, action ? msg : null];",
+    "func": "const raw = (msg.payload && (msg.payload.message || msg.payload.response || '')) || msg.tts_text || '';\n\n// Usa l'intent estratto client-side da Prepara prompt chat (priorità assoluta)\nlet action = msg.action_override || null;\n\n// Pulizia testo: rimuovi eventuali ACTION: rimasti (per sicurezza)\nlet text = raw\n    .replace(/\\n?ACTION:[^\\n]*/g, '')\n    .replace(/^\\s*\\{.*?\\}\\s*$/gm, '')\n    .replace(/\\n{3,}/g, '\\n')\n    .trim();\n\n// Testo di fallback se vuoto\nif (!text) {\n    text = action\n        ? (action.tipo === 'stato' ? 'Ecco come mi sento.' : 'Fatto.')\n        : 'Certo.';\n}\n\nmsg.payload  = { person: msg.payload.person || msg.person || 'Gaia', message: text, ts: msg.payload.ts || Date.now() };\nmsg.tts_text = text;\nmsg.action   = action;\n\n// Out 1 → Prepara TTS + HTTP Response | Out 2 → ActionRouter\nreturn [msg, action ? msg : null];",
     "outputs": 2,
     "timeout": 0,
     "noerr": 0,
@@ -3288,7 +3288,8 @@
     "y": 140,
     "wires": [
       [
-        "e03e3304ca745172"
+        "e03e3304ca745172",
+        "chat_http_resp_01"
       ],
       [
         "action_router_01"
@@ -3324,7 +3325,7 @@
     "type": "function",
     "z": "6087d338d264e627",
     "name": "HueExecutor",
-    "func": "const action = msg.action || {};\n\n// ── Scene predefinite (brightness 0-100, color_temp in Kelvin, color in HSB \"H,S,B\") ──\nconst SCENES = {\n    alba:     { brightness: 70, color_temp: 3200 },\n    relax:    { brightness: 40, color_temp: 2700 },\n    focus:    { brightness: 80, color_temp: 5000 },\n    sera:     { brightness: 30, color_temp: 2400 },\n    notte:    { brightness: 10, color_temp: 2000 },\n    festa:    { brightness: 100, color: '0,100,100' },\n    tempesta: { brightness: 50, color: '240,60,55' },\n    natura:   { brightness: 65, color: '115,70,65' },\n};\n\n// ── Mappa stanza → prefisso OpenHAB (adatta ai tuoi item) ────────────────────\n// NOTA: i nomi degli item devono corrispondere a quelli in OpenHAB\n// Es: openhab/hue/Salotto_Potenza_Luce/command\nconst ROOM_PREFIX = {\n    salotto:  'Salotto',\n    cucina:   'Cucina',\n    ingresso: 'Ingresso',\n    studio:   'Studio',\n    camera:   'Camera',\n    bagno:    'Bagno',\n};\n\nconst stanza = (action.stanza || 'salotto').toLowerCase().trim();\nconst prefix = ROOM_PREFIX[stanza] || (stanza.charAt(0).toUpperCase() + stanza.slice(1));\n\nfunction cmd(item, value) {\n    node.send({ topic: `openhab/hue/${item}/command`, payload: String(value) });\n}\n\n// ── Power on/off ──────────────────────────────────────────────────────────────\nif (action.power !== undefined) {\n    cmd(`${prefix}_Potenza_Luce`, action.power ? 'ON' : 'OFF');\n    if (!action.power) return null;\n}\n\n// ── Luminosità diretta ────────────────────────────────────────────────────────\nif (action.brightness !== undefined) {\n    cmd(`${prefix}_Potenza_Luce`, 'ON');\n    cmd(`${prefix}_Luminosita_Luce`, Math.max(0, Math.min(100, Math.round(action.brightness))));\n}\n\n// ── Colore per nome o HSB ─────────────────────────────────────────────────────\nconst COLOR_MAP = {\n    rosso:   '0,100,70',\n    verde:   '110,80,65',\n    blu:     '240,100,60',\n    giallo:  '50,100,80',\n    arancio: '30,100,75',\n    viola:   '290,80,65',\n    bianco:  '0,0,100',\n    warm:    null,   // gestito sotto come color_temp\n    cool:    null,\n};\nif (action.colore) {\n    const c = action.colore.toLowerCase();\n    if (c === 'warm') {\n        cmd(`${prefix}_Potenza_Luce`, 'ON');\n        cmd(`${prefix}_TemperaturaColore_Luce`, 2700);\n    } else if (c === 'cool') {\n        cmd(`${prefix}_Potenza_Luce`, 'ON');\n        cmd(`${prefix}_TemperaturaColore_Luce`, 5000);\n    } else {\n        const hsb = COLOR_MAP[c] || c;\n        cmd(`${prefix}_Potenza_Luce`, 'ON');\n        cmd(`${prefix}_Colore_Luce`, hsb);\n    }\n}\n\n// ── Temperatura colore diretta (Kelvin) ───────────────────────────────────────\nif (action.color_temp) {\n    cmd(`${prefix}_Potenza_Luce`, 'ON');\n    cmd(`${prefix}_TemperaturaColore_Luce`, action.color_temp);\n}\n\n// ── Scena predefinita ─────────────────────────────────────────────────────────\nif (action.scena) {\n    const scene = SCENES[action.scena.toLowerCase()];\n    if (scene) {\n        cmd(`${prefix}_Potenza_Luce`, 'ON');\n        cmd(`${prefix}_Luminosita_Luce`, scene.brightness);\n        if (scene.color_temp) cmd(`${prefix}_TemperaturaColore_Luce`, scene.color_temp);\n        if (scene.color)      cmd(`${prefix}_Colore_Luce`, scene.color);\n    }\n}\n\nreturn null;",
+    "func": "\nconst OPENHAB = 'http://localhost:8080/rest/items';\n\n// Hue CT Dimmer: 0%=2000K (warm), 100%=6500K (cold)\nfunction kelvinToPct(k) {\n    return Math.round(Math.max(0, Math.min(100, (k - 2000) / (6500 - 2000) * 100)));\n}\n\n// Manda comando a OpenHAB REST API\nfunction cmd(item, value) {\n    node.send({\n        url:     `${OPENHAB}/${item}`,\n        method:  'POST',\n        headers: { 'Content-Type': 'text/plain' },\n        payload: String(value)\n    });\n}\n\n// Mappa stanza (da voce/chat) → prefisso item OpenHAB reale\nconst ROOM_MAP = {\n    salotto:    'Soggiorno',\n    soggiorno:  'Soggiorno',\n    sala:       'Sala',\n    living:     'Soggiorno',\n    ingresso:   'luce_Ingresso',\n    corridoio:  'Luce_Corridoio',\n    tv:         'Area_TV_Zone',\n    area_tv:    'Area_TV_Zone',\n    notte:      'Zona_Notte_Zone',\n    camera:     'Zona_Notte_Zone',\n    bedroom:    'Zona_Notte_Zone',\n    tutte:      'Tutte_le_luci',\n    all:        'Tutte_le_luci',\n    tutto:      'Tutte_le_luci',\n    casa:       'Tutte_le_luci',\n};\n\n// Quali controlli ha ogni gruppo (Luce_Corridoio non ha Potenza/Colore)\nconst CAPS = {\n    Soggiorno:      ['power','brightness','color','ct','scene'],\n    Sala:           ['power','brightness','color','ct','scene'],\n    luce_Ingresso:  ['power','brightness','color','ct','scene'],\n    Luce_Corridoio: ['brightness'],\n    Area_TV_Zone:   ['power','brightness','color','ct','scene'],\n    Zona_Notte_Zone:['power','brightness','color','ct','scene'],\n    Tutte_le_luci:  ['power','brightness','color','ct','scene'],\n};\n\n// Scene predefinite: brightness (0-100), ct in Kelvin, color in HSB \"H,S,B\"\nconst SCENES = {\n    alba:     { brightness: 70,  ct: 3200 },\n    relax:    { brightness: 40,  ct: 2700 },\n    focus:    { brightness: 80,  ct: 5000 },\n    sera:     { brightness: 30,  ct: 2400 },\n    notte:    { brightness: 10,  ct: 2000 },\n    festa:    { brightness: 100, color: '0,100,100' },\n    tempesta: { brightness: 50,  color: '240,60,55' },\n    natura:   { brightness: 65,  color: '115,70,65' },\n};\n\n// Colori per nome → HSB\nconst COLORS = {\n    rosso:   '0,100,70',\n    verde:   '115,80,65',\n    blu:     '240,100,60',\n    giallo:  '50,100,80',\n    arancio: '30,100,75',\n    viola:   '290,80,65',\n    rosa:    '340,60,80',\n    bianco:  '0,0,100',\n    ciano:   '185,80,65',\n};\nconst action = msg.action || {};\nconst stanza = (action.stanza || 'salotto').toLowerCase().trim();\nconst prefix = ROOM_MAP[stanza] || 'Soggiorno';\nconst caps = CAPS[prefix] || [];\n\n// Power\nif (action.power !== undefined) {\n    if (caps.includes('power')) cmd(`${prefix}_Potenza`, action.power ? 'ON' : 'OFF');\n    if (!action.power) return null;\n}\n\n// Luminosità\nif (action.brightness !== undefined) {\n    if (caps.includes('power')) cmd(`${prefix}_Potenza`, 'ON');\n    if (caps.includes('brightness')) cmd(`${prefix}_Luminosita`, Math.max(0, Math.min(100, Math.round(action.brightness))));\n}\n\n// Colore per nome o HSB\nif (action.colore) {\n    const c = action.colore.toLowerCase();\n    if (c === 'warm') {\n        if (caps.includes('power')) cmd(`${prefix}_Potenza`, 'ON');\n        if (caps.includes('ct')) cmd(`${prefix}_Color_Temperature`, kelvinToPct(2700));\n    } else if (c === 'cool') {\n        if (caps.includes('power')) cmd(`${prefix}_Potenza`, 'ON');\n        if (caps.includes('ct')) cmd(`${prefix}_Color_Temperature`, kelvinToPct(5000));\n    } else {\n        const hsb = COLORS[c] || c;\n        if (caps.includes('power')) cmd(`${prefix}_Potenza`, 'ON');\n        if (caps.includes('color')) cmd(`${prefix}_Colore`, hsb);\n    }\n}\n\n// Temperatura colore in Kelvin\nif (action.color_temp) {\n    if (caps.includes('power')) cmd(`${prefix}_Potenza`, 'ON');\n    if (caps.includes('ct')) cmd(`${prefix}_Color_Temperature`, kelvinToPct(action.color_temp));\n}\n\n// Scena predefinita\nif (action.scena) {\n    const scene = SCENES[action.scena.toLowerCase()];\n    if (scene) {\n        if (caps.includes('power')) cmd(`${prefix}_Potenza`, 'ON');\n        if (caps.includes('brightness')) cmd(`${prefix}_Luminosita`, scene.brightness);\n        if (scene.ct && caps.includes('ct')) cmd(`${prefix}_Color_Temperature`, kelvinToPct(scene.ct));\n        if (scene.color && caps.includes('color')) cmd(`${prefix}_Colore`, scene.color);\n    }\n}\n\nreturn null;",
     "outputs": 1,
     "timeout": 0,
     "noerr": 0,
@@ -3335,7 +3336,7 @@
     "y": 160,
     "wires": [
       [
-        "openhab_mqtt_out_01"
+        "openhab_http_01"
       ]
     ]
   },
@@ -3344,7 +3345,7 @@
     "type": "function",
     "z": "6087d338d264e627",
     "name": "GaiaExpression",
-    "func": "const brain = global.get('gaiaBrain') || {};\nconst mood = brain.mood?.state || 'neutra';\n\n// Mappe umore → scena luci\nconst MOOD_SCENES = {\n    neutra:    { brightness: 60, color_temp: 4000, nome: 'luce naturale bilanciata' },\n    calm:      { brightness: 35, color_temp: 2700, nome: 'luce soffusa e calda' },\n    social:    { brightness: 80, color_temp: 3000, nome: 'luce vivace e accogliente' },\n    stress:    { brightness: 50, color_temp: 3200, nome: 'luce moderata' },\n    curiosity: { brightness: 75, color_temp: 5000, nome: 'luce brillante e ispiratrice' },\n};\n\nconst scene = MOOD_SCENES[mood] || MOOD_SCENES.neutra;\n\n// Aggiorna brain.activeScene (ThreeJS lo legge via gaia/brain/state)\nbrain.activeScene = { mood, ...scene, ts: Date.now() };\nglobal.set('gaiaBrain', brain);\n\n// Trova stanze abitate (esclude nodi camera/vision)\nconst ROOM_PREFIX = {\n    salotto: 'Salotto', cucina: 'Cucina', ingresso: 'Ingresso',\n    studio: 'Studio', camera: 'Camera', bagno: 'Bagno',\n};\nconst activeRooms = Object.keys(brain.rooms || {}).filter(r =>\n    !r.includes('cam') && !r.includes('vision') && r !== 'unknown' &&\n    (brain.rooms[r]?.persons_count || 0) > 0\n);\nif (activeRooms.length === 0) activeRooms.push('salotto');\n\nfor (const room of activeRooms) {\n    const prefix = ROOM_PREFIX[room] || (room.charAt(0).toUpperCase() + room.slice(1));\n    node.send({ topic: `openhab/hue/${prefix}_Potenza_Luce/command`, payload: 'ON' });\n    node.send({ topic: `openhab/hue/${prefix}_Luminosita_Luce/command`, payload: String(scene.brightness) });\n    node.send({ topic: `openhab/hue/${prefix}_TemperaturaColore_Luce/command`, payload: String(scene.color_temp) });\n}\nreturn null;",
+    "func": "\nconst OPENHAB = 'http://localhost:8080/rest/items';\n\n// Hue CT Dimmer: 0%=2000K (warm), 100%=6500K (cold)\nfunction kelvinToPct(k) {\n    return Math.round(Math.max(0, Math.min(100, (k - 2000) / (6500 - 2000) * 100)));\n}\n\n// Manda comando a OpenHAB REST API\nfunction cmd(item, value) {\n    node.send({\n        url:     `${OPENHAB}/${item}`,\n        method:  'POST',\n        headers: { 'Content-Type': 'text/plain' },\n        payload: String(value)\n    });\n}\n\n// Mappa stanza (da voce/chat) → prefisso item OpenHAB reale\nconst ROOM_MAP = {\n    salotto:    'Soggiorno',\n    soggiorno:  'Soggiorno',\n    sala:       'Sala',\n    living:     'Soggiorno',\n    ingresso:   'luce_Ingresso',\n    corridoio:  'Luce_Corridoio',\n    tv:         'Area_TV_Zone',\n    area_tv:    'Area_TV_Zone',\n    notte:      'Zona_Notte_Zone',\n    camera:     'Zona_Notte_Zone',\n    bedroom:    'Zona_Notte_Zone',\n    tutte:      'Tutte_le_luci',\n    all:        'Tutte_le_luci',\n    tutto:      'Tutte_le_luci',\n    casa:       'Tutte_le_luci',\n};\n\n// Quali controlli ha ogni gruppo (Luce_Corridoio non ha Potenza/Colore)\nconst CAPS = {\n    Soggiorno:      ['power','brightness','color','ct','scene'],\n    Sala:           ['power','brightness','color','ct','scene'],\n    luce_Ingresso:  ['power','brightness','color','ct','scene'],\n    Luce_Corridoio: ['brightness'],\n    Area_TV_Zone:   ['power','brightness','color','ct','scene'],\n    Zona_Notte_Zone:['power','brightness','color','ct','scene'],\n    Tutte_le_luci:  ['power','brightness','color','ct','scene'],\n};\n\n// Scene predefinite: brightness (0-100), ct in Kelvin, color in HSB \"H,S,B\"\nconst SCENES = {\n    alba:     { brightness: 70,  ct: 3200 },\n    relax:    { brightness: 40,  ct: 2700 },\n    focus:    { brightness: 80,  ct: 5000 },\n    sera:     { brightness: 30,  ct: 2400 },\n    notte:    { brightness: 10,  ct: 2000 },\n    festa:    { brightness: 100, color: '0,100,100' },\n    tempesta: { brightness: 50,  color: '240,60,55' },\n    natura:   { brightness: 65,  color: '115,70,65' },\n};\n\n// Colori per nome → HSB\nconst COLORS = {\n    rosso:   '0,100,70',\n    verde:   '115,80,65',\n    blu:     '240,100,60',\n    giallo:  '50,100,80',\n    arancio: '30,100,75',\n    viola:   '290,80,65',\n    rosa:    '340,60,80',\n    bianco:  '0,0,100',\n    ciano:   '185,80,65',\n};\nconst brain = global.get('gaiaBrain') || {};\nconst mood = brain.mood?.state || 'neutra';\n\nconst MOOD_SCENES = {\n    neutra:    { brightness: 60, ct: 4000, nome: 'luce naturale bilanciata' },\n    calm:      { brightness: 35, ct: 2700, nome: 'luce soffusa e calda' },\n    social:    { brightness: 80, ct: 3000, nome: 'luce vivace e accogliente' },\n    stress:    { brightness: 50, ct: 3200, nome: 'luce moderata' },\n    curiosity: { brightness: 75, ct: 5000, nome: 'luce brillante e ispiratrice' },\n};\n\nconst scene = MOOD_SCENES[mood] || MOOD_SCENES.neutra;\n\n// Aggiorna brain.activeScene (ThreeJS lo legge da gaia/brain/state)\nbrain.activeScene = { mood, ...scene, ts: Date.now() };\nglobal.set('gaiaBrain', brain);\n\n// Stanze abitate (escludi nodi cam/vision)\nconst activeRooms = Object.keys(brain.rooms || {}).filter(r =>\n    !r.includes('cam') && !r.includes('vision') && r !== 'unknown' &&\n    (brain.rooms[r]?.persons_count || 0) > 0\n);\nif (activeRooms.length === 0) activeRooms.push('salotto');\n\nfor (const room of activeRooms) {\n    const prefix = ROOM_MAP[room.toLowerCase()] || 'Soggiorno';\n    const caps = CAPS[prefix] || [];\n    if (caps.includes('power'))      cmd(`${prefix}_Potenza`, 'ON');\n    if (caps.includes('brightness')) cmd(`${prefix}_Luminosita`, scene.brightness);\n    if (caps.includes('ct'))         cmd(`${prefix}_Color_Temperature`, kelvinToPct(scene.ct));\n}\nreturn null;",
     "outputs": 1,
     "timeout": 0,
     "noerr": 0,
@@ -3355,29 +3356,16 @@
     "y": 240,
     "wires": [
       [
-        "openhab_mqtt_out_01"
+        "openhab_http_01"
       ]
     ]
-  },
-  {
-    "id": "openhab_mqtt_out_01",
-    "type": "mqtt out",
-    "z": "6087d338d264e627",
-    "name": "→ OpenHAB",
-    "topic": "",
-    "qos": "0",
-    "retain": "false",
-    "broker": "29b6d5926d1a95ec",
-    "x": 1460,
-    "y": 200,
-    "wires": []
   },
   {
     "id": "mood_scene_sync_01",
     "type": "function",
     "z": "d3a553c4a24c8d2d",
     "name": "MoodSceneSync",
-    "func": "// Applica scena umore → OpenHAB\nconst brain = global.get('gaiaBrain') || {};\nconst mood = brain.mood?.state || 'neutra';\nconst MOOD_SCENES = {\n    neutra:    { brightness: 60, color_temp: 4000 },\n    calm:      { brightness: 35, color_temp: 2700 },\n    social:    { brightness: 80, color_temp: 3000 },\n    stress:    { brightness: 50, color_temp: 3200 },\n    curiosity: { brightness: 75, color_temp: 5000 },\n};\nconst scene = MOOD_SCENES[mood] || MOOD_SCENES.neutra;\nbrain.activeScene = { mood, ...scene, ts: Date.now() };\nglobal.set('gaiaBrain', brain);\n\nconst ROOM_PREFIX = {\n    salotto: 'Salotto', cucina: 'Cucina', ingresso: 'Ingresso',\n    studio: 'Studio', camera: 'Camera', bagno: 'Bagno',\n};\nconst activeRooms = Object.keys(brain.rooms || {}).filter(r =>\n    !r.includes('cam') && !r.includes('vision') && r !== 'unknown' &&\n    (brain.rooms[r]?.persons_count || 0) > 0\n);\nif (activeRooms.length === 0) return null;\n\nfor (const room of activeRooms) {\n    const prefix = ROOM_PREFIX[room] || (room.charAt(0).toUpperCase() + room.slice(1));\n    node.send({ topic: `openhab/hue/${prefix}_Potenza_Luce/command`, payload: 'ON' });\n    node.send({ topic: `openhab/hue/${prefix}_Luminosita_Luce/command`, payload: String(scene.brightness) });\n    node.send({ topic: `openhab/hue/${prefix}_TemperaturaColore_Luce/command`, payload: String(scene.color_temp) });\n}\nreturn null;",
+    "func": "\nconst OPENHAB = 'http://localhost:8080/rest/items';\n\n// Hue CT Dimmer: 0%=2000K (warm), 100%=6500K (cold)\nfunction kelvinToPct(k) {\n    return Math.round(Math.max(0, Math.min(100, (k - 2000) / (6500 - 2000) * 100)));\n}\n\n// Manda comando a OpenHAB REST API\nfunction cmd(item, value) {\n    node.send({\n        url:     `${OPENHAB}/${item}`,\n        method:  'POST',\n        headers: { 'Content-Type': 'text/plain' },\n        payload: String(value)\n    });\n}\n\n// Mappa stanza (da voce/chat) → prefisso item OpenHAB reale\nconst ROOM_MAP = {\n    salotto:    'Soggiorno',\n    soggiorno:  'Soggiorno',\n    sala:       'Sala',\n    living:     'Soggiorno',\n    ingresso:   'luce_Ingresso',\n    corridoio:  'Luce_Corridoio',\n    tv:         'Area_TV_Zone',\n    area_tv:    'Area_TV_Zone',\n    notte:      'Zona_Notte_Zone',\n    camera:     'Zona_Notte_Zone',\n    bedroom:    'Zona_Notte_Zone',\n    tutte:      'Tutte_le_luci',\n    all:        'Tutte_le_luci',\n    tutto:      'Tutte_le_luci',\n    casa:       'Tutte_le_luci',\n};\n\n// Quali controlli ha ogni gruppo (Luce_Corridoio non ha Potenza/Colore)\nconst CAPS = {\n    Soggiorno:      ['power','brightness','color','ct','scene'],\n    Sala:           ['power','brightness','color','ct','scene'],\n    luce_Ingresso:  ['power','brightness','color','ct','scene'],\n    Luce_Corridoio: ['brightness'],\n    Area_TV_Zone:   ['power','brightness','color','ct','scene'],\n    Zona_Notte_Zone:['power','brightness','color','ct','scene'],\n    Tutte_le_luci:  ['power','brightness','color','ct','scene'],\n};\n\n// Scene predefinite: brightness (0-100), ct in Kelvin, color in HSB \"H,S,B\"\nconst SCENES = {\n    alba:     { brightness: 70,  ct: 3200 },\n    relax:    { brightness: 40,  ct: 2700 },\n    focus:    { brightness: 80,  ct: 5000 },\n    sera:     { brightness: 30,  ct: 2400 },\n    notte:    { brightness: 10,  ct: 2000 },\n    festa:    { brightness: 100, color: '0,100,100' },\n    tempesta: { brightness: 50,  color: '240,60,55' },\n    natura:   { brightness: 65,  color: '115,70,65' },\n};\n\n// Colori per nome → HSB\nconst COLORS = {\n    rosso:   '0,100,70',\n    verde:   '115,80,65',\n    blu:     '240,100,60',\n    giallo:  '50,100,80',\n    arancio: '30,100,75',\n    viola:   '290,80,65',\n    rosa:    '340,60,80',\n    bianco:  '0,0,100',\n    ciano:   '185,80,65',\n};\nconst brain = global.get('gaiaBrain') || {};\nconst mood = brain.mood?.state || 'neutra';\nconst now = Date.now();\nconst lastMoodScene = global.get('lastMoodScene') || { mood: null, ts: 0 };\n\nif (mood === lastMoodScene.mood || now - lastMoodScene.ts < 300000) return null;\n\nconst anyoneHome = Object.values(brain.presence || {}).some(p => p.present);\nif (!anyoneHome) return null;\n\nglobal.set('lastMoodScene', { mood, ts: now });\n\nconst MOOD_SCENES = {\n    neutra:    { brightness: 60, ct: 4000 },\n    calm:      { brightness: 35, ct: 2700 },\n    social:    { brightness: 80, ct: 3000 },\n    stress:    { brightness: 50, ct: 3200 },\n    curiosity: { brightness: 75, ct: 5000 },\n};\nconst scene = MOOD_SCENES[mood] || MOOD_SCENES.neutra;\n\nbrain.activeScene = { mood, ...scene, ts: now };\nglobal.set('gaiaBrain', brain);\n\nconst activeRooms = Object.keys(brain.rooms || {}).filter(r =>\n    !r.includes('cam') && !r.includes('vision') && r !== 'unknown' &&\n    (brain.rooms[r]?.persons_count || 0) > 0\n);\nif (activeRooms.length === 0) return null;\n\nfor (const room of activeRooms) {\n    const prefix = ROOM_MAP[room.toLowerCase()] || 'Soggiorno';\n    const caps = CAPS[prefix] || [];\n    if (caps.includes('power'))      cmd(`${prefix}_Potenza`, 'ON');\n    if (caps.includes('brightness')) cmd(`${prefix}_Luminosita`, scene.brightness);\n    if (caps.includes('ct'))         cmd(`${prefix}_Color_Temperature`, kelvinToPct(scene.ct));\n}\nreturn null;",
     "outputs": 1,
     "timeout": 0,
     "noerr": 0,
@@ -3388,21 +3376,59 @@
     "y": 700,
     "wires": [
       [
-        "mood_openhab_out_01"
+        "openhab_http_mood_01"
       ]
     ]
   },
   {
-    "id": "mood_openhab_out_01",
-    "type": "mqtt out",
+    "id": "openhab_http_01",
+    "type": "http request",
+    "z": "6087d338d264e627",
+    "name": "→ OpenHAB REST",
+    "method": "use",
+    "ret": "txt",
+    "paytoqs": "ignore",
+    "url": "",
+    "tls": "",
+    "persist": false,
+    "proxy": "",
+    "insecureHTTPParser": false,
+    "authType": "",
+    "x": 1460,
+    "y": 200,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "openhab_http_mood_01",
+    "type": "http request",
     "z": "d3a553c4a24c8d2d",
-    "name": "→ OpenHAB (Mood)",
-    "topic": "",
-    "qos": "0",
-    "retain": "false",
-    "broker": "29b6d5926d1a95ec",
-    "x": 920,
+    "name": "→ OpenHAB REST",
+    "method": "use",
+    "ret": "txt",
+    "paytoqs": "ignore",
+    "url": "",
+    "tls": "",
+    "persist": false,
+    "proxy": "",
+    "insecureHTTPParser": false,
+    "authType": "",
+    "x": 940,
     "y": 700,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "chat_http_resp_01",
+    "type": "http response",
+    "z": "6087d338d264e627",
+    "name": "Chat Response",
+    "statusCode": "200",
+    "headers": {},
+    "x": 820,
+    "y": 100,
     "wires": []
   }
 ]
