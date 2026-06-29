@@ -1,6 +1,10 @@
 # GAIA MediaPipe Node — configurazione
 # Copia in /etc/gaia/mediapipe.conf e modifica per ogni Raspberry Pi
 
+# Venv da usare (lascia vuoto per usare ./venv locale)
+# Esempio: MEDIAPIPE_VENV=/home/asemico/mediapipe_edge/venv
+MEDIAPIPE_VENV=
+
 # Nome della stanza/camera (usato come room ID nel brain)
 CAMERA_NAME=ingresso1
 

@@ -49,7 +49,7 @@ echo "  ✓ venv in $VENV"
 echo ""
 echo "[3/4] Installazione pacchetti Python..."
 # numpy prima — mediapipe e opencv devono trovare la versione giusta al resolve
-pip install "numpy>=1.24,<2.0"
+pip install "numpy>=2.0"
 pip install -r "$SCRIPT_DIR/requirements.txt"
 echo "  ✓ pacchetti Python OK"
 

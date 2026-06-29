@@ -35,6 +35,10 @@ minipc/script/voice_db.json
 # Wakeword models (file grandi)
 minipc/wakeword_models/
 
+# Local agent runtime (device-specific, generato automaticamente)
+minipc/local_agent.lock
+minipc/local_agent_config.json
+
 # ── Shared ────────────────────────────────────────────────────────────────────
 # Configurazioni locali con IP/credenziali
 /etc/gaia/

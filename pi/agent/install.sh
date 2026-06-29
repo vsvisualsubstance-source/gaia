@@ -37,7 +37,7 @@ SERVICES="gaia-agent.service gaia-yolo.service gaia-mediapipe.service gaia-voice
 
 for SVC in $SERVICES; do
     if [ -f "$SCRIPT_DIR/$SVC" ]; then
-        sed "s|/opt/gaia|$GAIA_ROOT|g" "$SCRIPT_DIR/$SVC" \
+        sed -e "s|/opt/gaia|$GAIA_ROOT|g" -e "s|User=pi|User=$(whoami)|g" "$SCRIPT_DIR/$SVC" \
             | sudo tee "/etc/systemd/system/$SVC" > /dev/null
         echo "  ✓ Installato: $SVC"
     fi
@@ -49,14 +49,20 @@ sudo systemctl daemon-reload
 sudo systemctl enable gaia-agent.service
 echo "  ✓ gaia-agent.service abilitato all'avvio"
 
+# Cartella /etc/gaia con permessi utente corrente
+sudo mkdir -p /etc/gaia
+sudo touch /etc/gaia/device.conf
+sudo chown -R "$(whoami):$(whoami)" /etc/gaia
+sudo chmod 755 /etc/gaia
+sudo chmod 644 /etc/gaia/device.conf
+echo "  ✓ /etc/gaia configurato"
+
 # Permessi sudo per systemctl (necessari per start/stop servizi)
 SUDOERS_FILE="/etc/sudoers.d/gaia-agent"
-if [ ! -f "$SUDOERS_FILE" ]; then
-    echo "${SUDO_USER:-pi} ALL=(ALL) NOPASSWD: /bin/systemctl start gaia-*, /bin/systemctl stop gaia-*, /bin/systemctl restart gaia-*, /sbin/reboot" \
-        | sudo tee "$SUDOERS_FILE" > /dev/null
-    sudo chmod 440 "$SUDOERS_FILE"
-    echo "  ✓ Permessi sudo configurati"
-fi
+echo "$(whoami) ALL=(ALL) NOPASSWD: /bin/systemctl start gaia-*, /bin/systemctl stop gaia-*, /bin/systemctl restart gaia-*, /sbin/reboot" \
+    | sudo tee "$SUDOERS_FILE" > /dev/null
+sudo chmod 440 "$SUDOERS_FILE"
+echo "  ✓ Permessi sudo configurati per $(whoami)"
 
 echo ""
 echo "✅ Installazione completata!"

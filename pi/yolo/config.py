@@ -26,12 +26,13 @@ _defaults = {
     'MQTT_HOST':                '192.168.1.142',
     'MQTT_PORT':                '1883',
     'YOLO_MODEL':               'models/yolo11n.pt',
-    'CONFIDENCE_THRESHOLD':     '0.40',
+    'CONFIDENCE_THRESHOLD':     '0.45',
     'FRAME_SKIP':               '6',
-    'PERSON_TIMEOUT':           '3',
-    'EVENT_COOLDOWN_SEC':       '2',
+    'PERSON_TIMEOUT':           '6',
+    'EVENT_COOLDOWN_SEC':       '5',
     'SNAPSHOT_CONF_THRESHOLD':  '0.75',
     'HEARTBEAT_INTERVAL':       '30',
+    'MIN_CONFIRMED_HITS':       '3',
 }
 
 _file_cfg = _load_conf('/etc/gaia/yolo.conf')
@@ -68,3 +69,4 @@ SNAPSHOT_CONF_THRESHOLD   = float(_cfg['SNAPSHOT_CONF_THRESHOLD'])
 
 # ── SYSTEM ────────────────────────────────────────────────────────────────────
 HEARTBEAT_INTERVAL        = float(_cfg['HEARTBEAT_INTERVAL'])
+MIN_CONFIRMED_HITS        = int(_cfg['MIN_CONFIRMED_HITS'])

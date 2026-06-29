@@ -73,6 +73,21 @@ def save_config(cfg: dict):
             json.dump(cfg, f, indent=2)
 
 
+def _write_device_env(cfg: dict):
+    """Scrive /etc/gaia/device.conf — letto dai servizi come EnvironmentFile."""
+    stanza = cfg.get("stanza", config.DEFAULT_STANZA)
+    lines = [
+        f"CAMERA_NAME={stanza}",
+        f"MQTT_HOST={config.MQTT_HOST}",
+        f"MQTT_PORT={config.MQTT_PORT}",
+        f"DEVICE_ID={config.DEVICE_ID}",
+    ]
+    os.makedirs(os.path.dirname(config.DEVICE_ENV_FILE), exist_ok=True)
+    with open(config.DEVICE_ENV_FILE, "w") as f:
+        f.write("\n".join(lines) + "\n")
+    print(f"[Agent] device.conf aggiornato → CAMERA_NAME={stanza}")
+
+
 # ──────────────────────────────────────────────────────────────────────
 # Capability detection
 # ──────────────────────────────────────────────────────────────────────
@@ -182,6 +197,7 @@ _mqtt.on_message    = _on_message
 def _publish_status():
     payload = {
         "device_id":    config.DEVICE_ID,
+        "name":         _device_config.get("name", _device_config.get("stanza", config.DEFAULT_STANZA)),
         "stanza":       _device_config.get("stanza", config.DEFAULT_STANZA),
         "ip":           _get_ip(),
         "capabilities": _capabilities,
@@ -240,9 +256,14 @@ def _handle_command(cmd: dict):
         restart_service(service)
 
     elif action == "set_config":
+        stanza_changed = False
         with _config_lock:
             if "stanza" in cmd:
-                _device_config["stanza"] = cmd["stanza"]
+                if cmd["stanza"] != _device_config.get("stanza"):
+                    _device_config["stanza"] = cmd["stanza"]
+                    stanza_changed = True
+            if "name" in cmd:
+                _device_config["name"] = cmd["name"]
             if "services" in cmd:
                 for svc, val in cmd["services"].items():
                     enabled = val if isinstance(val, bool) else val.get("enabled", False)
@@ -252,6 +273,13 @@ def _handle_command(cmd: dict):
                     else:
                         disable_service(svc)
         save_config(_device_config)
+        _write_device_env(_device_config)
+        if stanza_changed:
+            # Riavvia i servizi attivi so che leggano il nuovo CAMERA_NAME
+            for svc, cfg in _device_config.get("services", {}).items():
+                if cfg.get("enabled") and service_status(svc) == "active":
+                    print(f"[Agent] Riavvio {svc} per cambio stanza")
+                    restart_service(svc)
 
     elif action == "status":
         pass   # risponde sotto con _publish_status()
@@ -319,12 +347,12 @@ def _ota_update(service_key: str, url: str, md5_expected: str, filename: str):
 # Avvio iniziale — porta i servizi allo stato in device.json
 # ──────────────────────────────────────────────────────────────────────
 def apply_initial_config():
+    _write_device_env(_device_config)   # assicura /etc/gaia/device.conf aggiornato
     for svc, cfg in _device_config.get("services", {}).items():
         if cfg.get("enabled", False):
             print(f"[Agent] Avvio: {svc}")
             enable_service(svc)
         else:
-            # Ferma il servizio se per qualche motivo fosse già attivo
             disable_service(svc)
 
 

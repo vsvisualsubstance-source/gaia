@@ -75,11 +75,14 @@ def save_config(cfg: dict):
         log.warning(f"Config save error: {e}")
 
 # ── Audio device ──────────────────────────────────────────────────────────────
-def find_device(pa, hint="Polycom"):
+def find_device(pa, hint=""):
+    if not hint:
+        return None  # usa default di sistema
     for i in range(pa.get_device_count()):
         d = pa.get_device_info_by_index(i)
         if d["maxInputChannels"] > 0 and hint.lower() in d["name"].lower():
             return i
+    log.warning(f"Microfono '{hint}' non trovato — uso default di sistema")
     return None
 
 def get_device_info(pa, idx):
@@ -233,9 +236,13 @@ class GaiaListener:
 
         # PyAudio
         self.pa = pyaudio.PyAudio()
-        hint = self._cfg.get("device_hint", "Polycom")
+        hint = self._cfg.get("device_hint", "")
         dev  = find_device(self.pa, hint)
-        log.info(f"Microfono: {hint} (idx={dev})" if dev is not None else "Microfono: default")
+        if dev is not None:
+            log.info(f"Microfono: '{hint}' (idx={dev})")
+        else:
+            info_def = self.pa.get_default_input_device_info()
+            log.info(f"Microfono: default di sistema — {info_def['name']}")
         self.device_index = dev
 
         info = get_device_info(self.pa, dev)

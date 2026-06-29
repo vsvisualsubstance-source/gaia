@@ -1,0 +1,19 @@
+[Unit]
+Description=GAIA Local Agent (test YOLO/MediaPipe miniPC)
+After=network.target mosquitto.service
+
+[Service]
+Type=simple
+User=core
+WorkingDirectory=/home/core/core-node-0/minipc
+ExecStart=/media/core/D/venv/bin/python3 /home/core/core-node-0/minipc/local_agent.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+Environment=PYTHONUNBUFFERED=1
+Environment=MQTT_HOST=localhost
+
+[Install]
+WantedBy=multi-user.target

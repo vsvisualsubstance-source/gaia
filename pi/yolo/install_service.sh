@@ -16,10 +16,11 @@ Wants=network.target
 Type=simple
 User=$USER_NAME
 WorkingDirectory=$SCRIPT_DIR
-ExecStart=$SCRIPT_DIR/venv/bin/python3 $SCRIPT_DIR/main.py
+EnvironmentFile=-/etc/gaia/device.conf
+EnvironmentFile=-/etc/gaia/yolo.conf
+ExecStart=$SCRIPT_DIR/start.sh
 Restart=always
 RestartSec=10
-Environment=SERVICE_NAME=gaia-yolo
 StandardOutput=journal
 StandardError=journal
 

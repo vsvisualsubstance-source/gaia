@@ -6,12 +6,13 @@ After=network.target
 [Service]
 Type=simple
 User=pi
-WorkingDirectory=/opt/gaia/mediapipe-script
-ExecStart=/opt/gaia/mediapipe-script/start.sh
+WorkingDirectory=/opt/gaia/mediapipe
+EnvironmentFile=/etc/gaia/device.conf
+EnvironmentFile=-/etc/gaia/mediapipe.conf
+ExecStart=/opt/gaia/mediapipe/start.sh
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
-Environment=MQTT_HOST=192.168.1.142
 
 [Install]

@@ -143,34 +143,48 @@ while _running:
         track_id = t['track_id']
 
         if cls_name != 'person':
-            obj_counter[cls_name] = obj_counter.get(cls_name, 0) + 1
+            # conta solo oggetti visti nel frame corrente (age == 0)
+            if t['age'] == 0:
+                obj_counter[cls_name] = obj_counter.get(cls_name, 0) + 1
             continue
 
-        conf = float(t.get('conf', 0))
+        conf  = float(t.get('conf', 0))
+        hits  = int(t.get('hits', 1))
+        age   = int(t.get('age', 0))
 
-        # Person enter
-        if track_id not in last_seen:
-            publish_event('person_entered', track_id)
+        # Track confermata solo dopo MIN_CONFIRMED_HITS rilevamenti
+        confirmed = hits >= config.MIN_CONFIRMED_HITS
 
-        last_seen[track_id] = timestamp
+        if confirmed:
+            # Person enter: prima volta che raggiungiamo la soglia
+            if track_id not in last_seen:
+                publish_event('person_entered', track_id)
 
-        # Snapshot per face recognition
-        if conf >= config.SNAPSHOT_CONF_THRESHOLD and track_id not in last_snapshot_time:
-            snap = encode_person_crop(frame, t['box'])
-            if snap:
-                mqtt.publish(mqtt.topic_snapshot, {   # topic dinamico
-                    'node':      mqtt.node_id,
-                    'location':  config.LOCATION,
-                    'zone':      config.ZONE,
-                    'camera':    config.CAMERA_NAME,
-                    'track_id':  track_id,
-                    'timestamp': timestamp,
-                    'conf':      conf,
-                    'image':     snap,
-                })
-                last_snapshot_time[track_id] = timestamp
+            # Aggiorna last_seen solo se vista nel frame corrente
+            if age == 0:
+                last_seen[track_id] = timestamp
 
-        persons.append({'track_id': track_id, 'conf': conf, 'box': t['box']})
+            # Snapshot per face recognition
+            if (conf >= config.SNAPSHOT_CONF_THRESHOLD
+                    and age == 0
+                    and track_id not in last_snapshot_time):
+                snap = encode_person_crop(frame, t['box'])
+                if snap:
+                    mqtt.publish(mqtt.topic_snapshot, {
+                        'node':      mqtt.node_id,
+                        'location':  config.LOCATION,
+                        'zone':      config.ZONE,
+                        'camera':    config.CAMERA_NAME,
+                        'track_id':  track_id,
+                        'timestamp': timestamp,
+                        'conf':      conf,
+                        'image':     snap,
+                    })
+                    last_snapshot_time[track_id] = timestamp
+
+            # Conta solo persone viste nel frame corrente
+            if age == 0:
+                persons.append({'track_id': track_id, 'conf': conf, 'box': t['box']})
 
     # ── PERSON LEFT ───────────────────────────────────────────────────────────
 

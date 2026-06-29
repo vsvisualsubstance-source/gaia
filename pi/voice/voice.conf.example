@@ -1,0 +1,16 @@
+# GAIA Voice Node — configurazione
+# Copia in /etc/gaia/voice.conf e modifica per ogni Raspberry Pi
+
+# Venv da usare (lascia vuoto per usare ./venv locale)
+# Esempio: VOICE_VENV=/home/asemico/voice_edge/venv
+VOICE_VENV=
+
+# Broker MQTT
+MQTT_HOST=192.168.1.142
+MQTT_PORT=1883
+
+# Microfono (vuoto = default di sistema, oppure indice numerico es. 1)
+MIC_DEVICE=
+
+# Modello Whisper (tiny/base/small)
+WHISPER_MODEL=base

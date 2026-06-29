@@ -16,6 +16,10 @@ SAMPLE_RATE        = 16000
 CHUNK_SIZE         = 1280      # 80ms @ 16kHz — dimensione richiesta da openWakeWord
 SILENCE_THRESHOLD  = 400       # media assoluta int16 sotto cui = silenzio
 RECORD_SECONDS_MAX = 12
+# MIC_DEVICE: None = default di sistema; oppure indice int o nome parziale
+# es: MIC_DEVICE=0  oppure  MIC_DEVICE="Logitech"
+_mic_env = os.getenv("MIC_DEVICE", "")
+MIC_DEVICE = int(_mic_env) if _mic_env.isdigit() else (_mic_env if _mic_env else None)
 
 # ── Wakeword (openWakeWord) ───────────────────────────────────────────
 # Modelli disponibili: "alexa", "hey_jarvis", "hey_mycroft", "hey_rhasspy"

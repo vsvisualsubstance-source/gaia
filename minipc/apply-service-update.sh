@@ -5,8 +5,9 @@ REPO="/home/core/core-node-0"
 
 echo "=== Aggiornamento service files GAIA ==="
 
-cp "$REPO/minipc/script/gaia-listener.service" /etc/systemd/system/
-cp "$REPO/minipc/script/gaia-admin.service"    /etc/systemd/system/
+cp "$REPO/minipc/script/gaia-listener.service"  /etc/systemd/system/
+cp "$REPO/minipc/script/gaia-admin.service"     /etc/systemd/system/
+cp "$REPO/minipc/gaia-local-agent.service"      /etc/systemd/system/
 
 systemctl daemon-reload
 
@@ -23,6 +24,10 @@ echo "=== Riavvio Node-RED ==="
 systemctl restart nodered
 sleep 3
 systemctl is-active nodered && echo "  ✓ Node-RED: RUNNING" || echo "  ✗ Node-RED: FAILED"
+
+echo ""
+echo "  ✓ gaia-local-agent.service aggiornato"
+systemctl enable --now gaia-local-agent 2>/dev/null && echo "  ✓ gaia-local-agent: RUNNING" || echo "  ℹ  gaia-local-agent non avviato"
 
 echo ""
 echo "✅ Fatto. Verifica: journalctl -u gaia-listener -n 20"

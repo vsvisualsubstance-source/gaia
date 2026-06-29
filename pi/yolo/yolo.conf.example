@@ -1,6 +1,10 @@
 # GAIA YOLO Node — configurazione
 # Copia in /etc/gaia/yolo.conf e modifica per ogni Raspberry Pi
 
+# Venv da usare (lascia vuoto per usare ./venv locale)
+# Esempio: YOLO_VENV=/home/asemico/yolo_edge/venv
+YOLO_VENV=
+
 # Nome della stanza/room (claim iniziale, poi il Device Registry può correggere)
 NODE_ID=ingresso
 
@@ -22,13 +26,16 @@ MQTT_PORT=1883
 YOLO_MODEL=models/yolo11n.pt
 
 # Soglie
-CONFIDENCE_THRESHOLD=0.40
+CONFIDENCE_THRESHOLD=0.45
 SNAPSHOT_CONF_THRESHOLD=0.75
+
+# Anti falsi positivi: quanti frame consecutivi prima di considerare una persona "vera"
+MIN_CONFIRMED_HITS=3
 
 # Processing
 FRAME_SKIP=6
 
 # Timing
-PERSON_TIMEOUT=3
-EVENT_COOLDOWN_SEC=2
+PERSON_TIMEOUT=6
+EVENT_COOLDOWN_SEC=5
 HEARTBEAT_INTERVAL=30

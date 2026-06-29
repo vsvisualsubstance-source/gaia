@@ -30,10 +30,13 @@ SERVICE_MAP = {
     "voice":     "gaia-voice",
 }
 
+# File di ambiente condiviso — agent lo scrive, i servizi lo leggono
+DEVICE_ENV_FILE = "/etc/gaia/device.conf"
+
 # Percorsi base di ogni servizio sul Pi (usati da OTA)
 SERVICE_DIRS = {
-    "yolo":      "/opt/gaia/Yolo-Scripts",
-    "mediapipe": "/opt/gaia/mediapipe-script",
-    "voice":     "/opt/gaia/voice-node",
-    "agent":     "/opt/gaia/gaia-agent",
+    "yolo":      "/opt/gaia/yolo",
+    "mediapipe": "/opt/gaia/mediapipe",
+    "voice":     "/opt/gaia/voice",
+    "agent":     "/opt/gaia/agent",
 }

@@ -169,7 +169,8 @@ def _record_speech() -> np.ndarray | None:
     SILENCE_LIMIT = int(SR / CHUNK * 1.5)           # 1.5s silenzio → stop
     MAX_CHUNKS    = int(SR / CHUNK * config.RECORD_SECONDS_MAX)
 
-    with sd.InputStream(samplerate=SR, channels=1, dtype="int16", blocksize=CHUNK) as s:
+    with sd.InputStream(samplerate=SR, channels=1, dtype="int16", blocksize=CHUNK,
+                        device=config.MIC_DEVICE) as s:
         for _ in range(MAX_CHUNKS):
             if not _running:
                 break
@@ -205,7 +206,8 @@ def main():
         # ── Fase 1: ascolto wakeword ───────────────────────────────
         _publish_status("listening")
         wakeword_stream = sd.InputStream(
-            samplerate=SR, channels=1, dtype="int16", blocksize=CHUNK
+            samplerate=SR, channels=1, dtype="int16", blocksize=CHUNK,
+            device=config.MIC_DEVICE
         )
         wakeword_stream.start()
 

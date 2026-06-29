@@ -30,7 +30,7 @@ source venv/bin/activate
 pip install --upgrade pip -q
 
 # numpy prima (dipendenza di tutti gli altri)
-pip install "numpy>=1.24,<2.0" -q
+pip install "numpy>=2.0" -q
 
 # ── Pacchetti Python ─────────────────────────────────────────────────
 echo "[3/5] Installazione pacchetti Python..."

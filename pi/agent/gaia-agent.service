@@ -6,8 +6,8 @@ Wants=network.target
 [Service]
 Type=simple
 User=pi
-WorkingDirectory=/opt/gaia/gaia-agent
-ExecStart=/opt/gaia/gaia-agent/start.sh
+WorkingDirectory=/opt/gaia/agent
+ExecStart=/opt/gaia/agent/start.sh
 Restart=always
 RestartSec=5
 StandardOutput=journal
