@@ -22,10 +22,10 @@ _defaults = {
     'LOCATION':                 'casa',
     'ZONE':                     'unknown',
     'CAMERA_NAME':              'cam1',
-    'CAMERA_INDEX':             '0',
     'MQTT_HOST':                '192.168.1.142',
     'MQTT_PORT':                '1883',
     'YOLO_MODEL':               'models/yolo11n.pt',
+    'YOLO_IMGSZ':               '512',
     'CONFIDENCE_THRESHOLD':     '0.45',
     'FRAME_SKIP':               '6',
     'PERSON_TIMEOUT':           '6',
@@ -40,7 +40,7 @@ _cfg = {**_defaults, **_file_cfg, **{k: os.environ[k] for k in _defaults if k in
 
 # ── DEVICE IDENTITY ───────────────────────────────────────────────────────────
 # Stabile per tutta la vita del processo (hostname del Pi)
-DEVICE_ID = socket.gethostname()
+DEVICE_ID = os.getenv("DEVICE_ID", socket.gethostname())
 
 # ── INITIAL CLAIMS ────────────────────────────────────────────────────────────
 # Questi sono i valori di partenza. NODE_ID può essere aggiornato
@@ -49,7 +49,6 @@ NODE_ID             = _cfg['NODE_ID']
 LOCATION            = _cfg['LOCATION']
 ZONE                = _cfg['ZONE']
 CAMERA_NAME         = _cfg['CAMERA_NAME']
-CAMERA_INDEX        = int(_cfg['CAMERA_INDEX'])
 
 # ── MQTT ──────────────────────────────────────────────────────────────────────
 MQTT_HOST           = _cfg['MQTT_HOST']
@@ -57,6 +56,7 @@ MQTT_PORT           = int(_cfg['MQTT_PORT'])
 
 # ── YOLO ──────────────────────────────────────────────────────────────────────
 YOLO_MODEL                = _cfg['YOLO_MODEL']
+YOLO_IMGSZ                = int(_cfg['YOLO_IMGSZ'])
 CONFIDENCE_THRESHOLD      = float(_cfg['CONFIDENCE_THRESHOLD'])
 FRAME_SKIP                = int(_cfg['FRAME_SKIP'])
 

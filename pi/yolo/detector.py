@@ -7,14 +7,13 @@ class Detector:
 
         self.model = YOLO(model_path)
 
-    def infer(self, frame, conf_thres=0.4):
+    def infer(self, frame, conf_thres=0.4, imgsz=512):
 
         results = self.model.predict(
             source=frame,
             conf=conf_thres,
-            imgsz=512,
+            imgsz=imgsz,
             verbose=False
-            
         )
 
         detections = []

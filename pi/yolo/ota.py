@@ -12,6 +12,7 @@ Flusso:
 
 import os
 import sys
+import json
 import time
 import hashlib
 import logging
@@ -48,7 +49,6 @@ class OtaHandler:
 
     def handle(self, topic, payload_bytes):
         """Chiamato quando arriva un messaggio OTA. Thread-safe."""
-        import json
         try:
             cmd = json.loads(payload_bytes)
         except Exception:
@@ -98,26 +98,31 @@ class OtaHandler:
                     log.info(f"MD5 OK: {actual}")
 
                 # ── SCRITTURA ATOMICA ──────────────────────────────────────────
-                target = os.path.join(self.base_dir, script)
-                tmp    = target + '.ota_tmp'
+                base_real = os.path.realpath(self.base_dir)
+                target = os.path.realpath(os.path.join(self.base_dir, script))
+                if not target.startswith(base_real + os.sep):
+                    log.error(f"OTA path traversal: {script}")
+                    self._ack('failed', version, 'path_traversal')
+                    return
+                tmp = target + '.ota_tmp'
                 with open(tmp, 'wb') as f:
                     f.write(content)
                 os.replace(tmp, target)   # atomico su POSIX
                 log.info(f"✓ {script} scritto in {target}")
 
-                self._ack('updated', version)
-
                 # ── RESTART ───────────────────────────────────────────────────
                 if not restart:
+                    self._ack('updated', version)
                     return
-
-                time.sleep(0.5)  # lascia tempo all'ack MQTT di partire
 
                 if service:
                     log.info(f"Restart systemd: {service}")
                     subprocess.run(['sudo', 'systemctl', 'restart', service], check=True)
+                    self._ack('updated', version)
                 else:
                     # Auto-restart: rimpiazza il processo corrente con la versione aggiornata
+                    self._ack('updated', version)
+                    time.sleep(0.5)  # lascia tempo all'ack MQTT di partire
                     log.info("Self-restart via os.execv...")
                     os.execv(sys.executable, [sys.executable] + sys.argv)
 
@@ -126,7 +131,6 @@ class OtaHandler:
                 self._ack('failed', version, str(e))
 
     def _ack(self, status, version, error=None):
-        import json
         payload = {
             'device_id': self.device_id,
             'type':      self.device_type,
@@ -138,7 +142,7 @@ class OtaHandler:
             payload['error'] = error
         topic = f'gaia/devices/{self.device_id}/ota/ack'
         try:
-            self._mqtt.publish(topic, json.dumps(payload), retain=False)
+            self._mqtt.publish(topic, payload, retain=False)
         except Exception as e:
             log.error(f"OTA ack failed: {e}")
         log.info(f"OTA ack: {status} v{version}" + (f" [{error}]" if error else ""))

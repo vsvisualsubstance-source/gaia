@@ -33,7 +33,7 @@ echo "[3/3] Installazione servizi systemd..."
 
 # Sostituisce il path placeholder con quello reale
 GAIA_ROOT="$(dirname "$SCRIPT_DIR")"
-SERVICES="gaia-agent.service gaia-yolo.service gaia-mediapipe.service gaia-voice.service"
+SERVICES="gaia-agent.service gaia-yolo.service gaia-mediapipe.service gaia-voice.service gaia-camera.service"
 
 for SVC in $SERVICES; do
     if [ -f "$SCRIPT_DIR/$SVC" ]; then

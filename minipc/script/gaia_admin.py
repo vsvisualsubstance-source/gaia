@@ -11,7 +11,45 @@ Endpoints:
   POST /api/speaker/<n>/delete → rimuovi speaker
 """
 
-import json, os, threading, logging
+import hashlib
+import io
+import json, os, threading, logging, base64, time, subprocess
+import shutil
+import wave
+
+# Dispositivo ALSA per recording locale (es. "plughw:CARD=Communicator,DEV=0" per Polycom)
+_admin_mic_device = "plughw:CARD=Communicator,DEV=0"   # default: Polycom
+
+
+def _list_alsa_inputs() -> list[dict]:
+    """Lista dispositivi ALSA di input tramite arecord -L."""
+    try:
+        out = subprocess.run(["arecord", "-L"], capture_output=True, text=True, timeout=5)
+        devices = []
+        for line in out.stdout.splitlines():
+            if line.startswith("plughw:CARD="):
+                card = line.split("CARD=")[1].split(",")[0]
+                dev  = line.split("DEV=")[1] if "DEV=" in line else "0"
+                label = f"plughw:CARD={card},DEV={dev}"
+                friendly = card.replace("_"," ")
+                devices.append({"name": label, "label": friendly})
+        return devices
+    except Exception as e:
+        log.warning(f"arecord -L error: {e}")
+        return []
+
+
+def _record_arecord(alsa_device: str, duration_s: int, wav_path: str) -> bool:
+    """Registra audio con arecord (ALSA diretto, no PulseAudio)."""
+    try:
+        cmd = ["arecord", "-D", alsa_device,
+               "-f", "S16_LE", "-r", "16000", "-c", "1",
+               "-d", str(duration_s), wav_path]
+        result = subprocess.run(cmd, capture_output=True, timeout=duration_s + 5)
+        return result.returncode == 0
+    except Exception as e:
+        log.error(f"arecord error: {e}")
+        return False
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
 import paho.mqtt.client as mqtt
@@ -20,28 +58,107 @@ MQTT_BROKER = "localhost"
 MQTT_PORT   = 1883
 HTTP_PORT   = 8765
 
-DB_PATH     = os.path.expanduser("~/core-node-0/script/voice_db.json")
-CONFIG_PATH = os.path.expanduser("~/core-node-0/script/listener_config.json")
-FACES_DIR   = "/media/core/D/face-env/faces"
+# Pi che devono ricevere voice_db.json aggiornato dopo ogni enrollment/rimozione
+PI_VOICE_SYNC_TARGETS = [
+    {"user": "asemico", "ip": "192.168.1.189", "path": "~/gaia/voice/voice_db.json"},
+]
+
+PI_BASE_REPO   = os.path.expanduser("~/core-node-0/pi")  # root pi/ nel repo (serveFile legge da qui)
+MINIPC_IP      = "192.168.1.142"
+NODERED_PORT   = 1880
+
+
+def _distribute_model_via_ota(src_path: str, service_subpath: str, service_type: str,
+                               service_unit: str, restart: bool = True):
+    """Copia il modello nella directory repo pi/ (per ServeFile) e triggera OTA via MQTT.
+
+    service_subpath: percorso relativo al service dir sul Pi, es. 'models/gaia_verifier.pkl'
+    service_type: es. 'voice', 'yolo' (corrisponde alla directory in pi/)
+    """
+    def _run():
+        if not os.path.exists(src_path):
+            log.error(f"OTA: file sorgente non trovato: {src_path}")
+            return
+        # 1. Copia nella directory repo staging (pi/{service_type}/{service_subpath})
+        staging = os.path.join(PI_BASE_REPO, service_type, service_subpath)
+        os.makedirs(os.path.dirname(staging), exist_ok=True)
+        shutil.copy2(src_path, staging)
+        log.info(f"OTA staging: {staging}")
+        # 2. Calcola MD5
+        with open(staging, 'rb') as f:
+            md5 = hashlib.md5(f.read()).hexdigest()
+        # 3. Pubblica OTA via MQTT
+        version = time.strftime('%Y%m%d-%H%M')
+        url = f"http://{MINIPC_IP}:{NODERED_PORT}/gaia/ota/{service_type}/{service_subpath}"
+        cmd = {
+            "script":  service_subpath,
+            "url":     url,
+            "md5":     md5,
+            "version": version,
+            "service": service_unit,
+            "restart": restart,
+            "type":    service_type,
+        }
+        if _mqtt:
+            _mqtt.publish("gaia/ota/broadcast", json.dumps(cmd), retain=False)
+            log.info(f"OTA pubblicato: {service_subpath} v{version} → {url}")
+        else:
+            log.warning("OTA: _mqtt non connesso, impossibile pubblicare")
+    threading.Thread(target=_run, daemon=True).start()
+
+
+def _sync_voice_db():
+    """Copia voice_db.json verso i Pi configurati (async, non bloccante)."""
+    def _run():
+        for t in PI_VOICE_SYNC_TARGETS:
+            dst = f"{t['user']}@{t['ip']}:{t['path']}"
+            try:
+                result = subprocess.run(
+                    ["rsync", "-avz", DB_PATH, dst],
+                    capture_output=True, timeout=15
+                )
+                if result.returncode == 0:
+                    log.info(f"voice_db.json sincronizzato → {t['ip']}")
+                else:
+                    log.warning(f"sync fallito per {t['ip']}: {result.stderr.decode()[:200]}")
+            except Exception as e:
+                log.warning(f"sync errore {t['ip']}: {e}")
+    threading.Thread(target=_run, daemon=True).start()
+
+DB_PATH         = os.path.expanduser("~/core-node-0/minipc/script/voice_db.json")
+CONFIG_PATH     = os.path.expanduser("~/core-node-0/minipc/script/listener_config.json")
+FACES_DIR       = "/media/core/D/face-env/faces"
+DOORBELL_DIR      = os.path.expanduser("~/core-node-0/minipc/script/doorbell_samples")
+GAIA_WAKEWORD_DIR = os.path.expanduser("~/core-node-0/minipc/script/gaia_wakeword_samples")
+GAIA_MODEL_PATH   = os.path.join(GAIA_WAKEWORD_DIR, "gaia_verifier.pkl")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("gaia_admin")
 
 # ── Stato condiviso ───────────────────────────────────────────────────────────
-_state: dict = {"stats": {}, "calibrate_result": {}}
+_state: dict = {"stats": {}, "calibrate_result": {}, "pi_stats": {}, "pi_calibrate": {}}
 _mqtt: mqtt.Client | None = None
 
 # ── MQTT ──────────────────────────────────────────────────────────────────────
 def _on_connect(c, u, f, rc, p):
     log.info(f"MQTT connesso (rc={rc})")
-    c.subscribe("gaia/voce/stats")
-    c.subscribe("gaia/admin/calibrate_result")
+    c.subscribe("gaia/voice/stats/+")            # minipc + stanze Pi
+    c.subscribe("gaia/voice/calibrate_result/+") # calibrazione Pi
+    c.subscribe("gaia/admin/calibrate_result")   # calibrazione miniPC
 
 def _on_message(c, u, msg):
     try:
         payload = json.loads(msg.payload.decode())
-        if msg.topic == "gaia/voce/stats":
-            _state["stats"] = payload
+        source  = msg.topic.split("/")[-1]   # "minipc", "ingresso", ecc.
+        if msg.topic.startswith("gaia/voice/stats/"):
+            if source == "minipc":
+                _state["stats"] = payload
+                if payload.get("success") and payload.get("enrolled"):
+                    _sync_voice_db()
+            else:
+                _state["pi_stats"][source] = payload
+        elif msg.topic.startswith("gaia/voice/calibrate_result/"):
+            _state["pi_calibrate"][source] = payload
         elif msg.topic == "gaia/admin/calibrate_result":
             _state["calibrate_result"] = payload
     except:
@@ -101,6 +218,7 @@ def remove_speaker(name: str):
         if _mqtt:
             _mqtt.publish("gaia/admin/reload_speakers", "{}")
         log.info(f"Speaker rimosso: {name}")
+        _sync_voice_db()
     except Exception as e:
         log.warning(f"remove_speaker error: {e}")
 
@@ -111,14 +229,118 @@ class AdminHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self._cors(); self.end_headers()
 
+    def do_DELETE(self):
+        p = urlparse(self.path).path
+        if p.startswith("/api/gaia-wakeword/clip/"):
+            parts = p.split("/")
+            if len(parts) >= 6:
+                self._delete_clip(GAIA_WAKEWORD_DIR, parts[4], int(parts[5]))
+            else:
+                self.send_response(400); self._cors(); self.end_headers()
+            return
+        if p.startswith("/api/doorbell/clip/"):
+            parts = p.split("/")
+            if len(parts) >= 6:
+                self._delete_clip(DOORBELL_DIR, parts[4], int(parts[5]))
+            else:
+                self.send_response(400); self._cors(); self.end_headers()
+            return
+        self.send_response(404); self._cors(); self.end_headers()
+
+    def _delete_clip(self, base_dir, label, idx):
+        """Cancella il clip idx e rinumera i rimanenti per mantenere indici puliti."""
+        d = os.path.join(base_dir, label)
+        files = sorted(f for f in os.listdir(d) if f.endswith(".wav")) if os.path.exists(d) else []
+        if idx >= len(files):
+            self.send_response(404); self._cors(); self.end_headers(); return
+        target = os.path.join(d, files[idx])
+        os.remove(target)
+        # Rinumera i file successivi
+        for i, fname in enumerate(files[idx+1:], start=idx):
+            os.rename(os.path.join(d, fname), os.path.join(d, f"clip_{i:04d}.wav"))
+        self._json({"ok": True, "deleted": files[idx], "remaining": len(files) - 1})
+
+    def _serve_clip(self, base_dir, label, idx):
+        """Serve un singolo clip WAV per il playback nel browser."""
+        path = os.path.join(base_dir, label, f"clip_{idx:04d}.wav")
+        if not os.path.exists(path):
+            self.send_response(404); self._cors(); self.end_headers(); return
+        data = open(path, 'rb').read()
+        self.send_response(200)
+        self._cors()
+        self.send_header("Content-Type", "audio/wav")
+        self.send_header("Content-Length", len(data))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(data)
+
     def do_GET(self):
-        if urlparse(self.path).path == "/api/status":
+        p = urlparse(self.path).path
+
+        # Playback clip: /api/gaia-wakeword/clip/{label}/{index}
+        if p.startswith("/api/gaia-wakeword/clip/"):
+            parts = p.split("/")  # ['','api','gaia-wakeword','clip',label,idx]
+            if len(parts) >= 6:
+                self._serve_clip(GAIA_WAKEWORD_DIR, parts[4], int(parts[5]))
+            else:
+                self.send_response(400); self._cors(); self.end_headers()
+            return
+
+        # Playback clip: /api/doorbell/clip/{label}/{index}
+        if p.startswith("/api/doorbell/clip/"):
+            parts = p.split("/")  # ['','api','doorbell','clip',label,idx]
+            if len(parts) >= 6:
+                self._serve_clip(DOORBELL_DIR, parts[4], int(parts[5]))
+            else:
+                self.send_response(400); self._cors(); self.end_headers()
+            return
+
+        if p == "/api/microphones":
+            devs = _list_alsa_inputs()
+            self._json({"devices": devs, "current": _admin_mic_device}); return
+
+        if p == "/api/gaia-wakeword/status":
+            def _clips(label):
+                d = os.path.join(GAIA_WAKEWORD_DIR, label)
+                if not os.path.exists(d): return 0, []
+                fs = sorted(f for f in os.listdir(d) if f.endswith(".wav"))
+                return len(fs), [i for i in range(len(fs))]
+            pos_n, pos_idx = _clips("positive")
+            neg_n, neg_idx = _clips("negative")
+            self._json({
+                "positive": pos_n, "positive_clips": pos_idx,
+                "negative": neg_n, "negative_clips": neg_idx,
+                "model_exists": os.path.exists(GAIA_MODEL_PATH),
+            }); return
+        if p == "/api/doorbell/status":
+            def _dclips(label):
+                d = os.path.join(DOORBELL_DIR, label)
+                if not os.path.exists(d): return 0, []
+                fs = sorted(f for f in os.listdir(d) if f.endswith(".wav"))
+                return len(fs), [i for i in range(len(fs))]
+            pos_n, pos_idx = _dclips("positive")
+            neg_n, neg_idx = _dclips("negative")
+            self._json({
+                "positive": pos_n, "positive_clips": pos_idx,
+                "negative": neg_n, "negative_clips": neg_idx,
+                "model_exists": os.path.exists(os.path.join(DOORBELL_DIR, "doorbell_verifier.pkl")),
+            }); return
+        if p == "/api/status":
+            try:
+                r = subprocess.run(["systemctl", "is-active", "gaia-listener"],
+                                   capture_output=True, timeout=3)
+                listener_active = r.stdout.decode().strip() == "active"
+            except Exception:
+                listener_active = True
             self._json({
                 "stats":            _state["stats"],
+                "pi_stats":         _state["pi_stats"],
+                "pi_calibrate":     _state["pi_calibrate"],
                 "calibrate_result": _state["calibrate_result"],
                 "config":           get_config(),
                 "speakers":         get_speakers(),
                 "faces":            get_faces(),
+                "listener_active":  listener_active,
             })
         else:
             self.send_response(404); self.end_headers()
@@ -128,7 +350,38 @@ class AdminHandler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", 0))
         body   = json.loads(self.rfile.read(length)) if length else {}
 
-        if path == "/api/config":
+        if path.startswith("/api/service/listener/"):
+            action = path.split("/")[-1]
+            if action not in ("start", "stop", "restart"):
+                self._json({"ok": False, "error": "azione non valida"}, 400); return
+            try:
+                result = subprocess.run(
+                    ["sudo", "/usr/bin/systemctl", action, "gaia-listener"],
+                    capture_output=True, timeout=10
+                )
+                ok  = result.returncode == 0
+                out = (result.stderr or result.stdout).decode(errors="replace")[:200].strip()
+                self._json({"ok": ok, "output": out})
+            except Exception as e:
+                self._json({"ok": False, "error": str(e)})
+
+        elif path.startswith("/api/pi-service/"):
+            parts = path.split("/")   # ['','api','pi-service',room,action]
+            if len(parts) < 5:
+                self._json({"ok": False, "error": "formato non valido"}, 400); return
+            room   = parts[3]
+            action = parts[4]
+            if action not in ("start", "stop", "restart"):
+                self._json({"ok": False, "error": "azione non valida"}, 400); return
+            mqtt_action = {"start": "enable", "stop": "disable", "restart": "restart"}[action]
+            pi_info     = _state["pi_stats"].get(room, {})
+            device_id   = pi_info.get("device_id")
+            topic = f"gaia/device/{device_id}/command" if device_id else "gaia/device/all/command"
+            if _mqtt:
+                _mqtt.publish(topic, json.dumps({"action": mqtt_action, "service": "voice"}))
+            self._json({"ok": True, "action": mqtt_action, "room": room, "topic": topic})
+
+        elif path == "/api/config":
             if _mqtt:
                 _mqtt.publish("gaia/admin/config", json.dumps(body))
             self._json({"ok": True})
@@ -137,6 +390,22 @@ class AdminHandler(BaseHTTPRequestHandler):
             if _mqtt:
                 _mqtt.publish("gaia/admin/calibrate", "{}")
             self._json({"ok": True, "message": "Calibrazione avviata — silenzio per 5s"})
+
+        elif path == "/api/pi-voice/calibrate":
+            room       = body.get("room", "ingresso")
+            duration_s = int(body.get("duration_s", 5))
+            if _mqtt:
+                _mqtt.publish(f"gaia/voice/admin/{room}",
+                              json.dumps({"cmd": "calibrate", "duration_s": duration_s}))
+            self._json({"ok": True, "message": f"Calibrazione Pi ({room}) avviata — silenzio per {duration_s}s"})
+
+        elif path == "/api/pi-voice/config":
+            room = body.get("room", "ingresso")
+            cfg  = {k: v for k, v in body.items() if k != "room"}
+            if _mqtt and cfg:
+                _mqtt.publish(f"gaia/voice/admin/{room}",
+                              json.dumps({"cmd": "config", **cfg}))
+            self._json({"ok": True})
 
         elif path == "/api/enroll/voice":
             name = body.get("name", "").strip()
@@ -147,6 +416,22 @@ class AdminHandler(BaseHTTPRequestHandler):
                 _mqtt.publish("gaia/admin/voice_enroll", json.dumps(payload))
             self._json({"ok": True, "name": name})
 
+        elif path == "/api/enroll/voice-upload":
+            name = body.get("name", "").strip()
+            audio_b64 = body.get("audio_base64", "")
+            if not name or not audio_b64:
+                self._json({"ok": False, "error": "nome e audio_base64 obbligatori"}, 400); return
+            try:
+                audio_bytes = base64.b64decode(audio_b64.split(",")[-1])  # tollera prefisso data URL
+            except Exception:
+                self._json({"ok": False, "error": "audio_base64 non valido"}, 400); return
+            tmp_path = f"/tmp/voice_upload_{name}_{int(time.time())}.wav"
+            with open(tmp_path, "wb") as f:
+                f.write(audio_bytes)
+            if _mqtt:
+                _mqtt.publish("gaia/admin/voice_enroll_file", json.dumps({"name": name, "file_path": tmp_path}))
+            self._json({"ok": True, "name": name})
+
         elif path == "/api/enroll/face":
             name = body.get("name", "").strip()
             if not name:
@@ -155,9 +440,234 @@ class AdminHandler(BaseHTTPRequestHandler):
                 _mqtt.publish("gaia/vision/control", json.dumps({"cmd": "save_face", "name": name}))
             self._json({"ok": True, "name": name, "message": "Punta la telecamera verso la persona"})
 
+        elif path == "/api/enroll/face-upload":
+            name = body.get("name", "").strip()
+            image_b64 = body.get("image_base64", "")
+            if not name or not image_b64:
+                self._json({"ok": False, "error": "nome e image_base64 obbligatori"}, 400); return
+            try:
+                image_bytes = base64.b64decode(image_b64.split(",")[-1])
+            except Exception:
+                self._json({"ok": False, "error": "image_base64 non valido"}, 400); return
+            person_dir = os.path.join(FACES_DIR, name)
+            os.makedirs(person_dir, exist_ok=True)
+            existing = [f for f in os.listdir(person_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+            img_path = os.path.join(person_dir, f"snap_{len(existing):04d}.jpg")
+            with open(img_path, "wb") as f:
+                f.write(image_bytes)
+            log.info(f"Volto caricato: {img_path}")
+            if _mqtt:
+                _mqtt.publish("gaia/vision/control", json.dumps({"cmd": "reload"}))
+            self._json({"ok": True, "name": name})
+
+        elif path == "/api/admin/set-mic":
+            global _admin_mic_device
+            alsa = body.get("alsa_device")
+            if not alsa:
+                self._json({"ok": False, "error": "alsa_device obbligatorio"}, 400); return
+            _admin_mic_device = alsa
+            log.info(f"Mic admin impostato: {_admin_mic_device}")
+            self._json({"ok": True, "device": _admin_mic_device})
+
+        elif path == "/api/gaia-wakeword/record-local":
+            label      = body.get("label", "positive")
+            duration_s = int(body.get("duration_s", 3))
+            dst = os.path.join(GAIA_WAKEWORD_DIR, label)
+            os.makedirs(dst, exist_ok=True)
+            idx = len([f for f in os.listdir(dst) if f.endswith(".wav")])
+            wav_path = os.path.join(dst, f"clip_{idx:04d}.wav")
+            # gaia_listener.py ha già il microfono aperto → delega la registrazione via MQTT
+            if _mqtt:
+                _mqtt.publish("gaia/admin/record_raw_clip",
+                              json.dumps({"path": wav_path, "duration_s": duration_s}))
+                log.info(f"record_raw_clip inviato a gaia_listener → {wav_path}")
+            self._json({"ok": True, "label": label, "duration_s": duration_s, "clip": idx})
+
+        elif path == "/api/doorbell/record-local":
+            label      = body.get("label", "positive")
+            duration_s = int(body.get("duration_s", 3))
+            dst = os.path.join(DOORBELL_DIR, label)
+            os.makedirs(dst, exist_ok=True)
+            idx = len([f for f in os.listdir(dst) if f.endswith(".wav")])
+            wav_path = os.path.join(dst, f"clip_{idx:04d}.wav")
+            if _mqtt:
+                _mqtt.publish("gaia/admin/record_raw_clip",
+                              json.dumps({"path": wav_path, "duration_s": duration_s}))
+                log.info(f"record_raw_clip doorbell → {wav_path}")
+            self._json({"ok": True, "label": label, "duration_s": duration_s, "clip": idx})
+
+        elif path == "/api/gaia-wakeword/record":
+            label      = body.get("label", "positive")
+            duration_s = int(body.get("duration_s", 3))
+            target     = body.get("stanza", "ingresso1")
+            if _mqtt:
+                _mqtt.publish(f"gaia/voice/record_clip/{target}",
+                              json.dumps({"label": f"gaia_{label}", "duration_s": duration_s}))
+            self._json({"ok": True, "label": label, "duration_s": duration_s, "target": target})
+
+        elif path == "/api/gaia-wakeword/sample":
+            label     = body.get("label", "positive").replace("gaia_", "")
+            audio_b64 = body.get("audio_base64", "")
+            if not audio_b64:
+                self._json({"ok": False, "error": "audio_base64 mancante"}, 400); return
+            try:
+                audio_bytes = base64.b64decode(audio_b64.split(",")[-1])
+            except Exception:
+                self._json({"ok": False, "error": "audio_base64 non valido"}, 400); return
+            dst = os.path.join(GAIA_WAKEWORD_DIR, label)
+            os.makedirs(dst, exist_ok=True)
+            idx = len([f for f in os.listdir(dst) if f.endswith(".wav")])
+            wav_path = os.path.join(dst, f"clip_{idx:04d}.wav")
+            with open(wav_path, "wb") as f:
+                f.write(audio_bytes)
+            log.info(f"Campione Gaia wakeword salvato: {wav_path}")
+            self._json({"ok": True, "label": label, "path": wav_path})
+
+        elif path == "/api/gaia-wakeword/upload":
+            label     = body.get("label", "positive")
+            audio_b64 = body.get("audio_base64", "")
+            if not audio_b64:
+                self._json({"ok": False, "error": "audio_base64 mancante"}, 400); return
+            try:
+                audio_bytes = base64.b64decode(audio_b64.split(",")[-1])
+            except Exception:
+                self._json({"ok": False, "error": "audio_base64 non valido"}, 400); return
+            dst = os.path.join(GAIA_WAKEWORD_DIR, label)
+            os.makedirs(dst, exist_ok=True)
+            idx = len([f for f in os.listdir(dst) if f.endswith(".wav")])
+            wav_path = os.path.join(dst, f"clip_{idx:04d}.wav")
+            with open(wav_path, "wb") as f:
+                f.write(audio_bytes)
+            log.info(f"Campione Gaia wakeword caricato: {wav_path}")
+            self._json({"ok": True, "label": label, "path": wav_path})
+
+        elif path == "/api/gaia-wakeword/train":
+            def _do_train_gaia():
+                try:
+                    import sys
+                    sys.path.insert(0, os.path.dirname(DB_PATH))
+                    from train_doorbell_model import train_and_save
+                    ok, msg = train_and_save(samples_dir=GAIA_WAKEWORD_DIR,
+                                             output_path=GAIA_MODEL_PATH)
+                    log.info(f"Training Gaia wakeword: {msg}")
+                    if ok:
+                        _distribute_model_via_ota(
+                            src_path      = GAIA_MODEL_PATH,
+                            service_subpath = "models/gaia_verifier.pkl",
+                            service_type  = "voice",
+                            service_unit  = "gaia-voice",
+                            restart       = True,
+                        )
+                except Exception as e:
+                    log.error(f"Errore training Gaia: {e}")
+            threading.Thread(target=_do_train_gaia, daemon=True).start()
+            self._json({"ok": True, "message": "Training Gaia wakeword avviato in background"})
+
+        elif path == "/api/doorbell/record":
+            label      = body.get("label", "positive")
+            duration_s = int(body.get("duration_s", 5))
+            target     = body.get("stanza", "ingresso")  # stanza del Pi ingresso
+            if _mqtt:
+                _mqtt.publish(f"gaia/voice/record_clip/{target}",
+                              json.dumps({"label": label, "duration_s": duration_s}))
+            self._json({"ok": True, "label": label, "duration_s": duration_s, "target": target})
+
+        elif path == "/api/doorbell/sample":
+            raw_label = body.get("label", "positive")
+            audio_b64 = body.get("audio_base64", "")
+            if not audio_b64:
+                self._json({"ok": False, "error": "audio_base64 mancante"}, 400); return
+            try:
+                audio_bytes = base64.b64decode(audio_b64.split(",")[-1])
+            except Exception:
+                self._json({"ok": False, "error": "audio_base64 non valido"}, 400); return
+            # Smista in base al prefisso del label: "gaia_*" → GAIA_WAKEWORD_DIR, resto → DOORBELL_DIR
+            if raw_label.startswith("gaia_"):
+                label = raw_label[len("gaia_"):]
+                base_dir = GAIA_WAKEWORD_DIR
+                kind = "Gaia wakeword"
+            else:
+                label = raw_label
+                base_dir = DOORBELL_DIR
+                kind = "citofono"
+            dst = os.path.join(base_dir, label)
+            os.makedirs(dst, exist_ok=True)
+            idx = len([f for f in os.listdir(dst) if f.endswith(".wav")])
+            wav_path = os.path.join(dst, f"clip_{idx:04d}.wav")
+            with open(wav_path, "wb") as f:
+                f.write(audio_bytes)
+            log.info(f"Campione {kind} salvato: {wav_path}")
+            self._json({"ok": True, "label": label, "path": wav_path})
+
+        elif path == "/api/doorbell/upload":
+            label     = body.get("label", "positive")
+            audio_b64 = body.get("audio_base64", "")
+            if not audio_b64:
+                self._json({"ok": False, "error": "audio_base64 mancante"}, 400); return
+            try:
+                audio_bytes = base64.b64decode(audio_b64.split(",")[-1])
+            except Exception:
+                self._json({"ok": False, "error": "audio_base64 non valido"}, 400); return
+            dst = os.path.join(DOORBELL_DIR, label)
+            os.makedirs(dst, exist_ok=True)
+            idx = len([f for f in os.listdir(dst) if f.endswith(".wav")])
+            wav_path = os.path.join(dst, f"clip_{idx:04d}.wav")
+            with open(wav_path, "wb") as f:
+                f.write(audio_bytes)
+            log.info(f"Campione citofono caricato: {wav_path}")
+            self._json({"ok": True, "label": label, "path": wav_path})
+
+        elif path == "/api/doorbell/train":
+            def _do_train():
+                try:
+                    import sys
+                    sys.path.insert(0, os.path.dirname(DB_PATH))
+                    from train_doorbell_model import train_and_save, DEFAULT_OUTPUT
+                    ok, msg = train_and_save()
+                    log.info(f"Training citofono: {msg}")
+                    if ok:
+                        _distribute_model_via_ota(
+                            src_path      = DEFAULT_OUTPUT,
+                            service_subpath = "models/doorbell_verifier.pkl",
+                            service_type  = "voice",
+                            service_unit  = "gaia-voice",
+                            restart       = True,
+                        )
+                except Exception as e:
+                    log.error(f"Errore training: {e}")
+            threading.Thread(target=_do_train, daemon=True).start()
+            self._json({"ok": True, "message": "Training avviato in background"})
+
+        elif path.startswith("/api/gaia-wakeword/clip/") and len(path.split("/")) >= 6:
+            # POST fallback per delete (massima compatibilità browser con CORS)
+            parts = path.split("/")
+            if body.get("_method") == "DELETE":
+                self._delete_clip(GAIA_WAKEWORD_DIR, parts[4], int(parts[5]))
+            else:
+                self._json({"ok": False, "error": "_method:DELETE richiesto"}, 400)
+
+        elif path.startswith("/api/doorbell/clip/") and len(path.split("/")) >= 6:
+            parts = path.split("/")
+            if body.get("_method") == "DELETE":
+                self._delete_clip(DOORBELL_DIR, parts[4], int(parts[5]))
+            else:
+                self._json({"ok": False, "error": "_method:DELETE richiesto"}, 400)
+
         elif path.endswith("/delete") and "/api/speaker/" in path:
             name = path.split("/")[-2]
             remove_speaker(name)
+            _sync_voice_db()
+            self._json({"ok": True})
+
+        elif path.endswith("/delete") and "/api/face/" in path:
+            name = path.split("/")[-2]
+            face_dir = os.path.join(FACES_DIR, name)
+            if os.path.isdir(face_dir):
+                import shutil as _shutil
+                _shutil.rmtree(face_dir)
+                log.info(f"Volto rimosso: {name} ({face_dir})")
+                if _mqtt:
+                    _mqtt.publish("gaia/vision/control", json.dumps({"cmd": "reload"}))
             self._json({"ok": True})
 
         else:
@@ -174,7 +684,7 @@ class AdminHandler(BaseHTTPRequestHandler):
 
     def _cors(self):
         self.send_header("Access-Control-Allow-Origin",  "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
 
     def log_message(self, *_):

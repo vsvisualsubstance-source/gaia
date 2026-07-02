@@ -15,8 +15,9 @@ ZONE=citofono
 # Nome camera
 CAMERA_NAME=cam1
 
-# Indice webcam (0 = prima USB)
-CAMERA_INDEX=0
+# Nota: la camera non viene più aperta direttamente da questo servizio — i
+# frame arrivano dal broker condiviso gaia-camera (shared memory). L'indice
+# webcam si configura in /etc/gaia/camera.conf, non più qui.
 
 # Broker MQTT
 MQTT_HOST=192.168.1.142
@@ -24,6 +25,10 @@ MQTT_PORT=1883
 
 # Modello YOLO
 YOLO_MODEL=models/yolo11n.pt
+
+# Risoluzione inferenza (512 default). Abbassa a 320 su Pi per dimezzare
+# il tempo di inferenza a scapito della precisione su oggetti piccoli/lontani.
+YOLO_IMGSZ=512
 
 # Soglie
 CONFIDENCE_THRESHOLD=0.45

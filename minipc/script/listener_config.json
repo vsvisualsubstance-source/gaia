@@ -1,7 +1,7 @@
 {
   "device_id": "gaia-main",
   "device_hint": "",
-  "voice_threshold": 100,
+  "voice_threshold": 75,
   "silence_frames": 10,
   "speaker_threshold": 0.54
 }

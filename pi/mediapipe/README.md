@@ -40,12 +40,14 @@ cd ~/gaia/mediapipe && bash install.sh
 | `CAMERA_NAME` | `unknown` | Nome stanza (es. `ingresso`, `salotto`) |
 | `MQTT_HOST` | `192.168.1.142` | IP broker MQTT |
 | `MQTT_PORT` | `1883` | Porta broker |
-| `CAMERA_INDEX` | `0` | Indice webcam USB |
 | `PUBLISH_INTERVAL` | `1.0` | Secondi tra pubblicazioni |
+| `FRAME_SKIP` | `1` | Analizza 1 frame ogni N catturati (FaceMesh+Hands+Pose sono pesanti su Pi) |
 | `HEADLESS` | `1` | `1` = nessuna finestra (server/Pi senza display) |
 | `TOPIC` | `gaia/mediapipe/pose` | Topic MQTT |
 
 Le variabili d'ambiente hanno priorità sul file di configurazione.
+
+**Camera condivisa**: questo servizio non apre più la webcam direttamente — legge i frame dal broker `gaia-camera` (shared memory), avviato/fermato automaticamente da `gaia-agent` quando `mediapipe` o `yolo` sono abilitati. L'indice webcam si configura in `/etc/gaia/camera.conf`, non più qui.
 
 ---
 

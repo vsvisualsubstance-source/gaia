@@ -19,6 +19,7 @@ MQTT_HOST = os.getenv("MQTT_HOST", "192.168.1.142")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 
 _BASE       = os.path.dirname(os.path.abspath(__file__))
+_GAIA_ROOT  = os.path.dirname(_BASE)
 DEVICE_JSON = os.path.join(_BASE, "device.json")
 
 HEARTBEAT_INTERVAL = 30   # secondi tra un heartbeat e il successivo
@@ -28,6 +29,7 @@ SERVICE_MAP = {
     "yolo":      "gaia-yolo",
     "mediapipe": "gaia-mediapipe",
     "voice":     "gaia-voice",
+    "camera":    "gaia-camera",   # gestito come dipendenza di yolo/mediapipe, non attivabile a mano
 }
 
 # File di ambiente condiviso — agent lo scrive, i servizi lo leggono
@@ -35,8 +37,9 @@ DEVICE_ENV_FILE = "/etc/gaia/device.conf"
 
 # Percorsi base di ogni servizio sul Pi (usati da OTA)
 SERVICE_DIRS = {
-    "yolo":      "/opt/gaia/yolo",
-    "mediapipe": "/opt/gaia/mediapipe",
-    "voice":     "/opt/gaia/voice",
-    "agent":     "/opt/gaia/agent",
+    "yolo":      os.path.join(_GAIA_ROOT, "yolo"),
+    "mediapipe": os.path.join(_GAIA_ROOT, "mediapipe"),
+    "voice":     os.path.join(_GAIA_ROOT, "voice"),
+    "agent":     _BASE,
+    "camera":    os.path.join(_GAIA_ROOT, "camera"),
 }

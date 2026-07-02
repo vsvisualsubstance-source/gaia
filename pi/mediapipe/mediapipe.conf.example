@@ -12,11 +12,17 @@ CAMERA_NAME=ingresso1
 MQTT_HOST=192.168.1.142
 MQTT_PORT=1883
 
-# Indice webcam (0 = prima webcam USB)
-CAMERA_INDEX=0
+# Nota: la camera non viene più aperta direttamente da questo servizio — i
+# frame arrivano dal broker condiviso gaia-camera (shared memory). L'indice
+# webcam si configura in /etc/gaia/camera.conf, non più qui.
 
 # Secondi tra una pubblicazione e l'altra
 PUBLISH_INTERVAL=1.0
+
+# Analizza 1 frame ogni N catturati (FaceMesh+Hands+Pose sono pesanti su Pi).
+# 1 = ogni frame (default, come prima). Alza a 3-6 per ridurre CPU ~5-6x
+# a scapito di una risposta leggermente più lenta.
+FRAME_SKIP=1
 
 # 1 = nessuna finestra (headless, per Pi senza monitor)
 HEADLESS=1

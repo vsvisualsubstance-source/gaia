@@ -63,3 +63,13 @@ backups/
 # Ollama / OpenHAB (servizi separati)
 ollama/
 openhab/
+
+# Campioni audio citofono (dati runtime, non in git)
+minipc/script/doorbell_samples/
+
+# Campioni audio wakeword e modelli addestrati (dati personali, non in git)
+minipc/script/gaia_wakeword_samples/*.wav
+minipc/script/gaia_wakeword_samples/positive/
+minipc/script/gaia_wakeword_samples/negative/
+minipc/script/gaia_wakeword_samples/doorbell/
+minipc/script/gaia_wakeword_samples/*.pkl

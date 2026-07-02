@@ -16,6 +16,7 @@ import config
 from detector import Detector
 from tracker import Tracker
 from mqtt_client import MqttClient
+from camera_client import CameraClient
 
 logging.basicConfig(
     level=logging.INFO,
@@ -38,9 +39,9 @@ mqtt = MqttClient(
     node_id_claim=config.NODE_ID,
 )
 
-cap = cv2.VideoCapture(config.CAMERA_INDEX)
-if not cap.isOpened():
-    raise RuntimeError(f"Camera {config.CAMERA_INDEX} non accessibile")
+cam = CameraClient()
+if not cam.attach():
+    log.warning("Camera broker (gaia-camera) non disponibile all'avvio, riproverò nel loop")
 
 last_snapshot_time = {}
 last_seen          = {}
@@ -96,14 +97,14 @@ log.info("Loop avviato (headless, no finestre video)")
 
 while _running:
 
-    # Camera recovery
-    if not cap.isOpened():
-        log.warning("Camera persa, riapro...")
+    # Camera broker recovery
+    if not cam.attached:
+        log.warning("Camera broker non disponibile, riprovo tra 5s...")
         time.sleep(5)
-        cap = cv2.VideoCapture(config.CAMERA_INDEX)
+        cam.attach()
         continue
 
-    ret, frame = cap.read()
+    ret, frame = cam.read()
     if not ret:
         log.warning("Frame non letto")
         time.sleep(0.1)
@@ -128,7 +129,7 @@ while _running:
     # ── YOLO ──────────────────────────────────────────────────────────────────
 
     if frame_id % config.FRAME_SKIP == 0:
-        detections = detector.infer(frame, conf_thres=config.CONFIDENCE_THRESHOLD)
+        detections = detector.infer(frame, conf_thres=config.CONFIDENCE_THRESHOLD, imgsz=config.YOLO_IMGSZ)
         tracks = tracker.update(detections, timestamp)
     else:
         tracks = tracker.update([], timestamp)
@@ -143,9 +144,10 @@ while _running:
         track_id = t['track_id']
 
         if cls_name != 'person':
-            # conta solo oggetti visti nel frame corrente (age == 0)
-            if t['age'] == 0:
-                obj_counter[cls_name] = obj_counter.get(cls_name, 0) + 1
+            # tracker.update() restituisce solo track non scadute (age <= max_age):
+            # contale tutte, non solo quelle viste nell'esatto frame corrente,
+            # altrimenti con FRAME_SKIP>1 l'oggetto sparisce e ricompare a ogni ciclo
+            obj_counter[cls_name] = obj_counter.get(cls_name, 0) + 1
             continue
 
         conf  = float(t.get('conf', 0))
@@ -182,9 +184,11 @@ while _running:
                     })
                     last_snapshot_time[track_id] = timestamp
 
-            # Conta solo persone viste nel frame corrente
-            if age == 0:
-                persons.append({'track_id': track_id, 'conf': conf, 'box': t['box']})
+            # Conta ogni persona confermata ancora tracciata (non scaduta), non solo
+            # quelle viste nell'esatto frame corrente: con FRAME_SKIP>1 la maggior parte
+            # dei cicli non ha una detection fresca, e limitarsi ad age==0 faceva
+            # sparire/ricomparire la persona ad ogni ciclo (persons_count 1/0/1/0...)
+            persons.append({'track_id': track_id, 'conf': conf, 'box': t['box']})
 
     # ── PERSON LEFT ───────────────────────────────────────────────────────────
 

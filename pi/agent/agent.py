@@ -139,18 +139,48 @@ def all_statuses() -> dict:
     return {k: service_status(k) for k in config.SERVICE_MAP}
 
 
-def enable_service(key: str) -> bool:
+# Servizi che dipendono dal frame broker condiviso (camera_server) — vedi _sync_camera
+CAMERA_CONSUMERS = ("yolo", "mediapipe")
+
+
+def _camera_consumer_count(cfg: dict) -> int:
+    services = cfg.get("services", {})
+    return sum(1 for k in CAMERA_CONSUMERS if services.get(k, {}).get("enabled", False))
+
+
+def _sync_camera(cfg: dict):
+    """Garantisce che gaia-camera sia attivo se e solo se almeno un consumer
+    (yolo/mediapipe) lo richiede in cfg. Idempotente — può essere chiamata
+    ogni volta che lo stato di un consumer cambia, senza dover tracciare
+    a mano le transizioni 0→1/1→0."""
+    want = _camera_consumer_count(cfg) > 0
+    is_active = service_status("camera") == "active"
+    if want and not is_active:
+        print("[Agent] Avvio gaia-camera (richiesto da yolo/mediapipe)")
+        _systemctl("start", config.SERVICE_MAP["camera"])
+        time.sleep(1)   # lascia il tempo a camera_server di creare la shared memory
+    elif not want and is_active:
+        print("[Agent] Stop gaia-camera (nessun consumer attivo)")
+        _systemctl("stop", config.SERVICE_MAP["camera"])
+
+
+def enable_service(key: str, cfg: dict = None) -> bool:
+    if key in CAMERA_CONSUMERS and cfg is not None:
+        _sync_camera(cfg)
     unit = config.SERVICE_MAP.get(key)
     if not unit:
         return False
     return _systemctl("start", unit)
 
 
-def disable_service(key: str) -> bool:
+def disable_service(key: str, cfg: dict = None) -> bool:
     unit = config.SERVICE_MAP.get(key)
     if not unit:
         return False
-    return _systemctl("stop", unit)
+    ok = _systemctl("stop", unit)
+    if key in CAMERA_CONSUMERS and cfg is not None:
+        _sync_camera(cfg)
+    return ok
 
 
 def restart_service(key: str) -> bool:
@@ -164,9 +194,10 @@ def restart_service(key: str) -> bool:
 # MQTT
 # ──────────────────────────────────────────────────────────────────────
 _mqtt = mqtt.Client(client_id=f"gaia-agent-{config.DEVICE_ID}")
+_mqtt.reconnect_delay_set(min_delay=2, max_delay=30)
 
 
-def _on_connect(client, userdata, flags, rc):
+def _on_connect(client, userdata, flags, rc, properties=None):
     if rc == 0:
         client.subscribe(f"gaia/device/{config.DEVICE_ID}/command")
         client.subscribe("gaia/device/all/command")
@@ -176,7 +207,7 @@ def _on_connect(client, userdata, flags, rc):
         print(f"[MQTT] Connessione fallita rc={rc}")
 
 
-def _on_disconnect(client, userdata, rc):
+def _on_disconnect(client, userdata, rc, properties=None):
     if rc != 0:
         print(f"[MQTT] Disconnesso (rc={rc})")
 
@@ -238,19 +269,34 @@ def _handle_command(cmd: dict):
 
     print(f"[Agent] Comando ricevuto: {cmd}")
 
+    if service == "camera" and action in ("enable", "disable"):
+        print("[Agent] gaia-camera è gestito automaticamente da yolo/mediapipe, comando ignorato")
+        _publish_status()
+        return
+
     if action == "enable" and service:
-        ok = enable_service(service)
+        with _config_lock:
+            _device_config.setdefault("services", {}).setdefault(service, {})["enabled"] = True
+        ok = enable_service(service, _device_config)
         if ok:
-            with _config_lock:
-                _device_config.setdefault("services", {}).setdefault(service, {})["enabled"] = True
             save_config(_device_config)
+        else:
+            with _config_lock:
+                _device_config["services"][service]["enabled"] = False
+            if service in CAMERA_CONSUMERS:
+                _sync_camera(_device_config)
 
     elif action == "disable" and service:
-        ok = disable_service(service)
+        with _config_lock:
+            _device_config.setdefault("services", {}).setdefault(service, {})["enabled"] = False
+        ok = disable_service(service, _device_config)
         if ok:
-            with _config_lock:
-                _device_config.setdefault("services", {}).setdefault(service, {})["enabled"] = False
             save_config(_device_config)
+        else:
+            with _config_lock:
+                _device_config["services"][service]["enabled"] = True
+            if service in CAMERA_CONSUMERS:
+                _sync_camera(_device_config)
 
     elif action == "restart" and service:
         restart_service(service)
@@ -269,9 +315,9 @@ def _handle_command(cmd: dict):
                     enabled = val if isinstance(val, bool) else val.get("enabled", False)
                     _device_config.setdefault("services", {}).setdefault(svc, {})["enabled"] = enabled
                     if enabled:
-                        enable_service(svc)
+                        enable_service(svc, _device_config)
                     else:
-                        disable_service(svc)
+                        disable_service(svc, _device_config)
         save_config(_device_config)
         _write_device_env(_device_config)
         if stanza_changed:
@@ -293,7 +339,8 @@ def _handle_command(cmd: dict):
     elif action == "ota_update":
         threading.Thread(
             target=_ota_update,
-            args=(cmd.get("service", ""), cmd.get("url", ""), cmd.get("md5", ""), cmd.get("filename", "")),
+            args=(cmd.get("service", ""), cmd.get("url", ""), cmd.get("md5", ""),
+                  cmd.get("filename", ""), cmd.get("version", "?")),
             daemon=True
         ).start()
         return   # status verrà pubblicato al termine dell'OTA
@@ -307,15 +354,34 @@ def _handle_command(cmd: dict):
 # ──────────────────────────────────────────────────────────────────────
 # OTA — aggiornamento file singolo
 # ──────────────────────────────────────────────────────────────────────
-def _ota_update(service_key: str, url: str, md5_expected: str, filename: str):
+def _ota_ack(status: str, version: str, error: str = None):
+    payload = {
+        "device_id": config.DEVICE_ID,
+        "type":      "agent",
+        "status":    status,
+        "version":   version,
+        "ts":        int(time.time() * 1000),
+    }
+    if error:
+        payload["error"] = error
+    _mqtt.publish(f"gaia/devices/{config.DEVICE_ID}/ota/ack", json.dumps(payload), retain=False)
+
+
+def _ota_update(service_key: str, url: str, md5_expected: str, filename: str, version: str = "?"):
     target_dir = config.SERVICE_DIRS.get(service_key)
     if not target_dir or not url:
         print("[OTA] Parametri mancanti")
+        _ota_ack("failed", version, "missing_params")
         return
 
     fname = filename or url.split("/")[-1]
-    dest  = os.path.join(target_dir, fname)
-    tmp   = dest + ".ota_tmp"
+    target_real = os.path.realpath(target_dir)
+    dest = os.path.realpath(os.path.join(target_dir, fname))
+    if not dest.startswith(target_real + os.sep):
+        print(f"[OTA] Path traversal: {fname}")
+        _ota_ack("failed", version, "path_traversal")
+        return
+    tmp = dest + ".ota_tmp"
 
     print(f"[OTA] Download {url} → {dest}")
     try:
@@ -327,6 +393,7 @@ def _ota_update(service_key: str, url: str, md5_expected: str, filename: str):
             if actual != md5_expected:
                 print(f"[OTA] MD5 mismatch: {actual} != {md5_expected}")
                 os.remove(tmp)
+                _ota_ack("failed", version, "md5_mismatch")
                 return
 
         os.replace(tmp, dest)
@@ -334,11 +401,13 @@ def _ota_update(service_key: str, url: str, md5_expected: str, filename: str):
 
         # Riavvia il servizio aggiornato
         restart_service(service_key)
+        _ota_ack("updated", version)
 
     except Exception as e:
         print(f"[OTA] Errore: {e}")
         if os.path.exists(tmp):
             os.remove(tmp)
+        _ota_ack("failed", version, str(e))
 
     _publish_status()
 
@@ -348,12 +417,13 @@ def _ota_update(service_key: str, url: str, md5_expected: str, filename: str):
 # ──────────────────────────────────────────────────────────────────────
 def apply_initial_config():
     _write_device_env(_device_config)   # assicura /etc/gaia/device.conf aggiornato
+    _sync_camera(_device_config)        # avvia gaia-camera una sola volta se serve, prima dei consumer
     for svc, cfg in _device_config.get("services", {}).items():
         if cfg.get("enabled", False):
             print(f"[Agent] Avvio: {svc}")
-            enable_service(svc)
+            enable_service(svc, _device_config)
         else:
-            disable_service(svc)
+            disable_service(svc, _device_config)
 
 
 # ──────────────────────────────────────────────────────────────────────

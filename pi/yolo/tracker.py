@@ -152,6 +152,9 @@ class Tracker:
         # =========================
         for tid, tr in self.tracks.items():
 
+            if tid in to_delete:
+                continue
+
             output.append({
                 "track_id": tid,
                 "box": tr.box,

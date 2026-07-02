@@ -6,5 +6,5 @@
     "mediapipe": {"enabled": false},
     "voice":     {"enabled": false}
   },
-  "_nota": "device_id viene rilevato automaticamente dal MAC address se lasciato come 'pi-CONFIGURA'. Cambia 'stanza' con il nome della stanza del Pi."
+  "_nota": "device_id viene rilevato automaticamente dal MAC address se lasciato come 'pi-CONFIGURA'. Cambia 'stanza' con il nome della stanza del Pi. gaia-camera non va abilitato qui: parte/si ferma da solo quando yolo o mediapipe sono enabled."
 }

@@ -24,6 +24,7 @@ import signal
 import socket
 import logging
 from ota import OtaHandler
+from camera_client import CameraClient
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 
@@ -44,8 +45,8 @@ _defaults = {
     'CAMERA_NAME':      'unknown',   # room_claim iniziale (sostituita da config retained)
     'MQTT_HOST':        '192.168.1.142',
     'MQTT_PORT':        '1883',
-    'CAMERA_INDEX':     '0',
     'PUBLISH_INTERVAL': '1.0',
+    'FRAME_SKIP':       '1',
     'HEADLESS':         '1',
     'TOPIC':            'gaia/mediapipe/pose',
 }
@@ -54,12 +55,12 @@ _file_cfg = _load_conf('/etc/gaia/mediapipe.conf')
 _cfg = {**_defaults, **_file_cfg, **{k: os.environ[k] for k in _defaults if k in os.environ}}
 
 # device_id stabile = hostname (es. "pi-ingresso", "raspberrypi", "pi-salotto")
-DEVICE_ID        = socket.gethostname()
+DEVICE_ID        = os.getenv("DEVICE_ID", socket.gethostname())
 DEVICE_TYPE      = 'mediapipe'
 MQTT_HOST        = _cfg['MQTT_HOST']
 MQTT_PORT        = int(_cfg['MQTT_PORT'])
-CAMERA_INDEX     = int(_cfg['CAMERA_INDEX'])
 PUBLISH_INTERVAL = float(_cfg['PUBLISH_INTERVAL'])
+FRAME_SKIP       = int(_cfg['FRAME_SKIP'])
 HEADLESS         = _cfg['HEADLESS'] == '1'
 TOPIC            = _cfg['TOPIC']
 CONFIG_TOPIC     = f'gaia/devices/{DEVICE_ID}/config'
@@ -83,7 +84,7 @@ log.info(f"device_id={DEVICE_ID} room_claim={_state['room']} broker={MQTT_HOST}:
 
 # ── MQTT ──────────────────────────────────────────────────────────────────────
 
-def _on_connect(client, userdata, flags, rc):
+def _on_connect(client, userdata, flags, rc, properties=None):
     if rc != 0:
         log.warning(f"MQTT errore rc={rc}")
         return
@@ -114,7 +115,7 @@ def _on_connect(client, userdata, flags, rc):
 
 
 _ota = OtaHandler(
-    mqtt_client  = type('M', (), {'publish': lambda self, t, p, **kw: _mqtt.publish(t, p)})(),
+    mqtt_client  = type('M', (), {'publish': lambda self, t, p, **kw: _mqtt.publish(t, json.dumps(p) if isinstance(p, dict) else p)})(),
     device_id    = DEVICE_ID,
     device_type  = 'mediapipe',
     base_dir     = os.path.dirname(os.path.abspath(__file__)),
@@ -148,7 +149,7 @@ def _on_message(client, userdata, msg):
         log.error(f"Config parse error: {e}")
 
 
-def _on_disconnect(client, userdata, rc):
+def _on_disconnect(client, userdata, rc, properties=None):
     log.warning(f"MQTT disconnesso rc={rc}")
 
 
@@ -206,6 +207,11 @@ def _analyze(frame):
         mouth_open = mouth_gap > 15
         nx = lm[1].x
         attention = 'left' if nx < 0.42 else ('right' if nx > 0.58 else 'center')
+        # EAR sulle palpebre (159/145 occhio sx, 386/374 dx), normalizzato sulla distanza interoculare
+        eye_dist = abs((lm[263].x - lm[33].x) * w) or 1
+        left_ear  = abs((lm[159].y - lm[145].y) * h) / eye_dist
+        right_ear = abs((lm[386].y - lm[374].y) * h) / eye_dist
+        eyes_open = left_ear > 0.05 and right_ear > 0.05
 
     hr = _hands.process(rgb)
     if hr.multi_hand_landmarks:
@@ -242,16 +248,22 @@ def _analyze(frame):
 # ── CAMERA ────────────────────────────────────────────────────────────────────
 
 def _open_camera():
-    cap = cv2.VideoCapture(CAMERA_INDEX)
-    if not cap.isOpened():
-        log.error(f"Camera {CAMERA_INDEX} non disponibile")
+    cam = CameraClient()
+    if not cam.attach():
+        log.error("Camera broker (gaia-camera) non disponibile")
         return None
-    log.info(f"Camera {CAMERA_INDEX} aperta")
-    return cap
+    log.info("Camera broker collegato (shared memory)")
+    return cam
 
 
 cap = _open_camera()
 last_publish = 0.0
+frame_id = 0
+state = {
+    'person_detected': False, 'emotion': None, 'smile_score': 0,
+    'attention': 'unknown', 'gesture': 'none', 'pose': 'unknown',
+    'mouth_open': False, 'eyes_open': True,
+}
 _running = True
 
 # ── SIGNAL HANDLER ────────────────────────────────────────────────────────────
@@ -270,7 +282,7 @@ log.info(f"Loop avviato (headless={HEADLESS})")
 # ── LOOP ──────────────────────────────────────────────────────────────────────
 
 while _running:
-    if cap is None or not cap.isOpened():
+    if cap is None or not cap.attached:
         log.warning("Camera persa, nuovo tentativo tra 5s...")
         time.sleep(5)
         cap = _open_camera()
@@ -278,12 +290,16 @@ while _running:
 
     ret, frame = cap.read()
     if not ret:
-        log.warning("Frame non letto, riapro la camera...")
-        cap.release()
-        cap = None
+        # CameraClient.read() ritenta già internamente sui torn-read; un singolo
+        # esito negativo non significa connessione morta — solo cap.attached
+        # diventato False (rilevato dal client) indica che serve riagganciarsi.
+        log.warning("Frame non letto dalla shared memory")
+        time.sleep(0.1)
         continue
 
-    state = _analyze(frame)
+    frame_id += 1
+    if frame_id % FRAME_SKIP == 0:
+        state = _analyze(frame)
 
     now = time.time()
     if now - last_publish >= PUBLISH_INTERVAL:
@@ -314,7 +330,7 @@ while _running:
 
 log.info("Shutdown...")
 if cap:
-    cap.release()
+    cap.close()
 _face_mesh.close()
 _hands.close()
 _pose.close()

@@ -182,6 +182,16 @@ class SpeakerDB:
                 best_score, best = score, n
         return (best, best_score) if best_score >= self.threshold else ("sconosciuto", best_score)
 
+# Varianti di "Gaia" che Whisper può trascrivere in italiano
+_GAIA_VARIANTS = {"gaia", "gaya", "gaïa", "gaìa", "gaja", "gaia,", "gaya,"}
+# Prompt per aiutare Whisper a riconoscere il nome proprio e l'italiano parlato
+_WAKE_PROMPT  = "Gaia,"
+_CMD_PROMPT   = ("Gaia, accendi le luci del soggiorno. Gaia, spegni il corridoio. "
+                 "Gaia, attiva l'ingresso. Gaia, accendi la camera. "
+                 "Gaia, spegni tutto. Gaia, che ore sono? Gaia, temperatura della casa. "
+                 "Gaia, musica. Gaia, volume su. "
+                 "soggiorno, salotto, ingresso, corridoio, cucina, camera, notte, sala.")
+
 # ── Transcriber ───────────────────────────────────────────────────────────────
 class Transcriber:
     def __init__(self):
@@ -194,16 +204,19 @@ class Transcriber:
     def detect_wake(self, wav_bytes: bytes) -> tuple[bool, str]:
         segs, _ = self.tiny.transcribe(
             io.BytesIO(wav_bytes), language="it",
-            beam_size=1, best_of=1, temperature=0.0, vad_filter=False
+            beam_size=1, best_of=1, temperature=0.0, vad_filter=False,
+            initial_prompt=_WAKE_PROMPT,
         )
         text = " ".join(s.text for s in segs).strip().lower()
         log.info(f"[TINY] '{text}'")
-        return "gaia" in text, text
+        found = any(v in text for v in _GAIA_VARIANTS)
+        return found, text
 
     def transcribe_command(self, wav_bytes: bytes) -> str:
         segs, _ = self.small.transcribe(
             io.BytesIO(wav_bytes), language="it",
-            beam_size=3, best_of=1, temperature=0.0, vad_filter=True
+            beam_size=5, best_of=1, temperature=0.0, vad_filter=True,
+            initial_prompt=_CMD_PROMPT,
         )
         return " ".join(s.text for s in segs).strip()
 
@@ -374,6 +387,27 @@ class GaiaListener:
                     daemon=True
                 ).start()
 
+        elif cmd == "record_raw_clip":
+            # Registra N secondi dal microfono e salva il WAV nel path specificato
+            dest_path  = data.get("path", "").strip()
+            duration_s = int(data.get("duration_s", 3))
+            if dest_path and not self._busy:
+                threading.Thread(
+                    target=self._do_record_raw,
+                    args=(dest_path, stream, duration_s),
+                    daemon=True
+                ).start()
+
+        elif cmd == "voice_enroll_file":
+            name      = data.get("name", "").strip()
+            file_path = data.get("file_path", "").strip()
+            if name and file_path and not self._busy:
+                threading.Thread(
+                    target=self._do_enroll_file,
+                    args=(name, file_path),
+                    daemon=True
+                ).start()
+
         elif cmd == "reload_speakers":
             self.speaker_db.reload()
             log.info("Speaker DB ricaricato")
@@ -457,6 +491,58 @@ class GaiaListener:
         self._busy = False
         self._publish_stato(self.STATE_IDLE)
 
+    # ── Registrazione clip grezzo (WAV) — usato per training campioni ──────────
+    def _do_record_raw(self, dest_path: str, stream, duration_s: int = 3):
+        self._busy = True
+        self._publish_stato(self.STATE_ENROLLING)
+        log.info(f"Record raw clip: {duration_s}s → {dest_path}")
+        frames = []
+        for _ in range(int(duration_s * 1000 / FRAME_MS)):
+            try:
+                frames.append(self._read_frame(stream))
+            except Exception:
+                break
+        ok = False
+        if frames:
+            try:
+                import os
+                os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+                with open(dest_path, "wb") as f:
+                    f.write(frames_to_wav(frames))
+                ok = True
+                log.info(f"Clip salvata: {dest_path}")
+            except Exception as e:
+                log.warning(f"Salvataggio clip fallito: {e}")
+        self._publish_stats(0, 0, extra={"clip_saved": dest_path if ok else None, "clip_ok": ok})
+        self._busy = False
+        self._publish_stato(self.STATE_IDLE)
+
+    # ── Voice enrollment da file caricato (no microfono) ───────────────────────
+    def _do_enroll_file(self, name: str, file_path: str):
+        self._busy = True
+        self._publish_stato(self.STATE_ENROLLING)
+        log.info(f"Enrollment da file: {name} ({file_path})")
+
+        success, n_valid = False, 0
+        try:
+            emb = self.speaker_db.encoder.embed_utterance(preprocess_wav(file_path))
+            success = self.speaker_db.enroll(name, [emb])
+            n_valid = 1 if success else 0
+        except Exception as e:
+            log.warning(f"Enrollment da file fallito: {e}")
+        finally:
+            try:
+                os.remove(file_path)
+            except OSError:
+                pass
+
+        log.info(f"Enrollment {name} (file): {'OK' if success else 'FALLITO'}")
+        self._publish_stats(0, 0, extra={
+            "enrolled": name, "success": success, "samples": n_valid
+        })
+        self._busy = False
+        self._publish_stato(self.STATE_IDLE)
+
     # ── Command processing ────────────────────────────────────────────────────
     def _process_command(self, wav_bytes: bytes):
         self._publish_stato(self.STATE_PROCESSING)
@@ -468,7 +554,8 @@ class GaiaListener:
         t1.start(); t2.start(); t1.join(); t2.join()
 
         text = result_text[0]
-        for prefix in ["gaia,", "gaia ", "gaia"]:
+        _STRIP_PREFIXES = ["gaia,", "gaya,", "gaia ", "gaya ", "gaia", "gaya"]
+        for prefix in _STRIP_PREFIXES:
             if text.lower().startswith(prefix):
                 text = text[len(prefix):].strip()
                 break
@@ -534,7 +621,7 @@ class GaiaListener:
 
                                 if found:
                                     after = ""
-                                    for tok in ["gaia,", "gaia ", "gaia"]:
+                                    for tok in ["gaia,", "gaya,", "gaia ", "gaya ", "gaia", "gaya"]:
                                         idx = full_text.find(tok)
                                         if idx >= 0:
                                             after = full_text[idx + len(tok):].strip()

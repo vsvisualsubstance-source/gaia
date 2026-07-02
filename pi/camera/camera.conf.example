@@ -1,0 +1,20 @@
+# GAIA Camera Broker — configurazione
+# Copia in /etc/gaia/camera.conf e modifica per ogni Raspberry Pi
+
+# Venv da usare (lascia vuoto per usare ./venv locale)
+# Esempio: CAMERA_VENV=/home/asemico/yolo_edge/venv
+CAMERA_VENV=
+
+# Indice webcam (0 = prima USB) — unico punto in cui questo si configura ora:
+# yolo.conf e mediapipe.conf non aprono più la camera direttamente.
+CAMERA_INDEX=0
+
+# Risoluzione richiesta (il driver V4L2 può negoziare un valore vicino diverso,
+# camera_server usa sempre quello realmente negoziato per dimensionare la
+# shared memory — vedi i log di gaia-camera per la risoluzione effettiva)
+FRAME_WIDTH=640
+FRAME_HEIGHT=480
+
+# Limite frame/secondo pubblicati in shared memory (0 = nessun limite,
+# pubblica alla velocità massima della camera)
+FPS_LIMIT=15

@@ -1,6 +1,6 @@
 # GAIA – Coscienza Artificiale della Casa
 
-Sistema cognitivo distribuito per domotica intelligente. Integra rilevamento visivo (YOLO, MediaPipe), riconoscimento facciale (InsightFace), riconoscimento vocale (Whisper + resemblyzer), automazione (OpenHAB, MQTT), LLM locale (Ollama), memoria vettoriale (Qdrant), notifiche Telegram e interfaccia 3D (Three.js).
+**v1.0.1** — Sistema cognitivo distribuito per domotica intelligente. Integra rilevamento visivo (YOLO, MediaPipe), riconoscimento facciale (InsightFace), riconoscimento vocale (Whisper + resemblyzer), automazione (OpenHAB, MQTT), LLM locale (Ollama), memoria vettoriale (Qdrant), notifiche Telegram e interfaccia 3D (Three.js).
 
 ---
 
@@ -245,6 +245,79 @@ journalctl -u gaia-listener -f
 | `/media/core/D/piper-voices/` | Modelli TTS Piper |
 | `/media/core/D/gaia-web/` | Web UI live (servita da Node-RED) |
 | `/media/core/D/gaia-brain/` | Brain memory service |
+
+---
+
+---
+
+## Web UI (`/media/core/D/gaia-web/`)
+
+Servita staticamente da Node-RED (`httpStatic`). Non in git (runtime), ma le sorgenti sono mantenute lì.
+
+| File | Ruolo |
+|---|---|
+| `dashboard.html` | Dashboard live WebSocket — presenza, emozioni, soul, comandi vocali, debug |
+| `admin.html` | Admin unificato: tuning microfono, enrollment voci/volti, modelli AI, tab Pi Manager integrato |
+| `pi-manager.html` | (standalone legacy) Gestione Pi via MQTT WebSocket |
+
+**Note dashboard v1.0.1:**
+- Sezioni stabili aggiornate in-place (no flickering)
+- Card comandi vocali alimentata da `brain.voiceCommands` (via WebSocket)
+- Pannello debug con tabelle incrementali (rebuild solo se dati cambiano e pannello aperto)
+
+**Note admin v1.0.1:**
+- Tab "⚙ Configurazione" + "🍓 Pi Devices" — MQTT client caricato lazy al primo click
+- RMS threshold ticks visivi su tutti e tre i bar del Pi
+- Calibrazione con barra visiva + ratio rumore
+- Registrazione campioni wakeword "Gaia" dal microfono Pi (positivi e negativi)
+- Sezione Citofono: raccolta campioni + training modello + distribuzione OTA
+- Upload file audio/immagine per enrollment voce/volto
+
+---
+
+## Voice Pipeline Pi (`pi/voice/`) — v1.0.1
+
+| Parametro | Valore | Note |
+|---|---|---|
+| `GAIA_THRESHOLD` | `0.80` | Alzato da 0.70/0.65 per evitare falsi positivi da TV italiana |
+| `vad_filter` | `True` | Già attivo — riduce latenza STT (0.2s silenzio vs 15s) |
+| Guardia durata audio | ≥10s scartati | Clip vicino al max (12s) = probabile rumore ambientale continuo |
+| Wakeword base | `alexa` (openWakeWord) | + verifica con `gaia_verifier.pkl` custom |
+
+**Come raccogliere campioni wakeword "Gaia" e addestrare il modello:**
+1. In `admin.html → Modelli AI → Wakeword Gaia`: registra ≥15 positivi ("Gaia" netto) e ≥15 negativi (TV accesa, parlato normale)
+2. Usa il pulsante "📡 Da Pi ingresso" per catturare l'audio direttamente dal microfono Pi (topic MQTT `gaia/voice/record_clip/{stanza}`)
+3. Clicca "🎓 Addestra modello" → il modello viene distribuito via OTA al Pi e gaia-voice si riavvia
+
+---
+
+## Citofono (`minipc/script/train_doorbell_model.py`) — v1.0.1
+
+Modello ML (LogisticRegression su AudioFeatures di openWakeWord) per rilevare il suono del citofono:
+- Raccolta campioni da `admin.html → Modelli AI → Citofono`
+- Training: `python3 minipc/script/train_doorbell_model.py`
+- Distribuzione: automatica via OTA al Pi ingresso dopo training da admin.html
+- Inferenza Pi: controlla `models/doorbell_verifier.pkl` ad ogni frame audio → pubblica `gaia/{stanza}/alarm {type:"doorbell"}`
+
+---
+
+## Changelog
+
+### v1.0.1
+- Voice Pi: `GAIA_THRESHOLD=0.80`, guardia durata audio ≥10s, `vad_filter=True` confermato
+- Admin: RMS ticks visivi Pi, calibrazione con barra, recording campioni wakeword da Pi (positivi+negativi)
+- Admin: unificato con Pi Manager via tab nav (MQTT lazy), sezione Citofono completa
+- Dashboard: sezioni DOM stabili (no flickering), card comandi vocali, debug incrementale
+- Node-RED: `brain.voiceCommands` (max 20) salvato in Intent Detection, incluso nel payload WebSocket
+- Pi: broker camera condivisa (`pi/camera/camera_server.py` + `camera_client.py`) con seqlock shared memory
+- Pi: OTA unificata su tutti i servizi (`pi/voice/ota.py`, `pi/mediapipe/ota.py`, `pi/yolo/ota.py`)
+- Enrollment: upload file audio/immagine da admin.html; rsync `voice_db.json` → Pi
+- Citofono: script training + endpoint API admin completi
+
+### v1.0.0
+- Prima release stabile: YOLO11 + MediaPipe + openWakeWord + Whisper + Piper
+- Node-RED brain, intent detection, Ollama, Qdrant, Telegram, OpenHAB Hue
+- Pi Manager, admin panel, dashboard Three.js
 
 ---
 

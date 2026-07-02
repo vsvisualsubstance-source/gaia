@@ -1,39 +1,72 @@
 import os
+import socket
 
-# ── Stanza (identificatore unico per questo Pi) ──────────────────────
-CAMERA_NAME = os.getenv("CAMERA_NAME", "ingresso")
+
+def _load_conf(path):
+    cfg = {}
+    try:
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    k, v = line.split('=', 1)
+                    cfg[k.strip()] = v.strip()
+    except FileNotFoundError:
+        pass
+    return cfg
+
+
+_defaults = {
+    'NODE_ID':              'ingresso',
+    'CAMERA_NAME':          'ingresso',
+    'MQTT_HOST':            '192.168.1.142',
+    'MQTT_PORT':            '1883',
+    'SAMPLE_RATE':          '16000',
+    'CHUNK_SIZE':           '1280',
+    'SILENCE_THRESHOLD':    '400',
+    'RECORD_SECONDS_MAX':   '12',
+    'MIC_DEVICE':           '',
+    'WAKEWORD_MODEL':       'alexa',
+    'WAKEWORD_THRESHOLD':   '0.35',
+    'GAIA_THRESHOLD':       '0.80',
+    'WHISPER_MODEL':        'base',
+    'PIPER_SAMPLE_RATE':    '22050',
+}
+
+_file_cfg = _load_conf('/etc/gaia/voice.conf')
+_cfg = {**_defaults, **_file_cfg, **{k: os.environ[k] for k in _defaults if k in os.environ}}
+
+# ── Device identity ───────────────────────────────────────────────────
+# DEVICE_ID: legge DEVICE_ID dall'env (scritto da agent in /etc/gaia/device.conf),
+# cade back su hostname solo se non impostato (garantisce ID uniforme tra tutti i servizi).
+DEVICE_ID = os.getenv("DEVICE_ID", socket.gethostname())
+NODE_ID   = _cfg.get('NODE_ID') or _cfg.get('CAMERA_NAME', 'ingresso')
 
 # ── MQTT ─────────────────────────────────────────────────────────────
-MQTT_HOST = os.getenv("MQTT_HOST", "192.168.1.142")
-MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
-
-TOPIC_COMMAND = f"gaia/voice/command/{CAMERA_NAME}"
-TOPIC_TTS     = f"gaia/voice/tts/{CAMERA_NAME}"
-TOPIC_STATUS  = f"gaia/voice/status/{CAMERA_NAME}"
+MQTT_HOST = _cfg['MQTT_HOST']
+MQTT_PORT = int(_cfg['MQTT_PORT'])
 
 # ── Audio ─────────────────────────────────────────────────────────────
-SAMPLE_RATE        = 16000
-CHUNK_SIZE         = 1280      # 80ms @ 16kHz — dimensione richiesta da openWakeWord
-SILENCE_THRESHOLD  = 400       # media assoluta int16 sotto cui = silenzio
-RECORD_SECONDS_MAX = 12
-# MIC_DEVICE: None = default di sistema; oppure indice int o nome parziale
-# es: MIC_DEVICE=0  oppure  MIC_DEVICE="Logitech"
-_mic_env = os.getenv("MIC_DEVICE", "")
+SAMPLE_RATE        = int(_cfg['SAMPLE_RATE'])
+CHUNK_SIZE         = int(_cfg['CHUNK_SIZE'])   # 80ms @ 16kHz — richiesto da openWakeWord
+SILENCE_THRESHOLD  = int(_cfg['SILENCE_THRESHOLD'])
+RECORD_SECONDS_MAX = int(_cfg['RECORD_SECONDS_MAX'])
+
+_mic_env   = _cfg['MIC_DEVICE']
 MIC_DEVICE = int(_mic_env) if _mic_env.isdigit() else (_mic_env if _mic_env else None)
 
 # ── Wakeword (openWakeWord) ───────────────────────────────────────────
-# Modelli disponibili: "alexa", "hey_jarvis", "hey_mycroft", "hey_rhasspy"
-# oppure percorso assoluto a un .onnx custom
-WAKEWORD_MODEL_NAME = os.getenv("WAKEWORD_MODEL", "alexa")
-WAKEWORD_THRESHOLD  = 0.5
+WAKEWORD_MODEL_NAME = _cfg['WAKEWORD_MODEL']
+WAKEWORD_THRESHOLD  = float(_cfg['WAKEWORD_THRESHOLD'])
+GAIA_THRESHOLD      = float(_cfg['GAIA_THRESHOLD'])
 
 # ── STT (faster-whisper) ─────────────────────────────────────────────
-WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base")   # tiny | base | small
+WHISPER_MODEL = _cfg['WHISPER_MODEL']
 WHISPER_LANG  = "it"
 
-# ── TTS (Piper — percorsi relativi alla cartella dello script) ────────
-_BASE        = os.path.dirname(os.path.abspath(__file__))
-PIPER_BIN    = os.path.join(_BASE, "bin", "piper")
-PIPER_MODEL  = os.path.join(_BASE, "models", "it_IT-paola-medium.onnx")
-PIPER_CONFIG = os.path.join(_BASE, "models", "it_IT-paola-medium.onnx.json")
-PIPER_SAMPLE_RATE = 22050
+# ── TTS (Piper) ───────────────────────────────────────────────────────
+_BASE             = os.path.dirname(os.path.abspath(__file__))
+PIPER_BIN         = os.path.join(_BASE, "bin", "piper")
+PIPER_MODEL       = os.path.join(_BASE, "models", "it_IT-paola-medium.onnx")
+PIPER_CONFIG      = os.path.join(_BASE, "models", "it_IT-paola-medium.onnx.json")
+PIPER_SAMPLE_RATE = int(_cfg['PIPER_SAMPLE_RATE'])

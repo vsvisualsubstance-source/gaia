@@ -14,4 +14,4 @@ fi
 
 cd "$SCRIPT_DIR"
 source "$VENV/bin/activate"
-exec python3 "$SCRIPT_DIR/main.py"
+exec python3 -u "$SCRIPT_DIR/main.py"
