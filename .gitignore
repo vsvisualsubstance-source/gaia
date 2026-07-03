@@ -32,6 +32,10 @@ pi/agent/device.json
 # Dati personali voice enrollment
 minipc/script/voice_db.json
 
+# Calibrazione mic salvata automaticamente da gaia_listener.py ad ogni tuning
+# da admin.html — non è config editoriale, cambia da sola
+minipc/script/listener_config.json
+
 # Wakeword models (file grandi)
 minipc/wakeword_models/
 
