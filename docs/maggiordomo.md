@@ -14,13 +14,46 @@ tab — è codice di produzione, non solo test). Gestisce automazioni reattive s
    (`lastButlerAction.windows_alert`).
 3. **Spegnimento automatico luci**: per salotto/cucina/studio, se la stanza è vuota
    (`persons_count === 0`) da più di 10 minuti e una luce di quella stanza è accesa → spegne
-   via `openhab/{room}/Potenza/command` + notifica.
+   via REST OpenHAB (fix 2026-07-03, vedi sotto) + notifica.
 
-**Wiring:** output collegato a `mqtt out "Citofono"` e a `function 3` (non ancora
-documentato — verificare cosa fa prima di modificare questa parte). I comandi verso OpenHAB
-(`openhab/{room}/Potenza/command`) escono come `node.send` con topic dinamico: verificare che
-il nodo MQTT out a valle non abbia un topic fisso che li ignora (stesso problema visto per
-Pet Concierge/Disability, vedi `docs/pet-disability.md`).
+## FIX APPLICATO 2026-07-03 — output
+
+Prima del fix, l'output di `Maggiordomo` era collegato a `mqtt out "Citofono"` (topic **fisso**
+`casa/citofono/trigger` — ignorava `msg.topic`, quindi ogni alert/comando di Maggiordomo veniva
+pubblicato lì, indipendentemente dal contenuto) e a `function 3` (sovrascriveva il payload con
+un messaggio hardcoded "🔔 CITOFONO" e un placeholder mai completato `chatId = "YOUR_CHAT_ID"`
+— era il codice del webhook citofono reale, tab Inject, http-in "trigger", non pensato per
+ricevere gli output di Maggiordomo). **Nessuno dei tre comportamenti arrivava a destinazione.**
+
+Risolto dando alla function **2 output**: output 0 → nuovo nodo condiviso `Alert / Command Bus`
+(`mqtt out` dinamico, stesso usato da Pet Concierge/Disability, vedi `docs/pet-disability.md`)
+per gli alert Telegram; output 1 → `openhab_http_mood_01` (`→ OpenHAB REST`, lo stesso http
+request già usato da `MoodSceneSync`) per il comando luci, riscritto da MQTT
+(`openhab/{room}/Potenza/command`, mai funzionante — OpenHAB non ha subscriber MQTT per i
+comandi) a REST usando l'item **reale** già trovato dinamicamente in `brain.lights` (la
+variabile `light` prodotta da `Object.entries(brain.lights).find(...)` contiene l'id vero
+dell'item OpenHAB, non serve alcuna mappa statica stanza→item):
+```js
+const [itemId] = light;
+node.send([null, { url: `http://localhost:8080/rest/items/${itemId}`, method: 'POST',
+                    headers: {'Content-Type':'text/plain'}, payload: 'OFF' }]);
+node.send({ topic: 'telegram/alert', payload: `💡 Luci di ${room} (${itemId}) spente...` });
+```
+
+## PROBLEMA ANCORA APERTO — nessun trigger in ingresso
+
+**`Maggiordomo` non ha alcun wire in ingresso nel flow** — nessun nodo lo invoca mai (verificato
+cercando in tutto `flows.json` chi punta al suo id: nessun risultato). Il fix del wiring in
+uscita rende l'automazione *corretta*, ma **non la rende attiva**: finché non viene collegato
+un trigger, la function non gira mai. Da decidere insieme all'utente:
+- Riusare il timer già esistente `Inject Pet_Diability` (ogni 5 minuti, tab Inject — stesso che
+  innesca Pet Concierge/Disability) aggiungendo Maggiordomo come terzo target, oppure crearne
+  uno dedicato con un intervallo diverso.
+- Il branch "citofono pressed" cerca `msg.topic === 'casa/citofono/pressed'`, ma non esiste
+  nessun `mqtt in` su quel topic nel flow — il vero webhook citofono è un percorso separato
+  (`http in "trigger"` → `function 3`, tab Inject) che non passa da Maggiordomo. Quel branch è
+  verosimilmente codice legacy da una versione precedente del citofono — chiarire se va tenuto
+  (serve un input reale) o rimosso.
 
 ## Componenti correlati (letti da Maggiordomo, ma calcolati altrove)
 

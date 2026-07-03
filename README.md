@@ -210,12 +210,18 @@ Node-RED usa `/home/core/.node-red/flows.json`. Il repo tiene una copia in `node
 # Esporta da NR verso repo (dopo modifiche nell'editor)
 cp /home/core/.node-red/flows.json ~/core-node-0/node-red/flows.json
 
-# Importa da repo verso NR + ricarica
+# Importa da repo verso NR + riavvia
 cp ~/core-node-0/node-red/flows.json /home/core/.node-red/flows.json
-kill -HUP $(pgrep -f node-red)   # ricarica i flow senza perdere il context
-# oppure riavvia completamente (perde il global context / gaiaBrain in-memory):
-# pkill node-red && node-red --userDir /home/core/.node-red &
+pkill -f node-red && node-red --userDir /home/core/.node-red &
 ```
+
+**`kill -HUP` NON funziona qui** (verificato 2026-07-03): questo Node-RED non intercetta SIGHUP,
+quindi lo termina invece di ricaricare i flow — va sempre riavviato per intero con il comando
+sopra. Non è un problema per lo stato: `Load Brain at StartUp` (inject `once` su tab Inject)
+ricarica `gaiaBrain` da `/home/core/gaia/brain.json` ad ogni avvio — sopravvivono
+rooms/presence/people/lights/plants/sensors/mood/lifeIndex/gamification/automations; si
+azzerano invece diary/events/thoughts/memories/chatLog/emotions/gestures/sessions (comportamento
+normale ad ogni riavvio, non solo quando il processo muore per errore).
 
 ---
 
@@ -304,6 +310,20 @@ Modello ML (LogisticRegression su AudioFeatures di openWakeWord) per rilevare il
 - Training: `python3 minipc/script/train_doorbell_model.py`
 - Distribuzione: automatica via OTA al Pi ingresso dopo training da admin.html
 - Inferenza Pi: controlla `models/doorbell_verifier.pkl` ad ogni frame audio → pubblica `gaia/{stanza}/alarm {type:"doorbell"}`
+
+---
+
+## Note di sistema (2026-07-03)
+
+### Dispositivo microfono live nel panel admin
+- **Problema**: il panel "Microfoni — Stato live" non mostra quale device è in uso (rimane "—")
+- **Stato**: `listener_config.json` salva `current_device_name` (es: "default") ma il UI non lo legge
+- **Tentativo non riuscito** (16:30): aggiunto endpoint Python + fetch JavaScript, ma `await` fuori da `async` → revertito
+- **TODO Claude**: implementare lettura device name con funzione helper `async` oppure callback con `Promise`
+- **File coinvolti**: 
+  - `/home/core/D/gaia-web/admin.html` riga ~176: `<span id="listener-device-name">—</span>`
+  - `/home/core/core-node-0/minipc/script/gaia_admin.py`: aggiungere GET `/api/listener/device`
+  - `/home/core/core-node-0/minipc/script/listener_config.json`: contiene `current_device_name`
 
 ---
 
