@@ -1,0 +1,8 @@
+# Venv miniPC — ~/core-node-0/venv (stesso venv del resto di minipc/)
+# Installa con:
+#   source ~/core-node-0/venv/bin/activate
+#   pip install -r requirements.txt
+
+python-osc
+websocket-client
+paho-mqtt

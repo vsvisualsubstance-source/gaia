@@ -1,0 +1,21 @@
+[Unit]
+Description=GAIA ↔ TouchDesigner OSC Bridge
+After=network.target mosquitto.service
+
+[Service]
+Type=simple
+User=core
+WorkingDirectory=/home/core/core-node-0/minipc/touchdesigner
+ExecStart=/home/core/core-node-0/venv/bin/python3 /home/core/core-node-0/minipc/touchdesigner/osc_bridge.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+Environment=PYTHONUNBUFFERED=1
+Environment=HOME=/home/core
+# Override in /etc/gaia/touchdesigner.conf: TD_OSC_HOST, TD_OSC_PORT, OSC_IN_PORT,
+# SEND_INTERVAL_MS, MQTT_HOST, GAIA_WS_HOST/PORT — vedi config.py per i default
+
+[Install]
+WantedBy=multi-user.target
