@@ -21,6 +21,7 @@ del sistema Gaia non ne risente (nessun altro componente dipende da questo).
 """
 import json
 import re
+import socket
 import threading
 import time
 
@@ -155,6 +156,12 @@ class TouchDesignerToGaia:
         dispatcher = Dispatcher()
         dispatcher.set_default_handler(self._default_handler)
         server = ThreadingOSCUDPServer(("0.0.0.0", config.OSC_IN_PORT), dispatcher)
+        # TouchDesigner può mandare raffiche di molti messaggi in pochi ms (es. un
+        # loop che itera un intero set di parametri) — il buffer di ricezione di
+        # default del socket è troppo piccolo per assorbirle, e i pacchetti in
+        # eccesso vengono scartati dal kernel prima ancora di arrivare qui
+        # (visto: 174 drop su /proc/net/udp con 0 messaggi consegnati all'app).
+        server.socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 4 * 1024 * 1024)
         print(f"[TD-Bridge] In ascolto OSC da TouchDesigner su UDP {config.OSC_IN_PORT}")
         return server
 
