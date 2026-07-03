@@ -1,6 +1,6 @@
 # GAIA – Coscienza Artificiale della Casa
 
-**v1.0.1** — Sistema cognitivo distribuito per domotica intelligente. Integra rilevamento visivo (YOLO, MediaPipe), riconoscimento facciale (InsightFace), riconoscimento vocale (Whisper + resemblyzer), automazione (OpenHAB, MQTT), LLM locale (Ollama), memoria vettoriale (Qdrant), notifiche Telegram e interfaccia 3D (Three.js).
+**v1.0.2** — Sistema cognitivo distribuito per domotica intelligente. Discovery/provisioning automatico dei nodi (beacon UDP + captive portal WiFi), welcome kiosk con enrollment. Integra rilevamento visivo (YOLO, MediaPipe), riconoscimento facciale (InsightFace), riconoscimento vocale (Whisper + resemblyzer), automazione (OpenHAB, MQTT), LLM locale (Ollama), memoria vettoriale (Qdrant), notifiche Telegram e interfaccia 3D (Three.js).
 
 ---
 
