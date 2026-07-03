@@ -40,20 +40,21 @@ node.send([null, { url: `http://localhost:8080/rest/items/${itemId}`, method: 'P
 node.send({ topic: 'telegram/alert', payload: `💡 Luci di ${room} (${itemId}) spente...` });
 ```
 
-## PROBLEMA ANCORA APERTO — nessun trigger in ingresso
+## RISOLTO 2026-07-03 — trigger in ingresso
 
-**`Maggiordomo` non ha alcun wire in ingresso nel flow** — nessun nodo lo invoca mai (verificato
-cercando in tutto `flows.json` chi punta al suo id: nessun risultato). Il fix del wiring in
-uscita rende l'automazione *corretta*, ma **non la rende attiva**: finché non viene collegato
-un trigger, la function non gira mai. Da decidere insieme all'utente:
-- Riusare il timer già esistente `Inject Pet_Diability` (ogni 5 minuti, tab Inject — stesso che
-  innesca Pet Concierge/Disability) aggiungendo Maggiordomo come terzo target, oppure crearne
-  uno dedicato con un intervallo diverso.
-- Il branch "citofono pressed" cerca `msg.topic === 'casa/citofono/pressed'`, ma non esiste
-  nessun `mqtt in` su quel topic nel flow — il vero webhook citofono è un percorso separato
-  (`http in "trigger"` → `function 3`, tab Inject) che non passa da Maggiordomo. Quel branch è
-  verosimilmente codice legacy da una versione precedente del citofono — chiarire se va tenuto
-  (serve un input reale) o rimosso.
+`Maggiordomo` non aveva alcun wire in ingresso — agganciato ora al timer condiviso
+`Ciclo Automazioni (5 min)` (ex `Inject Pet_Diability`, rinominato perché ora innesca anche
+Pet Concierge/Disability/Cleanup/Plant/Away/Welcome). Aggiunto gate
+`if (brain.automations?.maggiordomo !== true) return null;` in testa alla function — **non è
+ancora nel sistema di toggle esposto in admin.html prima di questo fix, ora sì** (id
+`maggiordomo`, default **OFF**, vedi `docs/automazioni.md`). Testato con trigger manuale via API
+Node-RED: nessun errore.
+
+**Nota ancora valida**: il branch "citofono pressed" cerca `msg.topic === 'casa/citofono/pressed'`,
+ma non esiste nessun `mqtt in` su quel topic nel flow — il vero webhook citofono è un percorso
+separato (`http in "trigger"` → `function 3`, tab Inject) che non passa da Maggiordomo. Quel
+branch resta verosimilmente codice legacy — chiarire se va tenuto (serve un input reale) o
+rimosso, non urgente.
 
 ## Componenti correlati (letti da Maggiordomo, ma calcolati altrove)
 

@@ -272,7 +272,7 @@
         "type": "function",
         "z": "082363fa8be6eb11",
         "name": "Parse Brain",
-        "func": "try {\n    if (msg.payload && msg.payload.length > 0) {\n        let saved = JSON.parse(msg.payload);\n        let brain = global.get('gaiaBrain') || {};\n        // Ricostruisci solo i campi salvati, gli altri li inizializzi vuoti\n        brain.rooms = saved.rooms || {};\n        brain.presence = saved.presence || {};\n        brain.people = saved.people || {};\n        brain.lights = saved.lights || {};\n        brain.plants = saved.plants || {};\n        brain.sensors = saved.sensors || {};\n        brain.mood = saved.mood || { stress: 0, calm: 0, social: 0, curiosity: 0, energy: 50, state: \"neutra\" };\n        brain.lifeIndex = saved.lifeIndex || 50;\n        brain.gamification = saved.gamification || { level: 1, xp: 0, xpNextLevel: 1000, activeClass: \"Neutro\", unlockedAssets: [\"base_grid\"] };\n        brain.automations = saved.automations || { petConcierge: true, fallDetection: true, fireAlarm: true, fridgeAlarm: true, moodLighting: {} };\n        // Inizializza i campi non salvati (arrays vuoti)\n        brain.diary = [];\n        brain.events = [];\n        brain.thoughts = [];\n        brain.memories = [];\n        brain.chatLog = [];\n        brain.emotions = {};\n        brain.gestures = {};\n        brain.sessions = {};\n        global.set('gaiaBrain', brain);\n    } else {\n        // File non trovato: brain nuovo\n        let brain = { rooms: {}, presence: {}, people: {}, lights: {}, plants: {}, sensors: {}, mood: { stress:0, calm:0, social:0, curiosity:0, energy:50, state:\"neutra\" }, diary:[], events:[], thoughts:[], memories:[], chatLog:[], emotions:{}, gestures:{}, sessions:{}, automations: { petConcierge: true, fallDetection: true, fireAlarm: true, fridgeAlarm: true, moodLighting: {} } };\n        global.set('gaiaBrain', brain);\n    }\n} catch(e) {\n    node.error(\"Errore parsing brain: \" + e.message);\n    global.set('gaiaBrain', {});\n}\nreturn msg;",
+        "func": "try {\n    if (msg.payload && msg.payload.length > 0) {\n        let saved = JSON.parse(msg.payload);\n        let brain = global.get('gaiaBrain') || {};\n        // Ricostruisci solo i campi salvati, gli altri li inizializzi vuoti\n        brain.rooms = saved.rooms || {};\n        brain.presence = saved.presence || {};\n        brain.people = saved.people || {};\n        brain.lights = saved.lights || {};\n        brain.plants = saved.plants || {};\n        brain.sensors = saved.sensors || {};\n        brain.mood = saved.mood || { stress: 0, calm: 0, social: 0, curiosity: 0, energy: 50, state: \"neutra\" };\n        brain.lifeIndex = saved.lifeIndex || 50;\n        brain.gamification = saved.gamification || { level: 1, xp: 0, xpNextLevel: 1000, activeClass: \"Neutro\", unlockedAssets: [\"base_grid\"] };\n        brain.devices = saved.devices || {};\n        const _automationDefaults = { petConcierge: true, fallDetection: true, fireAlarm: true, fridgeAlarm: true, moodLighting: {}, maggiordomo: false, thirstyPlantAlert: false, awayMode: false, welcomeScene: false, touchdesignerLighting: false };\n        brain.automations = { ..._automationDefaults, ...(saved.automations || {}) };\n        // Inizializza i campi non salvati (arrays vuoti)\n        brain.diary = [];\n        brain.events = [];\n        brain.thoughts = [];\n        brain.memories = [];\n        brain.chatLog = [];\n        brain.emotions = {};\n        brain.gestures = {};\n        brain.sessions = {};\n        global.set('gaiaBrain', brain);\n    } else {\n        // File non trovato: brain nuovo\n        let brain = { rooms: {}, presence: {}, people: {}, lights: {}, plants: {}, sensors: {}, devices: {}, mood: { stress:0, calm:0, social:0, curiosity:0, energy:50, state:\"neutra\" }, diary:[], events:[], thoughts:[], memories:[], chatLog:[], emotions:{}, gestures:{}, sessions:{}, automations: { petConcierge: true, fallDetection: true, fireAlarm: true, fridgeAlarm: true, moodLighting: {}, maggiordomo: false, thirstyPlantAlert: false, awayMode: false, welcomeScene: false, touchdesignerLighting: false } };\n        global.set('gaiaBrain', brain);\n    }\n} catch(e) {\n    node.error(\"Errore parsing brain: \" + e.message);\n    global.set('gaiaBrain', {});\n}\nreturn msg;",
         "outputs": 1,
         "timeout": 0,
         "noerr": 0,
@@ -387,7 +387,7 @@
         "type": "function",
         "z": "082363fa8be6eb11",
         "name": "Maggiordomo",
-        "func": "const brain = global.get('gaiaBrain') || {};\nconst now = Date.now();\nconst lastAction = global.get('lastButlerAction') || {};\n\n// 1. Citofono\nif (msg.topic === 'casa/citofono/pressed') {\n    const peopleHome = Object.keys(brain.presence || {}).filter(n => brain.presence[n]?.present).join(', ');\n    node.send({ topic: 'telegram/alert', payload: `\ud83d\udd14 Qualcuno ha suonato! In casa: ${peopleHome || 'nessuno'}` });\n    return null;\n}\n\n// 2. Pioggia e finestre\nconst rainSensor = brain.sensors?.rain;\nconst windowsSensor = brain.sensors?.windows;\nif (rainSensor && rainSensor.state === 'raining' && windowsSensor && windowsSensor.open === true) {\n    if (now - (lastAction.windows_alert || 0) > 300000) {\n        node.send({ topic: 'telegram/alert', payload: '\ud83c\udf27\ufe0f Sta piovendo e le finestre sono aperte!' });\n        lastAction.windows_alert = now;\n        global.set('lastButlerAction', lastAction);\n    }\n}\n\n// 3. Spegnimento luci in stanze vuote da 10 minuti\nObject.entries(brain.rooms || {}).forEach(([room, data]) => {\n    if (room === 'salotto' || room === 'cucina' || room === 'studio') {\n        if (data.persons_count === 0 && data.lastUpdate && (now - data.lastUpdate > 600000)) {\n            const light = Object.entries(brain.lights || {}).find(([id, l]) => id.includes(room) && l.power === true);\n            if (light) {\n                const [itemId] = light;\n                node.send([null, {\n                    url: `http://localhost:8080/rest/items/${itemId}`,\n                    method: 'POST',\n                    headers: { 'Content-Type': 'text/plain' },\n                    payload: 'OFF'\n                }]);\n                node.send({ topic: 'telegram/alert', payload: `\ud83d\udca1 Luci di ${room} (${itemId}) spente automaticamente (stanza vuota da 10 minuti)` });\n            }\n        }\n    }\n});\n\nreturn null;",
+        "func": "const brain = global.get('gaiaBrain') || {};\nif (brain.automations?.maggiordomo !== true) return null;\nconst now = Date.now();\nconst lastAction = global.get('lastButlerAction') || {};\n\n// 1. Citofono\nif (msg.topic === 'casa/citofono/pressed') {\n    const peopleHome = Object.keys(brain.presence || {}).filter(n => brain.presence[n]?.present).join(', ');\n    node.send({ topic: 'telegram/alert', payload: `\ud83d\udd14 Qualcuno ha suonato! In casa: ${peopleHome || 'nessuno'}` });\n    return null;\n}\n\n// 2. Pioggia e finestre\nconst rainSensor = brain.sensors?.rain;\nconst windowsSensor = brain.sensors?.windows;\nif (rainSensor && rainSensor.state === 'raining' && windowsSensor && windowsSensor.open === true) {\n    if (now - (lastAction.windows_alert || 0) > 300000) {\n        node.send({ topic: 'telegram/alert', payload: '\ud83c\udf27\ufe0f Sta piovendo e le finestre sono aperte!' });\n        lastAction.windows_alert = now;\n        global.set('lastButlerAction', lastAction);\n    }\n}\n\n// 3. Spegnimento luci in stanze vuote da 10 minuti\nObject.entries(brain.rooms || {}).forEach(([room, data]) => {\n    if (room === 'salotto' || room === 'cucina' || room === 'studio') {\n        if (data.persons_count === 0 && data.lastUpdate && (now - data.lastUpdate > 600000)) {\n            const light = Object.entries(brain.lights || {}).find(([id, l]) => id.includes(room) && l.power === true);\n            if (light) {\n                const [itemId] = light;\n                node.send([null, {\n                    url: `http://localhost:8080/rest/items/${itemId}`,\n                    method: 'POST',\n                    headers: { 'Content-Type': 'text/plain' },\n                    payload: 'OFF'\n                }]);\n                node.send({ topic: 'telegram/alert', payload: `\ud83d\udca1 Luci di ${room} (${itemId}) spente automaticamente (stanza vuota da 10 minuti)` });\n            }\n        }\n    }\n});\n\nreturn null;",
         "outputs": 2,
         "timeout": 0,
         "noerr": 0,
@@ -409,7 +409,7 @@
         "id": "e5ef12ee348dbde4",
         "type": "inject",
         "z": "082363fa8be6eb11",
-        "name": "Inject Pet_Diability",
+        "name": "Ciclo Automazioni (5 min)",
         "props": [
             {
                 "p": "payload"
@@ -431,7 +431,12 @@
         "wires": [
             [
                 "97e9d7bc95cbf3c9",
-                "b6af1745acb5d49c"
+                "b6af1745acb5d49c",
+                "77c824601225ad12",
+                "gaia_cleanup_stale_rooms_01",
+                "gaia_plant_thirst_01",
+                "gaia_away_mode_01",
+                "gaia_welcome_scene_01"
             ]
         ]
     },
@@ -1196,7 +1201,7 @@
         "type": "function",
         "z": "d3a553c4a24c8d2d",
         "name": "function 1",
-        "func": "// Estrae solo lo stato essenziale per il riavvio\nlet full = global.get('gaiaBrain') || {};\nlet toSave = {\n    // Versioning\n    version: 1,\n    lastUpdate: Date.now(),\n    // Stato attuale delle stanze e persone\n    rooms: (() => {\n        const out = {};\n        for (const [rid, rdata] of Object.entries(full.rooms || {})) {\n            const known = [\"salotto\", \"sala\", \"ingresso\", \"cucina\", \"camera\", \"bagno\", \"studio\", \"esterno\", \"garage\", \"cantina\", \"terrazzo\", \"giardino\"];\n            if (!known.some(k => rid.toLowerCase().includes(k))) continue;\n            out[rid] = rdata;\n        }\n        return out;\n    })(),\n    presence: (() => {\n        const out = {};\n        const ONE_WEEK = 7 * 24 * 60 * 60 * 1000;\n        for (const [name, pd] of Object.entries(full.presence || {})) {\n            if (name.startsWith('unknown')) continue;\n            if (!pd.present && (Date.now() - (pd.lastSeen || 0)) > ONE_WEEK) continue;\n            out[name] = pd;\n        }\n        return out;\n    })(),\n    people: full.people || {}, // storico visite, tempi totali, affinity\n    // Dispositivi\n    lights: full.lights || {},\n    plants: full.plants || {},\n    sensors: full.sensors || {},\n    // Anima\n    mood: full.mood || { stress: 0, calm: 0, social: 0, curiosity: 0, energy: 50, state: \"neutra\" },\n    lifeIndex: full.lifeIndex || 50,\n    gamification: full.gamification || { level: 1, xp: 0, xpNextLevel: 1000, activeClass: \"Neutro\", unlockedAssets: [\"base_grid\"] },\n    // Toggle automazioni (luci da mood per stanza, pet concierge, alert disability) - config persistente\n    automations: full.automations || {},\n    // Non salvare: diary, events, thoughts, memories, chatLog, emotions, gestures, sessions (vanno in Qdrant)\n};\nmsg.payload = JSON.stringify(toSave, null, 2);\nreturn msg;",
+        "func": "// Estrae solo lo stato essenziale per il riavvio\nlet full = global.get('gaiaBrain') || {};\nlet toSave = {\n    // Versioning\n    version: 1,\n    lastUpdate: Date.now(),\n    // Stato attuale delle stanze e persone\n    rooms: (() => {\n        const out = {};\n        for (const [rid, rdata] of Object.entries(full.rooms || {})) {\n            const known = [\"salotto\", \"sala\", \"ingresso\", \"cucina\", \"camera\", \"bagno\", \"studio\", \"esterno\", \"garage\", \"cantina\", \"terrazzo\", \"giardino\"];\n            if (!known.includes(rid.toLowerCase())) continue;  // match esatto, non substring (evita residui tipo \"ingresso1\")\n            out[rid] = rdata;\n        }\n        return out;\n    })(),\n    presence: (() => {\n        const out = {};\n        const ONE_WEEK = 7 * 24 * 60 * 60 * 1000;\n        for (const [name, pd] of Object.entries(full.presence || {})) {\n            if (name.startsWith('unknown')) continue;\n            if (!pd.present && (Date.now() - (pd.lastSeen || 0)) > ONE_WEEK) continue;\n            out[name] = pd;\n        }\n        return out;\n    })(),\n    people: full.people || {}, // storico visite, tempi totali, affinity\n    // Dispositivi\n    lights: full.lights || {},\n    plants: full.plants || {},\n    sensors: full.sensors || {},\n    // Anima\n    mood: full.mood || { stress: 0, calm: 0, social: 0, curiosity: 0, energy: 50, state: \"neutra\" },\n    lifeIndex: full.lifeIndex || 50,\n    gamification: full.gamification || { level: 1, xp: 0, xpNextLevel: 1000, activeClass: \"Neutro\", unlockedAssets: [\"base_grid\"] },\n    // Toggle automazioni (luci da mood per stanza, pet concierge, alert disability) - config persistente\n    automations: full.automations || {},\n    devices: full.devices || {},\n    // Non salvare: diary, events, thoughts, memories, chatLog, emotions, gestures, sessions (vanno in Qdrant)\n};\nmsg.payload = JSON.stringify(toSave, null, 2);\nreturn msg;",
         "outputs": 1,
         "timeout": 0,
         "noerr": 0,
@@ -3483,7 +3488,7 @@
         "type": "function",
         "z": "tab_device_registry",
         "name": "AutomationsList",
-        "func": "// GET /gaia/automations -> stato di tutte le automazioni con default\nconst brain = global.get('gaiaBrain') || {};\nconst a = brain.automations || {};\n\nconst moodLightingRooms = {};\nfor (const roomId of Object.keys(brain.rooms || {})) {\n    if (roomId.includes('cam') || roomId.includes('vision') || roomId === 'unknown') continue;\n    moodLightingRooms[roomId] = (a.moodLighting || {})[roomId] === true;\n}\n\nmsg.payload = {\n    automations: [\n        { id: 'petConcierge',  label: 'Pet Concierge (luce soffusa per animali)', scope: 'global', enabled: a.petConcierge !== false },\n        { id: 'fallDetection', label: 'Rilevamento uomo a terra',                 scope: 'global', enabled: a.fallDetection !== false },\n        { id: 'fireAlarm',     label: 'Allarme incendio',                        scope: 'global', enabled: a.fireAlarm !== false },\n        { id: 'fridgeAlarm',   label: 'Allarme frigo aperto',                    scope: 'global', enabled: a.fridgeAlarm !== false },\n        { id: 'moodLighting',  label: 'Luci automatiche da mood', scope: 'per_room', rooms: moodLightingRooms },\n    ],\n    ts: Date.now(),\n};\nmsg.statusCode = 200;\nreturn msg;\n",
+        "func": "// GET /gaia/automations -> stato di tutte le automazioni con default\nconst brain = global.get('gaiaBrain') || {};\nconst a = brain.automations || {};\n\nconst moodLightingRooms = {};\nfor (const roomId of Object.keys(brain.rooms || {})) {\n    if (roomId.includes('cam') || roomId.includes('vision') || roomId === 'unknown') continue;\n    moodLightingRooms[roomId] = (a.moodLighting || {})[roomId] === true;\n}\n\n    msg.payload = {\n    automations: [\n        { id: 'petConcierge',  label: 'Pet Concierge (luce soffusa per animali)', scope: 'global', enabled: a.petConcierge !== false },\n        { id: 'fallDetection', label: 'Rilevamento uomo a terra',                 scope: 'global', enabled: a.fallDetection !== false },\n        { id: 'fireAlarm',     label: 'Allarme incendio',                        scope: 'global', enabled: a.fireAlarm !== false },\n        { id: 'fridgeAlarm',   label: 'Allarme frigo aperto',                    scope: 'global', enabled: a.fridgeAlarm !== false },\n        { id: 'moodLighting',  label: 'Luci automatiche da mood', scope: 'per_room', rooms: moodLightingRooms },\n        { id: 'maggiordomo',   label: 'Maggiordomo (citofono, pioggia/finestre, spegnimento luci)', scope: 'global', enabled: a.maggiordomo === true },\n        { id: 'thirstyPlantAlert', label: 'Alert pianta assetata', scope: 'global', enabled: a.thirstyPlantAlert === true },\n        { id: 'awayMode',      label: 'Modalita fuori casa (spegni tutto)', scope: 'global', enabled: a.awayMode === true },\n        { id: 'welcomeScene',  label: 'Scena bentornato (sera)', scope: 'global', enabled: a.welcomeScene === true },\n        { id: 'touchdesignerLighting', label: 'Luci pilotate da TouchDesigner', scope: 'global', enabled: a.touchdesignerLighting === true },\n    ],\n    ts: Date.now(),\n};\nmsg.statusCode = 200;\nreturn msg;\n",
         "outputs": 1,
         "timeout": 0,
         "noerr": 0,
@@ -3529,7 +3534,7 @@
         "type": "function",
         "z": "tab_device_registry",
         "name": "ToggleAutomation",
-        "func": "// POST /gaia/automations/toggle  {id, enabled, room?}\nconst GLOBAL_IDS = ['petConcierge', 'fallDetection', 'fireAlarm', 'fridgeAlarm'];\nconst body = msg.payload || {};\nconst id = body.id;\nconst enabled = body.enabled === true;\nconst room = body.room;\n\nif (!id || (id !== 'moodLighting' && !GLOBAL_IDS.includes(id))) {\n    msg.statusCode = 400;\n    msg.payload = { ok: false, error: 'id automazione non valido' };\n    return msg;\n}\nif (id === 'moodLighting' && !room) {\n    msg.statusCode = 400;\n    msg.payload = { ok: false, error: 'room richiesto per moodLighting' };\n    return msg;\n}\n\nlet brain = global.get('gaiaBrain') || {};\nbrain.automations = brain.automations || {};\n\nif (id === 'moodLighting') {\n    brain.automations.moodLighting = brain.automations.moodLighting || {};\n    brain.automations.moodLighting[room] = enabled;\n} else {\n    brain.automations[id] = enabled;\n}\n\nglobal.set('gaiaBrain', brain);\nnode.warn(`[Automations] ${id}${room ? '/' + room : ''} -> ${enabled}`);\n\nmsg.statusCode = 200;\nmsg.payload = { ok: true, id, room: room || null, enabled };\nreturn msg;\n",
+        "func": "// POST /gaia/automations/toggle  {id, enabled, room?}\nconst GLOBAL_IDS = ['petConcierge', 'fallDetection', 'fireAlarm', 'fridgeAlarm', 'maggiordomo', 'thirstyPlantAlert', 'awayMode', 'welcomeScene', 'touchdesignerLighting'];\nconst body = msg.payload || {};\nconst id = body.id;\nconst enabled = body.enabled === true;\nconst room = body.room;\n\nif (!id || (id !== 'moodLighting' && !GLOBAL_IDS.includes(id))) {\n    msg.statusCode = 400;\n    msg.payload = { ok: false, error: 'id automazione non valido' };\n    return msg;\n}\nif (id === 'moodLighting' && !room) {\n    msg.statusCode = 400;\n    msg.payload = { ok: false, error: 'room richiesto per moodLighting' };\n    return msg;\n}\n\nlet brain = global.get('gaiaBrain') || {};\nbrain.automations = brain.automations || {};\n\nif (id === 'moodLighting') {\n    brain.automations.moodLighting = brain.automations.moodLighting || {};\n    brain.automations.moodLighting[room] = enabled;\n} else {\n    brain.automations[id] = enabled;\n}\n\nglobal.set('gaiaBrain', brain);\nnode.warn(`[Automations] ${id}${room ? '/' + room : ''} -> ${enabled}`);\n\nmsg.statusCode = 200;\nmsg.payload = { ok: true, id, room: room || null, enabled };\nreturn msg;\n",
         "outputs": 1,
         "timeout": 0,
         "noerr": 0,
@@ -3606,5 +3611,130 @@
         "x": 780,
         "y": 560,
         "wires": []
+    },
+    {
+        "id": "gaia_cleanup_stale_rooms_01",
+        "type": "function",
+        "z": "082363fa8be6eb11",
+        "name": "Cleanup Stanze Stale",
+        "func": "const brain = global.get('gaiaBrain') || {};\nconst now = Date.now();\nconst STALE_MS = 4 * 3600 * 1000; // 4 ore senza aggiornamenti e nessuno presente\nlet removed = [];\nObject.entries(brain.rooms || {}).forEach(([room, roomData]) => {\n    const lu = roomData.lastUpdate || 0;\n    if ((roomData.persons_count || 0) === 0 && lu > 0 && (now - lu) > STALE_MS) {\n        delete brain.rooms[room];\n        if (brain.automations?.moodLighting) delete brain.automations.moodLighting[room];\n        removed.push(room);\n    }\n});\nif (removed.length > 0) {\n    global.set('gaiaBrain', brain);\n    node.warn(`[Cleanup] Stanze rimosse per inattivita >4h: ${removed.join(', ')}`);\n}\nreturn null;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 240,
+        "y": 760,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "gaia_plant_thirst_01",
+        "type": "function",
+        "z": "082363fa8be6eb11",
+        "name": "Plant Thirst Alert",
+        "func": "const brain = global.get('gaiaBrain') || {};\nif (brain.automations?.thirstyPlantAlert !== true) return null;\nconst now = Date.now();\nconst lastAlert = global.get('lastPlantAlert') || {};\nconst COOLDOWN = 6 * 3600 * 1000; // 6 ore tra un alert e l'altro per la stessa pianta\nObject.entries(brain.plants || {}).forEach(([id, p]) => {\n    const moisture = p.moisture || 0;\n    if (moisture < 25 && (now - (lastAlert[id] || 0)) > COOLDOWN) {\n        lastAlert[id] = now;\n        global.set('lastPlantAlert', lastAlert);\n        node.send({ topic: 'telegram/alert', payload: `\ud83c\udf31 ${id} ha bisogno d'acqua (umidita ${moisture}%)` });\n    }\n});\nreturn null;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 400,
+        "y": 760,
+        "wires": [
+            [
+                "gaia_alert_cmd_bus_01"
+            ]
+        ]
+    },
+    {
+        "id": "gaia_away_mode_01",
+        "type": "function",
+        "z": "082363fa8be6eb11",
+        "name": "Away Mode",
+        "func": "const brain = global.get('gaiaBrain') || {};\nif (brain.automations?.awayMode !== true) return null;\nconst now = Date.now();\nconst AWAY_THRESHOLD_MS = 30 * 60 * 1000; // 30 minuti senza nessuno in casa\nconst anyoneHome = Object.values(brain.presence || {}).some(p => p.present);\nif (anyoneHome) {\n    global.set('awayModeTriggeredAt', null);\n    return null;\n}\nconst lastSeenTimes = Object.values(brain.presence || {}).map(p => p.lastSeen || 0);\nconst mostRecentLastSeen = lastSeenTimes.length ? Math.max(...lastSeenTimes) : 0;\nif (mostRecentLastSeen === 0 || (now - mostRecentLastSeen) < AWAY_THRESHOLD_MS) return null;\nif (global.get('awayModeTriggeredAt')) return null; // gia' fatto per questa assenza\nglobal.set('awayModeTriggeredAt', now);\nnode.send([null, {\n    url: 'http://localhost:8080/rest/items/Tutte_le_luci_Potenza', method: 'POST',\n    headers: { 'Content-Type': 'text/plain' }, payload: 'OFF'\n}]);\nnode.send({ topic: 'telegram/alert',\n    payload: `\ud83c\udfe0 Nessuno in casa da oltre ${Math.round(AWAY_THRESHOLD_MS / 60000)} minuti \u2014 luci spente automaticamente` });\nreturn null;",
+        "outputs": 2,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 560,
+        "y": 760,
+        "wires": [
+            [
+                "gaia_alert_cmd_bus_01"
+            ],
+            [
+                "openhab_http_mood_01"
+            ]
+        ]
+    },
+    {
+        "id": "gaia_welcome_scene_01",
+        "type": "function",
+        "z": "082363fa8be6eb11",
+        "name": "Welcome Scene",
+        "func": "const brain = global.get('gaiaBrain') || {};\nif (brain.automations?.welcomeScene !== true) return null;\nconst now = Date.now();\nconst hour = new Date().getHours();\nconst isNight = hour < 6 || hour >= 20;\nif (!isNight) return null;\nconst lastWelcome = global.get('lastWelcomeScene') || {};\nconst COOLDOWN = 2 * 3600 * 1000; // non ripetere per la stessa persona entro 2 ore\nObject.entries(brain.presence || {}).forEach(([name, p]) => {\n    if (!p.present || name.startsWith('unknown')) return;\n    const enterTs = p.enterTs || 0;\n    const justArrived = enterTs > 0 && (now - enterTs) < 5 * 60 * 1000; // finestra = ciclo timer\n    if (justArrived && (now - (lastWelcome[name] || 0)) > COOLDOWN) {\n        lastWelcome[name] = now;\n        global.set('lastWelcomeScene', lastWelcome);\n        node.send([null, {\n            url: 'http://localhost:8080/rest/items/luce_Ingresso_Potenza', method: 'POST',\n            headers: { 'Content-Type': 'text/plain' }, payload: 'ON'\n        }]);\n        node.send([null, {\n            url: 'http://localhost:8080/rest/items/luce_Ingresso_Luminosita', method: 'POST',\n            headers: { 'Content-Type': 'text/plain' }, payload: '60'\n        }]);\n        node.send({ topic: 'telegram/alert', payload: `\ud83d\udc4b Bentornato ${name}! Luce ingresso accesa.` });\n    }\n});\nreturn null;",
+        "outputs": 2,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 720,
+        "y": 760,
+        "wires": [
+            [
+                "gaia_alert_cmd_bus_01"
+            ],
+            [
+                "openhab_http_mood_01"
+            ]
+        ]
+    },
+    {
+        "id": "gaia_td_lighting_mqtt_in_01",
+        "type": "mqtt in",
+        "z": "082363fa8be6eb11",
+        "name": "TD Lighting In",
+        "topic": "gaia/touchdesigner/lighting/#",
+        "qos": "2",
+        "datatype": "auto-detect",
+        "broker": "29b6d5926d1a95ec",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 220,
+        "y": 820,
+        "wires": [
+            [
+                "gaia_td_lighting_fn_01"
+            ]
+        ]
+    },
+    {
+        "id": "gaia_td_lighting_fn_01",
+        "type": "function",
+        "z": "082363fa8be6eb11",
+        "name": "TouchDesigner Lighting Bridge",
+        "func": "const brain = global.get('gaiaBrain') || {};\nif (brain.automations?.touchdesignerLighting !== true) return null;\n// Topic atteso: gaia/touchdesigner/lighting/<ItemOpenHAB>/<campo>\n// campo in {Potenza, Luminosita, Colore, Color_Temperature} -- item reale, vedi\n// memory project-openhab-hue-items per i nomi. Nessuna mappa stanza->item qui:\n// chi configura TouchDesigner deve puntare direttamente all'item OpenHAB reale.\nconst parts = msg.topic.split('/');\nif (parts.length !== 5 || parts[2] !== 'lighting') return null;\nconst item = parts[3];\nconst field = parts[4];\nconst ALLOWED_FIELDS = ['Potenza', 'Luminosita', 'Colore', 'Color_Temperature'];\nif (!ALLOWED_FIELDS.includes(field)) return null;\n\n// throttle: max 1 comando per item+campo ogni 200ms, TouchDesigner puo' mandare\n// molto piu' spesso di quanto OpenHAB debba/possa incassare\nconst now = Date.now();\nconst lastSent = global.get('tdLightingLastSent') || {};\nconst key = `${item}_${field}`;\nif (now - (lastSent[key] || 0) < 200) return null;\nlastSent[key] = now;\nglobal.set('tdLightingLastSent', lastSent);\n\nlet payload = msg.payload;\nif (typeof payload === 'object') payload = JSON.stringify(payload);\nreturn {\n    url: `http://localhost:8080/rest/items/${item}_${field}`, method: 'POST',\n    headers: { 'Content-Type': 'text/plain' }, payload: String(payload)\n};",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 420,
+        "y": 820,
+        "wires": [
+            [
+                "openhab_http_mood_01"
+            ]
+        ]
     }
 ]

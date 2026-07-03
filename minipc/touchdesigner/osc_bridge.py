@@ -107,23 +107,37 @@ class GaiaToTouchDesigner:
         threading.Thread(target=self._sender_loop, daemon=True).start()
         backoff = 1
         while not self._stop:
+            connected_at = None
+
+            def on_open(_ws):
+                nonlocal connected_at
+                connected_at = time.time()
+                print(f"[TD-Bridge] Connesso a {config.GAIA_WS_URL} → OSC "
+                      f"{config.TD_OSC_HOST}:{config.TD_OSC_PORT} "
+                      f"(ogni {config.SEND_INTERVAL_S * 1000:.0f}ms)")
+
             try:
                 ws = websocket.WebSocketApp(
                     config.GAIA_WS_URL,
                     on_message=self._on_message,
+                    on_open=on_open,
                 )
-                print(f"[TD-Bridge] Connesso a {config.GAIA_WS_URL} → OSC "
-                      f"{config.TD_OSC_HOST}:{config.TD_OSC_PORT} "
-                      f"(ogni {config.SEND_INTERVAL_S * 1000:.0f}ms)")
-                backoff = 1
                 ws.run_forever(ping_interval=30, ping_timeout=10)
             except Exception as e:
                 print(f"[TD-Bridge] Errore WS: {e}")
             if self._stop:
                 break
+            # run_forever() puo' ritornare pulito (senza eccezioni) anche se
+            # la connessione non si e' mai stabilita o e' caduta subito dopo
+            # (visto dopo un riavvio di Node-RED: loop di riconnessione ogni
+            # ~1s all'infinito). Resetta il backoff solo se la sessione e'
+            # durata abbastanza da essere considerata riuscita davvero.
+            if connected_at and (time.time() - connected_at) > 3:
+                backoff = 1
+            else:
+                backoff = min(backoff * 2, 30)
             print(f"[TD-Bridge] Riconnessione tra {backoff}s...")
             time.sleep(backoff)
-            backoff = min(backoff * 2, 30)
 
     def stop(self):
         self._stop = True
