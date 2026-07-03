@@ -28,6 +28,7 @@ Five independent Python services live here, each in its own directory with its o
 | `yolo/` | `gaia-yolo` | Person/object detection (ultralytics YOLO11) → `gaia/{room}/frame` etc. |
 | `mediapipe/` | `gaia-mediapipe` | Pose/gesture/emotion detection → `gaia/mediapipe/pose`. Requires ARM 64-bit (aarch64) — MediaPipe does not run on 32-bit Pi OS. |
 | `voice/` | `gaia-voice` | Wakeword (openWakeWord) → STT (faster-whisper) → MQTT, and MQTT → TTS (Piper) → speaker. |
+| `provision/` | `gaia-provision` | WiFi onboarding: se il Pi resta offline, hotspot "Gaia-Setup-XXXX" + captive portal su 10.42.0.1 per configurare rete/stanza. Gira come root (nmcli + porta 80), sempre attivo, idle quando online. Vedi `docs/provisioning-wifi.md`. |
 
 `agent` is the only service enabled at boot (`systemctl enable gaia-agent`); it starts/stops yolo/mediapipe/voice based on `agent/device.json`, so don't assume they're running just because their code is present. `camera` is never in `device.json` and can't be enabled/disabled directly via MQTT command — `agent.py` starts/stops it automatically as a reference-counted dependency whenever yolo or mediapipe is enabled/disabled (see `CAMERA_CONSUMERS`/`_sync_camera` in `agent/agent.py`).
 

@@ -1,0 +1,16 @@
+[Unit]
+Description=GAIA Provisioning WiFi (AP mode + captive portal)
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=simple
+# root: serve per nmcli hotspot e per la porta 80 del captive portal
+User=root
+EnvironmentFile=-/etc/gaia/provision.conf
+ExecStart=/usr/bin/python3 -u /opt/gaia/provision/provision.py
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
