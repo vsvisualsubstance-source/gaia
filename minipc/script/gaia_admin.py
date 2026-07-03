@@ -556,7 +556,7 @@ class AdminHandler(BaseHTTPRequestHandler):
         elif path == "/api/gaia-wakeword/record":
             label      = body.get("label", "positive")
             duration_s = int(body.get("duration_s", 3))
-            target     = body.get("stanza", "ingresso1")
+            target     = body.get("stanza", "ingresso")
             if _mqtt:
                 _mqtt.publish(f"gaia/voice/record_clip/{target}",
                               json.dumps({"label": f"gaia_{label}", "duration_s": duration_s}))
