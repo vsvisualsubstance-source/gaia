@@ -58,9 +58,11 @@ MQTT_BROKER = "localhost"
 MQTT_PORT   = 1883
 HTTP_PORT   = 8765
 
-# Pi che devono ricevere voice_db.json aggiornato dopo ogni enrollment/rimozione
+# Pi che devono ricevere voice_db.json aggiornato dopo ogni enrollment/rimozione.
+# IP Tailscale (100.x): il Pi di produzione è dietro NAT Google, la LAN non lo
+# raggiunge più — il tailnet sì (tutti i device Gaia sono in tailnet).
 PI_VOICE_SYNC_TARGETS = [
-    {"user": "asemico", "ip": "192.168.1.189", "path": "~/gaia/voice/voice_db.json"},
+    {"user": "asemico", "ip": "100.76.11.49", "path": "~/gaia/voice/voice_db.json"},
 ]
 
 PI_BASE_REPO   = os.path.expanduser("~/core-node-0/pi")  # root pi/ nel repo (serveFile legge da qui)
