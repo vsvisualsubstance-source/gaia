@@ -12,7 +12,9 @@ Restart=always
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
-Environment=MQTT_HOST=192.168.1.142
+# MQTT_HOST non più hardcoded: l'agent lo trova via discovery (docs/discovery-protocol.md).
+# Per forzare un host: decommenta la riga sotto (salta la discovery).
+# Environment=MQTT_HOST=192.168.1.142
 
 [Install]
 WantedBy=multi-user.target

@@ -70,11 +70,17 @@ _SERVICE_DEFS = {
     },
     "mediapipe": {
         "cmd": [
-            "/media/core/D/venv/bin/python3",
+            # venv Python 3.11 — non importa sounddevice/PortAudio a livello modulo
+            # Il venv Python 3.14 (/media/core/D/venv) include mediapipe.tasks.audio
+            # che inizializza PortAudio all'import e crasha senza sessione utente.
+            "/media/core/D/mediapipe-vision/venv/bin/python3",
             "/home/core/core-node-0/pi/mediapipe/mediapipe_node.py",
         ],
         "cwd": "/home/core/core-node-0/pi/mediapipe",
-        "env_extra": {"HEADLESS": "1"},
+        # XDG_RUNTIME_DIR: mediapipe importa sounddevice→PortAudio→PulseAudio;
+        # senza il socket utente (/run/user/1000/pulse) l'import crasha nel
+        # contesto systemd. Con la variabile l'import va a buon fine.
+        "env_extra": {"HEADLESS": "1", "XDG_RUNTIME_DIR": "/run/user/1000"},
         "ota_dir": "/home/core/core-node-0/pi/mediapipe",
     },
 }

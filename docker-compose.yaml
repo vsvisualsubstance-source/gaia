@@ -39,3 +39,15 @@ services:
     environment:
       - OLLAMA_KEEP_ALIVE=24h
     restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant
+    container_name: qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      # Path assoluto (non ./): storage preesistente al passaggio a compose,
+      # usato da gaia-brain/brain_memory.py (collection gaia_memory_large)
+      - /home/core/qdrant_storage:/qdrant/storage
+    restart: unless-stopped

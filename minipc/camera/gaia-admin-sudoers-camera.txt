@@ -1,0 +1,9 @@
+# Permessi sudo per gaia_admin.py — controlla gaia-camera e gaia-face senza password
+# Installazione: sudo visudo -f /etc/sudoers.d/gaia-camera
+#
+core ALL=(ALL) NOPASSWD: /usr/bin/systemctl start gaia-camera
+core ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop gaia-camera
+core ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart gaia-camera
+core ALL=(ALL) NOPASSWD: /usr/bin/systemctl start gaia-face
+core ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop gaia-face
+core ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart gaia-face

@@ -12,8 +12,19 @@ def _detect_device_id() -> str:
     return f"pi-{os.uname().nodename}"
 
 
+def _detect_mac() -> str:
+    for iface in ("eth0", "wlan0"):
+        mac_path = f"/sys/class/net/{iface}/address"
+        if os.path.exists(mac_path):
+            with open(mac_path) as f:
+                return f.read().strip()
+    return ""
+
+
 DEVICE_ID      = os.getenv("DEVICE_ID",    _detect_device_id())
 DEFAULT_STANZA = os.getenv("CAMERA_NAME",  "ingresso")
+MAC            = _detect_mac()
+SW_VERSION     = "1.0.2"   # versione del bundle pi/ — usata da /api/provision
 
 MQTT_HOST = os.getenv("MQTT_HOST", "192.168.1.142")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))

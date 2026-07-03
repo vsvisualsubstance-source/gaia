@@ -17,6 +17,8 @@ If a Pi session adds/edits memory locally instead, pull it back the same way bef
 
 This directory is the subtree deployed to each Raspberry Pi in the GAIA distributed home-AI system (one Pi per room). On the miniPC host repo it lives at `core-node-0/pi/`; on a Pi it is copied via `scp -r pi/ <user>@<IP>:~/gaia/` and becomes the Pi's project root (`~/gaia/`). All MQTT traffic goes to a central broker on the miniPC at `192.168.1.142:1883`; there is no logic on the Pi that talks to anything else.
 
+> Qdrant (memoria vettoriale, solo miniPC) è nel `docker-compose.yaml` del repo root dal 2026-07-03, storage su `/home/core/qdrant_storage`. Nessun servizio Qdrant gira sui Pi.
+
 Five independent Python services live here, each in its own directory with its own venv and systemd unit:
 
 | Dir | Service | Role |

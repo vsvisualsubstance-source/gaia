@@ -1,0 +1,18 @@
+<?xml version="1.0" standalone='no'?><!--*-nxml-*-->
+<!DOCTYPE service-group SYSTEM "avahi-service.dtd">
+<!--
+  Annuncio mDNS di Gaia Core: complementare al beacon UDP (gaia_beacon.py).
+  Installazione: sudo cp avahi-gaia.service /etc/avahi/services/gaia.service
+  (avahi-daemon ricarica da solo, nessun restart necessario)
+-->
+<service-group>
+  <name replace-wildcards="yes">Gaia Core su %h</name>
+  <service>
+    <type>_gaia._tcp</type>
+    <port>1883</port>
+    <txt-record>proto=1</txt-record>
+    <txt-record>admin_port=8765</txt-record>
+    <txt-record>beacon_port=8899</txt-record>
+    <txt-record>version=1.0.2</txt-record>
+  </service>
+</service-group>

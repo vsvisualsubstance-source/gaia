@@ -9,12 +9,15 @@
 ```
 core-node-0/
 ├── pi/                    ← codice deployato sui Raspberry Pi
-│   ├── agent/             gaia-agent: daemon + service files (yolo/voice/mediapipe)
+│   ├── agent/             gaia-agent: daemon + service files + discovery Gaia Core
+│   ├── camera/            camera_server: frame broker shared memory
 │   ├── yolo/              rilevamento persone/oggetti (YOLO11)
 │   ├── mediapipe/         pose, gesture, emozioni (MediaPipe)
 │   └── voice/             wakeword + STT + TTS (openWakeWord + Whisper + Piper)
 ├── minipc/                ← codice locale al miniPC (non va sui Pi)
-│   ├── script/            voice pipeline (gaia_listener.py), enrollment, debug
+│   ├── script/            voice pipeline (gaia_listener.py), enrollment, gaia_admin
+│   ├── beacon/            gaia-beacon: risponditore UDP discovery + annuncio mDNS
+│   ├── camera/            camera_server locale (shared memory + stream MJPEG :8766)
 │   ├── local_agent.py     agente locale (emula Pi per test OTA e Pi Manager)
 │   ├── gaia-local-agent.service  systemd unit per local_agent
 │   ├── wakeword_models/   modelli wakeword (gitignored)
@@ -22,8 +25,9 @@ core-node-0/
 │   └── transcribe_audio.sh STT da file audio
 ├── node-red/              ← flows git-tracked
 │   └── flows.json         flussi principali (copia del live)
+├── docs/                  ← contratti e protocolli (discovery-protocol.md)
 ├── mosquitto/             config broker MQTT
-└── docker-compose.yaml    servizi Docker (mosquitto, openhab, ollama)
+└── docker-compose.yaml    servizi Docker (mosquitto, openhab, ollama, qdrant)
 ```
 
 **D: drive** (runtime, non in git — modelli, venv, servizi con dati propri):
@@ -218,7 +222,7 @@ kill -HUP $(pgrep -f node-red)   # ricarica i flow senza perdere il context
 ## Avvio sistema completo
 
 ```bash
-# Servizi Docker (mosquitto, ollama, qdrant)
+# Servizi Docker (mosquitto, openhab, ollama, qdrant)
 docker compose up -d
 
 # Node-RED (se non parte automaticamente)
@@ -228,6 +232,8 @@ node-red --userDir /home/core/.node-red &
 systemctl status gaia-listener
 journalctl -u gaia-listener -f
 ```
+
+> Qdrant è gestito dal `docker-compose.yaml` come gli altri servizi (verificato 2026-07-03: migrato dal container manuale al compose senza perdita dati). Lo storage è il bind mount assoluto `/home/core/qdrant_storage` (collection `gaia_memory_large`, usata da `gaia-brain/brain_memory.py`), volutamente fuori dal repo.
 
 ---
 

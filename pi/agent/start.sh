@@ -8,4 +8,4 @@ fi
 
 cd "$SCRIPT_DIR"
 source "$SCRIPT_DIR/venv/bin/activate"
-exec python3 "$SCRIPT_DIR/agent.py"
+exec python3 -u "$SCRIPT_DIR/agent.py"   # -u: stdout non bufferizzato, log journald in tempo reale

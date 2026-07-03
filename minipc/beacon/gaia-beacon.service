@@ -1,0 +1,17 @@
+[Unit]
+Description=GAIA Beacon (discovery UDP per Pi/ESP32)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=core
+ExecStart=/usr/bin/python3 /home/core/core-node-0/minipc/beacon/gaia_beacon.py
+Environment=BEACON_PORT=8899
+Environment=MQTT_PORT=1883
+Environment=ADMIN_PORT=8765
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

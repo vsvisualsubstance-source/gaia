@@ -132,6 +132,25 @@ DOORBELL_DIR      = os.path.expanduser("~/core-node-0/minipc/script/doorbell_sam
 GAIA_WAKEWORD_DIR = os.path.expanduser("~/core-node-0/minipc/script/gaia_wakeword_samples")
 GAIA_MODEL_PATH   = os.path.join(GAIA_WAKEWORD_DIR, "gaia_verifier.pkl")
 
+# ── Provision registry — device registrati al boot (discovery livello 3) ──
+# Contratto client: docs/discovery-protocol.md + pi/agent/agent.py::_provision_register
+PROVISION_REGISTRY  = os.path.expanduser("~/core-node-0/minipc/script/provision_registry.json")
+GAIA_SERVER_VERSION = "1.0.2"
+_provision_lock = threading.Lock()
+
+
+def _load_provision_registry() -> dict:
+    try:
+        with open(PROVISION_REGISTRY) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_provision_registry(reg: dict):
+    with open(PROVISION_REGISTRY, "w") as f:
+        json.dump(reg, f, indent=2, ensure_ascii=False)
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("gaia_admin")
 
@@ -295,6 +314,11 @@ class AdminHandler(BaseHTTPRequestHandler):
                 self.send_response(400); self._cors(); self.end_headers()
             return
 
+        if p == "/api/provision/devices":
+            with _provision_lock:
+                reg = _load_provision_registry()
+            self._json({"devices": reg}); return
+
         if p == "/api/microphones":
             devs = _list_alsa_inputs()
             self._json({"devices": devs, "current": _admin_mic_device}); return
@@ -326,12 +350,14 @@ class AdminHandler(BaseHTTPRequestHandler):
                 "model_exists": os.path.exists(os.path.join(DOORBELL_DIR, "doorbell_verifier.pkl")),
             }); return
         if p == "/api/status":
-            try:
-                r = subprocess.run(["systemctl", "is-active", "gaia-listener"],
-                                   capture_output=True, timeout=3)
-                listener_active = r.stdout.decode().strip() == "active"
-            except Exception:
-                listener_active = True
+            def svc_active(name):
+                try:
+                    r = subprocess.run(["systemctl", "is-active", name],
+                                       capture_output=True, timeout=3)
+                    return r.stdout.decode().strip()
+                except Exception:
+                    return "unknown"
+            listener_st = svc_active("gaia-listener")
             self._json({
                 "stats":            _state["stats"],
                 "pi_stats":         _state["pi_stats"],
@@ -340,7 +366,12 @@ class AdminHandler(BaseHTTPRequestHandler):
                 "config":           get_config(),
                 "speakers":         get_speakers(),
                 "faces":            get_faces(),
-                "listener_active":  listener_active,
+                "listener_active":  listener_st == "active",
+                "services": {
+                    "gaia-listener": listener_st,
+                    "gaia-face":     svc_active("gaia-face"),
+                    "gaia-camera":   svc_active("gaia-camera"),
+                },
             })
         else:
             self.send_response(404); self.end_headers()
@@ -358,6 +389,30 @@ class AdminHandler(BaseHTTPRequestHandler):
                 result = subprocess.run(
                     ["sudo", "/usr/bin/systemctl", action, "gaia-listener"],
                     capture_output=True, timeout=10
+                )
+                ok  = result.returncode == 0
+                out = (result.stderr or result.stdout).decode(errors="replace")[:200].strip()
+                self._json({"ok": ok, "output": out})
+            except Exception as e:
+                self._json({"ok": False, "error": str(e)})
+
+        elif path.startswith("/api/core-service/"):
+            # /api/core-service/{service}/{action}
+            # Servizi consentiti (whitelist esplicita)
+            ALLOWED = {"gaia-listener", "gaia-face", "gaia-camera"}
+            parts = path.split("/")  # ['','api','core-service',svc,action]
+            if len(parts) < 5:
+                self._json({"ok": False, "error": "formato non valido"}, 400); return
+            svc    = parts[3]
+            action = parts[4]
+            if svc not in ALLOWED:
+                self._json({"ok": False, "error": f"servizio non consentito: {svc}"}, 400); return
+            if action not in ("start", "stop", "restart"):
+                self._json({"ok": False, "error": "azione non valida"}, 400); return
+            try:
+                result = subprocess.run(
+                    ["sudo", "/usr/bin/systemctl", action, svc],
+                    capture_output=True, timeout=15
                 )
                 ok  = result.returncode == 0
                 out = (result.stderr or result.stdout).decode(errors="replace")[:200].strip()
@@ -652,6 +707,84 @@ class AdminHandler(BaseHTTPRequestHandler):
                 self._delete_clip(DOORBELL_DIR, parts[4], int(parts[5]))
             else:
                 self._json({"ok": False, "error": "_method:DELETE richiesto"}, 400)
+
+        elif path == "/api/provision":
+            device_id = (body.get("device_id") or "").strip()
+            if not device_id:
+                self._json({"ok": False, "error": "device_id mancante"}, 400); return
+            now = int(time.time() * 1000)
+            with _provision_lock:
+                reg = _load_provision_registry()
+                entry = reg.setdefault(device_id, {"first_seen": now})
+                for k in ("mac", "hw", "sw_version", "capabilities"):
+                    if k in body:
+                        entry[k] = body[k]
+                entry["ip"]        = self.client_address[0]
+                entry["last_seen"] = now
+                claimed = (body.get("stanza") or "").strip()
+                if claimed:
+                    entry["stanza_claim"] = claimed
+                _save_provision_registry(reg)
+            assigned = bool(entry.get("stanza"))
+            state = f"stanza assegnata: {entry.get('stanza')}" if assigned else "da assegnare"
+            log.info(f"Provision: {device_id} da {entry['ip']} ({state})")
+            self._json({
+                "ok":             True,
+                "assigned":       assigned,
+                "stanza":         entry.get("stanza"),
+                "name":           entry.get("name"),
+                "mqtt_host":      MINIPC_IP,
+                "mqtt_port":      MQTT_PORT,
+                "server_version": GAIA_SERVER_VERSION,
+            })
+
+        elif path == "/api/provision/assign":
+            device_id = (body.get("device_id") or "").strip()
+            stanza    = (body.get("stanza") or "").strip()
+            if not device_id or not stanza:
+                self._json({"ok": False, "error": "device_id e stanza richiesti"}, 400); return
+            with _provision_lock:
+                reg = _load_provision_registry()
+                entry = reg.setdefault(device_id, {"first_seen": int(time.time() * 1000)})
+                entry["stanza"] = stanza
+                if body.get("name"):
+                    entry["name"] = body["name"]
+                _save_provision_registry(reg)
+            # Applica subito al device se è online (stesso comando del Pi Manager)
+            cmd = {"action": "set_config", "stanza": stanza}
+            if body.get("name"):
+                cmd["name"] = body["name"]
+            if _mqtt:
+                _mqtt.publish(f"gaia/device/{device_id}/command", json.dumps(cmd))
+            # Sincronizza il Device Registry di Node-RED (autoritativo per la
+            # room dei topic yolo/mediapipe): senza questo i due registri
+            # divergono e il device pubblica su una stanza diversa da quella
+            # assegnata qui (caso reale: ingresso vs ingresso1).
+            try:
+                import urllib.request
+                req = urllib.request.Request(
+                    f"http://localhost:{NODERED_PORT}/gaia/device/assign",
+                    data=json.dumps({"device_id": device_id, "room": stanza}).encode(),
+                    headers={"Content-Type": "application/json"})
+                urllib.request.urlopen(req, timeout=5).read()
+                registry_sync = True
+            except Exception as e:
+                log.warning(f"Provision assign: sync Device Registry fallito: {e}")
+                registry_sync = False
+            log.info(f"Provision assign: {device_id} → {stanza} (registry_sync={registry_sync})")
+            self._json({"ok": True, "device_id": device_id, "stanza": stanza,
+                        "registry_sync": registry_sync})
+
+        elif path == "/api/provision/forget":
+            device_id = (body.get("device_id") or "").strip()
+            if not device_id:
+                self._json({"ok": False, "error": "device_id mancante"}, 400); return
+            with _provision_lock:
+                reg = _load_provision_registry()
+                reg.pop(device_id, None)
+                _save_provision_registry(reg)
+            log.info(f"Provision forget: {device_id}")
+            self._json({"ok": True})
 
         elif path.endswith("/delete") and "/api/speaker/" in path:
             name = path.split("/")[-2]

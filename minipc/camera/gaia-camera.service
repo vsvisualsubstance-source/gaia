@@ -1,0 +1,22 @@
+[Unit]
+Description=GAIA Camera Server (miniPC) — shared memory + MJPEG stream :8766
+After=network.target
+
+[Service]
+Type=simple
+User=core
+WorkingDirectory=/home/core/core-node-0/minipc/camera
+ExecStart=/media/core/D/face-env/bin/python3 /home/core/core-node-0/minipc/camera/camera_server.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+Environment=PYTHONUNBUFFERED=1
+Environment=HOME=/home/core
+Environment=MJPEG_PORT=8766
+Environment=MJPEG_QUALITY=72
+# Override camera: CAMERA_INDEX=1 se webcam non è /dev/video0
+
+[Install]
+WantedBy=multi-user.target

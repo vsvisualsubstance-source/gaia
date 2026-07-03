@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 
 import paho.mqtt.client as mqtt
 import config
+import discovery
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -427,6 +428,52 @@ def apply_initial_config():
 
 
 # ──────────────────────────────────────────────────────────────────────
+# Provision — registrazione presso Gaia Core (livello 3, best effort)
+# ──────────────────────────────────────────────────────────────────────
+def _hw_model() -> str:
+    try:
+        with open("/proc/device-tree/model") as f:
+            return f.read().strip("\x00").strip()
+    except OSError:
+        return os.uname().machine
+
+
+def _provision_register() -> str | None:
+    """POST /api/provision su gaia_admin. Ritorna la stanza assegnata o None.
+
+    Best effort: qualsiasi errore lascia la config locale invariata —
+    il Pi resta pienamente funzionante anche senza Gaia Core aggiornato.
+    Contratto: docs/discovery-protocol.md
+    """
+    admin_port = 8765
+    try:
+        with open(discovery.CACHE_FILE) as f:
+            admin_port = int(json.load(f).get("admin_port", 8765))
+    except (OSError, ValueError):
+        pass
+    try:
+        payload = json.dumps({
+            "device_id":    config.DEVICE_ID,
+            "mac":          config.MAC,
+            "hw":           _hw_model(),
+            "sw_version":   config.SW_VERSION,
+            "stanza":       _device_config.get("stanza"),
+            "capabilities": _capabilities,
+        }).encode()
+        req = urllib.request.Request(
+            f"http://{config.MQTT_HOST}:{admin_port}/api/provision",
+            data=payload, headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            resp = json.load(r)
+        if resp.get("assigned") and resp.get("stanza"):
+            return resp["stanza"]
+        print("[Agent] Provision OK — nessuna stanza assegnata centralmente")
+    except Exception as e:
+        print(f"[Agent] Provision non riuscito (ignoro): {e}")
+    return None
+
+
+# ──────────────────────────────────────────────────────────────────────
 # Main
 # ──────────────────────────────────────────────────────────────────────
 def main():
@@ -438,6 +485,31 @@ def main():
     # Aggiorna device_id nel file se era quello di default
     if _device_config.get("device_id") in ("pi-CONFIGURA", "pi-unknown"):
         _device_config["device_id"] = config.DEVICE_ID
+        save_config(_device_config)
+
+    # Discovery di Gaia Core (cache → beacon UDP broadcast → mDNS).
+    # Un MQTT_HOST esplicito da env mantiene la priorità (layering config);
+    # GAIA_DISCOVERY=0 disattiva del tutto la ricerca.
+    if "MQTT_HOST" not in os.environ and os.getenv("GAIA_DISCOVERY", "1") != "0":
+        backoff = 5
+        while _running:
+            info = discovery.discover(cached_host=config.MQTT_HOST)
+            if info:
+                if info["mqtt_host"] != config.MQTT_HOST:
+                    print(f"[Agent] Gaia Core trovato: {info['mqtt_host']} (config era {config.MQTT_HOST})")
+                config.MQTT_HOST = info["mqtt_host"]
+                config.MQTT_PORT = int(info.get("mqtt_port", config.MQTT_PORT))
+                break
+            print(f"[Agent] Gaia Core non trovato, ritento tra {backoff}s...")
+            time.sleep(backoff)
+            backoff = min(backoff * 2, 60)
+
+    # Registrazione presso Gaia Core: se l'admin ha assegnato una stanza
+    # diversa, vince quella centrale (prima di scrivere device.conf).
+    assigned = _provision_register()
+    if assigned and assigned != _device_config.get("stanza"):
+        print(f"[Agent] Stanza assegnata da Gaia Core: {assigned}")
+        _device_config["stanza"] = assigned
         save_config(_device_config)
 
     print(f"[GAIA Agent] device_id : {config.DEVICE_ID}")
