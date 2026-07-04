@@ -5,7 +5,7 @@ Wake word "Gaia" → STT → Speaker ID → MQTT
 Admin via gaia/admin/# : config | calibrate | voice_enroll | reload_speakers | remove_speaker
 """
 
-import os, sys, json, time, wave, io, threading, logging, signal, queue
+import os, sys, json, time, wave, io, pickle, threading, logging, signal, queue
 from math import gcd
 import numpy as np
 import pyaudio
@@ -58,6 +58,7 @@ def load_config() -> dict:
         "voice_threshold":    DEFAULT_VOICE_THRESHOLD,
         "silence_frames":     DEFAULT_SILENCE_FRAMES,
         "speaker_threshold":  DEFAULT_SPEAKER_THR,
+        "gaia_verify_threshold": GAIA_VERIFY_THRESHOLD_DEFAULT,
     }
     if os.path.exists(CONFIG_PATH):
         try:
@@ -214,6 +215,77 @@ class SpeakerDB:
             json.dump(db, f, indent=2)
         return True
 
+# ── Wakeword verifier (embedding openWakeWord + classificatore miniPC) ─────────
+GAIA_MODEL_PATH_MINIPC = os.path.expanduser(
+    "~/core-node-0/minipc/script/gaia_wakeword_samples_minipc/gaia_verifier_minipc.pkl")
+GAIA_VERIFY_WINDOW_S   = 1.5
+GAIA_VERIFY_THRESHOLD_DEFAULT = 0.80
+
+
+class GaiaWakeVerifier:
+    """Rilevamento "Gaia" via embedding audio (AudioFeatures di openWakeWord) +
+    classificatore allenato sui campioni del microfono del miniPC
+    (gaia_wakeword_samples_minipc/, tramite admin.html -> Wakeword Gaia miniPC).
+
+    Stesso approccio usato dal Pi (pi/voice/main.py), ma con un modello proprio:
+    il mic del miniPC ha caratteristiche acustiche diverse da quello del Pi, un
+    modello allenato sui campioni del Pi non generalizzerebbe bene qui.
+
+    Gira in continuo, in parallelo al text-search whisper-tiny gia' esistente
+    (Transcriber.detect_wake) — se il modello non e' ancora stato allenato
+    (file assente), feed() ritorna sempre 0.0: nessun cambiamento di
+    comportamento rispetto a prima che questa classe esistesse.
+    """
+
+    def __init__(self, threshold: float = GAIA_VERIFY_THRESHOLD_DEFAULT):
+        self.threshold = threshold
+        self.af  = None
+        self.clf = None
+        self._buffer: list[np.ndarray] = []
+        self._buffer_samples = 0
+        self._target_samples = int(TARGET_RATE * GAIA_VERIFY_WINDOW_S)
+        self.reload()
+
+    def reload(self):
+        """Ricarica il modello dal disco — chiamato all'avvio e dopo un
+        ri-addestramento (comando admin 'reload_gaia_verifier')."""
+        self.clf = None
+        self._buffer.clear()
+        self._buffer_samples = 0
+        if not os.path.exists(GAIA_MODEL_PATH_MINIPC):
+            log.info("[GaiaVerify] Nessun modello miniPC ancora allenato — verifica disattiva")
+            return
+        try:
+            if self.af is None:
+                from openwakeword.utils import AudioFeatures
+                self.af = AudioFeatures()
+            with open(GAIA_MODEL_PATH_MINIPC, "rb") as f:
+                self.clf = pickle.load(f)
+            log.info(f"[GaiaVerify] Modello miniPC caricato: {GAIA_MODEL_PATH_MINIPC}")
+        except Exception as e:
+            log.warning(f"[GaiaVerify] Impossibile caricare il modello: {e}")
+            self.clf = None
+
+    def feed(self, frame_bytes: bytes) -> float:
+        """Accumula un frame nella finestra scorrevole; quando e' piena calcola
+        l'embedding e ritorna la probabilita' 'Gaia' (0.0 se il modello non e'
+        pronto o la finestra non e' ancora piena)."""
+        if self.clf is None or self.af is None:
+            return 0.0
+        self._buffer.append(np.frombuffer(frame_bytes, dtype=np.int16))
+        self._buffer_samples += len(frame_bytes) // 2
+        if self._buffer_samples < self._target_samples:
+            return 0.0
+        arr = np.concatenate(self._buffer).astype(np.int16).reshape(1, -1)
+        self._buffer.clear()
+        self._buffer_samples = 0
+        try:
+            emb = self.af.embed_clips(arr).mean(axis=1)
+            return float(self.clf.predict_proba(emb)[:, 1][0])
+        except Exception as e:
+            log.warning(f"[GaiaVerify] Errore inferenza: {e}")
+            return 0.0
+
 # Varianti di "Gaia" che Whisper può trascrivere in italiano
 _GAIA_VARIANTS = {"gaia", "gaya", "gaïa", "gaìa", "gaja", "gaia,", "gaya,"}
 # Prompt per aiutare Whisper a riconoscere il nome proprio e l'italiano parlato
@@ -267,6 +339,7 @@ class GaiaListener:
 
         self.state       = self.STATE_IDLE
         self.speaker_db  = SpeakerDB(threshold=self._cfg.get("speaker_threshold", DEFAULT_SPEAKER_THR))
+        self.gaia_verifier = GaiaWakeVerifier(threshold=self._cfg.get("gaia_verify_threshold", GAIA_VERIFY_THRESHOLD_DEFAULT))
         self.transcriber = Transcriber()
 
         self._cmd_queue = queue.Queue()
@@ -456,6 +529,9 @@ class GaiaListener:
         elif cmd == "reload_speakers":
             self.speaker_db.reload()
             log.info("Speaker DB ricaricato")
+
+        elif cmd == "reload_gaia_verifier":
+            self.gaia_verifier.reload()
 
         elif cmd == "remove_speaker":
             name = data.get("name", "").strip()
@@ -651,6 +727,21 @@ class GaiaListener:
 
                 # IDLE: accumula e cerca wake word
                 if self.state == self.STATE_IDLE:
+                    # Verifica via embedding (parallela al text-search whisper sotto —
+                    # se il modello miniPC non e' ancora allenato, feed() ritorna
+                    # sempre 0.0 e questo blocco e' un no-op, nessun cambio di
+                    # comportamento). Come sul Pi, un rilevamento qui non cattura
+                    # anche il comando nello stesso respiro: si passa a LISTENING
+                    # e si aspetta l'enunciato successivo (stesso branch usato
+                    # sotto per "Gaia" senza comando diretto nella stessa frase).
+                    verify_prob = self.gaia_verifier.feed(data)
+                    if verify_prob >= self.gaia_verifier.threshold:
+                        log.info(f"[GaiaVerify] Rilevato! prob={verify_prob:.2f}")
+                        speech_frames = []; silence_count = 0
+                        self._publish_stato(self.STATE_LISTENING)
+                        self.mqtt.publish(TOPIC_TTS, "Dimmi", qos=0)
+                        continue
+
                     if vol > self.voice_threshold:
                         speech_frames.append(data)
                         silence_count = 0

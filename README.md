@@ -181,12 +181,27 @@ Microfono (Polycom USB, 48kHz stereo)
     ↓ downsample a 16kHz mono
     ↓ gate energetico (RMS > 300)
 IDLE: accumula frame → whisper-tiny → cerca "gaia" nel testo
+    │                          + GaiaWakeVerifier (embedding continuo, parallelo —
+    │                            2026-07-04, vedi sotto) → LISTENING diretto se supera soglia
     ↓ wake word trovato → LISTENING
     ↓ registra fino al silenzio
     ↓ whisper-small (testo) + resemblyzer (speaker ID)
     ↓ pubblica su gaia/voice/command/minipc
-Node-RED: voice-flow → intent detection → Ollama → TTS → gaia/voice/tts/minipc
+Node-RED: Intent Detection → Ollama → TTS → gaia/voice/tts/minipc
+         └ doppia conferma volto+voce (opt-in, vedi docs/automazioni.md)
 ```
+
+**GaiaWakeVerifier (2026-07-04)** — stesso approccio del Pi (openWakeWord
+`AudioFeatures` + classificatore LogisticRegression), ma con un **modello dedicato
+al mic del miniPC** (`gaia_wakeword_samples_minipc/gaia_verifier_minipc.pkl`, MAI
+condiviso con quello del Pi — acustiche diverse). Gira in continuo su una finestra
+scorrevole di 1.5s, in parallelo al text-search whisper-tiny esistente: se il
+modello non è ancora allenato, `feed()` ritorna sempre 0.0 e il comportamento
+resta identico a prima (nessuna regressione). Allenabile da admin.html → card
+"Wakeword — 'Gaia' (miniPC / monitor touch)" — registra almeno 3 (idealmente
+20–30) campioni positivi/negativi **dal mic del miniPC**, poi "Addestra": il
+modello si ricarica a caldo via MQTT (`gaia/admin/reload_gaia_verifier`), nessun
+riavvio del servizio necessario.
 
 **Enrollment speaker:**
 ```bash

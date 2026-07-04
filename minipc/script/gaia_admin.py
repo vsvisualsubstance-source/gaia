@@ -133,6 +133,11 @@ FACES_DIR       = "/media/core/D/face-env/faces"
 DOORBELL_DIR      = os.path.expanduser("~/core-node-0/minipc/script/doorbell_samples")
 GAIA_WAKEWORD_DIR = os.path.expanduser("~/core-node-0/minipc/script/gaia_wakeword_samples")
 GAIA_MODEL_PATH   = os.path.join(GAIA_WAKEWORD_DIR, "gaia_verifier.pkl")
+# Dataset/modello dedicato al mic del miniPC — non mescolato con i campioni del
+# Pi (acustiche diverse), mai distribuito via OTA: gaia_listener.py lo carica
+# in locale (vedi GaiaWakeVerifier). Vedi docs/automazioni.md.
+GAIA_WAKEWORD_DIR_MINIPC = os.path.expanduser("~/core-node-0/minipc/script/gaia_wakeword_samples_minipc")
+GAIA_MODEL_PATH_MINIPC   = os.path.join(GAIA_WAKEWORD_DIR_MINIPC, "gaia_verifier_minipc.pkl")
 
 # ── Provision registry — device registrati al boot (discovery livello 3) ──
 # Contratto client: docs/discovery-protocol.md + pi/agent/agent.py::_provision_register
@@ -259,6 +264,13 @@ class AdminHandler(BaseHTTPRequestHandler):
             else:
                 self.send_response(400); self._cors(); self.end_headers()
             return
+        if p.startswith("/api/gaia-wakeword-minipc/clip/"):
+            parts = p.split("/")
+            if len(parts) >= 6:
+                self._delete_clip(GAIA_WAKEWORD_DIR_MINIPC, parts[4], int(parts[5]))
+            else:
+                self.send_response(400); self._cors(); self.end_headers()
+            return
         if p.startswith("/api/doorbell/clip/"):
             parts = p.split("/")
             if len(parts) >= 6:
@@ -307,6 +319,15 @@ class AdminHandler(BaseHTTPRequestHandler):
                 self.send_response(400); self._cors(); self.end_headers()
             return
 
+        # Playback clip: /api/gaia-wakeword-minipc/clip/{label}/{index}
+        if p.startswith("/api/gaia-wakeword-minipc/clip/"):
+            parts = p.split("/")
+            if len(parts) >= 6:
+                self._serve_clip(GAIA_WAKEWORD_DIR_MINIPC, parts[4], int(parts[5]))
+            else:
+                self.send_response(400); self._cors(); self.end_headers()
+            return
+
         # Playback clip: /api/doorbell/clip/{label}/{index}
         if p.startswith("/api/doorbell/clip/"):
             parts = p.split("/")  # ['','api','doorbell','clip',label,idx]
@@ -337,6 +358,20 @@ class AdminHandler(BaseHTTPRequestHandler):
                 "positive": pos_n, "positive_clips": pos_idx,
                 "negative": neg_n, "negative_clips": neg_idx,
                 "model_exists": os.path.exists(GAIA_MODEL_PATH),
+            }); return
+
+        if p == "/api/gaia-wakeword-minipc/status":
+            def _clips_mp(label):
+                d = os.path.join(GAIA_WAKEWORD_DIR_MINIPC, label)
+                if not os.path.exists(d): return 0, []
+                fs = sorted(f for f in os.listdir(d) if f.endswith(".wav"))
+                return len(fs), [i for i in range(len(fs))]
+            pos_n, pos_idx = _clips_mp("positive")
+            neg_n, neg_idx = _clips_mp("negative")
+            self._json({
+                "positive": pos_n, "positive_clips": pos_idx,
+                "negative": neg_n, "negative_clips": neg_idx,
+                "model_exists": os.path.exists(GAIA_MODEL_PATH_MINIPC),
             }); return
         if p == "/api/doorbell/status":
             def _dclips(label):
@@ -527,9 +562,12 @@ class AdminHandler(BaseHTTPRequestHandler):
             self._json({"ok": True, "device": _admin_mic_device})
 
         elif path == "/api/gaia-wakeword/record-local":
+            # Registra dal mic del miniPC → dataset dedicato al modello miniPC
+            # (GAIA_WAKEWORD_DIR_MINIPC), separato da quello del Pi: mic diversi,
+            # non ha senso mescolarli nello stesso modello. Vedi docs/automazioni.md.
             label      = body.get("label", "positive")
             duration_s = int(body.get("duration_s", 3))
-            dst = os.path.join(GAIA_WAKEWORD_DIR, label)
+            dst = os.path.join(GAIA_WAKEWORD_DIR_MINIPC, label)
             os.makedirs(dst, exist_ok=True)
             idx = len([f for f in os.listdir(dst) if f.endswith(".wav")])
             wav_path = os.path.join(dst, f"clip_{idx:04d}.wav")
@@ -539,6 +577,42 @@ class AdminHandler(BaseHTTPRequestHandler):
                               json.dumps({"path": wav_path, "duration_s": duration_s}))
                 log.info(f"record_raw_clip inviato a gaia_listener → {wav_path}")
             self._json({"ok": True, "label": label, "duration_s": duration_s, "clip": idx})
+
+        elif path == "/api/gaia-wakeword-minipc/upload":
+            label     = body.get("label", "positive")
+            audio_b64 = body.get("audio_base64", "")
+            if not audio_b64:
+                self._json({"ok": False, "error": "audio_base64 mancante"}, 400); return
+            try:
+                audio_bytes = base64.b64decode(audio_b64.split(",")[-1])
+            except Exception:
+                self._json({"ok": False, "error": "audio_base64 non valido"}, 400); return
+            dst = os.path.join(GAIA_WAKEWORD_DIR_MINIPC, label)
+            os.makedirs(dst, exist_ok=True)
+            idx = len([f for f in os.listdir(dst) if f.endswith(".wav")])
+            wav_path = os.path.join(dst, f"clip_{idx:04d}.wav")
+            with open(wav_path, "wb") as f:
+                f.write(audio_bytes)
+            log.info(f"Campione Gaia wakeword (miniPC) caricato: {wav_path}")
+            self._json({"ok": True, "label": label, "path": wav_path})
+
+        elif path == "/api/gaia-wakeword-minipc/train":
+            def _do_train_gaia_minipc():
+                try:
+                    import sys
+                    sys.path.insert(0, os.path.dirname(DB_PATH))
+                    from train_doorbell_model import train_and_save
+                    ok, msg = train_and_save(samples_dir=GAIA_WAKEWORD_DIR_MINIPC,
+                                             output_path=GAIA_MODEL_PATH_MINIPC)
+                    log.info(f"Training Gaia wakeword (miniPC): {msg}")
+                    if ok and _mqtt:
+                        # Nessuna OTA: il modello e' gia' locale, gaia_listener.py
+                        # lo ricarica direttamente dal disco.
+                        _mqtt.publish("gaia/admin/reload_gaia_verifier", "{}")
+                except Exception as e:
+                    log.error(f"Errore training Gaia miniPC: {e}")
+            threading.Thread(target=_do_train_gaia_minipc, daemon=True).start()
+            self._json({"ok": True, "message": "Training Gaia wakeword (miniPC) avviato in background"})
 
         elif path == "/api/doorbell/record-local":
             label      = body.get("label", "positive")
@@ -700,6 +774,13 @@ class AdminHandler(BaseHTTPRequestHandler):
             parts = path.split("/")
             if body.get("_method") == "DELETE":
                 self._delete_clip(GAIA_WAKEWORD_DIR, parts[4], int(parts[5]))
+            else:
+                self._json({"ok": False, "error": "_method:DELETE richiesto"}, 400)
+
+        elif path.startswith("/api/gaia-wakeword-minipc/clip/") and len(path.split("/")) >= 6:
+            parts = path.split("/")
+            if body.get("_method") == "DELETE":
+                self._delete_clip(GAIA_WAKEWORD_DIR_MINIPC, parts[4], int(parts[5]))
             else:
                 self._json({"ok": False, "error": "_method:DELETE richiesto"}, 400)
 
