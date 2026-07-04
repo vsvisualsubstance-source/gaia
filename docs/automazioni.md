@@ -75,6 +75,18 @@ Tre problemi concatenati, non uno solo:
    `rid.includes(known_name)` (substring) invece di uguaglianza esatta — quindi "ingresso1"
    passava il filtro pensato per scartare nomi spuri. Cambiato in match esatto.
 
+**Aggiornamento 2026-07-04**: "ingresso1" è ricomparso circa 10 ore dopo (Node-RED mai
+riavviato nel frattempo) — stavolta con attività MediaPipe reale, non un ghost inerte. Il fix
+manuale della sera prima (publish diretto sul topic retained `gaia/devices/pi-fd75d8/config`)
+aveva corretto il broker ma non `brain.devices` in memoria nel processo Node-RED già in
+esecuzione — il Device Registry continua a fidarsi del suo stato interno
+(`existing.room || roomClaim`), quindi ha continuato a riconfermare "ingresso1" per tutta la
+vita di quel processo. **Il modo corretto è sempre `POST /api/provision/assign`**
+(`{device_id, stanza}`) su `gaia_admin.py:8765` — fa la sincronizzazione a tre vie completa
+(provision registry + `set_config` MQTT al device + Device Registry Node-RED), non un publish
+manuale sul topic. Verificato: MediaPipe ha ripreso a taggare `"camera":"ingresso"` entro
+pochi secondi dalla chiamata.
+
 ## Roadmap — idee non ancora implementate
 
 - Collegare Automazioni a Gaming/RPG (sbloccare automazioni più sofisticate salendo di livello,
