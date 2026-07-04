@@ -80,7 +80,15 @@ _SERVICE_DEFS = {
         # XDG_RUNTIME_DIR: mediapipe importa sounddevice→PortAudio→PulseAudio;
         # senza il socket utente (/run/user/1000/pulse) l'import crasha nel
         # contesto systemd. Con la variabile l'import va a buon fine.
-        "env_extra": {"HEADLESS": "1", "XDG_RUNTIME_DIR": "/run/user/1000"},
+        # Il resto (MAX_FACES..POSE_MODEL_PATH) alza il minipc a "full" +
+        # multi-persona (2), lasciando i Pi al default legacy (1 persona) —
+        # decisione 2026-07-04, vedi pi/mediapipe/README.md.
+        "env_extra": {
+            "HEADLESS": "1", "XDG_RUNTIME_DIR": "/run/user/1000",
+            "MAX_FACES": "2", "MAX_HANDS": "4", "POSE_COMPLEXITY": "2",
+            "MULTI_PERSON": "1", "MAX_POSES": "2",
+            "POSE_MODEL_PATH": "/media/core/D/mediapipe-vision/models/pose_landmarker_full.task",
+        },
         "ota_dir": "/home/core/core-node-0/pi/mediapipe",
     },
 }

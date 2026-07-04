@@ -16,6 +16,8 @@ Topic dati:
 
 import cv2
 import mediapipe as mp
+from mediapipe.tasks import python as mp_tasks
+from mediapipe.tasks.python import vision as mp_vision
 import paho.mqtt.client as mqtt
 import json
 import time
@@ -50,6 +52,15 @@ _defaults = {
     'FRAME_SKIP':       '1',
     'HEADLESS':         '1',
     'TOPIC':            'gaia/mediapipe/pose',
+    # Tutti questi hanno default = comportamento identico a prima (1 persona,
+    # Pose legacy) — pensati per essere alzati via env solo su device con più
+    # CPU disponibile (es. minipc), lasciando i Pi invariati.
+    'MAX_FACES':        '1',
+    'MAX_HANDS':        '2',
+    'POSE_COMPLEXITY':  '1',   # legacy mp.solutions.pose: 0=lite 1=full 2=heavy
+    'MULTI_PERSON':     '0',   # 1 = usa Tasks API PoseLandmarker (multi-persona)
+    'MAX_POSES':        '2',   # usato solo se MULTI_PERSON=1
+    'POSE_MODEL_PATH':  '',    # bundle .task richiesto se MULTI_PERSON=1
 }
 
 _file_cfg = _load_conf('/etc/gaia/mediapipe.conf')
@@ -64,6 +75,12 @@ PUBLISH_INTERVAL = float(_cfg['PUBLISH_INTERVAL'])
 FRAME_SKIP       = int(_cfg['FRAME_SKIP'])
 HEADLESS         = _cfg['HEADLESS'] == '1'
 TOPIC            = _cfg['TOPIC']
+MAX_FACES        = int(_cfg['MAX_FACES'])
+MAX_HANDS        = int(_cfg['MAX_HANDS'])
+POSE_COMPLEXITY  = int(_cfg['POSE_COMPLEXITY'])
+MULTI_PERSON     = _cfg['MULTI_PERSON'] == '1'
+MAX_POSES        = int(_cfg['MAX_POSES'])
+POSE_MODEL_PATH  = _cfg['POSE_MODEL_PATH']
 CONFIG_TOPIC     = f'gaia/devices/{DEVICE_ID}/config'
 ANNOUNCE_TOPIC   = f'gaia/devices/{DEVICE_ID}/announce'
 
@@ -173,80 +190,175 @@ except Exception as e:
 # ── MEDIAPIPE ─────────────────────────────────────────────────────────────────
 
 _face_mesh = mp.solutions.face_mesh.FaceMesh(
-    static_image_mode=False, max_num_faces=1, refine_landmarks=True,
+    static_image_mode=False, max_num_faces=MAX_FACES, refine_landmarks=True,
     min_detection_confidence=0.5, min_tracking_confidence=0.5
 )
 _hands = mp.solutions.hands.Hands(
-    static_image_mode=False, max_num_hands=2,
-    min_detection_confidence=0.5, min_tracking_confidence=0.5
-)
-_pose = mp.solutions.pose.Pose(
-    static_image_mode=False,
+    static_image_mode=False, max_num_hands=MAX_HANDS,
     min_detection_confidence=0.5, min_tracking_confidence=0.5
 )
 
+# Pose: l'API legacy (mp.solutions.pose.Pose) rileva UNA sola persona per
+# costruzione — per il multi-persona serve la Tasks API (PoseLandmarker con
+# num_poses), che richiede un bundle .task scaricato a parte (~9MB, vedi
+# README). Default MULTI_PERSON=0 → nessun cambiamento rispetto a prima.
+_pose_legacy = None
+_pose_landmarker = None
+if MULTI_PERSON:
+    if not POSE_MODEL_PATH or not os.path.exists(POSE_MODEL_PATH):
+        log.error(f"MULTI_PERSON=1 ma POSE_MODEL_PATH non valido: {POSE_MODEL_PATH!r} — fallback a Pose singola")
+        MULTI_PERSON = False
+    else:
+        _pose_landmarker = mp_vision.PoseLandmarker.create_from_options(
+            mp_vision.PoseLandmarkerOptions(
+                base_options=mp_tasks.BaseOptions(model_asset_path=POSE_MODEL_PATH),
+                running_mode=mp_vision.RunningMode.VIDEO,
+                num_poses=MAX_POSES,
+                min_pose_detection_confidence=0.5,
+                min_tracking_confidence=0.5,
+            )
+        )
+        log.info(f"Pose multi-persona attiva (Tasks API, num_poses={MAX_POSES})")
+if not MULTI_PERSON:
+    _pose_legacy = mp.solutions.pose.Pose(
+        static_image_mode=False, model_complexity=POSE_COMPLEXITY,
+        min_detection_confidence=0.5, min_tracking_confidence=0.5
+    )
+
 _GESTURE_MAP = {0: 'fist', 1: 'point', 2: 'victory', 3: 'three', 4: 'open_hand'}
+
+
+def _face_to_dict(lm, w, h):
+    """Estrae i campi derivati per UN volto (lista landmark FaceMesh)."""
+    smile = int(abs((lm[291].x - lm[61].x) * w))
+    mouth_gap = abs((lm[14].y - lm[13].y) * h)
+    mouth_open = mouth_gap > 15
+    # Arricchimento emozione: sorriso marcato → happy; bocca aperta senza
+    # sorriso → surprised; altrimenti neutral (nessuna nuova geometria
+    # inventata, riusa solo i segnali già calcolati sopra).
+    if smile > 80:
+        emotion = 'happy'
+    elif mouth_open and smile < 40:
+        emotion = 'surprised'
+    else:
+        emotion = 'neutral'
+    nx = lm[1].x
+    attention = 'left' if nx < 0.42 else ('right' if nx > 0.58 else 'center')
+    eye_dist = abs((lm[263].x - lm[33].x) * w) or 1
+    left_ear  = abs((lm[159].y - lm[145].y) * h) / eye_dist
+    right_ear = abs((lm[386].y - lm[374].y) * h) / eye_dist
+    eyes_open = left_ear > 0.05 and right_ear > 0.05
+    return {
+        'x': nx, 'emotion': emotion, 'smile_score': smile,
+        'attention': attention, 'mouth_open': mouth_open, 'eyes_open': eyes_open,
+    }
+
+
+def _pose_to_dict(lm):
+    """Estrae i campi derivati per UNA posa (lista landmark Pose, 33 punti)."""
+    ls, rs = lm[11], lm[12]
+    lw, rw = lm[15], lm[16]
+    lh, rh = lm[23], lm[24]
+    if lw.y < ls.y and rw.y < rs.y:
+        pose_state = 'arms_up'
+    else:
+        torso = abs(((lh.y + rh.y) / 2) - ((ls.y + rs.y) / 2))
+        pose_state = 'standing' if torso > 0.25 else 'sitting'
+    x = (ls.x + rs.x) / 2
+    return {'x': x, 'pose': pose_state}
 
 
 def _analyze(frame):
     h, w, _ = frame.shape
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-    detected   = False
-    emotion    = None      # null = nessun volto visibile
-    smile      = 0
-    attention  = 'unknown'
-    gesture    = 'none'
-    pose_state = 'unknown'
-    mouth_open = False
-    eyes_open  = True
+    faces = []
+    hands = []
+    poses = []
 
     fr = _face_mesh.process(rgb)
-    if fr.multi_face_landmarks:
-        detected = True
-        lm = fr.multi_face_landmarks[0].landmark
-        smile = int(abs((lm[291].x - lm[61].x) * w))
-        emotion = 'happy' if smile > 80 else 'neutral'
-        mouth_gap = abs((lm[14].y - lm[13].y) * h)
-        mouth_open = mouth_gap > 15
-        nx = lm[1].x
-        attention = 'left' if nx < 0.42 else ('right' if nx > 0.58 else 'center')
-        # EAR sulle palpebre (159/145 occhio sx, 386/374 dx), normalizzato sulla distanza interoculare
-        eye_dist = abs((lm[263].x - lm[33].x) * w) or 1
-        left_ear  = abs((lm[159].y - lm[145].y) * h) / eye_dist
-        right_ear = abs((lm[386].y - lm[374].y) * h) / eye_dist
-        eyes_open = left_ear > 0.05 and right_ear > 0.05
+    for face_lm in (fr.multi_face_landmarks or []):
+        faces.append(_face_to_dict(face_lm.landmark, w, h))
 
     hr = _hands.process(rgb)
     if hr.multi_hand_landmarks:
-        detected = True
-        lm = hr.multi_hand_landmarks[0].landmark
-        fingers = sum([lm[8].y < lm[6].y, lm[12].y < lm[10].y,
-                       lm[16].y < lm[14].y, lm[20].y < lm[18].y])
-        gesture = _GESTURE_MAP.get(fingers, 'open_hand')
+        handedness_list = hr.multi_handedness or [None] * len(hr.multi_hand_landmarks)
+        for hand_lm, handed in zip(hr.multi_hand_landmarks, handedness_list):
+            lm = hand_lm.landmark
+            fingers = sum([lm[8].y < lm[6].y, lm[12].y < lm[10].y,
+                           lm[16].y < lm[14].y, lm[20].y < lm[18].y])
+            hands.append({
+                'x': lm[0].x,
+                'gesture': _GESTURE_MAP.get(fingers, 'open_hand'),
+                'handedness': handed.classification[0].label if handed else 'unknown',
+            })
 
-    pr = _pose.process(rgb)
-    if pr.pose_landmarks:
-        detected = True
-        lm = pr.pose_landmarks.landmark
-        ls, rs = lm[11], lm[12]
-        lw, rw = lm[15], lm[16]
-        lh, rh = lm[23], lm[24]
-        if lw.y < ls.y and rw.y < rs.y:
-            pose_state = 'arms_up'
+    if MULTI_PERSON:
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+        pr = _pose_landmarker.detect_for_video(mp_image, int(time.time() * 1000))
+        for pose_lm in (pr.pose_landmarks or []):
+            poses.append(_pose_to_dict(pose_lm))
+    else:
+        pr = _pose_legacy.process(rgb)
+        if pr.pose_landmarks:
+            poses.append(_pose_to_dict(pr.pose_landmarks.landmark))
+
+    # Associazione best-effort persona-per-persona: nessuna delle tre pipeline
+    # (FaceMesh/Hands/Pose) condivide un tracking-id tra loro, quindi si
+    # appaiano per vicinanza orizzontale (ordinamento per x) — non garantisce
+    # identità coerente frame-per-frame, solo un raggruppamento ragionevole
+    # quando le persone sono separate lateralmente (tipico inquadratura fissa).
+    faces_sorted = sorted(faces, key=lambda f: f['x'])
+    poses_sorted = sorted(poses, key=lambda p: p['x'])
+    n_people = max(len(faces_sorted), len(poses_sorted), 1 if hands else 0)
+
+    # Ancora (x) di ogni persona: volto se c'è, altrimenti posa, altrimenti None
+    anchors = []
+    for i in range(n_people):
+        face = faces_sorted[i] if i < len(faces_sorted) else None
+        pose = poses_sorted[i] if i < len(poses_sorted) else None
+        anchors.append(face['x'] if face else (pose['x'] if pose else None))
+
+    # Ogni mano va alla persona con ancora più vicina; se nessuna persona ha
+    # un'ancora nota (solo mani rilevate, niente volto/posa) tutte le mani
+    # finiscono sulla persona 0.
+    gestures_per_person = [[] for _ in range(n_people)]
+    known_anchors = [i for i in range(n_people) if anchors[i] is not None]
+    for hnd in hands:
+        if known_anchors:
+            nearest = min(known_anchors, key=lambda j: abs(hnd['x'] - anchors[j]))
         else:
-            torso = abs(((lh.y + rh.y) / 2) - ((ls.y + rs.y) / 2))
-            pose_state = 'standing' if torso > 0.25 else 'sitting'
+            nearest = 0
+        gestures_per_person[nearest].append(hnd['gesture'])
 
+    people = []
+    for i in range(n_people):
+        face = faces_sorted[i] if i < len(faces_sorted) else None
+        pose = poses_sorted[i] if i < len(poses_sorted) else None
+        people.append({
+            'id':          i,
+            'x':           anchors[i],
+            'emotion':     face['emotion'] if face else None,
+            'smile_score': face['smile_score'] if face else 0,
+            'attention':   face['attention'] if face else 'unknown',
+            'mouth_open':  face['mouth_open'] if face else False,
+            'eyes_open':   face['eyes_open'] if face else True,
+            'pose':        pose['pose'] if pose else 'unknown',
+            'gestures':    gestures_per_person[i],
+        })
+
+    primary = people[0] if people else None
     return {
-        'person_detected': detected,
-        'emotion':         emotion,
-        'smile_score':     smile,
-        'attention':       attention,
-        'gesture':         gesture,
-        'pose':            pose_state,
-        'mouth_open':      mouth_open,
-        'eyes_open':       eyes_open,
+        'person_detected': bool(people),
+        'emotion':         primary['emotion'] if primary else None,
+        'smile_score':     primary['smile_score'] if primary else 0,
+        'attention':       primary['attention'] if primary else 'unknown',
+        'gesture':         primary['gestures'][0] if primary and primary['gestures'] else 'none',
+        'pose':            primary['pose'] if primary else 'unknown',
+        'mouth_open':      primary['mouth_open'] if primary else False,
+        'eyes_open':       primary['eyes_open'] if primary else True,
+        'people_count':    len(people),
+        'people':          [{k: v for k, v in p.items() if k != 'x'} for p in people],
     }
 
 # ── CAMERA ────────────────────────────────────────────────────────────────────
@@ -267,6 +379,7 @@ state = {
     'person_detected': False, 'emotion': None, 'smile_score': 0,
     'attention': 'unknown', 'gesture': 'none', 'pose': 'unknown',
     'mouth_open': False, 'eyes_open': True,
+    'people_count': 0, 'people': [],
 }
 _running = True
 
@@ -337,7 +450,10 @@ if cap:
     cap.close()
 _face_mesh.close()
 _hands.close()
-_pose.close()
+if _pose_legacy:
+    _pose_legacy.close()
+if _pose_landmarker:
+    _pose_landmarker.close()
 if not HEADLESS:
     cv2.destroyAllWindows()
 _mqtt.loop_stop()
