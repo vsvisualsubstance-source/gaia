@@ -13,7 +13,9 @@ volta sola.
 
 **Shell condiviso** (non un blocco a sé, ma serve a tutti): `portal.html` (landing con le card
 verso ogni sezione), `index.html`+`app.js` (vista 3D Three.js), `welcome.html` (kiosk
-ospiti/enrollment, vedi memory `project-gaia-web`).
+ospiti/enrollment, vedi memory `project-gaia-web`), `asemic.js` (engine Vocabolario Asemico —
+lingua visiva deterministica di Gaia, v1 come sfondo della welcome; roadmap completa e punti
+di aggancio in `docs/vocabolario-asemico.md`).
 
 ---
 
