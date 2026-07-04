@@ -39,6 +39,11 @@ minipc/script/listener_config.json
 # Wakeword models (file grandi)
 minipc/wakeword_models/
 
+# Campioni voce "Gaia" + modello dedicato al mic del miniPC — dati personali
+# (registrazioni vocali), stessa categoria di voice_db.json
+minipc/script/gaia_wakeword_samples_minipc/
+minipc/script/gaia_wakeword_samples/
+
 # Local agent runtime (device-specific, generato automaticamente)
 minipc/local_agent.lock
 minipc/local_agent_config.json

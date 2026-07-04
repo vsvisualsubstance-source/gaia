@@ -185,11 +185,23 @@ IDLE: accumula frame → whisper-tiny → cerca "gaia" nel testo
     │                            2026-07-04, vedi sotto) → LISTENING diretto se supera soglia
     ↓ wake word trovato → LISTENING
     ↓ registra fino al silenzio
-    ↓ whisper-small (testo) + resemblyzer (speaker ID)
+    ↓ whisper-medium (testo, 2026-07-04: era "small") + resemblyzer (speaker ID)
     ↓ pubblica su gaia/voice/command/minipc
 Node-RED: Intent Detection → Ollama → TTS → gaia/voice/tts/minipc
          └ doppia conferma volto+voce (opt-in, vedi docs/automazioni.md)
+         └ 2026-07-04: mqtt-in dedicato (tab Voice) legge questo topic e lo
+           inoltra a say.sh — prima nessuno lo ascoltava, le risposte ai
+           comandi finivano su MQTT senza mai essere lette ad alta voce
+           (diverso dai "pensieri spontanei" su casa/tts/play, quelli già
+           funzionanti)
 ```
+
+**Nota prestazioni (2026-07-04)**: whisper-medium su CPU condivisa con la visione locale
+(YOLO+MediaPipe via `gaia-local-agent`) può salire da ~8s a ~27s per trascrizione — non è
+un bug del modello, è contesa CPU (load average misurato: 11.58 su 4 core). Vedi memoria
+`project-architettura-core-ops` per la decisione di separare i ruoli hardware (Core senza
+mic/camera vs OPS/monitor touch con visione+voce). Nel frattempo, `sudo systemctl stop
+gaia-local-agent` libera CPU per testare la voce.
 
 **GaiaWakeVerifier (2026-07-04)** — stesso approccio del Pi (openWakeWord
 `AudioFeatures` + classificatore LogisticRegression), ma con un **modello dedicato

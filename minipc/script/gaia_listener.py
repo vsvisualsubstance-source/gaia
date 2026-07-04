@@ -241,6 +241,7 @@ class GaiaWakeVerifier:
         self.threshold = threshold
         self.af  = None
         self.clf = None
+        self.last_prob = 0.0  # ultima probabilita' calcolata — per stats/UI live
         self._buffer: list[np.ndarray] = []
         self._buffer_samples = 0
         self._target_samples = int(TARGET_RATE * GAIA_VERIFY_WINDOW_S)
@@ -281,7 +282,9 @@ class GaiaWakeVerifier:
         self._buffer_samples = 0
         try:
             emb = self.af.embed_clips(arr).mean(axis=1)
-            return float(self.clf.predict_proba(emb)[:, 1][0])
+            prob = float(self.clf.predict_proba(emb)[:, 1][0])
+            self.last_prob = prob
+            return prob
         except Exception as e:
             log.warning(f"[GaiaVerify] Errore inferenza: {e}")
             return 0.0
@@ -299,10 +302,13 @@ _CMD_PROMPT   = ("Gaia, accendi le luci del soggiorno. Gaia, spegni il corridoio
 # ── Transcriber ───────────────────────────────────────────────────────────────
 class Transcriber:
     def __init__(self):
-        log.info("Caricamento whisper-tiny…")
+        log.info("Caricamento whisper-tiny (solo wake word, velocità > precisione)…")
         self.tiny  = WhisperModel("tiny",  device="cpu", compute_type="int8")
-        log.info("Caricamento whisper-small…")
-        self.small = WhisperModel("small", device="cpu", compute_type="int8")
+        # "medium" per la trascrizione del comando: molto piu' accurato di
+        # "small" sull'italiano, gia' in cache (~1.5GB, nessun download) —
+        # nome attributo invariato per non toccare le chiamate esistenti.
+        log.info("Caricamento whisper-medium (trascrizione comandi)…")
+        self.small = WhisperModel("medium", device="cpu", compute_type="int8")
         log.info("Whisper pronto.")
 
     def detect_wake(self, wav_bytes: bytes) -> tuple[bool, str]:
@@ -317,9 +323,13 @@ class Transcriber:
         return found, text
 
     def transcribe_command(self, wav_bytes: bytes) -> str:
+        # beam_size basso: su "medium" con CPU a 4 core, beam_size=5 impiegava
+        # ~27s per pochi secondi di parlato — troppo per un assistente
+        # interattivo. beam_size=1 (greedy) e' molto piu' veloce, precisione
+        # comunque superiore a "small" grazie al modello piu' grande.
         segs, _ = self.small.transcribe(
             io.BytesIO(wav_bytes), language="it",
-            beam_size=5, best_of=1, temperature=0.0, vad_filter=True,
+            beam_size=1, best_of=1, temperature=0.0, vad_filter=True,
             initial_prompt=_CMD_PROMPT,
         )
         return " ".join(s.text for s in segs).strip()
@@ -402,6 +412,9 @@ class GaiaListener:
             "frames_acc":       frames_acc,
             "device_id":        self._cfg.get("device_id", "gaia-main"),
             "device_name":      self.device_name,
+            "gaia_verify_confidence": round(self.gaia_verifier.last_prob, 3),
+            "gaia_verify_threshold":  round(self.gaia_verifier.threshold, 2),
+            "gaia_verify_active":     self.gaia_verifier.clf is not None,
         }
         if extra:
             payload.update(extra)
@@ -445,7 +458,14 @@ class GaiaListener:
             return False
 
     def _record_until_silence(self, stream) -> list[bytes]:
-        frames, silence = [], 0
+        # started=False finché non arriva il primo frame sopra soglia: il
+        # silenzio non conta per il taglio prima che l'utente abbia
+        # effettivamente iniziato a parlare (stesso pattern gia' usato in
+        # IDLE, vedi run() — "elif speech_frames:"). Senza questa guardia,
+        # una normale pausa di reazione dopo "Dimmi" (l'utente non ha ancora
+        # iniziato a rispondere) veniva scambiata per fine-frase e il
+        # comando reale non veniva mai catturato.
+        frames, silence, started = [], 0, False
         deadline = time.time() + LISTEN_MAX_S
         while time.time() < deadline and self._running and not self._busy:
             try:
@@ -455,7 +475,8 @@ class GaiaListener:
             frames.append(data)
             if rms(data) > self.voice_threshold:
                 silence = 0
-            else:
+                started = True
+            elif started:
                 silence += 1
                 if silence >= LISTEN_SILENCE_FRAMES:
                     break
@@ -472,10 +493,13 @@ class GaiaListener:
                 self.silence_frames = int(data["silence_frames"])
             if "speaker_threshold" in data:
                 self.speaker_db.threshold = float(data["speaker_threshold"])
+            if "gaia_verify_threshold" in data:
+                self.gaia_verifier.threshold = float(data["gaia_verify_threshold"])
             self._cfg.update({
                 "voice_threshold":   self.voice_threshold,
                 "silence_frames":    self.silence_frames,
                 "speaker_threshold": self.speaker_db.threshold,
+                "gaia_verify_threshold": self.gaia_verifier.threshold,
             })
             save_config(self._cfg)
             log.info(f"Config aggiornata: voice_threshold={self.voice_threshold} silence_frames={self.silence_frames}")
@@ -777,6 +801,7 @@ class GaiaListener:
                 # LISTENING: registra il comando
                 elif self.state == self.STATE_LISTENING:
                     frames = self._record_until_silence(stream)
+                    log.info(f"[LISTENING] catturati {len(frames)} frame ({len(frames)*FRAME_MS/1000:.2f}s)")
                     if len(frames) > 5:
                         self._process_command(frames_to_wav(frames))
                     else:
