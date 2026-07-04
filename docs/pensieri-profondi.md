@@ -46,21 +46,30 @@ Night Reflection (inject, orario) → Night Summary Prompt → Ollama → Save D
   giornaliere), distinto da `brain.thoughts` (pensieri istantanei nel payload WS come
   `lastMemory`).
 
-## Evoluzione linguistica — stato attuale e cosa manca
+## Evoluzione linguistica — fix applicati 2026-07-04
 
-Oggi "evoluzione" è solo accumulo di stato (`thoughts`, `memories`, `diary`) e recall
-semantico via Qdrant — non c'è ancora nessun meccanismo che cambi *come* Gaia parla nel tempo
-(tono, personalità, vocabolario) in base alla storia accumulata. Se l'obiettivo è far evolvere
-il linguaggio:
-- **Candidato più semplice**: iniettare un digest di `brain.memories` (i riassunti notturni)
-  nel prompt di `Build Prompt (Contestuale)`, non solo il recall puntuale da Qdrant — oggi il
-  riassunto notturno viene salvato ma non riletto da nessun altro nodo.
-- **Personalità/mood persistente**: `brain.mood` (stress/calm/social/curiosity, già esposto
-  come `soul` nel payload WS) esiste ma non risulta letto da `Build Prompt` — collegarlo
-  significherebbe che il tono dei pensieri cambia con lo stato d'animo accumulato, non solo
-  con l'evento contingente.
-- Prima di implementare, verificare lo stato di `brain.mood` e chi lo aggiorna (non ancora
-  tracciato in questo documento — da investigare quando si lavora su questo blocco).
+Due gap reali trovati e corretti:
+
+1. **`brain.memories` (riassunti notturni) ora inietta nel prompt dei pensieri spontanei** —
+   prima veniva salvato da "Save Daily Memory" ma nessun altro nodo lo rileggeva. `Build Prompt
+   (Contestuale)` ora aggiunge un digest degli ultimi 3 riassunti (`recentMemories`) al prompt,
+   accanto al recall puntuale da Qdrant — da' continuità narrativa oltre il singolo evento
+   contingente.
+2. **Il decadimento del mood era applicato per EVENTO, non per tempo trascorso** — causa root
+   per cui `brain.mood` (stress/calm/social/curiosity) era sempre bloccato a ~0 nel payload
+   `soul`: `GAIA Brain` sottraeva `0.002` ad ogni singolo evento normalizzato (frame
+   vision/mediapipe, anche molte volte al secondo), quindi qualsiasi bonus (es. +0.1 per
+   "presenza entrata") veniva eroso in pochi secondi reali. Corretto: il decadimento ora scala
+   con `now - brain._lastMoodDecayTs` (secondi reali trascorsi), indipendente dalla frequenza
+   di eventi in ingresso. **Non ancora verificato in modo osservabile dal vivo** (serve una
+   transizione presenza vera — ingresso/uscita — per vedere il bonus reggere oltre pochi
+   secondi; al momento del deploy tutte le persone note erano già presenti, nessuna
+   transizione fresca disponibile per il test).
+
+Entrambi i fix condividono lo stesso principio: `brain.mood.state` era già letto sia da
+`Build Prompt (Contestuale)` che da `Prepara prompt chat` (Chat tab) — il tono dei pensieri
+*avrebbe già dovuto* cambiare con l'umore accumulato, semplicemente l'umore non accumulava mai
+nulla di osservabile per via del bug di decadimento.
 
 ## File/nodi coinvolti (Node-RED, tab "Gaia Engine")
 
