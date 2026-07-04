@@ -16,7 +16,13 @@ Environment=PYTHONUNBUFFERED=1
 Environment=HOME=/home/core
 Environment=MJPEG_PORT=8766
 Environment=MJPEG_QUALITY=72
-# Override camera: CAMERA_INDEX=1 se webcam non è /dev/video0
+# Override camera: se webcam non è /dev/video0, impostare CAMERA_INDEX in
+# /etc/gaia/camera.conf (non qui — vedi config.py, env > file > default).
+# Capitato 2026-07-04: riconnessione USB ha rinumerato la webcam UC W20 da
+# /dev/video0 a /dev/video1 -> gaia-camera in crash-loop ("Camera 0 non
+# accessibile"), yolo/mediapipe in attesa (comportamento corretto, non il
+# problema). Diagnosi: `ls /dev/video*` + provare gli indici con OpenCV
+# (`cv2.VideoCapture(i).isOpened()`) per trovare quello vero.
 
 [Install]
 WantedBy=multi-user.target
