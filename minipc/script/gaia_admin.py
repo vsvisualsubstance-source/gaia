@@ -51,7 +51,7 @@ def _record_arecord(alsa_device: str, duration_s: int, wav_path: str) -> bool:
         log.error(f"arecord error: {e}")
         return False
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from urllib.parse import urlparse
+from urllib.parse import urlparse, unquote
 import paho.mqtt.client as mqtt
 
 MQTT_BROKER = "localhost"
@@ -335,6 +335,26 @@ class AdminHandler(BaseHTTPRequestHandler):
                 self._serve_clip(DOORBELL_DIR, parts[4], int(parts[5]))
             else:
                 self.send_response(400); self._cors(); self.end_headers()
+            return
+
+        # Thumbnail volto: /api/faces/{name}/thumb → prima immagine della persona
+        if p.startswith("/api/faces/") and p.endswith("/thumb"):
+            name = os.path.basename(unquote(p.split("/")[3]))
+            d = os.path.join(FACES_DIR, name)
+            imgs = sorted(f for f in (os.listdir(d) if os.path.isdir(d) else [])
+                          if f.lower().endswith((".jpg", ".jpeg", ".png")))
+            if not imgs:
+                self.send_response(404); self._cors(); self.end_headers(); return
+            fp = os.path.join(d, imgs[0])
+            data = open(fp, 'rb').read()
+            ctype = "image/png" if fp.lower().endswith(".png") else "image/jpeg"
+            self.send_response(200)
+            self._cors()
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", len(data))
+            self.send_header("Cache-Control", "max-age=60")
+            self.end_headers()
+            self.wfile.write(data)
             return
 
         if p == "/api/provision/devices":

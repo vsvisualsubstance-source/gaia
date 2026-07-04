@@ -25,6 +25,12 @@ ospiti/enrollment, vedi memory `project-gaia-web`).
 **File:** `admin.html` (+ redirect stub `pi-manager.html`). **Backend:** `minipc/script/gaia_admin.py`
 porta 8765.
 
+**2026-07-04 — UI uniformata:** tutte le pagine web condividono ora gli stessi design token
+(sfondo blu-nero `#050810`/`#08090f`, accento `#00ffcc`, bordo `#1e2840`, Segoe UI) — l'admin
+ha lasciato la palette GitHub, il portal il Courier New. Box "Voci/Volti nel DB" con card
+avatar+thumbnail (nuovo endpoint `GET :8765/api/faces/{name}/thumb` in gaia_admin.py) e clip
+wakeword/citofono in strip scorrevoli anti-flicker. Dettagli in memory `project-gaia-web`.
+
 **Sviluppo autonomo — cosa serve prima di toccarlo:**
 - Leggere memory `project-gaia-web` (sezioni `admin.html`) per il pattern tab + MQTT lazy.
 - Non serve altro contesto: il backend è tutto in un unico file (`gaia_admin.py`), gli endpoint
@@ -36,14 +42,16 @@ porta 8765.
 
 ## 2. Arte Visiva (`gaia-art/`)
 
-**Stato:** funzionante, "quadro vivente astratto" — canvas 2D generativo ispirato a Rothko/Turner,
-guidato dallo stesso WS `ws://{host}:1880/gaia`. File: `gaia-art/index.html`, `script.js` (~350
-righe), `style.css`.
+**Stato:** riscritta da zero il 2026-07-04 (la v1 "contemplativa" non convinceva). Canvas 2D
+generativo senza librerie, WS `ws://{host}:1880/gaia`. File: `gaia-art/index.html`,
+`script.js` (~420 righe), `style.css`.
 
-**Come funziona oggi:** riceve il payload WS in `socketData`, fa lerp (`lerped`) verso i valori
-target per evitare scatti, e mappa `soul.mood` (`neutra|stress|calm|social|curiosity`) su una
-palette di colori (`bg1/bg2/core/accent` in RGB) per uno sfondo/composizione animata. Nessuna
-dipendenza da librerie esterne (canvas API nativa).
+**Come funziona oggi:** bande Rothko per-mood (offscreen 16×128 upscalato = blur gratis, ridipinte
+con alpha bassa a ogni frame così fanno anche da fade delle scie) + flow-field di ~620 particelle
+(turbolenza da `soul.stress`, velocità da `soul.energy`, hue dalla palette mood, qualità adattiva
+se il frame rallenta) + nucleo respirante con i colori-stato voce della welcome + un'orbe con nome
+per ogni persona presente + braci per le luci accese + pensiero in crossfade. Tap = ripple nel
+campo. Palette lerp continua tra mood. Dettaglio layer-per-layer in memory `project-gaia-web`.
 
 **Sviluppo autonomo:**
 - Non serve toccare Node-RED per aggiungere nuove forme visive: tutto il necessario (soul,
