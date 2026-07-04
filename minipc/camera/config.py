@@ -26,7 +26,11 @@ _defaults = {
 _file_cfg = _load_conf('/etc/gaia/camera.conf')
 _cfg = {**_defaults, **_file_cfg, **{k: os.environ[k] for k in _defaults if k in os.environ}}
 
-CAMERA_INDEX  = int(_cfg['CAMERA_INDEX'])
+# CAMERA_INDEX puo' essere un indice numerico (es. "1") o un path stabile
+# (es. /dev/v4l/by-id/usb-..., non cambia mai anche se il kernel rinumera
+# /dev/videoN dopo una riconnessione USB — vedi minipc/camera/gaia-camera.service)
+_cam_raw = _cfg['CAMERA_INDEX']
+CAMERA_INDEX  = _cam_raw if '/' in _cam_raw else int(_cam_raw)
 FRAME_WIDTH   = int(_cfg['FRAME_WIDTH'])
 FRAME_HEIGHT  = int(_cfg['FRAME_HEIGHT'])
 FPS_LIMIT     = float(_cfg['FPS_LIMIT'])

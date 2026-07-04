@@ -8,7 +8,7 @@ l'audit di cosa esiste davvero.
 ## Sistema di toggle ufficiale (Node-RED `AutomationsList`/`ToggleAutomation`, tab Device Registry)
 
 `GET /gaia/automations` + `POST /gaia/automations/toggle` — **è il pannello "Automazioni" reale
-in admin.html**, verificato funzionante end-to-end. Espone 10 automazioni:
+in admin.html**, verificato funzionante end-to-end. Espone 11 automazioni:
 
 | id | Scope | Default | Cosa fa |
 |---|---|---|---|
@@ -22,6 +22,48 @@ in admin.html**, verificato funzionante end-to-end. Espone 10 automazioni:
 | `awayMode` | globale | **OFF** | Nessuno in casa da >30 min → spegne `Tutte_le_luci` via REST + alert, si riarma quando qualcuno rientra |
 | `welcomeScene` | globale | **OFF** | Persona nota rientra la sera (dopo le 20 o prima delle 6) → accende luce ingresso, cooldown 2h/persona |
 | `touchdesignerLighting` | globale | **OFF** | Vedi sotto — luci pilotate da parametri generati in TouchDesigner |
+| `voiceAutoEnroll` | globale | **OFF** (attivato e verificato dal vivo 2026-07-04) | Doppia conferma vocale + auto-enrollment — vedi sezione dedicata sotto |
+
+## Doppia conferma vocale + auto-enrollment (2026-07-04)
+
+**Cosa fa**: quando un comando vocale minipc viene identificato con uno speaker noto
+(`SpeakerDB.identify()` in `gaia_listener.py`) e quella stessa persona risulta **presente per
+riconoscimento facciale** (`brain.presence`), è una doppia conferma volto+voce — la function
+`Intent Detection` (Node-RED, tab GAIA Voice — **non** "Voce → Chat" nel tab Chat, vedi bug
+sotto) pubblica `gaia/admin/voice_autoenroll {name}`, e `gaia_listener.py` rifinisce il profilo
+vocale esistente con una **media mobile pesata** (`SpeakerDB.blend_or_enroll`, alpha 0.15) usando
+l'embedding già calcolato durante l'identificazione — nessuna nuova registrazione, nessun
+sovrascrittura brutale come fa `enroll()` (usato solo dal wizard esplicito).
+
+**Guardia anti-race**: `gaia_listener.py` applica il blend solo se il nome richiesto combacia
+con `speaker_db.last_identified_name` (l'ultima identificazione fatta), per evitare che un
+auto-enroll in ritardo si applichi all'utterance sbagliata.
+
+**Limite noto**: solo i comandi vocali dal **minipc** hanno speaker ID — i Pi non ne hanno
+ancora (vedi `voice_roadmap.md` in `pi/.claude/memory/`, TODO storico). Sui Pi il campo
+`speaker` non esiste nel payload, quindi il cross-check è semplicemente no-op per loro (nessun
+errore, solo nessuna doppia conferma).
+
+**Bug trovato e corretto durante l'implementazione**: la function "Voce → Chat" (tab Chat)
+sembrava il posto giusto per questa logica (legge già `speaker`/`confidence`) ma è **collegata
+a un `mqtt in` sul topic `casa/voce/comando`, che nessuno pubblica più** — `gaia_listener.py`
+pubblica su `gaia/voice/command/minipc`. "Voce → Chat" è codice morto nell'architettura
+attuale. Il percorso vivo è `voice-mqtt-in` (`gaia/voice/command/+`) → **Intent Detection**
+(tab GAIA Voice) → dove la logica è stata effettivamente aggiunta.
+
+**Verificato dal vivo 2026-07-04**: utente riconosciuto dalla camera → ha detto "Gaia, ciao" →
+speaker identificato come "Mauro" → log `[Voce] Doppia conferma volto+voce per Mauro ->
+auto-enroll` (Node-RED) → log `Auto-enroll vocale (doppia conferma): Mauro -> OK`
+(gaia_listener.py).
+
+## Suggerimento stanza da oggetti YOLO (2026-07-04)
+
+Nuovo endpoint `GET /gaia/room-guess?room=<chiave_attuale>` (Node-RED, tab Device Registry) —
+riusa le stesse firme oggetto di `DeviceRegistry.yoloVerify()` (`ROOM_SIGNATURES`) ma per
+**indovinare** la stanza più probabile dagli oggetti visti da una telecamera invece di
+verificare una singola claim. Non assegna nulla da solo — restituisce candidati ordinati per
+punteggio, un umano conferma con l'assegnazione esistente (`/api/provision/assign`). Pulsante
+🔍 aggiunto in admin.html → "Device registrati", accanto al campo stanza esistente.
 
 Le prime 4 sono di sicurezza/cura e restano **ON di default** (comportamento preesistente).
 Tutte le nuove (2026-07-03) partono **OFF** per scelta deliberata — coerenti con la convenzione

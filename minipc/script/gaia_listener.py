@@ -114,6 +114,13 @@ class SpeakerDB:
         self.encoder   = VoiceEncoder()
         self.threshold = threshold
         self.db: dict[str, np.ndarray] = {}
+        # Cache dell'ultima identificazione — usata dall'auto-enrollment per
+        # rifinire il profilo senza dover ri-registrare/ri-calcolare l'embedding
+        # (vedi blend_or_enroll). last_identified_name è None se l'ultima
+        # identify() non ha superato la soglia, per evitare che un
+        # auto-enroll arrivi in ritardo e si applichi all'utterance sbagliata.
+        self.last_embedding: np.ndarray | None = None
+        self.last_identified_name: str | None = None
         self._load()
 
     def _load(self):
@@ -180,7 +187,32 @@ class SpeakerDB:
             score = float(np.dot(emb, known))
             if score > best_score:
                 best_score, best = score, n
+        self.last_embedding = emb
+        self.last_identified_name = best if best_score >= self.threshold else None
         return (best, best_score) if best_score >= self.threshold else ("sconosciuto", best_score)
+
+    def blend_or_enroll(self, name: str, embedding: "np.ndarray", alpha: float = 0.15) -> bool:
+        """Auto-enrollment: fonde un embedding gia' calcolato nel profilo esistente
+        con una media mobile pesata (alpha = peso del nuovo campione), invece di
+        sovrascriverlo come fa enroll() — un singolo campione rumoroso pesa poco
+        e il profilo migliora gradualmente. Se il profilo non esiste ancora lo
+        crea (bootstrap)."""
+        if embedding is None:
+            return False
+        if name in self.db:
+            blended = (1 - alpha) * self.db[name] + alpha * embedding
+        else:
+            blended = embedding
+        blended = blended / (np.linalg.norm(blended) + 1e-8)
+        self.db[name] = blended
+        db = {}
+        if os.path.exists(DB_PATH):
+            with open(DB_PATH) as f:
+                db = json.load(f)
+        db[name] = {"embedding": blended.tolist()}
+        with open(DB_PATH, "w") as f:
+            json.dump(db, f, indent=2)
+        return True
 
 # Varianti di "Gaia" che Whisper può trascrivere in italiano
 _GAIA_VARIANTS = {"gaia", "gaya", "gaïa", "gaìa", "gaja", "gaia,", "gaya,"}
@@ -409,6 +441,17 @@ class GaiaListener:
                     args=(name, file_path),
                     daemon=True
                 ).start()
+
+        elif cmd == "voice_autoenroll":
+            # Pubblicato da Node-RED quando conferma che lo speaker riconosciuto
+            # sull'ultimo comando vocale corrisponde a una persona attualmente
+            # presente per riconoscimento facciale (doppia conferma) — vedi
+            # docs/automazioni.md. Usa l'embedding gia' calcolato da identify(),
+            # non registra nulla di nuovo.
+            name = data.get("name", "").strip()
+            if name and name == self.speaker_db.last_identified_name:
+                ok = self.speaker_db.blend_or_enroll(name, self.speaker_db.last_embedding)
+                log.info(f"Auto-enroll vocale (doppia conferma): {name} -> {'OK' if ok else 'FALLITO'}")
 
         elif cmd == "reload_speakers":
             self.speaker_db.reload()
