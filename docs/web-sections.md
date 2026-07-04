@@ -69,34 +69,22 @@ campo. Palette lerp continua tra mood. Dettaglio layer-per-layer in memory `proj
 
 ## 3. Gaming / RPG
 
-**Stato:** embrionale — solo modello dati, nessun gameplay reale ancora. Vive dentro
-`ThreeViewEngineGAME` (Node-RED) come `brain.gamification`:
-```js
-{ level: 1, xp: 0, xpNextLevel: 1000, activeClass: "Neutro", unlockedAssets: ["base_grid"] }
-```
-Inizializzato una volta in "GAIA Brain" (Node-RED) e **mai aggiornato** — nessuna logica di
-guadagno XP, level-up o sblocco asset esiste oggi. È esposto nel payload WS come `progression`
-e visualizzabile lato client, ma è uno scaffold, non un gioco.
+**Stato:** motore VIVO dal 2026-07-04 — la vita reale della casa genera XP, livelli,
+archetipi (Mago/Bardo/Guerriero/Druido) e sblocco asset per la scena 3D. Documento completo
+del motore (regole XP, curva livelli, Engine Tick 3s, verifica eseguita):
+**`docs/rpg-engine.md`**. La scena 3D (`index.html`+`app.js`) era già pronta a consumare
+tutto (HUD, VFX level-up, colori per classe) e ora riceve dati veri; la dashboard ha la
+card "🎮 Progressione RPG".
 
-**Visione (dall'utente):** deve evolvere in una vera piattaforma RPG multisensoriale — non solo
-UI web, ma progressione legata a eventi reali della casa (presenza, voce, automazioni), con
-ricompense che si riflettono su luci/audio/arte visiva/TouchDesigner.
+**Roadmap rimanente:**
+1. **Superficie di gioco** dedicata nel portal (oltre alla scena 3D esistente).
+2. **Multisensoriale**: level-up → scene luci OpenHAB (`MoodSceneSync`), preset TouchDesigner.
+3. **Asset 3D reali** per i nomi riservati in `ASSET_ORDER` (rune_circle, glyph_trail…).
+4. **Vocabolario Asemico v5**: glifi come rune di gioco (`docs/vocabolario-asemico.md`).
+5. **Bilanciamento** XP/cooldown dopo giorni di uso reale.
 
-**Cosa serve per svilupparlo in autonomia (roadmap, non ancora implementato):**
-1. **Motore XP**: decidere quali eventi generano XP (es. comandi vocali riusciti, nuove persone
-   riconosciute, automazioni completate) e scrivere la funzione Node-RED che aggiorna
-   `brain.gamification` (attualmente assente — nessun nodo scrive su questo campo dopo l'init).
-2. **Classi/progressione**: definire soglie livello → `activeClass`, e come questo influenza il
-   resto del sistema (es. sblocco automazioni Maggiordomo più avanzate, palette Arte Visiva,
-   preset TouchDesigner).
-3. **Superficie di gioco**: oggi non esiste una vera schermata "Gaming" nel portal — va creata
-   (o estesa da `index.html`/Three.js) per rendere tangibile la progressione.
-4. **Multisensoriale**: collegare progressione/eventi a luci (OpenHAB via `MoodSceneSync`), TTS,
-   e in prospettiva a TouchDesigner per feedback visivo/fisico nella stanza.
-
-Prima di scrivere codice su questo blocco, leggere la memory `project-web-gaming-rpg` (contiene
-il dettaglio di cosa esiste oggi in `ThreeViewEngineGAME`/`GAIA Brain` e va aggiornata con le
-decisioni di design man mano che vengono prese).
+Prima di scrivere codice su questo blocco, leggere `docs/rpg-engine.md` + memory
+`project-web-gaming-rpg`.
 
 ---
 
