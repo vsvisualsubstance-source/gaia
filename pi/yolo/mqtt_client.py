@@ -14,6 +14,7 @@ import json
 import time
 import os
 import socket
+import subprocess
 import logging
 import paho.mqtt.client as mqtt
 from ota import OtaHandler
@@ -91,8 +92,11 @@ class MqttClient:
         log.info(f"Subscribed a config + OTA")
 
         # Announce → il Device Registry risponde con la config retained
+        # gethostbyname(gethostname()) risolve spesso a 127.0.1.1 (voce /etc/hosts
+        # su Debian/Raspbian) invece dell'IP di rete reale — stesso approccio di
+        # agent.py._get_ip() per restare coerenti con quello che mostra Pi Manager.
         try:
-            ip = socket.gethostbyname(socket.gethostname())
+            ip = subprocess.run(["hostname", "-I"], capture_output=True, text=True, timeout=3).stdout.strip().split()[0]
         except Exception:
             ip = 'unknown'
 

@@ -95,8 +95,11 @@ def _on_connect(client, userdata, flags, rc, properties=None):
     for t in _ota.topics():
         client.subscribe(t, qos=1)
     _publish_status("listening")
+    # gethostbyname(gethostname()) risolve spesso a 127.0.1.1 (voce /etc/hosts su
+    # Debian/Raspbian) invece dell'IP di rete reale — stesso approccio di
+    # agent.py._get_ip() per restare coerenti con quello che mostra Pi Manager.
     try:
-        ip = socket.gethostbyname(socket.gethostname())
+        ip = subprocess.run(["hostname", "-I"], capture_output=True, text=True, timeout=3).stdout.strip().split()[0]
     except Exception:
         ip = "unknown"
     client.publish(

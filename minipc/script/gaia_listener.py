@@ -259,6 +259,7 @@ class GaiaListener:
         self.device_index = dev
 
         info = get_device_info(self.pa, dev)
+        self.device_name  = info["name"]
         self.src_rate     = int(info["defaultSampleRate"])
         self.src_channels = min(int(info["maxInputChannels"]), 2)
         self.native_chunk = int(self.src_rate * FRAME_MS / 1000)
@@ -295,6 +296,7 @@ class GaiaListener:
             "speaker_threshold": round(self.speaker_db.threshold, 2),
             "frames_acc":       frames_acc,
             "device_id":        self._cfg.get("device_id", "gaia-main"),
+            "device_name":      self.device_name,
         }
         if extra:
             payload.update(extra)
