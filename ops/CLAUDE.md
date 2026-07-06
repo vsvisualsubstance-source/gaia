@@ -116,6 +116,24 @@ mediapipe ultralytics numpy`. GPU: ignorala, la CPU basta (8 core).
    li legge da lì e coordina i passi successivi (spegnere la visione locale
    sul miniPC, ecc.).
 
+## MISSIONE 4 — Agent Windows (visibilità e controllo in Pi Manager)
+
+Senza agent la macchina è invisibile a Pi Manager (che ascolta
+`gaia/device/+/status`) e i servizi non si possono avviare/fermare da remoto.
+Porta il pattern SUBPROCESS di `minipc/local_agent.py` su Windows:
+- `fcntl` non esiste → lock con `msvcrt.locking` o file-pid semplice.
+- `_SERVICE_DEFS` per questa macchina: camera (minipc/camera/camera_server.py),
+  yolo (pi/yolo/main.py), mediapipe (pi/mediapipe/mediapipe_node.py), voice
+  quando pronta — con i rispettivi env (CAMERA_INDEX=4, DSHOW, profilo full…).
+  Meglio ancora: leggi le definizioni da un manifest `services.json` locale
+  (stesso schema di `pi/agent/services.json.example`, ruolo `ops`).
+- `DEVICE_ID=ops-silvermini2`, heartbeat 30s retained su
+  `gaia/device/ops-silvermini2/status` con campo `role: "ops"`.
+- Avvio automatico: Task Scheduler di Windows (`schtasks`) o cartella Startup —
+  l'agent poi avvia i servizi abilitati (pattern `apply_initial_config`).
+- Bonus: con l'agent attivo, enable/disable/restart funzionano da Pi Manager
+  e da Telegram, e l'OTA arriva anche qui.
+
 ## Regole della casa
 
 - Il broker, il brain e la web UI NON si toccano da qui: sono del Core.
