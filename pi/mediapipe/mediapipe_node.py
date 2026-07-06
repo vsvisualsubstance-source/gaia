@@ -209,9 +209,16 @@ if MULTI_PERSON:
         log.error(f"MULTI_PERSON=1 ma POSE_MODEL_PATH non valido: {POSE_MODEL_PATH!r} — fallback a Pose singola")
         MULTI_PERSON = False
     else:
+        # model_asset_buffer invece di model_asset_path: il resolver interno
+        # di mediapipe (C++) tratta i path non-POSIX (lettera di unità
+        # Windows) come relativi alla resource dir di site-packages e non
+        # trova mai il file — leggere i byte in Python evita del tutto la
+        # risoluzione del path lato C++, funziona identico su Linux/Pi.
+        with open(POSE_MODEL_PATH, 'rb') as f:
+            _pose_model_bytes = f.read()
         _pose_landmarker = mp_vision.PoseLandmarker.create_from_options(
             mp_vision.PoseLandmarkerOptions(
-                base_options=mp_tasks.BaseOptions(model_asset_path=POSE_MODEL_PATH),
+                base_options=mp_tasks.BaseOptions(model_asset_buffer=_pose_model_bytes),
                 running_mode=mp_vision.RunningMode.VIDEO,
                 num_poses=MAX_POSES,
                 min_pose_detection_confidence=0.5,

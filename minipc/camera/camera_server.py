@@ -14,6 +14,7 @@ MJPEG:
   GET http://localhost:8766/video  — stream multipart/x-mixed-replace
 """
 import os
+import sys
 import struct
 import time
 import signal
@@ -126,7 +127,12 @@ def _unlink_if_exists(name):
 
 
 def _open_camera():
-    cap = cv2.VideoCapture(config.CAMERA_INDEX)
+    # Su Windows il backend MSMF di default fallisce silenziosamente il grab
+    # (isOpened()==True ma read() non ritorna mai un frame) su alcune webcam
+    # (es. HD Pro Webcam C920) — DSHOW funziona in modo affidabile. Su
+    # Linux/Pi resta CAP_ANY (V4L2), comportamento invariato.
+    backend = cv2.CAP_DSHOW if sys.platform == 'win32' else cv2.CAP_ANY
+    cap = cv2.VideoCapture(config.CAMERA_INDEX, backend)
     if not cap.isOpened():
         return None, 0, 0
     cap.set(cv2.CAP_PROP_FRAME_WIDTH,  config.FRAME_WIDTH)
