@@ -71,7 +71,9 @@ NODERED_PORT   = 1880
 
 
 def _distribute_model_via_ota(src_path: str, service_subpath: str, service_type: str,
-                               service_unit: str, restart: bool = True):
+                               service_unit: str, restart: bool = True,
+                               target_devices: list | None = None,
+                               script_name: str | None = None):
     """Copia il modello nella directory repo pi/ (per ServeFile) e triggera OTA via MQTT.
 
     service_subpath: percorso relativo al service dir sul Pi, es. 'models/gaia_verifier.pkl'
@@ -101,9 +103,18 @@ def _distribute_model_via_ota(src_path: str, service_subpath: str, service_type:
             "restart": restart,
             "type":    service_type,
         }
+        if script_name:
+            cmd["script"] = script_name   # nome file sul device ≠ nome in staging
         if _mqtt:
-            _mqtt.publish("gaia/ota/broadcast", json.dumps(cmd), retain=False)
-            log.info(f"OTA pubblicato: {service_subpath} v{version} → {url}")
+            if target_devices:
+                # Mirato: solo i device indicati (i modelli sono per-microfono,
+                # il broadcast li farebbe piovere su tutti i servizi voice)
+                for dev in target_devices:
+                    _mqtt.publish(f"gaia/devices/{dev}/update", json.dumps(cmd), retain=False)
+                log.info(f"OTA mirato: {service_subpath} v{version} → {target_devices}")
+            else:
+                _mqtt.publish("gaia/ota/broadcast", json.dumps(cmd), retain=False)
+                log.info(f"OTA pubblicato: {service_subpath} v{version} → {url}")
         else:
             log.warning("OTA: _mqtt non connesso, impossibile pubblicare")
     threading.Thread(target=_run, daemon=True).start()
@@ -138,6 +149,16 @@ GAIA_MODEL_PATH   = os.path.join(GAIA_WAKEWORD_DIR, "gaia_verifier.pkl")
 # in locale (vedi GaiaWakeVerifier). Vedi docs/automazioni.md.
 GAIA_WAKEWORD_DIR_MINIPC = os.path.expanduser("~/core-node-0/minipc/script/gaia_wakeword_samples_minipc")
 GAIA_MODEL_PATH_MINIPC   = os.path.join(GAIA_WAKEWORD_DIR_MINIPC, "gaia_verifier_minipc.pkl")
+# Dataset/modello dedicato al mic della macchina OPS (silvermini2, cucina).
+# I campioni arrivano dal servizio voice di OPS via record_clip (come il Pi)
+# ma vanno smistati per stanza — vedi GAIA_WW_DIR_BY_STANZA.
+GAIA_WAKEWORD_DIR_OPS = os.path.expanduser("~/core-node-0/minipc/script/gaia_wakeword_samples_ops")
+GAIA_MODEL_PATH_OPS   = os.path.join(GAIA_WAKEWORD_DIR_OPS, "gaia_verifier_ops.pkl")
+# stanza → dataset per i campioni "gaia_*" registrati da remoto (default: Pi)
+GAIA_WW_DIR_BY_STANZA = {"cucina": GAIA_WAKEWORD_DIR_OPS}
+# Target OTA mirati per i modelli voice: il broadcast colpirebbe TUTTI i
+# device voice (dal 2026-07-06 anche OPS) sovrascrivendo i modelli a vicenda.
+VOICE_MODEL_TARGETS = {"pi": ["pi-fd75d8"], "ops": ["ops-silvermini2"]}
 
 # ── Provision registry — device registrati al boot (discovery livello 3) ──
 # Contratto client: docs/discovery-protocol.md + pi/agent/agent.py::_provision_register
@@ -264,6 +285,12 @@ class AdminHandler(BaseHTTPRequestHandler):
             else:
                 self.send_response(400); self._cors(); self.end_headers()
             return
+        if p.startswith("/api/gaia-wakeword-ops/clip/"):
+            parts = p.split("/")
+            if len(parts) >= 6:
+                self._delete_clip(GAIA_WAKEWORD_DIR_OPS, parts[4], int(parts[5]))
+                return
+
         if p.startswith("/api/gaia-wakeword-minipc/clip/"):
             parts = p.split("/")
             if len(parts) >= 6:
@@ -315,6 +342,15 @@ class AdminHandler(BaseHTTPRequestHandler):
             parts = p.split("/")  # ['','api','gaia-wakeword','clip',label,idx]
             if len(parts) >= 6:
                 self._serve_clip(GAIA_WAKEWORD_DIR, parts[4], int(parts[5]))
+            else:
+                self.send_response(400); self._cors(); self.end_headers()
+            return
+
+        # Playback clip: /api/gaia-wakeword-ops/clip/{label}/{index}
+        if p.startswith("/api/gaia-wakeword-ops/clip/"):
+            parts = p.split("/")
+            if len(parts) >= 6:
+                self._serve_clip(GAIA_WAKEWORD_DIR_OPS, parts[4], int(parts[5]))
             else:
                 self.send_response(400); self._cors(); self.end_headers()
             return
@@ -378,6 +414,21 @@ class AdminHandler(BaseHTTPRequestHandler):
                 "positive": pos_n, "positive_clips": pos_idx,
                 "negative": neg_n, "negative_clips": neg_idx,
                 "model_exists": os.path.exists(GAIA_MODEL_PATH),
+            }); return
+
+        if p == "/api/gaia-wakeword-ops/status":
+            def _oclips(lbl):
+                d = os.path.join(GAIA_WAKEWORD_DIR_OPS, lbl)
+                if not os.path.isdir(d):
+                    return 0, []
+                fs = sorted(f for f in os.listdir(d) if f.endswith(".wav"))
+                return len(fs), [i for i in range(len(fs))]
+            pos_n, pos_idx = _oclips("positive")
+            neg_n, neg_idx = _oclips("negative")
+            self._json({
+                "positive": pos_n, "positive_clips": pos_idx,
+                "negative": neg_n, "negative_clips": neg_idx,
+                "model_exists": os.path.exists(GAIA_MODEL_PATH_OPS),
             }); return
 
         if p == "/api/gaia-wakeword-minipc/status":
@@ -520,7 +571,7 @@ class AdminHandler(BaseHTTPRequestHandler):
             self._json({"ok": True})
 
         elif path == "/api/enroll/voice":
-            name = body.get("name", "").strip()
+            name = body.get("name", "").strip().lower()  # nomi sempre minuscoli: "Mauro" e "mauro" creavano due identità
             if not name:
                 self._json({"ok": False, "error": "nome obbligatorio"}, 400); return
             payload = {"name": name, "samples": body.get("samples", 3), "duration_s": body.get("duration_s", 5)}
@@ -529,7 +580,7 @@ class AdminHandler(BaseHTTPRequestHandler):
             self._json({"ok": True, "name": name})
 
         elif path == "/api/enroll/voice-upload":
-            name = body.get("name", "").strip()
+            name = body.get("name", "").strip().lower()  # nomi sempre minuscoli: "Mauro" e "mauro" creavano due identità
             audio_b64 = body.get("audio_base64", "")
             if not name or not audio_b64:
                 self._json({"ok": False, "error": "nome e audio_base64 obbligatori"}, 400); return
@@ -545,7 +596,7 @@ class AdminHandler(BaseHTTPRequestHandler):
             self._json({"ok": True, "name": name})
 
         elif path == "/api/enroll/face":
-            name = body.get("name", "").strip()
+            name = body.get("name", "").strip().lower()  # nomi sempre minuscoli: "Mauro" e "mauro" creavano due identità
             if not name:
                 self._json({"ok": False, "error": "nome obbligatorio"}, 400); return
             if _mqtt:
@@ -553,7 +604,7 @@ class AdminHandler(BaseHTTPRequestHandler):
             self._json({"ok": True, "name": name, "message": "Punta la telecamera verso la persona"})
 
         elif path == "/api/enroll/face-upload":
-            name = body.get("name", "").strip()
+            name = body.get("name", "").strip().lower()  # nomi sempre minuscoli: "Mauro" e "mauro" creavano due identità
             image_b64 = body.get("image_base64", "")
             if not name or not image_b64:
                 self._json({"ok": False, "error": "nome e image_base64 obbligatori"}, 400); return
@@ -615,6 +666,50 @@ class AdminHandler(BaseHTTPRequestHandler):
                 f.write(audio_bytes)
             log.info(f"Campione Gaia wakeword (miniPC) caricato: {wav_path}")
             self._json({"ok": True, "label": label, "path": wav_path})
+
+        elif path == "/api/gaia-wakeword-ops/upload":
+            label     = body.get("label", "positive")
+            audio_b64 = body.get("audio_base64", "")
+            if not audio_b64:
+                self._json({"ok": False, "error": "audio_base64 mancante"}, 400); return
+            try:
+                audio_bytes = base64.b64decode(audio_b64.split(",")[-1])
+            except Exception:
+                self._json({"ok": False, "error": "audio_base64 non valido"}, 400); return
+            dst = os.path.join(GAIA_WAKEWORD_DIR_OPS, label)
+            os.makedirs(dst, exist_ok=True)
+            idx = len([f for f in os.listdir(dst) if f.endswith(".wav")])
+            wav_path = os.path.join(dst, f"clip_{idx:04d}.wav")
+            with open(wav_path, "wb") as f:
+                f.write(audio_bytes)
+            log.info(f"Gaia wakeword OPS: salvato {wav_path}")
+            self._json({"ok": True, "label": label, "clip": idx})
+
+        elif path == "/api/gaia-wakeword-ops/train":
+            def _do_train_gaia_ops():
+                try:
+                    import sys
+                    sys.path.insert(0, os.path.dirname(DB_PATH))
+                    from train_doorbell_model import train_and_save
+                    ok, msg = train_and_save(samples_dir=GAIA_WAKEWORD_DIR_OPS,
+                                             output_path=GAIA_MODEL_PATH_OPS)
+                    log.info(f"Training Gaia wakeword (OPS): {msg}")
+                    if ok:
+                        # Staging col nome _ops (l'URL Node-RED lo serve così),
+                        # sul device viene scritto come models/gaia_verifier.pkl
+                        # che è il nome che pi/voice carica.
+                        _distribute_model_via_ota(
+                            src_path        = GAIA_MODEL_PATH_OPS,
+                            service_subpath = "models/gaia_verifier_ops.pkl",
+                            service_type    = "voice",
+                            service_unit    = "gaia-voice",
+                            target_devices  = VOICE_MODEL_TARGETS["ops"],
+                            script_name     = "models/gaia_verifier.pkl",
+                        )
+                except Exception as e:
+                    log.error(f"Errore training Gaia OPS: {e}")
+            threading.Thread(target=_do_train_gaia_ops, daemon=True).start()
+            self._json({"ok": True, "message": "Training Gaia wakeword (OPS) avviato in background"})
 
         elif path == "/api/gaia-wakeword-minipc/train":
             def _do_train_gaia_minipc():
@@ -707,6 +802,7 @@ class AdminHandler(BaseHTTPRequestHandler):
                             service_subpath = "models/gaia_verifier.pkl",
                             service_type  = "voice",
                             service_unit  = "gaia-voice",
+                            target_devices = VOICE_MODEL_TARGETS["pi"],
                             restart       = True,
                         )
                 except Exception as e:
@@ -732,11 +828,14 @@ class AdminHandler(BaseHTTPRequestHandler):
                 audio_bytes = base64.b64decode(audio_b64.split(",")[-1])
             except Exception:
                 self._json({"ok": False, "error": "audio_base64 non valido"}, 400); return
-            # Smista in base al prefisso del label: "gaia_*" → GAIA_WAKEWORD_DIR, resto → DOORBELL_DIR
+            # Smista per prefisso label E stanza: "gaia_*" → dataset wakeword
+            # della macchina giusta (cucina=OPS, default=Pi), resto → citofono.
+            # I voice più vecchi non mandano "stanza" → default dataset Pi.
+            stanza_src = body.get("stanza", "")
             if raw_label.startswith("gaia_"):
                 label = raw_label[len("gaia_"):]
-                base_dir = GAIA_WAKEWORD_DIR
-                kind = "Gaia wakeword"
+                base_dir = GAIA_WW_DIR_BY_STANZA.get(stanza_src, GAIA_WAKEWORD_DIR)
+                kind = f"Gaia wakeword ({stanza_src or 'pi'})"
             else:
                 label = raw_label
                 base_dir = DOORBELL_DIR
