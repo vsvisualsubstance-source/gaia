@@ -54,6 +54,10 @@ Verifica: da quel momento il Core può fare `ssh vsvis@192.168.1.239`.
   dall'installazione dei pacchetti in QUESTO venv.
 - SSH dal Core funziona (Missione 1 ok) — il Claude del Core può ispezionare la macchina;
   il lavoro locale resta tuo per evitare conflitti.
+- `C:\WWWROOT\_\pipe\` = progetto museo web dell'utente con `@mediapipe/tasks-vision`
+  (MediaPipe **JavaScript**, browser). Non c'entra col sensing Python (pacchetti diversi,
+  convivono) ma è know-how riusabile: tracking client-side nella Welcome page per le
+  gesture→glifi asemici (roadmap v3 in docs/vocabolario-asemico.md), zero carico server.
 
 ## MISSIONE 2 — Stack visione+voce nativo Windows (il test OPS)
 
