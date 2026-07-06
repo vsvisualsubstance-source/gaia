@@ -74,9 +74,13 @@ mediapipe+face vivono sempre sulla stessa macchina.
 
 ## Percorso di adozione (quando arriva la seconda macchina)
 
-1. Fase 0 (fattibile subito, nessun hardware nuovo): estrarre da `pi/agent` la lettura
-   dinamica di SERVICE_MAP da `/etc/gaia/services.json` (retrocompatibile: se il file
-   manca, usa la mappa hardcoded attuale). Testabile sul miniPC stesso.
+1. **Fase 0 — FATTA (2026-07-06)**: `pi/agent/config.py` legge `/etc/gaia/services.json`
+   (override env `GAIA_SERVICES_MANIFEST`): `machine_role`, `device_id_prefix`,
+   `services{key:{unit,dir}}` sostituiscono SERVICE_MAP/SERVICE_DIRS; senza file valgono
+   i default Pi (testato: fallback, manifest media, JSON corrotto, servizio senza unit).
+   `agent.py`: default di device.json derivati dalla mappa, `_sync_camera` no-op senza
+   camera, `role` nel payload status. Esempio: `pi/agent/services.json.example`.
+   Nota deploy: arriva ai Pi al prossimo rsync — innocuo, senza manifest nulla cambia.
 2. Fase 1: sulla macchina nuova — install agent + manifest col ruolo scelto (es. `media`:
    mediaplayer+icecast). Appare in Pi Manager, si gestisce da lì.
 3. Fase 2: migrazione OPS vera (visione+voce sul monitor touch) secondo

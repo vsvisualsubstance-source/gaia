@@ -47,13 +47,13 @@ signal.signal(signal.SIGINT,  _handle_signal)
 # ──────────────────────────────────────────────────────────────────────
 # device.json
 # ──────────────────────────────────────────────────────────────────────
+# Default derivati da SERVICE_MAP (che può venire dal manifest per-macchina):
+# tutti disabilitati; "camera" esclusa perché è una dipendenza automatica.
 _DEFAULT_CONFIG = {
     "device_id": config.DEVICE_ID,
     "stanza":    config.DEFAULT_STANZA,
     "services": {
-        "yolo":      {"enabled": False},
-        "mediapipe": {"enabled": False},
-        "voice":     {"enabled": False},
+        k: {"enabled": False} for k in config.SERVICE_MAP if k != "camera"
     }
 }
 
@@ -154,6 +154,8 @@ def _sync_camera(cfg: dict):
     (yolo/mediapipe) lo richiede in cfg. Idempotente — può essere chiamata
     ogni volta che lo stato di un consumer cambia, senza dover tracciare
     a mano le transizioni 0→1/1→0."""
+    if "camera" not in config.SERVICE_MAP:
+        return   # macchina senza camera nel manifest (ruolo core/media)
     want = _camera_consumer_count(cfg) > 0
     is_active = service_status("camera") == "active"
     if want and not is_active:
@@ -231,6 +233,7 @@ def _publish_status():
         "device_id":    config.DEVICE_ID,
         "name":         _device_config.get("name", _device_config.get("stanza", config.DEFAULT_STANZA)),
         "stanza":       _device_config.get("stanza", config.DEFAULT_STANZA),
+        "role":         config.MACHINE_ROLE,
         "ip":           _get_ip(),
         "capabilities": _capabilities,
         "services":     all_statuses(),

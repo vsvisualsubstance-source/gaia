@@ -1,0 +1,10 @@
+{
+  "_nota": "Manifest per-macchina (Fase 0 architettura distribuita — docs/core-distribuito.md). Copiare in /etc/gaia/services.json SOLO su macchine non-Pi: senza questo file l'agent usa le mappe Pi di default (yolo/mediapipe/voice/camera). 'unit' = nome del servizio systemd; 'dir' = cartella del servizio per l'OTA (default: ../<chiave> rispetto all'agent). device_id_prefix cambia il prefisso dell'ID auto-rilevato dal MAC (default 'pi').",
+  "machine_role": "media",
+  "device_id_prefix": "media",
+  "services": {
+    "mediaplayer": { "unit": "gaia-mediaplayer", "dir": "/opt/gaia/mediaplayer" },
+    "icecast":     { "unit": "icecast2",         "dir": "/etc/icecast2" },
+    "livestream":  { "unit": "gaia-livestream",  "dir": "/opt/gaia/livestream" }
+  }
+}
