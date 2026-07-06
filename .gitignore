@@ -18,6 +18,7 @@ pi/yolo/models/
 pi/mediapipe/models/
 pi/voice/models/
 ops/models/
+ops/voice/models/
 pi/voice/bin/
 
 # Pi agent — device.json è Pi-specifico (generato da install.sh dal template)

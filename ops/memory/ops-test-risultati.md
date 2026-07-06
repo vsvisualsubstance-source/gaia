@@ -100,6 +100,65 @@ sotto), corretto in questa sessione.
   webcam USB del miniPC, un indice numerico non è garantito stabile — qui però è
   interno/integrato, probabilmente più stabile del caso USB, ma non testato su riavvio).
 - Valutare `FRAME_SKIP=2` se serve margine CPU per la voce.
-- Missione 2 punto 4 (voce): non ancora iniziata in questa sessione.
 - Concordare con la sessione Core un modo per non lanciare visione locale da entrambe le
   parti contemporaneamente (vedi punto 1 sopra).
+
+## Missione 2 punto 4 — Voce (2026-07-06, sessione successiva)
+
+**Non ho usato `minipc/script/gaia_listener.py`** come da indicazione letterale della
+missione: usa pyaudio/resemblyzer (speaker ID) e soprattutto pubblica su
+`gaia/voice/tts/minipc`, che in Node-RED è cablato a un `exec` di
+`minipc/say.sh` **eseguito sul Core** (Piper+aplay locali al processo Node-RED) — nella
+vecchia architettura miniPC-unico Node-RED e gli altoparlanti erano la stessa macchina,
+qui non più: avrebbe fatto parlare il Core, non silvermini2. Ho invece portato
+`pi/voice/main.py` (openWakeWord + faster-whisper + MQTT), che già usa
+`gaia/voice/tts/{stanza}` — **lo stesso schema per-stanza che Node-RED pubblica già**
+(vedi `Build TTS payload` in flows.json) — quindi zero modifiche lato Core necessarie.
+
+Nuovo modulo: `ops/voice/` (`config.py` + `main.py`), non stessa cosa di `pi/voice/`:
+- **TTS**: libreria Python `piper-tts` (onnxruntime, bundlata, niente binario esterno) +
+  playback con `sounddevice` invece di piper.exe+aplay (Linux-only). Stesso modello vocale
+  del resto del sistema, `it_IT-paola-medium` (scaricato da HuggingFace
+  `rhasspy/piper-voices`, 63MB, in `ops/voice/models/`, gitignored) — voce coerente in
+  tutta la casa.
+- Rimosso: OTA (qui si lancia a mano, niente agent/systemd) e rilevamento citofono (non
+  pertinente a questa macchina).
+- Mic/output audio: **default di sistema già corretti**, non serve MIC_DEVICE/OUTPUT_DEVICE
+  espliciti — `sounddevice` risolve l'input di default sulla Logitech C920 (non una delle
+  virtual mic NDI) e l'output sugli altoparlanti reali (MB16AMTR USB Audio). Verificato con
+  `sd.query_devices()`.
+- **Gotcha stdout bufferizzato**: `print()` senza flush esplicito, se lo stdout non è una
+  tty (redirect su file), Windows/Python bufferizza tutto — il log restava vuoto per
+  minuti anche a servizio pienamente avviato. Fix: `PYTHONUNBUFFERED=1` in env al lancio
+  (stesso gotcha già noto sui Pi per lo stdout dei servizi, vedi [[project_gaia]]).
+- **Gotcha HF Hub hang**: al primo avvio, `WhisperModel("base")` ha controllato la
+  freschezza della cache HuggingFace via rete (anche a modello già scaricato) e si è
+  bloccato per minuti — molto probabilmente rate-limit/contesa dovuta al download
+  concorrente della sessione Core in parallelo sulla stessa cache utente condivisa
+  (`~/.cache/huggingface`, condivisa tra tutti gli interpreti Python dello stesso utente
+  Windows, non per-venv). Fix: `HF_HUB_OFFLINE=1` in env — il modello era già in cache,
+  carica istantaneamente senza toccare la rete.
+
+**Testato**: pipeline completa avviata (Piper/Whisper/openWakeWord caricati, MQTT connesso,
+`room=cucina` confermata dal Device Registry). TTS verificato end-to-end pubblicando su
+`gaia/voice/tts/cucina` → stato passato `listening → speaking → listening` → **audio
+sentito realmente dagli altoparlanti** (confermato dall'utente).
+
+**Non ancora testato**: wakeword + comando vocale via microfono reale (richiede una
+persona che parli). Il wakeword attivo è **`alexa`** (modello pretrained generico
+openWakeWord, default), **non "Gaia"** — nessun campione/modello custom
+(`gaia_verifier.pkl`) esiste ancora per il microfono di questa macchina, esattamente come
+segnalato in `ops/CLAUDE.md` Missione 2. Finché non si allena un modello dedicato (stessi
+strumenti usati per Pi/miniPC, admin.html → raccolta campioni → training), il rilevamento
+wake funziona dicendo "Alexa", non "Gaia".
+
+### Prossimi passi voce
+
+- Raccogliere 20-30 campioni "Gaia" dal microfono di questa macchina e allenare
+  `ops/voice/models/gaia_verifier.pkl` (stesso approccio di [[project_voice_minipc]]) —
+  serve un endpoint/flow admin per farlo, non esiste ancora per questa macchina
+  specificamente.
+- Testare il giro STT completo (wakeword reale + comando parlato) con una persona davanti
+  al microfono.
+- Verificare se lanciare anche la voce insieme a camera+yolo+mediapipe cambia
+  sensibilmente il carico misurato sopra (non rimisurato in questa sessione).
