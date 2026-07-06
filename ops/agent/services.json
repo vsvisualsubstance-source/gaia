@@ -1,0 +1,34 @@
+{
+  "_nota": "Manifest servizi per l'agent Windows di questa macchina (ruolo ops, Missione 4 in ops/CLAUDE.md). cmd/cwd sono assoluti a questa macchina (silvermini2) — non portabile su un'altra installazione senza aggiornare i path del venv.",
+  "machine_role": "ops",
+  "device_id": "ops-silvermini2",
+  "stanza": "cucina",
+  "services": {
+    "camera": {
+      "cmd": ["C:\\gaia\\venv\\Scripts\\python.exe", "camera_server.py"],
+      "cwd": "C:\\gaia\\minipc\\camera",
+      "env_extra": { "CAMERA_INDEX": "4", "HEADLESS": "1", "PYTHONUNBUFFERED": "1" }
+    },
+    "yolo": {
+      "cmd": ["C:\\gaia\\venv\\Scripts\\python.exe", "main.py"],
+      "cwd": "C:\\gaia\\pi\\yolo",
+      "env_extra": { "HEADLESS": "1", "PYTHONUNBUFFERED": "1" }
+    },
+    "mediapipe": {
+      "cmd": ["C:\\gaia\\venv\\Scripts\\python.exe", "mediapipe_node.py"],
+      "cwd": "C:\\gaia\\pi\\mediapipe",
+      "env_extra": {
+        "HEADLESS": "1", "PYTHONUNBUFFERED": "1",
+        "MAX_FACES": "2", "MAX_HANDS": "4", "POSE_COMPLEXITY": "2",
+        "MULTI_PERSON": "1", "MAX_POSES": "2",
+        "POSE_MODEL_PATH": "models/pose_landmarker_full.task"
+      }
+    },
+    "voice": {
+      "cmd": ["C:\\gaia\\venv\\Scripts\\python.exe", "main.py"],
+      "cwd": "C:\\gaia\\ops\\voice",
+      "env_extra": { "PYTHONUNBUFFERED": "1", "HF_HUB_OFFLINE": "1" }
+    }
+  },
+  "camera_consumers": ["yolo", "mediapipe"]
+}

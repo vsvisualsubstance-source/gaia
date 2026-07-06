@@ -1,6 +1,6 @@
 ---
 name: ops-test-risultati
-description: "Missione 2/3 OPS (silvermini2) — stack visione nativo Windows: esito, fix applicati, carico misurato, problemi noti"
+description: "Missioni 2/3/4 OPS (silvermini2) — stack visione+voce nativo Windows e agent Pi Manager: esito, fix applicati, carico misurato, problemi noti"
 metadata:
   node_type: memory
   type: project
@@ -162,3 +162,59 @@ wake funziona dicendo "Alexa", non "Gaia".
   al microfono.
 - Verificare se lanciare anche la voce insieme a camera+yolo+mediapipe cambia
   sensibilmente il carico misurato sopra (non rimisurato in questa sessione).
+
+## Missione 4 — Agent Windows per Pi Manager (2026-07-06, stessa sessione voce)
+
+Nuovo modulo `ops/agent/` (`agent.py` + `services.json` + `run_agent.bat`), porting del
+pattern SUBPROCESS di `minipc/local_agent.py` (non il pattern systemd di `pi/agent/agent.py`
+— Windows non ha systemd). Stessa interfaccia MQTT: `gaia/device/{id}/status` (heartbeat 30s,
+retained, con `role: "ops"`) e `gaia/device/{id}/command` (`enable`/`disable`/`restart`/
+`set_config`/`status`/`ota_update`; `reboot` loggato ma ignorato — questa non è un Pi
+headless da riavviare da remoto senza conferma).
+
+**Differenze dal riferimento (`local_agent.py`)**:
+- Definizioni servizi lette da `services.json` (manifest locale, ruolo `ops`,
+  `device_id`/`stanza`/`cmd`/`cwd`/`env_extra` per camera/yolo/mediapipe/voice) invece di
+  hardcoded nello script — più facile da aggiornare senza toccare la logica.
+- **Camera come dipendenza ref-contata** di yolo/mediapipe (`CAMERA_CONSUMERS`/
+  `_sync_camera`, stessa logica di `pi/agent/agent.py`, non presente in `local_agent.py`):
+  si avvia da sola quando il primo tra yolo/mediapipe viene abilitato, si ferma quando
+  l'ultimo viene disabilitato — mai gestibile a mano via comando (bloccato esplicitamente in
+  `set_config`). Necessario per rispettare l'esclusività della webcam scoperta in Missione 2/3.
+- Lock singleton: `msvcrt.locking()` invece di `fcntl.flock()` (non esiste su Windows).
+
+**Gotcha trovati e risolti**:
+1. **Deadlock da lock non rientrante**: `_sync_camera` (chiamato da dentro un
+   `with _cfg_lock:` in enable/disable/set_config) finiva per richiamare `_build_env`, che
+   riacquisisce lo stesso `_cfg_lock` — con un `threading.Lock` normale il thread si blocca
+   per sempre aspettando un lock che tiene già lui stesso. Sintomo: il comando `enable yolo`
+   avviava yolo ma la camera non partiva mai, senza nessun errore visibile (il thread del
+   comando restava bloccato in silenzio). Fix: `threading.RLock()` al posto di
+   `threading.Lock()` per `_cfg_lock`. **Se si aggiungono nuovi punti che tengono
+   `_cfg_lock` e poi chiamano (anche indirettamente) `_start_service`/`_stop_service`,
+   verificare che non ci sia lo stesso problema.**
+2. **Stesso gotcha encoding cp1252** già visto per la voce: `sys.stdout.reconfigure(
+   encoding="utf-8", errors="replace")` necessario anche qui, altrimenti i log dei
+   sottoprocessi (accenti, frecce) mandano in `UnicodeEncodeError` il thread `drain` che
+   inoltra il loro stdout.
+
+**Testato end-to-end via MQTT** (comandi inviati da un client di test, non da Pi Manager
+reale): `enable yolo` → camera si avvia da sola, yolo rileva persone; `enable mediapipe` e
+`enable voice` → entrambi attivi in parallelo; `disable yolo` (mediapipe ancora attivo) →
+camera resta su; `disable mediapipe` → camera si ferma (nessun consumer rimasto); stato
+`gaia/device/ops-silvermini2/status` con `role:"ops"`, `capabilities`, `services`, `uptime`
+tutti corretti.
+
+**Avvio automatico**: Scheduled Task Windows `GAIA-OPS-Agent` (trigger `AtLogOn` per
+l'utente corrente, `RestartCount=5`/`RestartInterval=1min` se crasha, esegue
+`ops/agent/run_agent.bat` che redirige stdout/stderr su `ops/agent/agent.log`, gitignored).
+Registrato con PowerShell elevato (`Register-ScheduledTask`, richiede admin — stesso pattern
+UAC della Missione 1). Verificato con `Start-ScheduledTask` manuale: si avvia, si connette a
+MQTT, e **il lock impedisce correttamente una doppia istanza** (l'ho verificato per sbaglio:
+un mio processo agent di test manuale ancora vivo ha fatto uscire subito l'istanza lanciata
+dal task schedulato con "Un'altra istanza è già in esecuzione").
+
+**Non fatto in questa sessione**: nessun test OTA (`ota_update`) — il meccanismo è portato
+1:1 da `local_agent.py` ma non esercitato; test di riavvio completo della macchina (il
+trigger `AtLogOn` presuppone che l'utente `vsvis` faccia login, non testato un riavvio reale
+del PC).

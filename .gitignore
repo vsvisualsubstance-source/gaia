@@ -49,6 +49,9 @@ minipc/script/gaia_wakeword_samples/
 # Local agent runtime (device-specific, generato automaticamente)
 minipc/local_agent.lock
 minipc/local_agent_config.json
+ops/agent/agent.lock
+ops/agent/agent_config.json
+ops/agent/agent.log
 
 # ── Shared ────────────────────────────────────────────────────────────────────
 # Configurazioni locali con IP/credenziali
