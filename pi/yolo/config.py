@@ -31,6 +31,7 @@ _defaults = {
     'PERSON_TIMEOUT':           '6',
     'EVENT_COOLDOWN_SEC':       '5',
     'SNAPSHOT_CONF_THRESHOLD':  '0.75',
+    'SNAPSHOT_REFRESH_S':       '20',
     'HEARTBEAT_INTERVAL':       '30',
     'MIN_CONFIRMED_HITS':       '3',
 }
@@ -66,6 +67,10 @@ EVENT_COOLDOWN_SEC        = float(_cfg['EVENT_COOLDOWN_SEC'])
 
 # ── SNAPSHOT ──────────────────────────────────────────────────────────────────
 SNAPSHOT_CONF_THRESHOLD   = float(_cfg['SNAPSHOT_CONF_THRESHOLD'])
+# Ogni quanti secondi rimandare uno snapshot per lo stesso track: la vecchia
+# logica once-per-track dava UNA sola chance al face recognition — se il primo
+# scatto era di spalle/controluce, mai più riconosciuto finché il track viveva.
+SNAPSHOT_REFRESH_S        = float(_cfg['SNAPSHOT_REFRESH_S'])
 
 # ── SYSTEM ────────────────────────────────────────────────────────────────────
 HEARTBEAT_INTERVAL        = float(_cfg['HEARTBEAT_INTERVAL'])

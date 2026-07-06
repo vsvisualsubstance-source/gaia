@@ -33,6 +33,8 @@ YOLO_IMGSZ=512
 # Soglie
 CONFIDENCE_THRESHOLD=0.45
 SNAPSHOT_CONF_THRESHOLD=0.75
+# Secondi tra snapshot successivi dello stesso track (retry del riconoscimento)
+SNAPSHOT_REFRESH_S=20
 
 # Anti falsi positivi: quanti frame consecutivi prima di considerare una persona "vera"
 MIN_CONFIRMED_HITS=3

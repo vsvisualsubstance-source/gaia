@@ -166,10 +166,12 @@ while _running:
             if age == 0:
                 last_seen[track_id] = timestamp
 
-            # Snapshot per face recognition
+            # Snapshot per face recognition — ripetuto ogni SNAPSHOT_REFRESH_S
+            # finché il track vive (non più once-per-track: il face service
+            # merita più di un tentativo per persona)
             if (conf >= config.SNAPSHOT_CONF_THRESHOLD
                     and age == 0
-                    and track_id not in last_snapshot_time):
+                    and timestamp - last_snapshot_time.get(track_id, 0) >= config.SNAPSHOT_REFRESH_S):
                 snap = encode_person_crop(frame, t['box'])
                 if snap:
                     mqtt.publish(mqtt.topic_snapshot, {
