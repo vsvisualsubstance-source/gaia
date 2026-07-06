@@ -14,3 +14,5 @@
 - [Voce miniPC — GaiaWakeVerifier](project_voice_minipc.md) — modello allenato, gap TTS risposte risolto, bug taglio-comando risolto, modello medium
 - [Architettura Core/OPS/Pi](project_architettura_core_ops.md) — split ruoli per contesa CPU; dal 2026-07-06 design N macchine (docs/core-distribuito.md) + moduli Pi futuri Herbarium/LiveStream (docs/pi-moduli-futuri.md)
 - [Vocabolario Asemico](project_vocabolario_asemico.md) — lingua visiva deterministica (parola→glifo), asemic.js, v1 live su welcome, roadmap gesture/Pi-screen/gioco
+- [Verifica Core su OPS](verifica-core-2026-07-06.md) — test end-to-end dal Core via SSH, carico ~46%/35GB, da unificare DEVICE_ID
+- [Test stack visione OPS](ops-test-risultati.md) — esito Missione 2/3 silvermini2: fix DSHOW/model_asset_buffer, CAMERA_INDEX=4 (NDI su 0-3), carico, doppio camera_server tra sessioni
