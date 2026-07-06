@@ -6,9 +6,10 @@ services:
       - "1883:1883"
       - "9001:9001"
     volumes:
+      # config versionata nel repo; data/log (runtime) su D
       - ./mosquitto/config:/mosquitto/config
-      - ./mosquitto/data:/mosquitto/data
-      - ./mosquitto/log:/mosquitto/log
+      - /media/core/D/gaia-data/mosquitto/data:/mosquitto/data
+      - /media/core/D/gaia-data/mosquitto/log:/mosquitto/log
     restart: unless-stopped
 
   openhab:
@@ -19,9 +20,9 @@ services:
       - "8443:8443"
       - "5007:5007"
     volumes:
-      - ./openhab/addons:/openhab/addons
-      - ./openhab/conf:/openhab/conf
-      - ./openhab/userdata:/openhab/userdata
+      - /media/core/D/gaia-data/openhab/addons:/openhab/addons
+      - /media/core/D/gaia-data/openhab/conf:/openhab/conf
+      - /media/core/D/gaia-data/openhab/userdata:/openhab/userdata
     environment:
       - OPENHAB_HTTP_PORT=8080
       - OPENHAB_HTTPS_PORT=8443
@@ -35,7 +36,7 @@ services:
     ports:
       - "11434:11434"
     volumes:
-      - ./ollama:/root/.ollama
+      - /media/core/D/gaia-data/ollama:/root/.ollama
     environment:
       - OLLAMA_KEEP_ALIVE=24h
     restart: unless-stopped
@@ -49,5 +50,5 @@ services:
     volumes:
       # Path assoluto (non ./): storage preesistente al passaggio a compose,
       # usato da gaia-brain/brain_memory.py (collection gaia_memory_large)
-      - /home/core/qdrant_storage:/qdrant/storage
+      - /media/core/D/gaia-data/qdrant:/qdrant/storage
     restart: unless-stopped
