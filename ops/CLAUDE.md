@@ -39,6 +39,22 @@ Restart-Service sshd
 
 Verifica: da quel momento il Core può fare `ssh vsvis@192.168.1.239`.
 
+## SCOPERTE SUL CAMPO (2026-07-06, dal Core via SSH — leggere prima della Missione 2)
+
+- `C:\TouchDesigner\TOE\` contiene GIÀ MediaPipe per TD (`mediapipe-touchdesigner-main`,
+  FACEMASK.toe) e `Yolo.toe`; `C:\TouchDesigner\piante\` + `AV.toe` = lavoro AV/VST
+  esistente dell'utente — sono i semi dell'AV Herbarium (docs/pi-moduli-futuri.md).
+- **Decisione architetturale**: il sensing 24/7 per il brain lo fanno i servizi Python
+  headless (questa missione). TouchDesigner è lo strato CREATIVO che consuma i dati GAIA
+  (bridge OSC in `minipc/touchdesigner/`) — non va usato come backbone di sensing.
+- **Camera condivisa**: su Windows la webcam è esclusiva. camera_server ne è l'unico
+  proprietario; TouchDesigner la legge dallo stream MJPEG `http://localhost:8766/video`
+  (Video Stream In TOP). Non aprire mai la webcam da due processi.
+- Venv già creato in `C:\gaia\venv` (Python 3.11.9) ma vuoto: la Missione 2 parte
+  dall'installazione dei pacchetti in QUESTO venv.
+- SSH dal Core funziona (Missione 1 ok) — il Claude del Core può ispezionare la macchina;
+  il lavoro locale resta tuo per evitare conflitti.
+
 ## MISSIONE 2 — Stack visione+voce nativo Windows (il test OPS)
 
 **Decisione già presa (non rimetterla in discussione senza motivo): Python
