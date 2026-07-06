@@ -156,9 +156,16 @@ def _start_service(key: str) -> bool:
         print(f"[Agent] File non trovato: {script}")
         return False
     print(f"[Agent] Avvio {key}: {' '.join(cmd)}")
+    # CREATE_NO_WINDOW: senza, ogni sottoprocesso apre/condivide una console
+    # visibile — chiuderla per errore (es. pensando fosse un singolo
+    # servizio) manda un evento di chiusura a TUTTO l'albero di processi
+    # (visto in produzione: chiusa una finestra "camera", morti anche
+    # yolo/mediapipe/voice insieme). Con questo flag non c'e' nessuna
+    # finestra da chiudere per sbaglio.
+    creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
     with _procs_lock:
         _procs[key] = subprocess.Popen(
-            cmd, cwd=cwd, env=env,
+            cmd, cwd=cwd, env=env, creationflags=creationflags,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT
         )
     proc = _procs[key]

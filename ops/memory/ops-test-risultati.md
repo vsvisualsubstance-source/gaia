@@ -218,3 +218,40 @@ dal task schedulato con "Un'altra istanza è già in esecuzione").
 1:1 da `local_agent.py` ma non esercitato; test di riavvio completo della macchina (il
 trigger `AtLogOn` presuppone che l'utente `vsvis` faccia login, non testato un riavvio reale
 del PC).
+
+### Incidente post-deploy: chiusura finestra console ha ucciso tutto lo stack
+
+Poco dopo il deploy, l'utente ha chiuso quella che pensava fosse la finestra della sola
+camera — in realtà agent + camera + yolo + mediapipe + voice condividevano tutti **la
+stessa console** (aperta dal task perché lanciava `python.exe`, non `pythonw.exe`, con
+logon interattivo): chiudere quella finestra manda un `CTRL_CLOSE_EVENT`/window-close a
+tutto il gruppo di processi, non solo al "primo piano" — visto in log come
+`forrtl: error (200): program aborting due to window-CLOSE event` sul processo voice
+(runtime Fortran/MKL di ctranslate2), ma in realtà TUTTI i servizi sono morti insieme.
+Il Scheduled Task ha registrato `LastTaskResult=3221225786` (`STATUS_CONTROL_C_EXIT`) ma
+non si è riavviato da solo nonostante `RestartCount=5` — il riavvio automatico su
+crash **non copre la chiusura via finestra su un trigger `AtLogOn`**, va verificato meglio
+se ricapita (per ora si riavvia a mano con `Start-ScheduledTask`).
+
+**Fix applicato** (`ops/agent/agent.py`, `run_agent.bat`, nuovo `run_agent_hidden.vbs`):
+- `subprocess.Popen(..., creationflags=subprocess.CREATE_NO_WINDOW)` per ogni servizio
+  figlio — non condividono più (né aprono una propria) finestra console.
+- `run_agent.bat` ora lancia `pythonw.exe` (non `python.exe`) per l'agent stesso — nessuna
+  console, ma serve comunque il redirect (`>> agent.log 2>&1`) nel `.bat` perché `pythonw`
+  da solo non ha stdout valido (sarebbe `None`, `print()` esploderebbe).
+- Il Task Scheduler con logon interattivo mostra comunque una finestra per il `cmd.exe`
+  che esegue il `.bat`, quindi l'azione del task ora è `wscript.exe run_agent_hidden.vbs`
+  (`WScript.Shell.Run ..., 0, False` — stile finestra 0 = nascosta), che a sua volta lancia
+  il `.bat` invisibile. **Aggiornare la registrazione task se si tocca `run_agent.bat`**:
+  serve rieseguire `Register-ScheduledTask` (admin) con l'Action puntata al `.vbs`, non
+  più direttamente al `.bat`.
+- Verificato: nessuna finestra visibile dopo il riavvio, tutti e 4 i servizi tornati
+  `active` via status MQTT.
+
+**Trovato anche un problema laterale durante il recovery**: fermare il processo agent
+(`Stop-Process`) non termina i suoi sottoprocessi (camera/yolo/mediapipe/voice) — a
+differenza della chiusura-finestra, che uccide tutto il gruppo, Windows non propaga la
+terminazione da padre a figli. Risultato: due generazioni di servizi orfani rimaste vive
+in parallelo (vecchia + nuova), e la camera nuova falliva l'apertura perché quella vecchia
+teneva ancora l'indice 4. **Prima di riavviare l'agent per debug, verificare ed eventualmente
+terminare esplicitamente anche i sottoprocessi**, non solo il processo agent.
