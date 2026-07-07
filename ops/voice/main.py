@@ -99,6 +99,7 @@ def _on_connect(client, userdata, flags, rc, properties=None):
     client.subscribe(_topic_admin())
     client.subscribe(_topic_record_clip())
     client.subscribe(f"gaia/devices/{config.DEVICE_ID}/config", qos=1)
+    client.subscribe(f"gaia/devices/{config.DEVICE_ID}/update", qos=1)
     _publish_status("listening")
     client.publish(
         f"gaia/devices/{config.DEVICE_ID}/announce",
@@ -123,6 +124,15 @@ def _on_message(client, userdata, msg):
     topic = msg.topic
     if topic == f"gaia/devices/{config.DEVICE_ID}/config":
         _handle_device_config(client, msg.payload)
+        return
+    if topic == f"gaia/devices/{config.DEVICE_ID}/update":
+        # OTA mirato dal Core (es. modello wakeword dopo il training):
+        # scarica il file e, se e' il verifier Gaia, lo ricarica a caldo.
+        try:
+            cmd = json.loads(msg.payload)
+            threading.Thread(target=_handle_ota_update, args=(cmd,), daemon=True).start()
+        except Exception as e:
+            print(f"[OTA] Errore parse: {e}")
         return
     if topic == _topic_record_clip():
         # Registrazione campione (wakeword Gaia / citofono) richiesta da admin.
@@ -280,19 +290,64 @@ _gaia_buffer      = []
 _GAIA_BUFFER_SEC  = 1.5
 _GAIA_THRESHOLD   = config.GAIA_THRESHOLD
 
-if os.path.exists(_GAIA_MODEL_PATH):
+def _load_gaia_verifier() -> bool:
+    """Carica (o ricarica) il classificatore Gaia. Chiamabile a caldo."""
+    global _gaia_clf, _gaia_af
+    if not os.path.exists(_GAIA_MODEL_PATH):
+        print("[Gaia WW] Nessun modello per questa macchina ancora allenato — verifica disattiva")
+        return False
     try:
-        from openwakeword.utils import AudioFeatures
-        try:
-            _gaia_af = AudioFeatures(inference_framework='onnx', device='cpu')
-        except TypeError:
-            _gaia_af = AudioFeatures()
+        if _gaia_af is None:
+            from openwakeword.utils import AudioFeatures
+            try:
+                _gaia_af = AudioFeatures(inference_framework='onnx', device='cpu')
+            except TypeError:
+                _gaia_af = AudioFeatures()
         _gaia_clf = pickle.load(open(_GAIA_MODEL_PATH, 'rb'))
         print(f"[Gaia WW] Modello custom caricato: {_GAIA_MODEL_PATH}")
+        return True
     except Exception as e:
         print(f"[Gaia WW] Impossibile caricare il modello: {e}")
-else:
-    print("[Gaia WW] Nessun modello per questa macchina ancora allenato — verifica disattiva")
+        return False
+
+
+def _handle_ota_update(cmd: dict):
+    """OTA mirato: scarica cmd['url'] nel path relativo cmd['script'],
+    verifica l'MD5 e ricarica il verifier se e' lui l'aggiornato."""
+    import hashlib
+    script = cmd.get("script", "")
+    url    = cmd.get("url", "")
+    if not script or not url or ".." in script:
+        print(f"[OTA] Comando non valido: {cmd}")
+        return
+    dest = os.path.join(os.path.dirname(os.path.abspath(__file__)), *script.split("/"))
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    tmp = dest + ".ota_tmp"
+    try:
+        print(f"[OTA] Download {url} -> {dest}")
+        urllib.request.urlretrieve(url, tmp)
+        md5_exp = cmd.get("md5", "")
+        if md5_exp:
+            actual = hashlib.md5(open(tmp, 'rb').read()).hexdigest()
+            if actual != md5_exp:
+                print(f"[OTA] MD5 mismatch: {actual} != {md5_exp}")
+                os.remove(tmp)
+                return
+        os.replace(tmp, dest)
+        print(f"[OTA] OK: {dest} (v{cmd.get('version','?')})")
+        if os.path.abspath(dest) == os.path.abspath(_GAIA_MODEL_PATH):
+            if _load_gaia_verifier():
+                print("[OTA] Verifier Gaia ricaricato a caldo — attivo subito")
+        else:
+            print("[OTA] File aggiornato — riavviare il servizio per applicarlo")
+    except Exception as e:
+        print(f"[OTA] Errore: {e}")
+        if os.path.exists(tmp):
+            try: os.remove(tmp)
+            except OSError: pass
+
+
+_load_gaia_verifier()
 
 SR    = config.SAMPLE_RATE
 CHUNK = config.CHUNK_SIZE
