@@ -12,6 +12,8 @@ volute rispetto al Pi:
   - niente rilevamento citofono (non pertinente a questa macchina)
   - TTS: PiperVoice (onnxruntime) + sounddevice invece di piper binario + aplay
 """
+import base64
+import io
 import json
 import os
 import pickle
@@ -20,6 +22,8 @@ import signal
 import socket
 import threading
 import time
+import urllib.request
+import wave
 
 import numpy as np
 import sounddevice as sd
@@ -40,6 +44,7 @@ _current_room = config.NODE_ID
 _tts_lock = threading.Lock()  # serializza le esecuzioni TTS
 
 _calibrate_requests: queue.Queue = queue.Queue()
+_record_clip_requests: queue.Queue = queue.Queue()   # campioni wakeword da admin
 
 
 def _handle_signal(sig, frame):
@@ -61,6 +66,7 @@ def _topic_tts():     return f"gaia/voice/tts/{_current_room}"
 def _topic_status():  return f"gaia/voice/status/{_current_room}"
 def _topic_command(): return f"gaia/voice/command/{_current_room}"
 def _topic_admin():   return f"gaia/voice/admin/{_current_room}"
+def _topic_record_clip(): return f"gaia/voice/record_clip/{_current_room}"
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -91,6 +97,7 @@ def _on_connect(client, userdata, flags, rc, properties=None):
         return
     client.subscribe(_topic_tts())
     client.subscribe(_topic_admin())
+    client.subscribe(_topic_record_clip())
     client.subscribe(f"gaia/devices/{config.DEVICE_ID}/config", qos=1)
     _publish_status("listening")
     client.publish(
@@ -116,6 +123,20 @@ def _on_message(client, userdata, msg):
     topic = msg.topic
     if topic == f"gaia/devices/{config.DEVICE_ID}/config":
         _handle_device_config(client, msg.payload)
+        return
+    if topic == _topic_record_clip():
+        # Registrazione campione (wakeword Gaia / citofono) richiesta da admin.
+        # Accodata: il MAIN LOOP possiede il mic — un secondo InputStream
+        # simultaneo su Windows fallirebbe (stesso pattern della calibrazione).
+        try:
+            data = json.loads(msg.payload)
+            _record_clip_requests.put({
+                "label": data.get("label", "gaia_positive"),
+                "duration_s": int(data.get("duration_s", 3)),
+            })
+            print(f"[Clip] Richiesta registrazione: {data}")
+        except Exception as e:
+            print(f"[Clip] Errore richiesta: {e}")
         return
     if topic == _topic_admin():
         try:
@@ -148,9 +169,11 @@ def _handle_device_config(client, payload):
             print(f"[Registry] Room: {_current_room} -> {new_room}")
             client.unsubscribe(_topic_tts())
             client.unsubscribe(_topic_admin())
+            client.unsubscribe(_topic_record_clip())
             _current_room = new_room
             client.subscribe(_topic_tts())
             client.subscribe(_topic_admin())
+            client.subscribe(_topic_record_clip())
             _publish_status("listening")
         elif new_room:
             print(f"[Registry] Room confermata: {new_room}")
@@ -314,6 +337,46 @@ def _apply_config(data: dict):
         print(f"[Config] SILENCE_THRESHOLD -> {config.SILENCE_THRESHOLD}")
 
 
+def _do_record_clip(label: str, duration_s: int):
+    """Registra duration_s secondi dal mic e invia il WAV all'admin sul Core.
+    Il payload include la stanza: l'admin smista i campioni gaia_* nel dataset
+    della macchina giusta (cucina -> OPS)."""
+    _publish_status("recording")
+    print(f"[Clip] Registrazione {label} ({duration_s}s)...")
+    chunks = []
+    n_chunks = int(SR / CHUNK * duration_s)
+    try:
+        with sd.InputStream(samplerate=SR, channels=1, dtype="int16",
+                            blocksize=CHUNK, device=config.MIC_DEVICE) as st:
+            for _ in range(n_chunks):
+                if not _running:
+                    break
+                data, _ = st.read(CHUNK)
+                chunks.append(data.flatten())
+    except Exception as e:
+        print(f"[Clip] Errore stream: {e}")
+    _publish_status("listening")
+    if not chunks:
+        print("[Clip] Registrazione vuota, scarto")
+        return
+    pcm = np.concatenate(chunks).astype(np.int16)
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(1); wf.setsampwidth(2); wf.setframerate(SR)
+        wf.writeframes(pcm.tobytes())
+    audio_b64 = base64.b64encode(buf.getvalue()).decode()
+    admin_url = f"http://{config.MQTT_HOST}:8765/api/doorbell/sample"
+    payload = json.dumps({"label": label, "audio_base64": audio_b64,
+                          "stanza": _current_room}).encode()
+    try:
+        req = urllib.request.Request(admin_url, data=payload,
+                                     headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            print(f"[Clip] Inviato -> {json.loads(resp.read())}")
+    except Exception as e:
+        print(f"[Clip] Errore invio al Core: {e}")
+
+
 def _do_calibrate(duration_s: int = 5):
     _publish_status("calibrating")
     print(f"[Calibrazione] Silenzio per {duration_s}s...")
@@ -397,6 +460,10 @@ def main():
             req = _calibrate_requests.get_nowait()
             _do_calibrate(req.get("duration_s", 5))
 
+        while not _record_clip_requests.empty():
+            req = _record_clip_requests.get_nowait()
+            _do_record_clip(req.get("label", "gaia_positive"), req.get("duration_s", 3))
+
         _publish_status("listening")
         wakeword_stream = sd.InputStream(
             samplerate=SR, channels=1, dtype="int16", blocksize=CHUNK,
@@ -406,7 +473,7 @@ def main():
 
         wakeword_detected = False
         while _running and not wakeword_detected:
-            if not _calibrate_requests.empty():
+            if not _calibrate_requests.empty() or not _record_clip_requests.empty():
                 break
             if _speaking:
                 try:
