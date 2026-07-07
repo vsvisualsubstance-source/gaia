@@ -903,6 +903,13 @@ class AdminHandler(BaseHTTPRequestHandler):
             else:
                 self._json({"ok": False, "error": "_method:DELETE richiesto"}, 400)
 
+        elif path.startswith("/api/gaia-wakeword-ops/clip/") and len(path.split("/")) >= 6:
+            parts = path.split("/")
+            if body.get("_method") == "DELETE":
+                self._delete_clip(GAIA_WAKEWORD_DIR_OPS, parts[4], int(parts[5]))
+            else:
+                self._json({"ok": False, "error": "_method:DELETE richiesto"}, 400)
+
         elif path.startswith("/api/doorbell/clip/") and len(path.split("/")) >= 6:
             parts = path.split("/")
             if body.get("_method") == "DELETE":
