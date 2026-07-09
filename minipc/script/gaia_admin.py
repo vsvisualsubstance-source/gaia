@@ -216,8 +216,15 @@ def _start_mqtt():
     _mqtt = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
     _mqtt.on_connect = _on_connect
     _mqtt.on_message = _on_message
-    _mqtt.connect(MQTT_BROKER, MQTT_PORT, 60)
-    _mqtt.loop_forever()
+    # connect_async + reconnect_delay: al boot mosquitto (docker) parte DOPO
+    # questo servizio — il connect() sincrono moriva con ConnectionRefused e il
+    # thread MQTT spariva per sempre lasciando l'HTTP vivo ma stats/pi_stats
+    # vuoti (successo il 2026-07-09, stessa race dell'agent OPS al login).
+    # connect_async lascia che sia il loop a stabilire (e ristabilire) la
+    # connessione con retry automatico.
+    _mqtt.reconnect_delay_set(min_delay=2, max_delay=30)
+    _mqtt.connect_async(MQTT_BROKER, MQTT_PORT, 60)
+    _mqtt.loop_forever(retry_first_connection=True)
 
 # ── Dati ─────────────────────────────────────────────────────────────────────
 def get_speakers() -> list[str]:

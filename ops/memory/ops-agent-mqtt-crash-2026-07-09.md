@@ -77,3 +77,19 @@ accesso SSH da OPS verso il Core per controllare il processo dal vivo.
   riavvio del broker/rete, considerare lo stesso pattern di retry-con-backoff
   applicato qui in `ops/agent/agent.py` anche al client MQTT di `gaia_admin.py`
   (stesso tipo di race condition, causa diversa).
+
+## RISOLTO lato Core (2026-07-09, Claude Core)
+
+Diagnosi confermata al 100%: il Core era stato riavviato la mattina e gaia_admin.py
+era partito PRIMA del container mosquitto → `ConnectionRefusedError` sul
+`_mqtt.connect()` sincrono → thread MQTT morto per sempre, HTTP vivo (il caso
+peggiore: servizio "active" ma sordo — identico nella sostanza al vostro P1).
+
+**Fix strutturale** (`_start_mqtt`): `connect_async()` + `reconnect_delay_set(2,30)` +
+`loop_forever(retry_first_connection=True)` — il loop paho stabilisce e ristabilisce
+la connessione da solo, il boot-order non conta più. Verificato: stats/pi_stats di
+nuovo popolati (minipc + cucina + ingresso).
+
+Sistemati nello stesso giro: gaia-camera Core (inactive post-boot) e mediapipe OPS
+riattivato via agent (`enable` da MQTT — funziona, grazie al vostro agent).
+Ottima nota diagnostica: metà del lavoro era già fatto. 🤝
