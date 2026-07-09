@@ -3957,7 +3957,7 @@
         "type": "function",
         "z": "d3a553c4a24c8d2d",
         "name": "SpeakerAttribution",
-        "func": "// Chi sta parlando in una stanza (F3 gaia-semantico): quando il voice\n// della stanza registra/elabora, incrocia mediapipe (bocca aperta) e le\n// identità face presenti — tutto dato che il brain ha già.\nlet p = msg.payload;\nif (typeof p === 'string') { try { p = JSON.parse(p); } catch (e) { return null; } }\nconst stanza = (msg.topic || '').split('/').pop();\nconst state = p.state || p.status;\nif (!stanza || !state) return null;\n\nlet brain = global.get('gaiaBrain') || {};\nbrain.rooms = brain.rooms || {};\nconst room = brain.rooms[stanza];\nif (!room) return null;\n\nif (state === 'recording' || state === 'processing') {\n    const named = (room.people || []).filter(n => !String(n).startsWith('unknown'));\n    let who = null;\n    const mpPeople = room.mediapipe && room.mediapipe.people || [];\n    const mouthOpen = mpPeople.some(x => x.mouth_open);\n    if (named.length === 1) {\n        who = named[0];                       // unica persona nota nella stanza\n    } else if (named.length > 1 && mouthOpen) {\n        who = named[0];                        // più persone: migliorabile (v2: sync bocca/voce)\n    }\n    if (who) {\n        room.speaking = { name: who, ts: Date.now(), confidence: named.length === 1 ? 0.9 : 0.5 };\n        global.set('gaiaBrain', brain);\n    }\n}\nreturn null;",
+        "func": "// Chi sta parlando in una stanza (F3 gaia-semantico).\n// Due vie: (a) il voice della stanza registra un comando (alta confidenza);\n// (b) parlato normale = volume mic alto + BOCCA APERTA da mediapipe (la\n// conferma visiva evita che il rumore ambientale accenda il badge).\nlet p = msg.payload;\nif (typeof p === 'string') { try { p = JSON.parse(p); } catch (e) { return null; } }\nconst stanza = (msg.topic || '').split('/').pop();\nif (!stanza || !p) return null;\n\nlet brain = global.get('gaiaBrain') || {};\nbrain.rooms = brain.rooms || {};\nconst room = brain.rooms[stanza];\nif (!room) return null;\n\nconst named = (room.people || []).filter(n => !String(n).startsWith('unknown'));\nif (!named.length) return null;\nconst mpPeople = (room.mediapipe && room.mediapipe.people) || [];\nconst mouthOpen = mpPeople.some(x => x.mouth_open);\n\nlet who = null, conf = 0;\nconst isStats = msg.topic.includes('/stats/');\nif (isStats) {\n    // (b) parlato normale: volume sopra soglia E bocca aperta\n    const vol = p.vol || 0;\n    const thr = p.silence_threshold || p.threshold || 400;\n    if (vol > thr && mouthOpen) {\n        who = named[0];\n        conf = named.length === 1 ? 0.7 : 0.4;\n    }\n} else {\n    // (a) comando vocale in corso\n    const state = p.state || p.status;\n    if (state === 'recording' || state === 'processing') {\n        if (named.length === 1) { who = named[0]; conf = 0.9; }\n        else if (mouthOpen)     { who = named[0]; conf = 0.5; }\n    }\n}\n\nif (who) {\n    room.speaking = { name: who, ts: Date.now(), confidence: conf };\n    global.set('gaiaBrain', brain);\n}\nreturn null;",
         "outputs": 0,
         "noerr": 0,
         "x": 330,
@@ -3996,5 +3996,26 @@
         "x": 300,
         "y": 80,
         "wires": []
+    },
+    {
+        "id": "f3-voicestats-in",
+        "type": "mqtt in",
+        "z": "d3a553c4a24c8d2d",
+        "name": "voice/stats/+ (speaking)",
+        "topic": "gaia/voice/stats/+",
+        "qos": "0",
+        "datatype": "auto-detect",
+        "broker": "29b6d5926d1a95ec",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 120,
+        "y": 120,
+        "wires": [
+            [
+                "f3-speaker-fn"
+            ]
+        ]
     }
 ]

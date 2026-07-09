@@ -98,7 +98,8 @@ _SERVICE_DEFS = {
             "/home/core/core-node-0/minipc/script/scene_worker.py",
         ],
         "cwd": "/home/core/core-node-0/minipc/script",
-        "env_extra": {"SCENE_INTERVAL": "900"},
+        "env_extra": {"SCENE_INTERVAL": "900",
+                      "SCENE_ENDPOINT_OVERRIDES": '{"pi-fd75d8": "http://100.76.11.49:8766/video"}'},
         "ota_dir": "/home/core/core-node-0/minipc/script",
     },
 }

@@ -27,6 +27,13 @@ SCENE_INTERVAL = int(os.environ.get("SCENE_INTERVAL", "900"))
 SCENE_MODEL    = os.environ.get("SCENE_MODEL", "moondream")
 OLLAMA_URL     = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 PROFILES_URL   = os.environ.get("PROFILES_URL", "http://localhost:1880/gaia/devices/profiles")
+INFER_TIMEOUT  = int(os.environ.get("SCENE_INFER_TIMEOUT", "360"))
+# Override endpoint per device (JSON): es. il Pi dietro NAT è raggiungibile
+# dal Core solo via tailscale — {"pi-fd75d8": "http://100.76.11.49:8766/video"}
+try:
+    ENDPOINT_OVERRIDES = json.loads(os.environ.get("SCENE_ENDPOINT_OVERRIDES", "{}"))
+except ValueError:
+    ENDPOINT_OVERRIDES = {}
 
 PROMPT = ("Describe this room in one short paragraph: type of room, furniture, "
           "layout, lighting, notable objects. Be concrete and factual.")
@@ -69,7 +76,7 @@ def describe(jpeg: bytes) -> str | None:
     req = urllib.request.Request(f"{OLLAMA_URL}/api/generate", data=body,
                                  headers={"Content-Type": "application/json"})
     try:
-        with urllib.request.urlopen(req, timeout=180) as r:
+        with urllib.request.urlopen(req, timeout=INFER_TIMEOUT) as r:
             return json.loads(r.read()).get("response", "").strip() or None
     except OSError as e:
         print(f"[Scene] Ollama errore: {e}")
@@ -93,7 +100,7 @@ def main():
 
         for did, p in profiles.items():
             cam = (p.get("services") or {}).get("camera") or {}
-            mjpeg = (cam.get("endpoints") or {}).get("mjpeg")
+            mjpeg = ENDPOINT_OVERRIDES.get(did) or (cam.get("endpoints") or {}).get("mjpeg")
             room = p.get("room_assigned") or p.get("room")
             if not mjpeg or not room or cam.get("state") != "active":
                 continue
