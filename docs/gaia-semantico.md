@@ -91,6 +91,28 @@ il suo video esce solo come snapshot MQTT, che il NAT non blocca — quindi non 
    salva frames su D). Se un giorno serve NVR vero: Frigate in docker sul Core (pesante,
    valutare solo con hardware Core dedicato).
 
+## Stato implementazione (2026-07-09, sessione F1-F5)
+
+- **F1 profilo semantico: FATTO** — i 3 agent pubblicano `gaia/devices/{id}/profile`
+  (retained, con endpoint); `ProfileRegistry` in brain.devices; `GET /gaia/devices/profiles`.
+- **F2 MJPEG ovunque: FATTO** — porting su pi/camera (encode solo con client connessi,
+  MJPEG_PORT=0 per spegnere); `cameras.html` = griglia sorveglianza v1 a scoperta
+  automatica dai profili; link nelle nav.
+- **F3 room graph + chi parla: FATTO** — `brain.roomGraph` statico (IPOTESI da far
+  correggere all'utente!) + `roomGraphLearned` dalle co-transizioni di presenza (<20s);
+  `SpeakerAttribution` (voice recording + mediapipe mouth_open + identità) →
+  `rooms[].speaking` nel payload WS.
+- **F4 capability→moduli: FATTO** — detect esteso (audio_out, display, midi[], i2c;
+  su Windows cache + MAI probare la webcam: è esclusiva); `CAP_MODULES` in
+  ProfileRegistry → `suggested_modules` nei profili. Il Pi ingresso già suggerisce
+  av-herbarium (ha i2c+audio). UI in Pi Manager: da fare.
+- **F5 scene worker: FATTO** — `minipc/script/scene_worker.py` (servizio `scene` del
+  local_agent, moondream via Ollama, 1 frame/camera ogni 15min) → `gaia/scene/{room}`
+  → `rooms[].scene` nel brain/WS + scena nel prompt dei Pensieri Profondi.
+
+Rimasti: UI moduli suggeriti in Pi Manager · correzione roomGraph dall'utente ·
+sync bocca/voce per lo speaking multi-persona · registrazione clip sorveglianza (v2).
+
 ## Fasi consigliate
 
 1. **Profilo semantico** (contratto 1): estendere status/announce dei 3 agent + registry.

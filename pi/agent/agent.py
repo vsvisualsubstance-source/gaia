@@ -113,16 +113,32 @@ def _service_endpoints(key: str, stanza: str, ip: str) -> dict:
 
 
 def detect_capabilities() -> dict:
-    camera = len(glob.glob("/dev/video*")) > 0
-
-    mic = False
+    caps = {}
+    caps["camera"] = len(glob.glob("/dev/video*")) > 0
+    caps["mic"] = False
     try:
         r = subprocess.run(["arecord", "-l"], capture_output=True, text=True, timeout=5)
-        mic = "card" in r.stdout
+        caps["mic"] = "card" in r.stdout
     except Exception:
         pass
-
-    return {"camera": camera, "mic": mic}
+    # F4 gaia-semantico: capability estese → il Core suggerisce i moduli
+    caps["audio_out"] = False
+    try:
+        r = subprocess.run(["aplay", "-l"], capture_output=True, text=True, timeout=5)
+        caps["audio_out"] = "card" in r.stdout
+    except Exception:
+        pass
+    caps["display"] = False
+    try:
+        for st in glob.glob("/sys/class/drm/*/status"):
+            if open(st).read().strip() == "connected":
+                caps["display"] = True
+                break
+    except Exception:
+        pass
+    caps["midi"] = sorted(os.path.basename(p) for p in glob.glob("/dev/snd/midi*") + glob.glob("/dev/midi*"))
+    caps["i2c"] = len(glob.glob("/dev/i2c-*")) > 0
+    return caps
 
 
 # ──────────────────────────────────────────────────────────────────────

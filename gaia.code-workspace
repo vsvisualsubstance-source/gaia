@@ -1,0 +1,24 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../D"
+		}
+	],
+	"settings": {
+		"vscode-node-red.url": "http://127.0.0.1:1880",
+		"vscode-node-red.settings.js": {
+
+		},
+		"chat.tools.terminal.autoApprove": {
+			"git remote": true
+		}
+	},
+	"extensions": {
+		"recommendations": [
+			"formulahendry.vscode-node-red"
+		]
+	}
+}

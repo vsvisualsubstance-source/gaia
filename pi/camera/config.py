@@ -21,6 +21,9 @@ _defaults = {
     'FRAME_WIDTH':   '640',
     'FRAME_HEIGHT':  '480',
     'FPS_LIMIT':     '15',
+    'MJPEG_PORT':    '8766',   # 0 = stream HTTP disattivo
+    'MJPEG_QUALITY': '80',
+    'MJPEG_FPS':     '10',
 }
 
 _file_cfg = _load_conf('/etc/gaia/camera.conf')
@@ -30,3 +33,6 @@ CAMERA_INDEX  = int(_cfg['CAMERA_INDEX'])
 FRAME_WIDTH   = int(_cfg['FRAME_WIDTH'])
 FRAME_HEIGHT  = int(_cfg['FRAME_HEIGHT'])
 FPS_LIMIT     = float(_cfg['FPS_LIMIT'])
+MJPEG_PORT    = int(_cfg['MJPEG_PORT'])
+MJPEG_QUALITY = int(_cfg['MJPEG_QUALITY'])
+MJPEG_FPS     = float(_cfg['MJPEG_FPS'])

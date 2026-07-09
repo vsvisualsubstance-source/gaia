@@ -10,6 +10,9 @@ import struct
 import time
 import signal
 import logging
+import queue
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from multiprocessing.shared_memory import SharedMemory
 
 import cv2
@@ -24,6 +27,80 @@ logging.basicConfig(
 log = logging.getLogger('gaia-camera')
 
 _running = True
+
+
+# ── MJPEG HTTP stream (porting dalla versione minipc, F2 gaia-semantico) ─────
+# Encode JPEG SOLO quando ci sono client connessi: a riposo costo zero per il Pi.
+_clients: list = []
+_clients_lock = threading.Lock()
+
+
+class MJPEGHandler(BaseHTTPRequestHandler):
+    def log_message(self, *args):
+        pass
+
+    def do_GET(self):
+        if self.path not in ('/', '/video'):
+            self.send_error(404)
+            return
+        self.send_response(200)
+        self.send_header('Content-Type', 'multipart/x-mixed-replace; boundary=frame')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Cache-Control', 'no-cache, no-store')
+        self.send_header('Pragma', 'no-cache')
+        self.end_headers()
+        q: queue.Queue = queue.Queue(maxsize=2)
+        with _clients_lock:
+            _clients.append(q)
+        log.info(f"MJPEG client connesso ({len(_clients)} totali)")
+        try:
+            while _running:
+                try:
+                    jpg = q.get(timeout=2.0)
+                except queue.Empty:
+                    continue
+                try:
+                    self.wfile.write(b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + jpg + b'\r\n')
+                    self.wfile.flush()
+                except (BrokenPipeError, ConnectionResetError):
+                    break
+        finally:
+            with _clients_lock:
+                try:
+                    _clients.remove(q)
+                except ValueError:
+                    pass
+            log.info(f"MJPEG client disconnesso ({len(_clients)} rimasti)")
+
+
+def _mjpeg_server_thread():
+    srv = HTTPServer(('0.0.0.0', config.MJPEG_PORT), MJPEGHandler)
+    srv.timeout = 1.0
+    log.info(f"MJPEG stream attivo: http://0.0.0.0:{config.MJPEG_PORT}/video")
+    while _running:
+        srv.handle_request()
+    srv.server_close()
+
+
+def _mjpeg_broadcast(frame, state):
+    """Encode+push ai client connessi, throttled a MJPEG_FPS."""
+    with _clients_lock:
+        if not _clients:
+            return
+    now = time.time()
+    if now - state.get('last', 0) < 1.0 / max(config.MJPEG_FPS, 1):
+        return
+    state['last'] = now
+    ok, jpg = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, config.MJPEG_QUALITY])
+    if not ok:
+        return
+    data = jpg.tobytes()
+    with _clients_lock:
+        for q in _clients:
+            try:
+                q.put_nowait(data)
+            except queue.Full:
+                pass   # client lento: salta il frame
 
 
 def _shutdown(sig, frame):
@@ -86,6 +163,10 @@ def main():
     frame_shm = SharedMemory(name=SHM_FRAME_NAME, create=True, size=frame_bytes)
     log.info(f"Shared memory creata: {SHM_HEADER_NAME}, {SHM_FRAME_NAME}")
 
+    if config.MJPEG_PORT > 0:
+        threading.Thread(target=_mjpeg_server_thread, daemon=True).start()
+    _mjpeg_state = {}
+
     seq = 0
     min_frame_interval = (1.0 / config.FPS_LIMIT) if config.FPS_LIMIT > 0 else 0.0
     last_loop = 0.0
@@ -129,6 +210,9 @@ def main():
                 HEADER_FMT, header_shm.buf, 0,
                 seq, time.monotonic_ns(), width, height, frame_bytes, channels
             )
+
+            if config.MJPEG_PORT > 0:
+                _mjpeg_broadcast(frame, _mjpeg_state)
 
     finally:
         log.info("Chiusura camera_server...")

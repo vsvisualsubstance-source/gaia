@@ -129,9 +129,33 @@ def _service_endpoints(key: str, stanza: str, ip: str) -> dict:
 
 
 def detect_capabilities() -> dict:
-    # Questa macchina (silvermini2) ha sempre camera+mic — niente equivalente
-    # Windows comodo di /dev/video*/arecord per rilevarli dinamicamente.
-    return {"camera": True, "mic": True}
+    """Capability della macchina (F4 gaia-semantico). Su Windows i probe
+    affidabili sono costosi: camera/mic via OpenCV/sounddevice al primo giro,
+    poi cache; audio_out/display assunti presenti su questa workstation."""
+    global _caps_cache
+    if _caps_cache is not None:
+        return _caps_cache
+    caps = {"camera": False, "mic": False, "audio_out": True,
+            "display": True, "midi": [], "i2c": False}
+    try:
+        import sounddevice as sd
+        devs = sd.query_devices()
+        caps["mic"] = any(d.get("max_input_channels", 0) > 0 for d in devs)
+        caps["audio_out"] = any(d.get("max_output_channels", 0) > 0 for d in devs)
+    except Exception:
+        pass
+    # MAI probare la webcam con VideoCapture qui: su Windows è esclusiva e
+    # il probe la strapperebbe al camera_server. Se il servizio camera gira,
+    # la capability è vera per definizione; altrimenti resta il default.
+    try:
+        caps["camera"] = _svc_status("camera") == "active" or "camera" in _SERVICE_DEFS
+    except Exception:
+        pass
+    _caps_cache = caps
+    return caps
+
+
+_caps_cache = None
 
 
 # ── Process management ────────────────────────────────────────────────

@@ -18,3 +18,8 @@ FRAME_HEIGHT=480
 # Limite frame/secondo pubblicati in shared memory (0 = nessun limite,
 # pubblica alla velocità massima della camera)
 FPS_LIMIT=15
+
+# Stream MJPEG HTTP (F2 gaia-semantico): 0 = disattivo
+MJPEG_PORT=8766
+MJPEG_QUALITY=80
+MJPEG_FPS=10
