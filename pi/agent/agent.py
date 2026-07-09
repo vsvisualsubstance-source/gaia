@@ -92,6 +92,26 @@ def _write_device_env(cfg: dict):
 # ──────────────────────────────────────────────────────────────────────
 # Capability detection
 # ──────────────────────────────────────────────────────────────────────
+
+
+def _service_endpoints(key: str, stanza: str, ip: str) -> dict:
+    """Dove consumare ogni servizio — la parte 'semantica' del profilo
+    (docs/gaia-semantico.md, contratto 1). Chi legge il profilo scopre gli
+    endpoint senza hardcodare IP o topic."""
+    if key == "camera":
+        return {"mjpeg": f"http://{ip}:8766/video"}
+    if key == "voice":
+        return {"tts": f"gaia/voice/tts/{stanza}",
+                "command": f"gaia/voice/command/{stanza}",
+                "stats": f"gaia/voice/stats/{stanza}"}
+    if key == "mediapipe":
+        return {"pose": "gaia/mediapipe/pose"}
+    if key == "yolo":
+        return {"frame": f"gaia/{stanza}/frame",
+                "snapshot": f"gaia/{stanza}/snapshot"}
+    return {}
+
+
 def detect_capabilities() -> dict:
     camera = len(glob.glob("/dev/video*")) > 0
 
@@ -246,6 +266,32 @@ def _publish_status():
         json.dumps(payload),
         retain=True
     )
+    _publish_profile(payload)
+
+
+def _publish_profile(status_payload: dict):
+    """Profilo semantico retained (docs/gaia-semantico.md): capability +
+    servizi CON endpoint. Consumato da registry, cameras.html, scene worker."""
+    stanza = status_payload.get("stanza", "")
+    ip     = status_payload.get("ip", "")
+    services = {}
+    for key in config.SERVICE_MAP:
+        services[key] = {
+            "state": service_status(key),
+            "endpoints": _service_endpoints(key, stanza, ip),
+        }
+    profile = {
+        "device_id":    config.DEVICE_ID,
+        "role":         config.MACHINE_ROLE,
+        "room":         stanza,
+        "ip":           ip,
+        "capabilities": status_payload.get("capabilities", {}),
+        "services":     services,
+        "sw_version":   config.SW_VERSION,
+        "ts":           int(time.time() * 1000),
+    }
+    _mqtt.publish(f"gaia/devices/{config.DEVICE_ID}/profile",
+                  json.dumps(profile), retain=True)
 
 
 def _get_ip() -> str:

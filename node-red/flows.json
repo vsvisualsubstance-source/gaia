@@ -3853,5 +3853,82 @@
                 "b6ee3252b6912e1b"
             ]
         ]
+    },
+    {
+        "id": "sem-profile-in",
+        "type": "mqtt in",
+        "z": "tab_device_registry",
+        "name": "devices/+/profile",
+        "topic": "gaia/devices/+/profile",
+        "qos": "1",
+        "datatype": "auto-detect",
+        "broker": "29b6d5926d1a95ec",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 120,
+        "y": 520,
+        "wires": [
+            [
+                "sem-profile-fn"
+            ]
+        ]
+    },
+    {
+        "id": "sem-profile-fn",
+        "type": "function",
+        "z": "tab_device_registry",
+        "name": "ProfileRegistry",
+        "func": "// Profilo semantico dei device (docs/gaia-semantico.md, contratto 1).\n// Retained per-device: capability hardware + servizi con endpoint.\nlet p = msg.payload;\nif (typeof p === 'string') { try { p = JSON.parse(p); } catch (e) { return null; } }\nif (!p || !p.device_id) return null;\n\nlet brain = global.get('gaiaBrain') || {};\nbrain.devices = brain.devices || {};\nconst d = brain.devices[p.device_id] || { id: p.device_id };\nd.profile  = p;\nd.role     = p.role || d.role;\nd.ip       = p.ip || d.ip;\nd.lastSeen = Date.now();\nd.online   = true;\nbrain.devices[p.device_id] = d;\nglobal.set('gaiaBrain', brain);\nreturn null;",
+        "outputs": 0,
+        "noerr": 0,
+        "x": 340,
+        "y": 520,
+        "wires": []
+    },
+    {
+        "id": "sem-prof-http-in",
+        "type": "http in",
+        "z": "tab_device_registry",
+        "name": "",
+        "url": "/gaia/devices/profiles",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 140,
+        "y": 580,
+        "wires": [
+            [
+                "sem-prof-http-fn"
+            ]
+        ]
+    },
+    {
+        "id": "sem-prof-http-fn",
+        "type": "function",
+        "z": "tab_device_registry",
+        "name": "ListProfiles",
+        "func": "// Tutti i profili device noti — consumato da cameras.html e dal\n// scene worker per scoprire gli endpoint (mjpeg, tts, ...) senza hardcode.\nconst brain = global.get('gaiaBrain') || {};\nconst out = {};\nfor (const [id, d] of Object.entries(brain.devices || {})) {\n    if (d.profile) out[id] = { ...d.profile, room_assigned: d.room || d.profile.room };\n}\nmsg.payload = out;\nmsg.headers = { 'Access-Control-Allow-Origin': '*' };\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "x": 360,
+        "y": 580,
+        "wires": [
+            [
+                "sem-prof-http-out"
+            ]
+        ]
+    },
+    {
+        "id": "sem-prof-http-out",
+        "type": "http response",
+        "z": "tab_device_registry",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 560,
+        "y": 580,
+        "wires": []
     }
 ]
