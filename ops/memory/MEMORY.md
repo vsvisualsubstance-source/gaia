@@ -16,3 +16,4 @@
 - [Vocabolario Asemico](project_vocabolario_asemico.md) — lingua visiva deterministica (parola→glifo), asemic.js, v1 live su welcome, roadmap gesture/Pi-screen/gioco
 - [Verifica Core su OPS](verifica-core-2026-07-06.md) — test end-to-end dal Core via SSH, carico ~46%/35GB, da unificare DEVICE_ID
 - [Test stack visione OPS](ops-test-risultati.md) — esito Missione 2/3 silvermini2: fix DSHOW/model_asset_buffer, CAMERA_INDEX=4 (NDI su 0-3), carico, doppio camera_server tra sessioni
+- [Agent OPS crash MQTT 2026-07-09](ops-agent-mqtt-crash-2026-07-09.md) — fix retry/backoff su connect; admin.py Core non riceve stats nonostante broker OK, da controllare lato Core

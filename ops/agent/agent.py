@@ -442,7 +442,22 @@ def main():
     _mqtt = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"gaia-ops-agent-{_cfg['device_id']}")
     _mqtt.on_connect = _on_connect
     _mqtt.on_message = _on_message
-    _mqtt.connect(MQTT_HOST, MQTT_PORT, 60)
+
+    # AtLogOn può scattare prima che la rete/Tailscale sia pronta a
+    # raggiungere il Core: niente retry qui = crash del processo intero
+    # (visto il 2026-07-09, servizi già avviati restati orfani). Riprova
+    # con backoff invece di morire al primo tentativo fallito.
+    backoff = 5
+    while _running:
+        try:
+            _mqtt.connect(MQTT_HOST, MQTT_PORT, 60)
+            break
+        except OSError as e:
+            print(f"[GAIA OPS Agent] Connessione MQTT fallita ({e}), riprovo tra {backoff}s")
+            time.sleep(backoff)
+            backoff = min(backoff * 2, 60)
+    if not _running:
+        return
     _mqtt.loop_start()
 
     last_hb = 0
