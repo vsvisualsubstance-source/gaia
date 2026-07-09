@@ -304,6 +304,18 @@ def _publish_profile(status_payload: dict):
             "state": _svc_status(key),
             "endpoints": _service_endpoints(key, stanza, ip),
         }
+    # La camera del miniPC gira sotto systemd (gaia-camera), non sotto questo
+    # agent: senza questa entry il profilo non dichiara l'MJPEG e salotto
+    # resta invisibile a cameras.html e allo scene worker.
+    try:
+        r = subprocess.run(["systemctl", "is-active", "gaia-camera"],
+                           capture_output=True, text=True, timeout=5)
+        services["camera"] = {
+            "state": r.stdout.strip(),
+            "endpoints": _service_endpoints("camera", stanza, ip),
+        }
+    except Exception:
+        pass
     profile = {
         "device_id":    device_id,
         "role":         "core",
