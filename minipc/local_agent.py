@@ -98,8 +98,9 @@ _SERVICE_DEFS = {
             "/home/core/core-node-0/minipc/script/scene_worker.py",
         ],
         "cwd": "/home/core/core-node-0/minipc/script",
-        "env_extra": {"SCENE_INTERVAL": "900",
-                      "SCENE_ENDPOINT_OVERRIDES": '{"pi-fd75d8": "http://100.76.11.49:8766/video"}'},
+        # override tailscale rimosso 2026-07-10: il Pi è sulla LAN principale
+        # (provisioning hotspot riuscito), il profilo espone l'IP raggiungibile
+        "env_extra": {"SCENE_INTERVAL": "900"},
         "ota_dir": "/home/core/core-node-0/minipc/script",
     },
 }
