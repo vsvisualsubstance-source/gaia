@@ -200,7 +200,7 @@ PORTAL_HTML = """<!DOCTYPE html>
 </style></head><body><div class="box">
 <div class="ring"></div>
 <h1>Ciao, sono Gaia</h1>
-<p class="sub">Collegami alla rete WiFi di casa per completare l'installazione.</p>
+<p class="sub">%SUBTITLE%</p>
 %ERROR%
 <form onsubmit="return send(this)">
   <label>Rete WiFi</label>
@@ -248,20 +248,39 @@ class PortalHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
+        with _state_lock:
+            cur_mode = _state["mode"]
         if path != "/":
-            # probe captive o pagina qualsiasi → redirect al portale
-            self.send_response(302)
-            self.send_header("Location", "http://10.42.0.1/")
-            self.end_headers()
+            if cur_mode == "ap":
+                # probe captive → redirect al portale (solo in hotspot)
+                self.send_response(302)
+                self.send_header("Location", "http://10.42.0.1/")
+                self.end_headers()
+            else:
+                self.send_response(404)
+                self.end_headers()
             return
+        if cur_mode != "ap":
+            # Online (gestione rete da LAN): scan fresco a ogni apertura —
+            # in AP mode invece lo scan è fatto prima di accendere l'hotspot
+            # perché l'AP occupa la radio.
+            fresh = scan_wifi()
+            with _state_lock:
+                if fresh:
+                    _state["ssids"] = fresh
         with _state_lock:
             ssids = list(_state["ssids"])
             err   = _state["last_error"]
         opts = "".join(
             f'<option value="{s["ssid"]}">{s["ssid"]}  ({s["signal"]}%)</option>'
             for s in ssids) or '<option value="">nessuna rete trovata</option>'
+        subtitle = ("Collegami alla rete WiFi di casa per completare l'installazione."
+                    if cur_mode == "ap" else
+                    "Sono online. Da qui puoi cambiarmi rete WiFi — se qualcosa va storto, "
+                    "dopo 3 minuti accendo l'hotspot di soccorso Gaia-Setup.")
         html = (PORTAL_HTML
                 .replace("%OPTIONS%", opts)
+                .replace("%SUBTITLE%", subtitle)
                 .replace("%SSID%", AP_SSID)
                 .replace("%ERROR%", f'<div class="err">Ultimo tentativo fallito: {err}</div>' if err else ""))
         body = html.encode()
@@ -311,7 +330,11 @@ def main():
     log(f"Avvio — AP SSID: {AP_SSID}, iface: {AP_IFACE}, force_ap: {FORCE_AP}")
     ap_down()   # pulizia: nessun hotspot orfano da run precedenti
 
-    portal = None
+    # Portale SEMPRE attivo (2026-07-10): anche online serve la pagina di
+    # gestione rete su http://<ip-lan>/ — cambio rete senza aspettare il
+    # soccorso hotspot. La rete di sicurezza resta: se il cambio va male e
+    # il Pi finisce offline, dopo OFFLINE_GRACE_S nasce comunque l'AP.
+    portal = start_portal()
     offline_since = None
     ap_started_at = None
 
@@ -323,14 +346,25 @@ def main():
 
         if online:
             if mode == "ap":
-                log("Rete tornata: chiudo AP e portale")
+                log("Rete tornata: chiudo AP (il portale resta per la gestione da LAN)")
                 ap_down()
-                if portal:
-                    portal.shutdown(); portal = None
             offline_since = None
             with _state_lock:
                 _state["mode"] = "idle"
                 _state["last_error"] = None
+                sub = _state["submitted"]
+                _state["submitted"] = None
+            if sub:
+                # Cambio rete richiesto DA ONLINE: tenta il join; se fallisce,
+                # NetworkManager riaggancia il profilo precedente (autoconnect)
+                # e in ultima istanza scatta il soccorso hotspot.
+                log(f"Cambio rete da online → '{sub['ssid']}'")
+                save_stanza(sub["stanza"])
+                time.sleep(2)          # lascia arrivare la risposta HTTP al client
+                ok, err = try_connect(sub["ssid"], sub["psk"])
+                with _state_lock:
+                    _state["last_error"] = None if ok else (err or "connessione fallita")
+                log(f"Cambio rete: {'OK' if ok else 'FALLITO — ' + str(err)}")
             time.sleep(CHECK_S)
             continue
 
@@ -376,8 +410,6 @@ def main():
                     _state["mode"] = "idle"
                     _state["last_error"] = None
                 offline_since = None
-                if portal:
-                    portal.shutdown(); portal = None
                 continue
             with _state_lock:
                 _state["mode"] = "starting"   # ricrea AP al giro dopo

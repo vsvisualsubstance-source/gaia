@@ -97,3 +97,17 @@ sudo systemctl daemon-reload && sudo systemctl restart gaia-provision
   comportamento (AP + form + retry), non il codice.
 - Password AP unica di default: per produzione seria generare per-device
   e stamparla sull'etichetta QR.
+
+
+## Portale sempre attivo (2026-07-10)
+
+Il portale non è più solo il soccorso offline: gira SEMPRE (porta 80 del Pi).
+- **Online**: `http://<ip-lan-pi>/` = pagina di gestione rete — scan fresco a ogni
+  apertura, cambio rete al volo. Se il join fallisce, NetworkManager riaggancia il
+  profilo precedente; se il Pi resta offline, dopo OFFLINE_GRACE_S scatta comunque
+  l'hotspot di soccorso. I probe captive vengono redirette solo in modalità AP.
+- **Reti multiple / ethernet**: le gestisce NetworkManager nativamente — ethernet
+  vince sul WiFi (metrica di rotta 100 vs 600); tra più WiFi salvate decide
+  `connection.autoconnect-priority` (`sudo nmcli connection modify <nome>
+  connection.autoconnect-priority 10`). Il portale aggiunge profili standard,
+  quindi convivono con qualsiasi configurazione manuale.
