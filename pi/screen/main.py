@@ -131,7 +131,12 @@ def main():
     W, H = screen.get_size()
     print(f"[Screen] Display {W}x{H} (driver {pygame.display.get_driver()})")
 
-    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"gaia-screen-{config.DEVICE_ID}")
+    # compatibile paho 1.x (python3-paho-mqtt di sistema) e 2.x
+    try:
+        client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
+                             client_id=f"gaia-screen-{config.DEVICE_ID}")
+    except AttributeError:
+        client = mqtt.Client(client_id=f"gaia-screen-{config.DEVICE_ID}")
     client.on_connect = _on_connect
     client.on_message = _on_message
     client.reconnect_delay_set(min_delay=2, max_delay=30)

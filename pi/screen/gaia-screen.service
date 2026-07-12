@@ -10,6 +10,7 @@ WorkingDirectory=/home/asemico/gaia/screen
 EnvironmentFile=/etc/gaia/device.conf
 EnvironmentFile=-/etc/gaia/screen.conf
 Environment=SDL_VIDEODRIVER=kmsdrm
+Environment=PYTHONUNBUFFERED=1
 ExecStart=/usr/bin/python3 /home/asemico/gaia/screen/main.py
 Restart=on-failure
 RestartSec=5
