@@ -1,0 +1,20 @@
+[Unit]
+Description=GAIA Screen — superficie asemica (display DSI)
+After=network.target
+# Gestito da gaia-agent — NON abilitare con systemctl enable
+
+[Service]
+Type=simple
+User=asemico
+WorkingDirectory=/home/asemico/gaia/screen
+EnvironmentFile=/etc/gaia/device.conf
+EnvironmentFile=-/etc/gaia/screen.conf
+Environment=SDL_VIDEODRIVER=kmsdrm
+ExecStart=/usr/bin/python3 /home/asemico/gaia/screen/main.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

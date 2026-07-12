@@ -64,6 +64,7 @@ SERVICE_MAP = {
     "mediapipe": "gaia-mediapipe",
     "voice":     "gaia-voice",
     "camera":    "gaia-camera",   # gestito come dipendenza di yolo/mediapipe, non attivabile a mano
+    "screen":    "gaia-screen",   # superficie asemica su display DSI (pi/screen)
 }
 
 # File di ambiente condiviso — agent lo scrive, i servizi lo leggono
@@ -76,6 +77,7 @@ SERVICE_DIRS = {
     "voice":     os.path.join(_GAIA_ROOT, "voice"),
     "agent":     _BASE,
     "camera":    os.path.join(_GAIA_ROOT, "camera"),
+    "screen":    os.path.join(_GAIA_ROOT, "screen"),
 }
 
 # Se il manifest dichiara servizi, sostituisce ENTRAMBE le mappe (l'entry

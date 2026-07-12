@@ -1,0 +1,4 @@
+# GAIA Screen — superficie asemica su display DSI
+# CAMERA_NAME arriva da /etc/gaia/device.conf (agent); qui solo override.
+#CELL=44
+#MQTT_HOST=192.168.1.142
