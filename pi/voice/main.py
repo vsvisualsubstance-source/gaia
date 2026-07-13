@@ -457,7 +457,8 @@ def _do_record_clip(label: str, duration_s: int):
     # "stanza" permette all'admin di smistare i campioni gaia_* nel dataset
     # della macchina giusta (es. cucina → OPS) — i mic non si mescolano
     payload   = json.dumps({"label": label, "audio_base64": audio_b64,
-                            "stanza": _current_room}).encode()
+                            "stanza": _current_room,
+                            "device_id": config.DEVICE_ID}).encode()
     try:
         req = urllib.request.Request(admin_url, data=payload,
                                      headers={"Content-Type": "application/json"})

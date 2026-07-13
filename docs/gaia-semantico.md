@@ -124,3 +124,32 @@ sync bocca/voce per lo speaking multi-persona · registrazione clip sorveglianza
 
 Regola trasversale: ogni pezzo nuovo parla MQTT col contratto del profilo, mai canali
 privati — è ciò che rende il sistema scalabile "a prescindere da cosa si collega".
+
+## Stanze vs Device (2026-07-13)
+
+**Principio: le stanze sono luoghi, i device sono sensori mobili.** Tutto ciò che
+riguarda l'*identità fisica* (dataset wakeword, modelli, calibrazioni mic) segue il
+**device_id** — i mic non cambiano acustica spostandosi di poco, e soprattutto i
+campioni non devono mai finire nel dataset di un'altra macchina
+(`GAIA_WW_DIR_BY_DEVICE` in gaia_admin.py; i voice mandano `device_id` nel sample).
+Tutto ciò che riguarda il *contesto* (topic tts/command/status, presenze, scene,
+speaker attribution) segue la **stanza assegnata** nel Device Registry.
+
+**Cambio stanza** — un'unica azione: riassegnare il device (Pi Manager o
+`POST /gaia/device/assign`). Il registry pubblica la config retained, i servizi
+ri-derivano i topic; se la stanza vecchia resta senza device, la assign fa
+**auto-pulizia** (dati live in brain.rooms + clear dei retained
+`gaia/scene/{room}` e `gaia/voice/status/{room}`).
+
+**Pulizia manuale** (stanze sbagliate/orfane):
+- `GET  /gaia/rooms` — stato stanze: device assegnati, in_map, scene, presenze
+- `POST /gaia/rooms/clean {room, force?}` — rimuove dati live, archi nei grafi
+  APPRESI (learned/motion) e retained; rifiuta se la stanza ha device (409)
+- admin.html → Pi Manager → bottone "🧹 Stanze orfane"
+
+La mappa disegnata (`roomGraph`, ora `_v:3` con `soggiorno`) non viene mai toccata
+dalla pulizia: quella è la casa, non i dati.
+
+Attenzione nota: su OPS il publisher mediapipe si annuncia come
+`ops-silvermini2-mp` (device_id separato dall'agent `ops-silvermini2`) — da
+unificare lato OPS, altrimenti ogni spostamento va riassegnato due volte.

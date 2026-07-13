@@ -422,7 +422,8 @@ def _do_record_clip(label: str, duration_s: int):
     audio_b64 = base64.b64encode(buf.getvalue()).decode()
     admin_url = f"http://{config.MQTT_HOST}:8765/api/doorbell/sample"
     payload = json.dumps({"label": label, "audio_base64": audio_b64,
-                          "stanza": _current_room}).encode()
+                          "stanza": _current_room,
+                            "device_id": config.DEVICE_ID}).encode()
     try:
         req = urllib.request.Request(admin_url, data=payload,
                                      headers={"Content-Type": "application/json"})

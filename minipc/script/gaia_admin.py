@@ -151,11 +151,17 @@ GAIA_WAKEWORD_DIR_MINIPC = os.path.expanduser("~/core-node-0/minipc/script/gaia_
 GAIA_MODEL_PATH_MINIPC   = os.path.join(GAIA_WAKEWORD_DIR_MINIPC, "gaia_verifier_minipc.pkl")
 # Dataset/modello dedicato al mic della macchina OPS (silvermini2, cucina).
 # I campioni arrivano dal servizio voice di OPS via record_clip (come il Pi)
-# ma vanno smistati per stanza — vedi GAIA_WW_DIR_BY_STANZA.
+# ma vanno smistati per device — vedi GAIA_WW_DIR_BY_DEVICE.
 GAIA_WAKEWORD_DIR_OPS = os.path.expanduser("~/core-node-0/minipc/script/gaia_wakeword_samples_ops")
 GAIA_MODEL_PATH_OPS   = os.path.join(GAIA_WAKEWORD_DIR_OPS, "gaia_verifier_ops.pkl")
 # stanza → dataset per i campioni "gaia_*" registrati da remoto (default: Pi)
-GAIA_WW_DIR_BY_STANZA = {"cucina": GAIA_WAKEWORD_DIR_OPS}
+# PER DEVICE, non per stanza: i device CAMBIANO stanza (2026-07-12 il Pi è
+# passato in cucina — per stanza i suoi campioni sarebbero finiti nel dataset
+# del mic OPS). Default: dataset Pi per i voice vecchi senza device_id.
+GAIA_WW_DIR_BY_DEVICE = {
+    "pi-fd75d8":       GAIA_WAKEWORD_DIR,
+    "ops-silvermini2": GAIA_WAKEWORD_DIR_OPS,
+}
 # Target OTA mirati per i modelli voice: il broadcast colpirebbe TUTTI i
 # device voice (dal 2026-07-06 anche OPS) sovrascrivendo i modelli a vicenda.
 VOICE_MODEL_TARGETS = {"pi": ["pi-fd75d8"], "ops": ["ops-silvermini2"]}
@@ -838,11 +844,11 @@ class AdminHandler(BaseHTTPRequestHandler):
             # Smista per prefisso label E stanza: "gaia_*" → dataset wakeword
             # della macchina giusta (cucina=OPS, default=Pi), resto → citofono.
             # I voice più vecchi non mandano "stanza" → default dataset Pi.
-            stanza_src = body.get("stanza", "")
+            dev_src = body.get("device_id", "")
             if raw_label.startswith("gaia_"):
                 label = raw_label[len("gaia_"):]
-                base_dir = GAIA_WW_DIR_BY_STANZA.get(stanza_src, GAIA_WAKEWORD_DIR)
-                kind = f"Gaia wakeword ({stanza_src or 'pi'})"
+                base_dir = GAIA_WW_DIR_BY_DEVICE.get(dev_src, GAIA_WAKEWORD_DIR)
+                kind = f"Gaia wakeword ({dev_src or 'pi'})"
             else:
                 label = raw_label
                 base_dir = DOORBELL_DIR
