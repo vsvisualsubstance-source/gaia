@@ -196,7 +196,7 @@ def _start_service(key: str) -> bool:
     cwd = defn.get("cwd")
     # {STANZA} negli argomenti → stanza corrente (es. URL del kiosk che segue
     # il device quando viene riassegnato, come CAMERA_NAME sul Pi)
-    cmd = [c.replace("{STANZA}", _state.get("stanza", "")) for c in defn["cmd"]]
+    cmd = [c.replace("{STANZA}", _cfg.get("stanza", "")) for c in defn["cmd"]]
     # check_script: false per i servizi il cui ultimo argomento non è un file
     # (es. kiosk: l'ultimo arg è un URL)
     if defn.get("check_script", True):
