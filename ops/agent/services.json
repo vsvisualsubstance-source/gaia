@@ -2,33 +2,76 @@
   "_nota": "Manifest servizi per l'agent Windows di questa macchina (ruolo ops, Missione 4 in ops/CLAUDE.md). cmd/cwd sono assoluti a questa macchina (silvermini2) — non portabile su un'altra installazione senza aggiornare i path del venv.",
   "machine_role": "ops",
   "device_id": "ops-silvermini2",
-  "stanza": "cucina",
+  "stanza": "soggiorno",
   "services": {
     "camera": {
-      "cmd": ["C:\\gaia\\venv\\Scripts\\python.exe", "camera_server.py"],
+      "cmd": [
+        "C:\\gaia\\venv\\Scripts\\python.exe",
+        "camera_server.py"
+      ],
       "cwd": "C:\\gaia\\minipc\\camera",
-      "env_extra": { "CAMERA_INDEX": "4", "HEADLESS": "1", "PYTHONUNBUFFERED": "1" }
+      "env_extra": {
+        "CAMERA_INDEX": "4",
+        "HEADLESS": "1",
+        "PYTHONUNBUFFERED": "1"
+      }
     },
     "yolo": {
-      "cmd": ["C:\\gaia\\venv\\Scripts\\python.exe", "main.py"],
+      "cmd": [
+        "C:\\gaia\\venv\\Scripts\\python.exe",
+        "main.py"
+      ],
       "cwd": "C:\\gaia\\pi\\yolo",
-      "env_extra": { "HEADLESS": "1", "PYTHONUNBUFFERED": "1" }
+      "env_extra": {
+        "HEADLESS": "1",
+        "PYTHONUNBUFFERED": "1"
+      }
     },
     "mediapipe": {
-      "cmd": ["C:\\gaia\\venv\\Scripts\\python.exe", "mediapipe_node.py"],
+      "cmd": [
+        "C:\\gaia\\venv\\Scripts\\python.exe",
+        "mediapipe_node.py"
+      ],
       "cwd": "C:\\gaia\\pi\\mediapipe",
       "env_extra": {
-        "HEADLESS": "1", "PYTHONUNBUFFERED": "1",
-        "MAX_FACES": "2", "MAX_HANDS": "4", "POSE_COMPLEXITY": "2",
-        "MULTI_PERSON": "1", "MAX_POSES": "2",
+        "HEADLESS": "1",
+        "PYTHONUNBUFFERED": "1",
+        "MAX_FACES": "2",
+        "MAX_HANDS": "4",
+        "POSE_COMPLEXITY": "2",
+        "MULTI_PERSON": "1",
+        "MAX_POSES": "2",
         "POSE_MODEL_PATH": "models/pose_landmarker_full.task"
       }
     },
     "voice": {
-      "cmd": ["C:\\gaia\\venv\\Scripts\\python.exe", "main.py"],
+      "cmd": [
+        "C:\\gaia\\venv\\Scripts\\python.exe",
+        "main.py"
+      ],
       "cwd": "C:\\gaia\\ops\\voice",
-      "env_extra": { "PYTHONUNBUFFERED": "1", "HF_HUB_OFFLINE": "1" }
+      "env_extra": {
+        "PYTHONUNBUFFERED": "1",
+        "HF_HUB_OFFLINE": "1"
+      }
+    },
+    "kiosk": {
+      "cmd": [
+        "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+        "--kiosk",
+        "http://192.168.1.142:1880/welcome.html?cam=localhost&room={STANZA}",
+        "--edge-kiosk-type=fullscreen",
+        "--no-first-run",
+        "--user-data-dir=C:\\gaia\\kiosk-profile"
+      ],
+      "cwd": "C:\\gaia",
+      "check_script": false,
+      "_nota": "Welcome sul monitor OPS. Il task agent è 'Solo interattivo' quindi Edge appare sul desktop. user-data-dir dedicato: il processo resta figlio dell'agent (stop funziona)."
     }
   },
-  "camera_consumers": ["yolo", "mediapipe"]
+  "camera_consumers": [
+    "yolo",
+    "mediapipe",
+    "kiosk"
+  ]
 }

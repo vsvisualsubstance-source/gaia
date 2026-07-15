@@ -194,11 +194,16 @@ def _start_service(key: str) -> bool:
         return False
     env = _build_env(defn.get("env_extra", {}))
     cwd = defn.get("cwd")
-    cmd = defn["cmd"]
-    script = os.path.join(cwd, cmd[-1]) if cwd else cmd[-1]
-    if not os.path.exists(script):
-        print(f"[Agent] File non trovato: {script}")
-        return False
+    # {STANZA} negli argomenti → stanza corrente (es. URL del kiosk che segue
+    # il device quando viene riassegnato, come CAMERA_NAME sul Pi)
+    cmd = [c.replace("{STANZA}", _state.get("stanza", "")) for c in defn["cmd"]]
+    # check_script: false per i servizi il cui ultimo argomento non è un file
+    # (es. kiosk: l'ultimo arg è un URL)
+    if defn.get("check_script", True):
+        script = os.path.join(cwd, cmd[-1]) if cwd else cmd[-1]
+        if not os.path.exists(script):
+            print(f"[Agent] File non trovato: {script}")
+            return False
     print(f"[Agent] Avvio {key}: {' '.join(cmd)}")
     # CREATE_NO_WINDOW: senza, ogni sottoprocesso apre/condivide una console
     # visibile — chiuderla per errore (es. pensando fosse un singolo

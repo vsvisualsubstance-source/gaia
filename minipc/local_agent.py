@@ -58,6 +58,20 @@ _DEFAULT_CFG = {
 # Ogni servizio è un processo Python locale.
 # env_extra: variabili aggiuntive oltre a quelle di sistema + stanza.
 _SERVICE_DEFS = {
+    "kiosk": {
+        # Welcome sul touchscreen del salotto (il minipc non si sposta,
+        # room hardcoded). Firefox è l'unico browser installato; --kiosk
+        # nativo. Sessione grafica dell'utente core (User=core nel unit).
+        "cmd": ["/usr/bin/firefox", "--kiosk",
+                "http://localhost:1880/welcome.html?cam=localhost&room=salotto"],
+        "cwd": "/home/core",
+        "check_script": False,
+        "env_extra": {
+            "DISPLAY": ":0", "XDG_RUNTIME_DIR": "/run/user/1000",
+            "WAYLAND_DISPLAY": "wayland-0", "MOZ_ENABLE_WAYLAND": "1",
+            "HOME": "/home/core",
+        },
+    },
     "yolo": {
         "cmd": [
             "/media/core/D/gaia-vision/venv/bin/python3",
@@ -221,11 +235,13 @@ def _start_service(key: str) -> bool:
     env  = _build_env(defn.get("env_extra", {}))
     cwd  = defn.get("cwd")
     cmd  = defn["cmd"]
-    # Verifica che il file principale esista
-    script = cmd[1] if len(cmd) > 1 else cmd[0]
-    if not os.path.exists(script):
-        print(f"[Agent] File non trovato: {script}")
-        return False
+    # Verifica che il file principale esista (check_script: false per i
+    # servizi il cui secondo argomento non è un file, es. kiosk → URL)
+    if defn.get("check_script", True):
+        script = cmd[1] if len(cmd) > 1 else cmd[0]
+        if not os.path.exists(script):
+            print(f"[Agent] File non trovato: {script}")
+            return False
     print(f"[Agent] Avvio {key}: {' '.join(cmd)}")
     with _procs_lock:
         _procs[key] = subprocess.Popen(
