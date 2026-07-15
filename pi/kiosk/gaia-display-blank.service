@@ -1,0 +1,10 @@
+[Unit]
+Description=GAIA display blank - DSI spento al boot finche kiosk o screen non lo accendono
+Before=gaia-kiosk.service gaia-screen.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'for b in /sys/class/backlight/*/bl_power; do echo 4 > "$b"; done'
+
+[Install]
+WantedBy=multi-user.target

@@ -1,6 +1,7 @@
 [Unit]
 Description=GAIA Screen — superficie asemica (display DSI)
 After=network.target
+Conflicts=gaia-kiosk.service
 # Gestito da gaia-agent — NON abilitare con systemctl enable
 
 [Service]
@@ -11,7 +12,11 @@ EnvironmentFile=/etc/gaia/device.conf
 EnvironmentFile=-/etc/gaia/screen.conf
 Environment=SDL_VIDEODRIVER=kmsdrm
 Environment=PYTHONUNBUFFERED=1
+# Retroilluminazione: accesa solo mentre una superficie possiede il display
+# (spenta a riposo il DSI mostrerebbe la console del kernel).
+ExecStartPre=+/bin/sh -c 'for b in /sys/class/backlight/*/bl_power; do echo 0 > "$b"; done'
 ExecStart=/usr/bin/python3 /home/asemico/gaia/screen/main.py
+ExecStopPost=+/bin/sh -c 'for b in /sys/class/backlight/*/bl_power; do echo 4 > "$b"; done'
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
