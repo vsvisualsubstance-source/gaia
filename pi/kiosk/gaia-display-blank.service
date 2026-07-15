@@ -4,7 +4,7 @@ Before=gaia-kiosk.service gaia-screen.service
 
 [Service]
 Type=oneshot
-ExecStart=/bin/sh -c 'for b in /sys/class/backlight/*/bl_power; do echo 4 > "$b"; done'
+ExecStart=/home/asemico/gaia/kiosk/display_power.sh off
 
 [Install]
 WantedBy=multi-user.target

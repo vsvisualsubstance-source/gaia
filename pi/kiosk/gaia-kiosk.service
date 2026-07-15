@@ -16,7 +16,7 @@ EnvironmentFile=-/etc/gaia/kiosk.conf
 # GNOME a ogni avvio e il kiosk resta bloccato sul dialog.
 # Retroilluminazione: accesa solo mentre una superficie possiede il display
 # (spenta a riposo il DSI mostrerebbe la console del kernel).
-ExecStartPre=+/bin/sh -c 'for b in /sys/class/backlight/*/bl_power; do echo 0 > "$b"; done'
+ExecStartPre=+/home/asemico/gaia/kiosk/display_power.sh on
 ExecStart=/bin/sh -c 'exec cage -- chromium-browser --kiosk \
   --ozone-platform=wayland \
   --password-store=basic \
@@ -24,7 +24,7 @@ ExecStart=/bin/sh -c 'exec cage -- chromium-browser --kiosk \
   --disable-session-crashed-bubble \
   --autoplay-policy=no-user-gesture-required \
   "${KIOSK_URL:-http://${MQTT_HOST:-192.168.1.142}:1880/welcome.html?cam=localhost&room=${CAMERA_NAME:-cucina}}"'
-ExecStopPost=+/bin/sh -c 'for b in /sys/class/backlight/*/bl_power; do echo 4 > "$b"; done'
+ExecStopPost=+/home/asemico/gaia/kiosk/display_power.sh off
 Restart=on-failure
 RestartSec=5
 
