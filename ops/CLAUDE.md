@@ -142,3 +142,18 @@ Porta il pattern SUBPROCESS di `minipc/local_agent.py` su Windows:
   (vedi .gitignore).
 - Se qualcosa del contesto non torna, chiedi all'utente o lascia una domanda
   in `ops/memory/` per il Claude del Core.
+
+
+## Gotcha deploy: l'agent è pythonw.exe, non python.exe
+
+`run_agent.bat` lancia l'agent con **pythonw.exe** (niente console). Un
+`taskkill /F /IM python.exe /T` uccide i servizi figli (voice, camera…) ma
+NON l'agent: il vecchio agent resta in memoria col manifest vecchio e il suo
+singleton lock (msvcrt su agent.lock) fa uscire subito ogni nuova istanza
+lanciata da `schtasks /run`. Sembra riavviato, non lo è. Sequenza corretta:
+
+```
+taskkill /F /IM pythonw.exe /T & taskkill /F /IM python.exe /T & schtasks /run /tn GAIA-OPS-Agent
+```
+
+Verificato 2026-07-15 (il nuovo services.json col kiosk non veniva caricato).
