@@ -27,6 +27,10 @@ ExecStart=/bin/sh -c 'exec cage -- chromium-browser --kiosk \
 ExecStopPost=+/home/asemico/gaia/kiosk/display_power.sh off
 Restart=on-failure
 RestartSec=5
+# cage non esce su SIGTERM (stop in timeout 90s → failed): dopo 10s SIGKILL
+# a tutto il cgroup — il kiosk è stateless, niente da salvare.
+TimeoutStopSec=10
+KillMode=mixed
 
 [Install]
 WantedBy=multi-user.target
