@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GAIA · Portale</title>
+  <style>
+    :root { --mood: #4477ff; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #050810;
+      color: #c9d1d9;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    /* Aurora di sfondo reattiva all'umore */
+    #aurora {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      transition: background 4s ease;
+    }
+
+    /* Header */
+    .header {
+      text-align: center;
+      position: relative;
+      z-index: 1;
+      margin-bottom: 36px;
+    }
+
+    .gaia-title {
+      font-size: 2.8rem;
+      letter-spacing: 0.35em;
+      color: #fff;
+      text-shadow: 0 0 40px var(--mood);
+      transition: text-shadow 3s ease;
+    }
+
+    .gaia-sub {
+      font-size: 0.6rem;
+      letter-spacing: 0.25em;
+      color: #3a4870;
+      margin-top: 8px;
+    }
+
+    /* Metriche anima */
+    .soul-row {
+      display: flex;
+      gap: 28px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin: 20px 0 8px;
+    }
+
+    .metric {
+      text-align: center;
+      min-width: 60px;
+    }
+
+    .metric .lbl {
+      font-size: 0.5rem;
+      letter-spacing: 0.2em;
+      color: #6b7a99;
+    }
+
+    .metric .val {
+      font-size: 1rem;
+      color: var(--mood);
+      text-shadow: 0 0 8px var(--mood);
+      transition: color 3s, text-shadow 3s;
+    }
+
+    /* Barra XP */
+    .xp-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      justify-content: center;
+      margin: 6px 0 10px;
+      font-size: 0.6rem;
+      color: #6b7a99;
+    }
+
+    .xp-bar {
+      width: 160px;
+      height: 3px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .xp-fill {
+      height: 100%;
+      background: #ffd700;
+      border-radius: 2px;
+      transition: width 1s ease;
+      width: 0%;
+    }
+
+    /* Pensiero */
+    .thought {
+      font-style: italic;
+      font-size: 0.78rem;
+      color: #6677aa;
+      text-align: center;
+      max-width: 520px;
+      min-height: 1.2em;
+      margin: 10px 0 28px;
+      transition: opacity 1s;
+      line-height: 1.5;
+    }
+
+    /* Persone presenti */
+    .presence {
+      font-size: 0.6rem;
+      letter-spacing: 0.1em;
+      color: #6b7a99;
+      text-align: center;
+      margin-bottom: 32px;
+      min-height: 1em;
+    }
+
+    .presence span { color: #c9d1d9; }
+
+    /* Cards modalità */
+    .modes {
+      display: grid;
+      grid-template-columns: repeat(4, 260px);
+      gap: 18px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .card {
+      background: rgba(10, 14, 26, 0.85);
+      border: 1px solid rgba(30, 40, 64, 0.7);
+      border-radius: 14px;
+      padding: 26px 22px;
+      text-decoration: none;
+      color: inherit;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      transition: border-color 0.3s, box-shadow 0.3s, transform 0.3s;
+      backdrop-filter: blur(12px);
+      cursor: pointer;
+    }
+
+    .card:hover {
+      border-color: var(--c);
+      box-shadow: 0 0 32px rgba(0,0,0,0.5), inset 0 0 20px rgba(0,0,0,0.3);
+      transform: translateY(-5px);
+    }
+
+    .card-icon { font-size: 1.6rem; opacity: 0.9; }
+    .card-name { font-size: 0.85rem; letter-spacing: 0.2em; color: var(--c); }
+
+    .card-desc {
+      font-size: 0.65rem;
+      color: #6b7a99;
+      line-height: 1.7;
+      flex: 1;
+    }
+
+    .card-cta {
+      font-size: 0.6rem;
+      letter-spacing: 0.2em;
+      color: var(--c);
+      opacity: 0.5;
+      transition: opacity 0.2s;
+    }
+
+    .card:hover .card-cta { opacity: 1; }
+
+    /* Status indicator */
+    .status {
+      position: fixed;
+      top: 18px;
+      right: 20px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 0.6rem;
+      color: #6b7a99;
+      z-index: 10;
+    }
+
+    .dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: #ff3333;
+      transition: background 0.5s, box-shadow 0.5s;
+    }
+
+    .dot.on { background: #00ffcc; box-shadow: 0 0 6px #00ffcc; }
+
+    /* Orologio */
+    .clock {
+      position: fixed;
+      top: 18px;
+      left: 20px;
+      font-size: 0.6rem;
+      color: #6b7a99;
+      letter-spacing: 0.1em;
+    }
+
+    @media (max-width: 860px) {
+      .modes { grid-template-columns: 1fr; max-width: 300px; }
+      .gaia-title { font-size: 2rem; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="aurora"></div>
+
+<div class="clock" id="clock"></div>
+
+<div class="status">
+  <div class="dot" id="dot"></div>
+  <span id="connTxt">connessione...</span>
+</div>
+
+<div class="header">
+  <div class="gaia-title">◈ GAIA</div>
+  <div class="gaia-sub">SISTEMA NERVOSO DIGITALE · v9.0</div>
+
+  <div class="soul-row">
+    <div class="metric"><div class="lbl">ANIMA</div><div class="val" id="vMood">—</div></div>
+    <div class="metric"><div class="lbl">VITA</div><div class="val" id="vLife">—</div></div>
+    <div class="metric"><div class="lbl">ENERGIA</div><div class="val" id="vEnergy">—</div></div>
+    <div class="metric"><div class="lbl">LIVELLO</div><div class="val" id="vLevel">—</div></div>
+    <div class="metric"><div class="lbl">ARCHETIPO</div><div class="val" id="vClass">—</div></div>
+    <div class="metric"><div class="lbl">PERSONE</div><div class="val" id="vPeople">—</div></div>
+    <div class="metric"><div class="lbl">LUCI</div><div class="val" id="vLights">—</div></div>
+  </div>
+
+  <div class="xp-row">
+    <span id="xpTxt">XP 0 / 1000</span>
+    <div class="xp-bar"><div class="xp-fill" id="xpFill"></div></div>
+  </div>
+
+  <div class="thought" id="thought"></div>
+  <div class="presence" id="presence">nessuno presente</div>
+</div>
+
+<div class="modes">
+  <a class="card" href="index.html" style="--c:#00ffcc">
+    <div class="card-icon">◈</div>
+    <div class="card-name">RPG  GAMING</div>
+    <div class="card-desc">
+      Scena Three.js 3D immersiva.<br>
+      Cuore torusknot, ombre umane,<br>
+      giardino vivo, gemme di luce.<br>
+      Archetipi RPG: Mago, Druido,<br>
+      Guerriero, Bardo.
+    </div>
+    <div class="card-cta">→ ENTRA NELLA SCENA</div>
+  </a>
+
+  <a class="card" href="dashboard.html" style="--c:#ffaa33">
+    <div class="card-icon">◉</div>
+    <div class="card-name">ANALYTICS</div>
+    <div class="card-desc">
+      Dati in tempo reale.<br>
+      Persone, emozioni, stanze,<br>
+      luci Hue, piante, sensori<br>
+      ambientali, eventi e log<br>
+      WebSocket live.
+    </div>
+    <div class="card-cta">→ APRI DASHBOARD</div>
+  </a>
+
+  <a class="card" href="gaia-art/index.html" style="--c:#cc88ff">
+    <div class="card-icon">◐</div>
+    <div class="card-name">ARTE  VIVA</div>
+    <div class="card-desc">
+      Quadro vivente generativo.<br>
+      Campi di colore alla Rothko,<br>
+      correnti di particelle, nucleo<br>
+      respirante. Mood, presenze e<br>
+      pensieri dipingono la tela.
+    </div>
+    <div class="card-cta">→ CONTEMPLA</div>
+  </a>
+
+  <a class="card" href="admin.html" style="--c:#8899ff">
+    <div class="card-icon">⚙</div>
+    <div class="card-name">ADMIN</div>
+    <div class="card-desc">
+      Tuning microfono, voci e volti.<br>
+      Automazioni: luci da mood per<br>
+      stanza, pet concierge, allarmi<br>
+      (caduta, incendio, frigo) —<br>
+      attiva/disattiva da qui.
+    </div>
+    <div class="card-cta">→ APRI ADMIN</div>
+  </a>
+
+  <a class="card" href="welcome.html" style="--c:#00ffcc">
+    <div class="card-icon">👋</div>
+    <div class="card-name">WELCOME</div>
+    <div class="card-desc">
+      Kiosk touchscreen di benvenuto.<br>
+      GAIA riconosce chi arriva,<br>
+      saluta e accoglie gli ospiti<br>
+      con l'enrollment guidato<br>
+      (volto e voce).
+    </div>
+    <div class="card-cta">→ APRI KIOSK</div>
+  </a>
+</div>
+
+<script>
+  const MOOD_COLORS = {
+    neutra:     '#4477ff',
+    viva:       '#00ffcc',
+    serena:     '#33ff88',
+    stabile:    '#4499ff',
+    instabile:  '#ff9900',
+    sofferente: '#ff3333'
+  };
+
+  const $ = id => document.getElementById(id);
+
+  function setMood(mood) {
+    const c = MOOD_COLORS[mood] || MOOD_COLORS.neutra;
+    document.documentElement.style.setProperty('--mood', c);
+    $('aurora').style.background = `
+      radial-gradient(ellipse at 25% 65%, ${c}08 0%, transparent 55%),
+      radial-gradient(ellipse at 75% 30%, ${c}05 0%, transparent 45%)
+    `;
+  }
+
+  function updateUI(d) {
+    const soul = d.soul || {};
+    const prog = d.progression || {};
+    const people = d.people || [];
+    const lights = d.lights || [];
+
+    $('vMood').textContent   = (soul.mood || 'neutra').toUpperCase();
+    $('vLife').textContent   = Math.round(soul.lifeIndex || 50) + '%';
+    $('vEnergy').textContent = Math.round(soul.energy || 50);
+    $('vLevel').textContent  = prog.level || 1;
+    $('vClass').textContent  = (prog.activeClass || 'Neutro').toUpperCase();
+    $('vPeople').textContent = people.length;
+    $('vLights').textContent = lights.filter(l => l.power).length + '/' + lights.length;
+
+    const xpPct = Math.round(Math.min(100, ((prog.xp || 0) / (prog.xpNextLevel || 1000)) * 100));
+    $('xpFill').style.width = xpPct + '%';
+    $('xpTxt').textContent = `XP ${prog.xp || 0} / ${prog.xpNextLevel || 1000}`;
+
+    if (d.thought) {
+      $('thought').textContent = `"${d.thought}"`;
+    }
+
+    if (people.length > 0) {
+      $('presence').innerHTML = people.map(p =>
+        `<span>${p.name}${p.room ? ' · ' + p.room : ''}</span>`
+      ).join('  ');
+    } else {
+      $('presence').textContent = 'nessuno presente';
+    }
+
+    setMood(soul.mood);
+  }
+
+  function tickClock() {
+    const now = new Date();
+    $('clock').textContent = now.toLocaleTimeString('it-IT');
+  }
+  tickClock();
+  setInterval(tickClock, 1000);
+
+  function connect() {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${proto}//${location.hostname}:1880/gaia`);
+
+    ws.onopen = () => {
+      $('dot').classList.add('on');
+      $('connTxt').textContent = 'connesso';
+    };
+
+    ws.onmessage = e => {
+      try { updateUI(JSON.parse(e.data)); } catch(_) {}
+    };
+
+    ws.onclose = () => {
+      $('dot').classList.remove('on');
+      $('connTxt').textContent = 'riconnessione...';
+      setTimeout(connect, 3000);
+    };
+  }
+
+  connect();
+  setMood('neutra');
+</script>
+</body>
+</html>

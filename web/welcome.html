@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>GAIA</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;user-select:none;-webkit-user-select:none;touch-action:manipulation;background:#050810;color:#c9d1d9;font-family:'Segoe UI',system-ui,sans-serif}
+
+/* ── Vocabolario asemico (sfondo, dietro tutto) ───────────────────── */
+#asemic-canvas{position:absolute;inset:0;z-index:0;pointer-events:none}
+
+/* ── Ambient layer ────────────────────────────────────────────────── */
+#ambient{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;z-index:1}
+#avatar-canvas{display:block}
+#clock{font-size:clamp(2.2rem,6vw,4rem);font-weight:200;color:#c9d1d9;letter-spacing:.1em;font-variant-numeric:tabular-nums}
+#thought{font-size:clamp(.85rem,2.2vw,1.2rem);font-style:italic;color:#3a4870;max-width:55vw;text-align:center;line-height:1.5;min-height:1.6em;transition:color .5s}
+#thought.visible{color:#6b7a99}
+
+/* ── Presence overlay ─────────────────────────────────────────────── */
+#presence{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding-bottom:10vh;gap:18px;z-index:3;pointer-events:none;transition:opacity .4s}
+#presence.hidden{opacity:0;pointer-events:none}
+#p-greeting{font-size:clamp(2.2rem,7vw,4.5rem);font-weight:700;color:#00ffcc;text-align:center;text-shadow:0 0 50px #00ffcc33;line-height:1.1}
+#p-sub{font-size:clamp(.9rem,2.5vw,1.4rem);color:#6b7a99;text-align:center}
+#btn-present{pointer-events:all;background:#001a12;border:2px solid #00ffcc;color:#00ffcc;font-size:clamp(1rem,2.8vw,1.4rem);font-weight:600;padding:22px 52px;border-radius:60px;cursor:pointer;min-height:80px;min-width:280px;transition:all .2s;box-shadow:0 0 20px #00ffcc22;letter-spacing:.03em}
+#btn-present:hover,#btn-present:active{background:#003020;box-shadow:0 0 35px #00ffcc44;transform:scale(1.03)}
+#btn-present[hidden]{display:none}
+
+/* ── Camera bubble ────────────────────────────────────────────────── */
+#cam-bubble{position:absolute;bottom:28px;right:28px;width:160px;height:160px;border-radius:50%;overflow:hidden;border:2px solid #1e2840;background:#0a0e1a;z-index:4;transition:opacity .3s,border-color .3s}
+#cam-bubble.hidden{opacity:0;pointer-events:none}
+#cam-bubble.mp{border-color:#00ffcc55}
+#cam-main{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+/* cam-main è <img> MJPEG — mirror CSS solo per display */
+
+/* Vista MediaPipe (sostituisce il video dopo il riconoscimento) */
+#mp-view{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;background:radial-gradient(circle at 50% 38%,#0d1830,#0a0e1a)}
+#mp-view[hidden]{display:none}
+#mp-label{font-size:.56rem;color:#3a4870;letter-spacing:.12em;text-transform:uppercase}
+#mp-emo{font-size:44px;line-height:1.15}
+#mp-row{font-size:19px;display:flex;gap:7px;min-height:1.3em;align-items:center}
+#mp-count{font-size:.7rem;color:#00ffcc;background:#00ffcc18;padding:1px 9px;border-radius:10px}
+#mp-count[hidden]{display:none}
+
+/* ── UI chrome ────────────────────────────────────────────────────── */
+#ws-dot{position:absolute;top:22px;right:26px;width:10px;height:10px;border-radius:50%;background:#1e2840;z-index:10;transition:background .3s}
+#ws-dot.ok{background:#3fb950;box-shadow:0 0 6px #3fb950}
+#ws-dot.err{background:#f85149}
+#admin-link{position:absolute;top:18px;left:22px;color:#101828;font-size:.72rem;text-decoration:none;z-index:10;transition:color .2s;padding:4px 8px}
+#admin-link:hover{color:#3a4870}
+
+/* ── Wizard modal ─────────────────────────────────────────────────── */
+#wizard{position:absolute;inset:0;background:rgba(5,8,16,.97);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;padding:32px 24px;gap:24px}
+#wizard[hidden]{display:none}
+#wiz-close{position:absolute;top:18px;right:22px;background:none;border:none;color:#1e2840;font-size:2rem;cursor:pointer;padding:8px;line-height:1;min-height:0;transition:color .2s}
+#wiz-close:hover{color:#6b7a99}
+
+.wiz-progress{display:flex;gap:12px}
+.wdot{width:12px;height:12px;border-radius:50%;background:#1e2840;transition:all .3s}
+.wdot.done{background:#00ffcc44;border:2px solid #00ffcc}
+.wdot.cur{background:#00ffcc;box-shadow:0 0 8px #00ffcc}
+
+.step{display:none;flex-direction:column;align-items:center;gap:18px;max-width:560px;width:100%;text-align:center}
+.step.active{display:flex}
+.step h2{font-size:clamp(1.6rem,5vw,2.6rem);font-weight:600;color:#c9d1d9}
+.step p{font-size:clamp(.85rem,2.2vw,1.15rem);color:#6b7a99;line-height:1.6}
+.step em{color:#c9d1d9;font-style:normal}
+
+/* Name input */
+#wiz-name{font-size:clamp(1.4rem,4.5vw,2.2rem);background:#0a0e1a;border:2px solid #1e2840;border-radius:12px;color:#c9d1d9;padding:18px 28px;width:100%;text-align:center;outline:none;transition:border-color .2s}
+#wiz-name:focus{border-color:#00ffcc}
+#wiz-name::placeholder{color:#1e2840}
+
+/* Buttons */
+.wbtn{background:#00ffcc;color:#000;border:none;border-radius:60px;font-size:clamp(1rem,2.8vw,1.3rem);font-weight:700;padding:20px 48px;cursor:pointer;min-height:80px;min-width:220px;transition:all .2s;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.wbtn:hover{opacity:.9;transform:scale(1.02)}
+.wbtn:disabled{opacity:.3;cursor:default;transform:none}
+.wbtn.ghost{background:transparent;color:#00ffcc;border:2px solid #1e2840;min-height:54px;padding:14px 32px;font-size:clamp(.8rem,2vw,1rem);font-weight:500}
+.wbtn.ghost:hover{border-color:#00ffcc44}
+
+/* Photo step */
+#photo-wrap{position:relative;width:100%;max-width:480px;border-radius:14px;overflow:hidden;background:#0a0e1a;border:2px solid #1e2840;aspect-ratio:4/3}
+#wiz-video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+#photo-flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .15s}
+#photo-flash.on{opacity:.7}
+.thumbs{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;min-height:70px}
+.thumb{width:70px;height:70px;border-radius:8px;object-fit:cover;border:2px solid #00ffcc;animation:pop .2s ease}
+@keyframes pop{from{transform:scale(.7);opacity:0}to{transform:scale(1);opacity:1}}
+#photo-label{font-size:clamp(.85rem,2vw,1rem);color:#6b7a99}
+
+/* Voice step */
+#voice-ring{width:130px;height:130px;border-radius:50%;border:3px solid #1e2840;display:flex;align-items:center;justify-content:center;font-size:3rem;transition:all .3s}
+#voice-ring.on{border-color:#00ffcc;box-shadow:0 0 25px #00ffcc44;animation:vpulse .8s ease-in-out infinite}
+@keyframes vpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+#voice-counter{font-size:clamp(2rem,6vw,3.5rem);font-weight:200;color:#00ffcc;min-height:1.2em;font-variant-numeric:tabular-nums}
+
+/* Done step */
+#done-emoji{font-size:5rem}
+#done-person{font-size:clamp(2rem,6vw,3.5rem);font-weight:700;color:#00ffcc}
+
+/* Message line */
+.wmsg{font-size:.9rem;min-height:1.2em;color:#3a4870}
+.wmsg.ok{color:#3fb950}.wmsg.err{color:#f85149}.wmsg.info{color:#e3b341}
+
+#cap-canvas{display:none}
+</style>
+</head>
+<body>
+
+<a id="admin-link" href="admin.html">admin</a>
+<div id="ws-dot"></div>
+
+<!-- ── Vocabolario asemico: Gaia "scrive" ciò che dice/sente ── -->
+<canvas id="asemic-canvas"></canvas>
+
+<!-- ── Ambient ── -->
+<div id="ambient">
+  <canvas id="avatar-canvas"></canvas>
+  <div id="clock"></div>
+  <div id="thought"></div>
+</div>
+
+<!-- ── Camera bubble (MJPEG dal camera_server :8766; vista MediaPipe in GREETED) ── -->
+<div id="cam-bubble">
+  <img id="cam-main" crossorigin="anonymous" alt="">
+  <div id="mp-view" hidden>
+    <div id="mp-label">gaia vede</div>
+    <div id="mp-emo">·</div>
+    <div id="mp-row"></div>
+    <div id="mp-count" hidden></div>
+  </div>
+</div>
+
+<!-- ── Presence overlay ── -->
+<div id="presence" class="hidden">
+  <div id="p-greeting"></div>
+  <div id="p-sub"></div>
+  <button id="btn-present" hidden onclick="openWizard()">Presentati a Gaia →</button>
+</div>
+
+<!-- ── Wizard ── -->
+<div id="wizard" hidden>
+  <button id="wiz-close" onclick="closeWizard()">✕</button>
+
+  <div class="wiz-progress">
+    <div class="wdot cur" id="wd0"></div>
+    <div class="wdot"     id="wd1"></div>
+    <div class="wdot"     id="wd2"></div>
+  </div>
+
+  <!-- Step 1: Nome -->
+  <div id="step-name" class="step active">
+    <h2>Come ti chiami?</h2>
+    <p>Digita il tuo nome — Gaia ti ricorderà.</p>
+    <input id="wiz-name" type="text" placeholder="Il tuo nome"
+           autocomplete="off" autocapitalize="words" spellcheck="false">
+    <button class="wbtn" id="btn-name-next" onclick="goStep2()" disabled>Avanti →</button>
+    <div class="wmsg" id="msg-name"></div>
+  </div>
+
+  <!-- Step 2: Foto -->
+  <div id="step-photo" class="step">
+    <h2>Scattiamo 3 foto 📸</h2>
+    <p>Posizionati davanti alla camera e premi il pulsante</p>
+    <div id="photo-wrap">
+      <img id="wiz-video" crossorigin="anonymous" alt="" style="width:100%;height:100%;object-fit:cover;transform:scaleX(-1)">
+      <div id="photo-flash"></div>
+    </div>
+    <div class="thumbs" id="thumbs"></div>
+    <div id="photo-label">0 / 3 foto</div>
+    <button class="wbtn" id="btn-snap" onclick="takePhoto()">📷 Scatta foto</button>
+    <div class="wmsg" id="msg-photo"></div>
+  </div>
+
+  <!-- Step 3: Voce -->
+  <div id="step-voice" class="step">
+    <h2>Di' qualcosa a Gaia 🎤</h2>
+    <p>Per esempio:<br><em>"Gaia, ciao! Sono <span id="voice-name-hint"></span>."</em></p>
+    <div id="voice-ring">🎤</div>
+    <div id="voice-counter"></div>
+    <button class="wbtn" id="btn-voice" onclick="startVoice()">🔴 Registra (5s)</button>
+    <button class="wbtn ghost" onclick="goStep4()">Salta →</button>
+    <div class="wmsg" id="msg-voice"></div>
+  </div>
+
+  <!-- Step 4: Done -->
+  <div id="step-done" class="step">
+    <div id="done-emoji">🎉</div>
+    <h2>Piacere di conoscerti!</h2>
+    <div id="done-person"></div>
+    <p>D'ora in poi Gaia ti riconoscerà.<br>Bentornato quando vuoi!</p>
+  </div>
+
+  <canvas id="cap-canvas"></canvas>
+</div>
+
+<script src="asemic.js"></script>
+<script>
+// ── Costanti ────────────────────────────────────────────────────────────────
+// Kiosk multi-stanza (2026-07-06): la pagina è UNA, servita dal Core, ma ogni
+// kiosk può usare la camera della propria macchina e filtrare la presenza
+// sulla propria stanza:
+//   welcome.html?cam=192.168.1.239&room=cucina   ← kiosk OPS in cucina
+//   welcome.html                                  ← default: camera del Core
+const _params  = new URLSearchParams(location.search);
+const CAM_HOST = _params.get('cam')  || location.hostname;
+const ROOM     = _params.get('room') || null;
+const API    = `http://${location.hostname}:8765`;   // admin resta sul Core
+const MJPEG  = `http://${CAM_HOST}:8766/video`;
+// Etichetta discreta della stanza sul kiosk (solo se ?room= impostato)
+if (ROOM) {
+  document.title = `GAIA · ${ROOM}`;
+  const _rl = document.createElement('div');
+  _rl.textContent = ROOM;
+  _rl.style.cssText = 'position:absolute;top:18px;left:74px;color:#1e2840;font-size:.72rem;z-index:10;letter-spacing:.12em;text-transform:uppercase;padding:4px 0';
+  document.body.appendChild(_rl);
+}
+
+const EMOTION_ICON = {happy:'😊',neutral:'😐',sad:'😔',surprised:'😲',angry:'😠'};
+const POSE_ICON    = {standing:'🧍',sitting:'🪑',arms_up:'🙌'};
+const GESTURE_ICON = {fist:'✊',point:'☝️',victory:'✌️',three:'🤟',open_hand:'✋'};
+const TIMEOUT = {GREETED:15000, STRANGER:30000, WIZARD:120000};
+
+// ── Stato ────────────────────────────────────────────────────────────────────
+let _state   = 'AMBIENT';
+let _brain   = {};
+let _timer   = null;
+let _wizName = '';
+let _photos  = 0;
+let _voicing = false;
+let _vtimer  = null;
+
+// ── Vocabolario asemico ──────────────────────────────────────────────────────
+// Gaia scrive nella sua lingua ciò che dice (tts/pensieri, banda alta, ciano)
+// e ciò che sente (comandi vocali, banda bassa, blu). Stessa parola = stesso
+// glifo, sempre: un vocabolario che si impara guardando. Engine: asemic.js.
+const _asemic = new AsemicField(document.getElementById('asemic-canvas'));
+let _asTtsTs = 0, _asVcTs = 0, _asThought = '';
+const _asRecent = new Map();   // testo → ts, per non riscrivere doppioni ravvicinati
+
+function asemicSay(text, dir) {
+  if (!text) return;
+  const now = Date.now();
+  const seen = _asRecent.get(text);
+  if (seen && now - seen < 30000) return;
+  _asRecent.set(text, now);
+  if (_asRecent.size > 40) _asRecent.delete(_asRecent.keys().next().value);
+  _asemic.say(text, dir);
+}
+
+function feedAsemic(d) {
+  if (d.tts && d.tts.ts && d.tts.ts !== _asTtsTs) {
+    _asTtsTs = d.tts.ts;
+    asemicSay(d.tts.text, 'out');
+  }
+  const vcs = d.voiceCommands || [];
+  const vc = vcs[vcs.length - 1];
+  if (vc && vc.ts && vc.ts !== _asVcTs) {
+    _asVcTs = vc.ts;
+    asemicSay(vc.text, 'in');
+  }
+  // i pensieri spontanei non passano da gaia/voice/tts/minipc → presi da qui
+  if (d.thought && d.thought !== _asThought) {
+    _asThought = d.thought;
+    asemicSay(d.thought, 'out');
+  }
+}
+
+// ── Clock ─────────────────────────────────────────────────────────────────────
+function tickClock() {
+  document.getElementById('clock').textContent =
+    new Date().toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'});
+}
+tickClock(); setInterval(tickClock, 1000);
+
+// ── Avatar canvas ─────────────────────────────────────────────────────────────
+const _cv  = document.getElementById('avatar-canvas');
+const _cx  = _cv.getContext('2d');
+let   _dpr = window.devicePixelRatio || 1;
+
+function sizeCanvas() {
+  const s = Math.min(window.innerWidth * .40, 360);
+  _cv.width  = s * _dpr;
+  _cv.height = s * _dpr;
+  _cv.style.width  = s + 'px';
+  _cv.style.height = s + 'px';
+}
+sizeCanvas();
+window.addEventListener('resize', sizeCanvas);
+
+requestAnimationFrame(function frame(ts) {
+  requestAnimationFrame(frame);
+  const t    = ts * .001;
+  const life = Math.max(0, Math.min(1, (_brain.soul?.lifeIndex ?? 50) / 100));
+  const vs   = _brain.voiceStatus?.status || 'idle';
+  const isL  = vs === 'listening', isP = vs === 'processing';
+
+  const W = _cv.width / _dpr, H = _cv.height / _dpr;
+  const cx = W / 2, cy = H / 2;
+  _cx.clearRect(0, 0, W, H);
+
+  const spd  = isL ? 4.2 : isP ? 2.8 : 0.7;
+  const bR   = Math.min(W, H) * .17;
+  const amp  = Math.min(W, H) * .055 * (.4 + life * .6);
+  const hue  = isL ? '45,200,0' : isP ? '88,166,255' : '0,255,204';
+
+  for (let i = 0; i < 3; i++) {
+    const ph = (i * Math.PI * 2) / 3;
+    const r  = bR * (1 + i * .72) + amp * Math.sin(t * spd + ph);
+    const a  = (.65 - i * .16) * (.6 + .4 * Math.sin(t * spd * .5 + ph));
+    _cx.beginPath();
+    _cx.arc(cx, cy, Math.max(r, 4), 0, Math.PI * 2);
+    _cx.strokeStyle = `rgba(${hue},${a})`;
+    _cx.lineWidth   = isL ? 3 : 2;
+    _cx.stroke();
+  }
+
+  // Core glow
+  const g = _cx.createRadialGradient(cx, cy, 0, cx, cy, bR * .24);
+  g.addColorStop(0, `rgba(${hue},.85)`);
+  g.addColorStop(1, `rgba(${hue},0)`);
+  _cx.beginPath();
+  _cx.arc(cx, cy, bR * .24, 0, Math.PI * 2);
+  _cx.fillStyle = g;
+  _cx.fill();
+});
+
+// ── State machine ─────────────────────────────────────────────────────────────
+function setState(s, person) {
+  clearTimeout(_timer);
+  _state = s;
+  const pEl  = document.getElementById('presence');
+  const gEl  = document.getElementById('p-greeting');
+  const sEl  = document.getElementById('p-sub');
+  const bEl  = document.getElementById('btn-present');
+
+  if (s === 'AMBIENT') {
+    pEl.classList.add('hidden');
+    showMpView(false);
+    return;
+  }
+  if (s === 'GREETED' && person) {
+    const emo  = EMOTION_ICON[person.emotion] || '👋';
+    const vis  = person.visits;
+    gEl.textContent = `Ciao, ${person.name}! ${emo}`;
+    sEl.textContent = !vis || vis < 2 ? 'Prima visita 🌟' : `${vis}ª visita`;
+    bEl.hidden = true;
+    pEl.classList.remove('hidden');
+    showMpView(true);
+    arm(s);
+    return;
+  }
+  if (s === 'STRANGER') {
+    showMpView(false);
+    gEl.textContent = 'Ciao! 👋';
+    sEl.textContent = 'Non ci siamo ancora incontrati.';
+    bEl.hidden = false;
+    pEl.classList.remove('hidden');
+    arm(s);
+    return;
+  }
+}
+
+function arm(s) {
+  clearTimeout(_timer);
+  if (TIMEOUT[s]) _timer = setTimeout(() => setState('AMBIENT'), TIMEOUT[s]);
+}
+
+function nudge() {
+  if (_state !== 'WIZARD') arm(_state);
+}
+document.addEventListener('touchstart', nudge, {passive:true});
+document.addEventListener('click', nudge);
+
+// ── WebSocket ─────────────────────────────────────────────────────────────────
+function connectWS() {
+  const ws  = new WebSocket(`ws://${location.hostname}:1880/gaia`);
+  const dot = document.getElementById('ws-dot');
+  ws.onopen  = () => dot.className = 'ok';
+  ws.onerror = () => dot.className = 'err';
+  ws.onclose = () => { dot.className='err'; setTimeout(connectWS, 3000); };
+  ws.onmessage = e => {
+    try {
+      const d = JSON.parse(e.data);
+      _brain = d;
+
+      feedAsemic(d);
+
+      // Aggiorna thought
+      const th = d.thought || '';
+      const tEl = document.getElementById('thought');
+      if (tEl.textContent !== (th ? `"${th}"` : '')) {
+        tEl.textContent = th ? `"${th}"` : '';
+        tEl.className = th ? 'visible' : '';
+      }
+
+      // Presenza — non interrompe il wizard
+      if (_state === 'WIZARD') return;
+
+      // Con ?room= reagisce solo alle persone presenti in QUELLA stanza
+      const person = (d.people || []).find(p =>
+        p.present !== false && (!ROOM || p.room === ROOM));
+      if (!person) { if (_state !== 'AMBIENT') setState('AMBIENT'); return; }
+
+      const unknown = (person.realId || '').startsWith('unknown');
+      if (!unknown) {
+        // Rinnova GREETED solo se nome diverso o non eravamo GREETED
+        const cur = document.getElementById('p-greeting').textContent;
+        if (_state !== 'GREETED' || !cur.includes(person.name)) setState('GREETED', person);
+        else arm('GREETED');
+        renderMp(person);
+      } else {
+        if (_state !== 'STRANGER') setState('STRANGER');
+        else arm('STRANGER');
+      }
+    } catch {}
+  };
+}
+connectWS();
+
+// ── Camera MJPEG (stream da camera_server :8766, condiviso con YOLO) ─────────
+let _camErr = false;
+function initMJPEG() {
+  const bubble = document.getElementById('cam-main');
+  const wiz    = document.getElementById('wiz-video');
+  // Stesso stream MJPEG in entrambi gli elementi
+  bubble.src = MJPEG;
+  wiz.src    = MJPEG;
+  bubble.onerror = function() {
+    // src='' (stream fermato da showMpView) genera un error event fasullo
+    if (!this.src || !this.src.includes(':8766')) return;
+    _camErr = true;
+    document.getElementById('cam-bubble').classList.add('hidden');
+    console.warn('Camera MJPEG non disponibile su', MJPEG);
+  };
+}
+initMJPEG();
+
+// ── Vista MediaPipe nella bolla (stato GREETED) ──────────────────────────────
+// Dopo il riconoscimento il video grezzo si ferma (chiude anche la connessione
+// MJPEG) e la bolla mostra cosa Gaia CAPISCE: emozione, posa, gesto, n. persone.
+function showMpView(on) {
+  const bub = document.getElementById('cam-bubble');
+  const img = document.getElementById('cam-main');
+  const mpv = document.getElementById('mp-view');
+  if (on) {
+    img.src = '';
+    img.style.display = 'none';
+    mpv.hidden = false;
+    bub.classList.add('mp');
+    bub.classList.remove('hidden');   // visibile anche se il MJPEG era in errore
+  } else {
+    mpv.hidden = true;
+    img.style.display = '';
+    bub.classList.remove('mp');
+    if (!img.src || !img.src.includes(':8766')) img.src = MJPEG;
+    if (_camErr) bub.classList.add('hidden');
+  }
+}
+
+function renderMp(person) {
+  const room = (_brain.rooms || []).find(r => r.id === person.room);
+  const mp   = room && room.mediapipe;
+  const emoEl = document.getElementById('mp-emo');
+  const rowEl = document.getElementById('mp-row');
+  const cntEl = document.getElementById('mp-count');
+  if (!mp) {                       // mediapipe non attivo o nessuno in scena
+    emoEl.textContent = '·';
+    rowEl.textContent = '';
+    cntEl.hidden = true;
+    return;
+  }
+  // emotion null = volto non visibile (persona vista solo da corpo/mani)
+  emoEl.textContent = mp.emotion ? (EMOTION_ICON[mp.emotion] || '🙂') : '👤';
+  let row = POSE_ICON[mp.pose] || '';
+  if (mp.gesture)            row += ' ' + (GESTURE_ICON[mp.gesture] || '');
+  if (mp.eyes_open === false) row += ' 😴';
+  rowEl.textContent = row.trim();
+  const n = mp.people_count || 0;
+  cntEl.hidden = n < 2;
+  if (n >= 2) cntEl.textContent = `👥 ${n}`;
+}
+
+// ── Wizard ────────────────────────────────────────────────────────────────────
+function openWizard() {
+  _state = 'WIZARD';
+  clearTimeout(_timer);
+  document.getElementById('wizard').hidden = false;
+  // wiz-video è già puntato al MJPEG — nessuna azione necessaria
+  resetWizard();
+  arm('WIZARD');
+}
+
+function closeWizard() {
+  stopVoice();
+  _photos = 0;
+  _wizName = '';
+  document.getElementById('wizard').hidden = true;
+  setState('AMBIENT');
+}
+
+function resetWizard() {
+  _photos  = 0;
+  _wizName = '';
+  document.getElementById('thumbs').innerHTML   = '';
+  document.getElementById('wiz-name').value     = '';
+  document.getElementById('photo-label').textContent = '0 / 3 foto';
+  document.getElementById('msg-name').textContent   = '';
+  document.getElementById('msg-photo').textContent  = '';
+  document.getElementById('msg-voice').textContent  = '';
+  document.getElementById('btn-name-next').disabled = true;
+  showStep('step-name');
+  setDots(0);
+}
+
+function setDots(cur) {
+  [0,1,2].forEach(i => {
+    document.getElementById('wd'+i).className =
+      'wdot' + (i < cur ? ' done' : i === cur ? ' cur' : '');
+  });
+}
+
+function showStep(id) {
+  document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function setMsg(id, txt, cls='') {
+  const el = document.getElementById(id);
+  el.textContent = txt;
+  el.className   = 'wmsg ' + cls;
+}
+
+// ── Step 1: Nome ───────────────────────────────────────────────────────────────
+document.getElementById('wiz-name').addEventListener('input', function() {
+  document.getElementById('btn-name-next').disabled = this.value.trim().length < 2;
+});
+document.getElementById('wiz-name').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !document.getElementById('btn-name-next').disabled) goStep2();
+});
+
+function goStep2() {
+  const raw = document.getElementById('wiz-name').value.trim();
+  if (raw.length < 2) return;
+  _wizName = raw.charAt(0).toUpperCase() + raw.slice(1);
+  document.getElementById('voice-name-hint').textContent = _wizName;
+  showStep('step-photo');
+  setDots(1);
+  setMsg('msg-photo', '');
+}
+
+// ── Step 2: Foto ───────────────────────────────────────────────────────────────
+async function takePhoto() {
+  if (_photos >= 3) return;
+  const btn   = document.getElementById('btn-snap');
+  const flash = document.getElementById('photo-flash');
+  btn.disabled = true;
+
+  // Flash visivo
+  flash.classList.add('on');
+  setTimeout(() => flash.classList.remove('on'), 180);
+
+  // Cattura frame dall'img MJPEG
+  const imgEl  = document.getElementById('wiz-video');
+  const canvas = document.getElementById('cap-canvas');
+  canvas.width  = imgEl.naturalWidth  || 640;
+  canvas.height = imgEl.naturalHeight || 480;
+  canvas.getContext('2d').drawImage(imgEl, 0, 0);
+  const b64 = canvas.toDataURL('image/jpeg', 0.92).split(',')[1];
+
+  // Thumbnail locale
+  const img = document.createElement('img');
+  img.className = 'thumb';
+  img.src = 'data:image/jpeg;base64,' + b64;
+  document.getElementById('thumbs').appendChild(img);
+
+  setMsg('msg-photo', 'Salvo foto…', 'info');
+
+  try {
+    const r = await fetch(`${API}/api/enroll/face-upload`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({name: _wizName, image_base64: b64})
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'errore');
+
+    _photos++;
+    document.getElementById('photo-label').textContent = `${_photos} / 3 foto`;
+
+    if (_photos >= 3) {
+      setMsg('msg-photo', '✓ 3 foto salvate!', 'ok');
+      setTimeout(goStep3, 700);
+    } else {
+      setMsg('msg-photo', `✓ Foto ${_photos} salvata`, 'ok');
+      btn.disabled = false;
+    }
+  } catch(e) {
+    setMsg('msg-photo', `✗ ${e.message}`, 'err');
+    // Rimuovi ultima thumbnail fallita
+    const thumbs = document.getElementById('thumbs');
+    if (thumbs.lastChild) thumbs.removeChild(thumbs.lastChild);
+    btn.disabled = false;
+  }
+}
+
+// ── Step 3: Voce ───────────────────────────────────────────────────────────────
+function goStep3() {
+  showStep('step-voice');
+  setDots(2);
+  document.getElementById('voice-counter').textContent = '';
+  document.getElementById('voice-ring').classList.remove('on');
+  document.getElementById('btn-voice').disabled = false;
+  // Il mic dell'enrollment è quello del Core: su un kiosk remoto (?cam=) la
+  // registrazione avverrebbe in un'altra stanza — meglio dirlo che fallire.
+  if (CAM_HOST !== location.hostname) {
+    setMsg('msg-voice', 'ℹ Il microfono di registrazione è vicino al Core — se non sei lì, Salta', 'info');
+  } else {
+    setMsg('msg-voice', '');
+  }
+}
+
+async function startVoice() {
+  if (_voicing) return;
+  _voicing = true;
+  document.getElementById('btn-voice').disabled = true;
+  document.getElementById('voice-ring').classList.add('on');
+  setMsg('msg-voice', '🎤 Sto ascoltando…', 'info');
+
+  try {
+    await fetch(`${API}/api/enroll/voice`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({name: _wizName, samples:1, duration_s:5})
+    });
+  } catch {
+    setMsg('msg-voice', '✗ Errore connessione mic', 'err');
+    stopVoice();
+    document.getElementById('btn-voice').disabled = false;
+    return;
+  }
+
+  // Countdown 5s
+  let left = 5;
+  document.getElementById('voice-counter').textContent = left;
+  _vtimer = setInterval(() => {
+    left--;
+    document.getElementById('voice-counter').textContent = left > 0 ? left : '';
+    if (left <= 0) {
+      stopVoice();
+      setMsg('msg-voice', '✓ Campione voce registrato!', 'ok');
+      setTimeout(goStep4, 800);
+    }
+  }, 1000);
+}
+
+function stopVoice() {
+  clearInterval(_vtimer);
+  _voicing = false;
+  document.getElementById('voice-ring').classList.remove('on');
+  document.getElementById('voice-counter').textContent = '';
+}
+
+// ── Step 4: Done ───────────────────────────────────────────────────────────────
+function goStep4() {
+  stopVoice();
+  document.getElementById('done-person').textContent = _wizName;
+  showStep('step-done');
+  // Auto-chiudi: il WS aggiornerà la presenza con il nome appena registrato
+  setTimeout(() => {
+    document.getElementById('wizard').hidden = true;
+    setState('AMBIENT');
+  }, 4000);
+}
+</script>
+</body>
+</html>

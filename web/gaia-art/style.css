@@ -1,0 +1,83 @@
+/* GAIA · Arte Viva — chrome minimale, coerente con welcome/dashboard
+   (bg #050810, accento #00ffcc, testo #c9d1d9, muted #6b7a99) */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+    background: #050810;
+    overflow: hidden;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    touch-action: manipulation;
+}
+
+canvas {
+    display: block;
+    position: fixed;
+    inset: 0;
+}
+
+/* Link portale, discreto come admin-link della welcome */
+#portal-link {
+    position: fixed;
+    top: 16px;
+    left: 20px;
+    color: #101828;
+    font-size: 1rem;
+    text-decoration: none;
+    z-index: 10;
+    padding: 4px 8px;
+    transition: color .25s;
+}
+#portal-link:hover { color: #6b7a99; }
+
+/* Stato connessione — stesso pattern ws-dot di dashboard/welcome */
+#ws-dot {
+    position: fixed;
+    top: 20px;
+    right: 24px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #1e2840;
+    z-index: 10;
+    transition: background .3s;
+}
+#ws-dot.ok  { background: #3fb950; box-shadow: 0 0 6px #3fb950; }
+#ws-dot.err { background: #f85149; }
+
+/* Chip info in basso a sinistra */
+#info {
+    position: fixed;
+    bottom: 18px;
+    left: 20px;
+    z-index: 10;
+    pointer-events: none;
+    background: rgba(5, 8, 16, .55);
+    border: 1px solid rgba(30, 40, 64, .8);
+    border-radius: 24px;
+    padding: 8px 16px;
+    backdrop-filter: blur(6px);
+}
+
+#moodLabel {
+    font-size: .78rem;
+    font-weight: 600;
+    letter-spacing: .18em;
+    color: #c9d1d9;
+    text-transform: uppercase;
+}
+
+#status {
+    margin-top: 2px;
+    font-size: .62rem;
+    letter-spacing: .08em;
+    color: #6b7a99;
+}

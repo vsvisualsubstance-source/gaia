@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GAIA Dashboard</title>
+<style>
+:root{--bg:#050810;--card:#0e1221;--border:#1e2840;--accent:#00ffcc;--blue:#58a6ff;--yellow:#e3b341;--red:#f85149;--green:#3fb950;--text:#c9d1d9;--muted:#6b7a99}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;padding:16px;min-height:100vh}
+
+/* Nav */
+.nav{display:flex;gap:12px;margin-bottom:18px;align-items:center;border-bottom:1px solid var(--border);padding-bottom:12px}
+.nav a{color:var(--muted);text-decoration:none;font-size:.8rem;padding:4px 10px;border-radius:6px;transition:all .15s}
+.nav a:hover{color:var(--text);background:var(--card)}
+.nav a.active{color:var(--accent);background:#001a12}
+.nav-title{font-size:1.1rem;font-weight:700;color:var(--accent);margin-right:8px;display:flex;align-items:center;gap:8px}
+.ws-dot{width:8px;height:8px;border-radius:50%;background:var(--muted);display:inline-block;transition:background .3s;flex-shrink:0}
+.ws-dot.ok{background:var(--green);box-shadow:0 0 6px var(--green)}
+.ws-dot.err{background:var(--red)}
+
+.voice-pill{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:600;transition:all .3s;background:#0a1020;border:1px solid #1e2840;color:var(--muted);margin-left:auto}
+.voice-pill.listening{color:var(--accent);border-color:var(--accent);background:#001a12;box-shadow:0 0 8px #00ffcc44;animation:pulse-mic .8s ease-in-out infinite}
+.voice-pill.processing{color:var(--blue);border-color:var(--blue);background:#0a1220}
+@keyframes pulse-mic{0%,100%{opacity:1}50%{opacity:.5}}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;min-height:80px}
+.card-title{font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:12px;display:flex;align-items:center;gap:6px}
+.card-title span{font-size:1rem}
+
+/* Soul */
+.soul-bar{height:6px;border-radius:3px;background:var(--border);overflow:hidden;margin-bottom:3px}
+.soul-fill{height:100%;border-radius:3px;transition:width .5s}
+
+/* People */
+.person-card{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:12px}
+.person-avatar{width:36px;height:36px;border-radius:50%;background:#1a2535;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0}
+.person-name{font-weight:600;font-size:.95rem}
+.badges{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:.72rem;font-weight:600}
+.badge.emotion{background:#0f2020;color:var(--accent)}
+.badge.pose{background:#0f1a2a;color:var(--blue)}
+.badge.gesture{background:#1a1530;color:#c678dd}
+.badge.room{background:#1a1a0a;color:var(--yellow)}
+.badge.time{background:#1a1020;color:var(--muted)}
+
+/* Rooms */
+.room-card{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px}
+.room-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.room-name{font-weight:600;font-size:.9rem}
+.room-activity{font-size:.75rem;color:var(--muted)}
+.objects-grid{display:flex;flex-wrap:wrap;gap:4px}
+.obj-tag{background:#0a1520;border:1px solid #1e3050;border-radius:6px;padding:2px 8px;font-size:.72rem;color:var(--blue)}
+.obj-count{font-weight:700;color:var(--yellow);margin-left:3px}
+
+/* Metrics / events / lights / sensors */
+.metric-row{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);font-size:.82rem}
+.metric-row:last-child{border:none}
+.metric-val{color:var(--accent);font-weight:600}
+
+.event-row{display:flex;gap:8px;padding:4px 0;border-bottom:1px solid var(--border);font-size:.78rem;align-items:baseline}
+.event-row:last-child{border:none}
+.event-ts{color:var(--muted);flex-shrink:0;font-size:.7rem;min-width:52px}
+.event-cat{color:var(--blue);font-weight:600;min-width:70px}
+.event-val{color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.event-who{color:var(--yellow);margin-left:4px;font-size:.7rem;white-space:nowrap}
+
+/* Voice command log */
+.vcmd-row{display:flex;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);font-size:.78rem;align-items:baseline;line-height:1.4}
+.vcmd-row:last-child{border:none}
+.vcmd-ts{color:var(--muted);flex-shrink:0;font-size:.68rem;min-width:52px}
+.vcmd-stanza{color:var(--yellow);font-size:.7rem;min-width:62px;font-weight:600}
+.vcmd-intent{color:var(--blue);font-size:.7rem;min-width:80px}
+.vcmd-text{color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.light-row{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border);font-size:.8rem}
+.light-row:last-child{border:none}
+.light-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0}
+.light-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.light-bri{color:var(--muted);font-size:.72rem}
+
+.sensor-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.sensor-item{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px 10px}
+.sensor-label{font-size:.7rem;color:var(--muted)}
+.sensor-val{font-size:.9rem;font-weight:600;color:var(--accent)}
+
+/* Debug panel */
+.dbg-panel{margin-top:20px;border:1px solid #2a3a5a;border-radius:12px;overflow:hidden;font-family:monospace}
+.dbg-header{background:#0a1020;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:pointer;user-select:none}
+.dbg-header h3{font-size:.85rem;color:#58a6ff;flex:1}
+.dbg-body{max-height:0;overflow:hidden;transition:max-height .4s;background:#050810}
+.dbg-body.open{max-height:1000px;overflow:auto;padding:12px}
+.dbg-section{margin-bottom:14px}
+.dbg-label{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:4px;display:flex;align-items:center;gap:6px}
+.dbg-label .badge-count{background:#1e2840;color:var(--blue);border-radius:8px;padding:1px 7px;font-size:.68rem}
+.dbg-table{width:100%;border-collapse:collapse;font-size:.72rem;table-layout:fixed}
+.dbg-table th{text-align:left;color:var(--muted);padding:3px 8px;border-bottom:1px solid #1e2840;font-weight:600;white-space:nowrap}
+.dbg-table td{padding:3px 8px;border-bottom:1px solid #0d1525;vertical-align:top;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dbg-table tr.warn td{color:var(--yellow)}
+.dbg-table tr.err td{color:var(--red)}
+.dbg-raw{background:#030610;border:1px solid #1e2840;border-radius:6px;padding:8px;font-size:.68rem;color:#58a6ff;white-space:pre-wrap;word-break:break-all;max-height:200px;overflow:auto}
+button.btn-sm{background:#0a1020;border:1px solid #2a3a5a;color:var(--muted);padding:3px 10px;border-radius:10px;cursor:pointer;font-size:.72rem}
+button.btn-sm:hover{color:var(--text);border-color:var(--blue)}
+button.btn-sm.active{border-color:var(--accent);color:var(--accent)}
+
+.footer{margin-top:16px;text-align:center;font-size:.7rem;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <div class="nav-title"><div class="ws-dot" id="wsdot"></div>GAIA</div>
+  <a href="portal.html">⌂</a>
+  <a href="dashboard.html" class="active">Dashboard</a>
+  <a href="admin.html">Admin</a>
+  <a href="welcome.html">Welcome</a>
+  <a href="cameras.html">Camere</a>
+  <a href="gaia-art/index.html">Arte</a>
+  <a href="admin.html#pi">Pi Manager</a>
+  <span style="color:var(--muted);font-size:.8rem;margin-left:4px" id="ts-label"></span>
+  <span class="voice-pill" id="voice-pill">🎙 idle</span>
+</div>
+
+<div class="grid" id="grid">
+  <!-- sezioni stabili — vengono aggiornate in-place, mai ricreate -->
+  <div id="sec-thought" style="display:none;grid-column:1/-1"></div>
+  <div id="sec-soul"    style="display:none"></div>
+  <div id="sec-rpg"     style="display:none"></div>
+  <div id="sec-people"  style="display:none"></div>
+  <div id="sec-rooms"   style="display:none"></div>
+  <div id="sec-voice"   style="display:none"></div>
+  <div id="sec-lights"  style="display:none"></div>
+  <div id="sec-sensors" style="display:none"></div>
+  <div id="sec-plants"  style="display:none"></div>
+  <div id="sec-events"  style="display:none"></div>
+  <div id="sec-metrics" style="display:none"></div>
+  <div id="sec-init" class="card" style="grid-column:1/-1;text-align:center;color:var(--muted)">⏳ Connessione in corso…</div>
+</div>
+
+<div class="dbg-panel">
+  <div class="dbg-header" onclick="toggleDbg()">
+    <h3>🔍 Debug · <span id="dbg-ts" style="color:var(--muted);font-weight:400;font-size:.78rem">in attesa…</span></h3>
+    <button class="btn-sm" id="dbgbtn">Mostra</button>
+    <button class="btn-sm" onclick="event.stopPropagation();reloadBrain()" title="Ricarica brain da file">↺ Brain</button>
+    <button class="btn-sm" onclick="event.stopPropagation();exportDebug()" title="Scarica JSON corrente">💾 Salva</button>
+  </div>
+  <div class="dbg-body" id="dbgbody">
+    <div class="dbg-section">
+      <div class="dbg-label">🏠 Stanze <span class="badge-count" id="dbg-room-count">0</span></div>
+      <table class="dbg-table" id="dbg-rooms">
+        <colgroup><col style="width:14%"><col style="width:8%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:42%"></colgroup>
+        <thead><tr><th>Nome</th><th>Pers.</th><th>Attività</th><th>Emozione</th><th>Pose</th><th>Oggetti</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="dbg-section">
+      <div class="dbg-label">👤 Persone <span class="badge-count" id="dbg-people-count">0</span></div>
+      <table class="dbg-table" id="dbg-people">
+        <colgroup><col style="width:16%"><col style="width:22%"><col style="width:14%"><col style="width:14%"><col style="width:14%"><col style="width:20%"></colgroup>
+        <thead><tr><th>Nome</th><th>RealId</th><th>Stanza</th><th>Emozione</th><th>Pose</th><th>Fiducia</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="dbg-section">
+      <div class="dbg-label">🎙 Comandi voce recenti <span class="badge-count" id="dbg-voice-count">0</span></div>
+      <table class="dbg-table" id="dbg-voice-cmds">
+        <colgroup><col style="width:12%"><col style="width:14%"><col style="width:18%"><col style="width:56%"></colgroup>
+        <thead><tr><th>Ora</th><th>Stanza</th><th>Intent</th><th>Testo</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="dbg-section">
+      <div class="dbg-label">📡 Device Registry <span class="badge-count" id="dbg-dev-count">0</span>
+        <button class="btn-sm" onclick="refreshDevices()" style="margin-left:auto">⟳ Devices</button>
+      </div>
+      <table class="dbg-table" id="dbg-devices">
+        <colgroup><col style="width:22%"><col style="width:10%"><col style="width:18%"><col style="width:12%"><col style="width:16%"><col style="width:12%"><col style="width:10%"></colgroup>
+        <thead><tr><th>Device ID</th><th>Tipo</th><th>Stanza</th><th>Verif.</th><th>IP</th><th>Visto</th><th></th></tr></thead>
+        <tbody><tr><td colspan="7" style="color:var(--muted)">—</td></tr></tbody>
+      </table>
+    </div>
+    <div class="dbg-section">
+      <div class="dbg-label">📦 Raw JSON (ultimo messaggio)</div>
+      <div class="dbg-raw" id="dbg-raw">in attesa…</div>
+    </div>
+  </div>
+</div>
+
+<div class="footer">ws://<span id="wshost"></span>:1880/gaia · live</div>
+
+<script>
+const EMOTION_ICON = {happy:'😊',neutral:'😐',sad:'😔',surprised:'😲',angry:'😠',unknown:'❓'};
+const POSE_ICON    = {standing:'🧍',sitting:'🪑',moving:'🚶',unknown:'❔'};
+const OBJ_ICON     = {person:'👤',laptop:'💻',tv:'📺',chair:'🪑',couch:'🛋️',bed:'🛏️',book:'📚',bottle:'🍶',cup:'☕',phone:'📱',remote:'📡',knife:'🔪',scissors:'✂️',clock:'⏰',vase:'🏺',plant:'🌿',dog:'🐕',cat:'🐈',fire:'🔥',default:'📦'};
+const KNOWN_ROOMS  = ['salotto','soggiorno','sala','ingresso','cucina','balcone','corridoio','sgabuzzino','camera','camera1','camera2','camera3','bagno','bagno2','studio','esterno','garage','cantina','terrazzo','giardino'];
+
+let _lastRaw  = null;
+let _dbgOpen  = false;
+let _firstMsg = true;
+
+// ── helpers ────────────────────────────────────────────────────────────────────
+function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function fmt(v){if(v==null)return'—';if(typeof v==='boolean')return v?'✓':'✗';if(typeof v==='object')return JSON.stringify(v).slice(0,80);return String(v)}
+function fmtDur(s){if(!s)return'—';if(s<60)return s+'s';return Math.floor(s/60)+'m '+Math.round(s%60)+'s'}
+function fmtTs(ts){if(!ts)return'—';return new Date(ts).toLocaleTimeString()}
+function objIcon(name){return OBJ_ICON[name]||OBJ_ICON.default}
+
+// Aggiorna un contenitore stabile solo se l'HTML cambia
+function setSection(id, html, show){
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (el.innerHTML !== html) el.innerHTML = html;
+  el.style.display = (show && html) ? '' : 'none';
+}
+
+// ── Render functions ───────────────────────────────────────────────────────────
+function renderThought(data){
+  if(!data.thought) return '';
+  return`<div class="card" style="grid-column:1/-1">
+    <div class="card-title"><span>🧠</span> Pensiero di GAIA</div>
+    <div style="font-style:italic;color:var(--accent);line-height:1.5">"${escHtml(data.thought)}"</div>
+    ${data.lastMemory?`<div style="margin-top:8px;font-size:.78rem;color:var(--muted)">Ultimo ricordo: ${escHtml(data.lastMemory)}</div>`:''}
+  </div>`;
+}
+
+function renderSoul(data){
+  if(!data.soul) return '';
+  const s=data.soul, prog=data.progression||{};
+  const bars=[['Stress',s.stress,'#f85149'],['Calma',s.calm,'#3fb950'],['Social',s.social,'#58a6ff'],['Curiosità',s.curiosity,'#e3b341']];
+  return`<div class="card">
+    <div class="card-title"><span>💖</span> Anima GAIA</div>
+    <div style="font-size:1.1rem;font-weight:700;color:var(--accent);margin-bottom:10px">${escHtml(s.mood||'neutra')} &nbsp;<span style="font-size:.75rem;color:var(--muted)">LifeIndex: ${s.lifeIndex||50}%</span></div>
+    ${bars.map(([n,v,c])=>`<div style="font-size:.72rem;color:var(--muted);margin-bottom:1px">${n} <span style="float:right;color:${c}">${Math.round((v||0)*100)}%</span></div>
+    <div class="soul-bar"><div class="soul-fill" style="width:${Math.round((v||0)*100)}%;background:${c}"></div></div>`).join('')}
+    <div style="margin-top:10px;font-size:.78rem;color:var(--muted)">Lv.${prog.level||1} ${escHtml(prog.activeClass||'Neutro')} · XP ${prog.xp||0}/${prog.xpNextLevel||1000}</div>
+  </div>`;
+}
+
+function renderRpg(data){
+  const p=data.progression||{};
+  const stats=p.stats||{};
+  const CLS=[['mago','Mago','#00ffff','🪄'],['bardo','Bardo','#ff00ff','🎭'],['guerriero','Guerriero','#ff5555','⚔️'],['druido','Druido','#33ff88','🌿']];
+  const tot=Object.values(stats).reduce((s,v)=>s+(v||0),0)||1;
+  const xpPct=Math.min(100,Math.round((p.xp||0)/(p.xpNextLevel||1000)*100));
+  return`<div class="card">
+    <div class="card-title"><span>🎮</span> Progressione RPG</div>
+    <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:6px">
+      <span style="font-size:1.5rem;font-weight:700;color:var(--accent)">Lv.${p.level||1}</span>
+      <span style="font-size:.9rem;color:var(--yellow);font-weight:600">${escHtml(p.activeClass||'Neutro')}</span>
+      <span style="margin-left:auto;font-size:.75rem;color:var(--muted)">${p.xp||0} / ${p.xpNextLevel||1000} XP</span>
+    </div>
+    <div class="soul-bar"><div class="soul-fill" style="width:${xpPct}%;background:#ffd700"></div></div>
+    <div style="margin-top:10px">${CLS.map(([k,n,c,ic])=>{
+      const v=stats[k]||0;const pct=Math.round(v/tot*100);
+      return`<div style="font-size:.72rem;color:var(--muted);margin-bottom:1px">${ic} ${n} <span style="float:right;color:${c}">${v}</span></div>
+      <div class="soul-bar"><div class="soul-fill" style="width:${pct}%;background:${c}"></div></div>`;
+    }).join('')}</div>
+    <div style="margin-top:10px;font-size:.72rem;color:var(--muted)">Asset sbloccati: ${(p.unlockedAssets||[]).map(a=>
+      `<span style="background:#0c1e2a;color:var(--accent);border-radius:8px;padding:1px 8px;margin-right:4px;display:inline-block;margin-top:3px">${escHtml(a)}</span>`).join('')||'—'}</div>
+  </div>`;
+}
+
+function renderPeople(data){
+  const people=data.people||[];
+  if(!people.length) return`<div class="card"><div class="card-title"><span>👥</span> Persone</div><div style="color:var(--muted);font-size:.85rem">Nessuna persona presente</div></div>`;
+  return`<div class="card"><div class="card-title"><span>👥</span> Persone (${people.length})</div>
+    ${people.map(p=>{
+      const emo=p.emotion||'neutral', pos=p.pose||'unknown', ges=p.gesture&&p.gesture!=='none'?p.gesture:null, dur=p.currentSessionDuration;
+      return`<div class="person-card">
+        <div class="person-avatar">${EMOTION_ICON[emo]||'👤'}</div>
+        <div style="flex:1">
+          <div class="person-name">${escHtml(p.name)}</div>
+          <div class="badges">
+            <span class="badge room">📍 ${escHtml(p.room||'?')}</span>
+            <span class="badge emotion">${EMOTION_ICON[emo]||''} ${emo}</span>
+            <span class="badge pose">${POSE_ICON[pos]||''} ${pos}</span>
+            ${ges?`<span class="badge gesture">✋ ${escHtml(ges)}</span>`:''}
+            ${dur?`<span class="badge time">⏱ ${fmtDur(dur)}</span>`:''}
+          </div>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+function renderRooms(data){
+  const rooms=data.rooms||[];
+  if(!rooms.length) return '';
+  return`<div class="card"><div class="card-title"><span>🏠</span> Stanze rilevate</div>
+    ${rooms.map(r=>{
+      const objs=r.objects||{}, objKeys=Object.keys(objs).filter(k=>objs[k]);
+      const objTags=objKeys.map(k=>{const cnt=typeof objs[k]==='number'?objs[k]:1;return`<span class="obj-tag">${objIcon(k)} ${k}${cnt>1?`<span class="obj-count">×${cnt}</span>`:''}</span>`;}).join('');
+      const mp=r.mediapipe;
+      const emoVal=r.currentEmotion||mp?.emotion||null, posVal=r.currentPose||mp?.pose||null;
+      const emo=emoVal?`<span class="badge emotion" style="font-size:.68rem">${EMOTION_ICON[emoVal]||''} ${emoVal}</span>`:'';
+      const pos=posVal?`<span class="badge pose" style="font-size:.68rem">${POSE_ICON[posVal]||''} ${posVal}</span>`:'';
+      const mpB=mp?[mp.attention&&mp.attention!=='unknown'?`<span class="badge" style="background:#0f1a30;color:#79c0ff;font-size:.68rem">👁 ${mp.attention}</span>`:'', mp.smile_score>20?`<span class="badge" style="background:#0f2010;color:#3fb950;font-size:.68rem">😁 ${mp.smile_score}%</span>`:'', mp.gesture?`<span class="badge gesture" style="font-size:.68rem">✋ ${mp.gesture}</span>`:''].filter(Boolean).join(''):'';
+      const spk=r.speaking?`<span class="badge" style="background:#00251c;color:var(--accent);font-size:.68rem">🎤 ${escHtml(r.speaking)} sta parlando</span>`:'';
+      const scene=r.scene?`<div style="font-size:.7rem;color:var(--muted);font-style:italic;margin-top:5px;line-height:1.4">👁 ${escHtml(r.scene.slice(0,140))}${r.scene.length>140?'…':''}</div>`:'';
+      return`<div class="room-card">
+        <div class="room-header"><span class="room-name">🏠 ${escHtml(r.name)}${mp?` <span style="font-size:.65rem;color:#58a6ff">📷</span>`:''}</span><span class="room-activity">${escHtml(r.activity||'idle')} · ${r.persons_count||0}p</span></div>
+        ${(emo||pos||mpB||spk)?`<div class="badges" style="margin-bottom:6px">${spk}${emo}${pos}${mpB}</div>`:''}
+        ${objKeys.length?`<div class="objects-grid">${objTags}</div>`:`<div style="color:var(--muted);font-size:.75rem">Nessun oggetto</div>`}
+        ${scene}
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+function renderVoice(data){
+  const cmds=(data.voiceCommands||[]).slice().reverse().slice(0,8);
+  if(!cmds.length) return '';
+  const vs=data.voiceStatus||{};
+  const stateMap={listening:'🔴 ascolto',processing:'⚙️ elaboro',idle:'🎙 idle'};
+  const stateColor={listening:'var(--accent)',processing:'var(--blue)',idle:'var(--muted)'};
+  const st=vs.status||'idle';
+  return`<div class="card">
+    <div class="card-title"><span>🎙</span> Comandi vocali
+      <span style="margin-left:auto;font-size:.7rem;color:${stateColor[st]||'var(--muted)'}">${stateMap[st]||st}</span>
+    </div>
+    ${cmds.map(c=>`<div class="vcmd-row">
+      <span class="vcmd-ts">${fmtTs(c.ts)}</span>
+      <span class="vcmd-stanza">${escHtml(c.stanza||'?')}</span>
+      <span class="vcmd-intent">${escHtml(c.intent||'?')}</span>
+      <span class="vcmd-text" title="${escHtml(c.text||'')}">${escHtml(c.text||'—')}</span>
+    </div>`).join('')}
+  </div>`;
+}
+
+function renderLights(data){
+  const lights=(data.lights||[]).slice(0,12);
+  if(!lights.length) return '';
+  return`<div class="card"><div class="card-title"><span>💡</span> Luci Hue</div>
+    ${lights.map(l=>`<div class="light-row">
+      <div class="light-dot" style="background:${l.color||'#555'};${l.power?'box-shadow:0 0 6px '+l.color:''};opacity:${l.power?1:0.3}"></div>
+      <div class="light-name">${escHtml(l.id)}</div>
+      <div class="light-bri">${l.power?l.brightness+'%':'off'}</div>
+    </div>`).join('')}
+  </div>`;
+}
+
+function renderSensors(data){
+  const sensors=(data.sensors||[]).slice(0,8);
+  if(!sensors.length) return '';
+  return`<div class="card"><div class="card-title"><span>📡</span> Sensori</div>
+    <div class="sensor-grid">${sensors.map(s=>`<div class="sensor-item">
+      <div class="sensor-label">${escHtml(s.id)}</div>
+      ${s.temperature!=null?`<div class="sensor-val">${s.temperature.toFixed(1)}°C</div>`:''}
+      ${s.ambient_light!=null?`<div class="sensor-val" style="color:var(--yellow)">☀ ${s.ambient_light}</div>`:''}
+      ${s.motion?`<div style="color:var(--red);font-size:.75rem">● moto</div>`:''}
+    </div>`).join('')}</div>
+  </div>`;
+}
+
+function renderPlants(data){
+  const plants=data.plants||[];
+  if(!plants.length) return '';
+  return`<div class="card"><div class="card-title"><span>🌱</span> Piante</div>
+    ${plants.map(p=>{const m=p.moisture||0,c=m<30?'var(--red)':m<60?'var(--yellow)':'var(--green)';return`<div class="metric-row"><span>🌱 ${escHtml(p.id)}</span><span class="metric-val" style="color:${c}">${m}% ${p.status||''}</span></div>`}).join('')}
+  </div>`;
+}
+
+function renderEvents(data){
+  const events=(data.events||[]).slice(-10).reverse();
+  if(!events.length) return '';
+  return`<div class="card"><div class="card-title"><span>📅</span> Eventi recenti</div>
+    ${events.map(e=>`<div class="event-row">
+      <span class="event-ts">${fmtTs(e.ts)}</span>
+      <span class="event-cat">${escHtml(e.category||'?')}</span>
+      <span class="event-val">${escHtml(fmt(e.value))}</span>
+      ${e.person?`<span class="event-who">${escHtml(e.person)}</span>`:''}
+    </div>`).join('')}
+  </div>`;
+}
+
+function renderMetrics(data){
+  if(!data.metrics&&!data.stats) return '';
+  const m=data.metrics||{};
+  return`<div class="card"><div class="card-title"><span>📊</span> Metriche</div>
+    ${[['👤 Persone attive', m.activePeople??data.stats?.totalPeopleCount??'—'],
+       ['💡 Luci accese', m.activeLights??data.stats?.activeLightsCount??'—'],
+       ['🌡 Temp. media', m.averageTemperature!=null?m.averageTemperature.toFixed(1)+'°C':'—'],
+       ['🔋 Batterie scariche', m.lowBatteryDevices??'—']
+      ].map(([k,v])=>`<div class="metric-row"><span>${k}</span><span class="metric-val">${v}</span></div>`).join('')}
+  </div>`;
+}
+
+// ── Voice pill ─────────────────────────────────────────────────────────────────
+function updateVoicePill(data){
+  const st=(data.voiceStatus||{}).status||'idle';
+  const pill=document.getElementById('voice-pill');
+  pill.className='voice-pill '+st;
+  const icons={idle:'🎙',listening:'🔴',processing:'⚙️'};
+  const labels={idle:'idle',listening:'ascolto…',processing:'elaboro…'};
+  pill.textContent=(icons[st]||'🎙')+' '+(labels[st]||st);
+}
+
+// ── Main UI update (stable sections) ──────────────────────────────────────────
+function updateUI(data){
+  if(_firstMsg){
+    document.getElementById('sec-init').style.display='none';
+    _firstMsg=false;
+  }
+  document.getElementById('ts-label').textContent=data.ts?new Date(data.ts).toLocaleTimeString():'';
+
+  setSection('sec-thought', renderThought(data), !!data.thought);
+  setSection('sec-soul',    renderSoul(data),    !!data.soul);
+  setSection('sec-rpg',     renderRpg(data),     !!data.progression);
+  setSection('sec-people',  renderPeople(data),  true);
+  setSection('sec-rooms',   renderRooms(data),   (data.rooms||[]).length>0);
+  setSection('sec-voice',   renderVoice(data),   (data.voiceCommands||[]).length>0 || (data.voiceStatus||{}).status!=='idle');
+  setSection('sec-lights',  renderLights(data),  (data.lights||[]).length>0);
+  setSection('sec-sensors', renderSensors(data), (data.sensors||[]).length>0);
+  setSection('sec-plants',  renderPlants(data),  (data.plants||[]).length>0);
+  setSection('sec-events',  renderEvents(data),  (data.events||[]).length>0);
+  setSection('sec-metrics', renderMetrics(data), !!(data.metrics||data.stats));
+
+  updateVoicePill(data);
+}
+
+// ── Debug update (stable tables — rebuilt solo quando pannello è aperto) ───────
+let _dbgLastHash = '';
+function updateDebug(data){
+  const ts=new Date(data.ts||Date.now()).toLocaleTimeString();
+  document.getElementById('dbg-ts').textContent=ts;
+
+  // Raw JSON: sempre aggiornato (costoso ma utile per debug)
+  const summary={ts:data.ts,voice:data.voiceStatus,rooms:(data.rooms||[]).map(r=>({name:r.name,persons:r.persons_count,emotion:r.currentEmotion})),people:(data.people||[]).map(p=>({name:p.name,room:p.room,emotion:p.emotion})),voiceCommands:(data.voiceCommands||[]).slice(-3)};
+  document.getElementById('dbg-raw').textContent=JSON.stringify(summary,null,2);
+
+  if(!_dbgOpen) return; // non aggiornare le tabelle se pannello chiuso
+
+  const hash=JSON.stringify({r:data.rooms,p:data.people,v:data.voiceCommands});
+  if(hash===_dbgLastHash) return;
+  _dbgLastHash=hash;
+
+  // Rooms table
+  const rooms=data.rooms||[];
+  document.getElementById('dbg-room-count').textContent=rooms.length;
+  document.querySelector('#dbg-rooms tbody').innerHTML=
+    rooms.map(r=>{
+      const isGarbage=r.name&&!KNOWN_ROOMS.some(k=>r.name.toLowerCase().includes(k));
+      const cls=isGarbage?'err':(r.name==='unknown'?'warn':'');
+      const objStr=Object.entries(r.objects||{}).filter(([,v])=>v).map(([k,v])=>`${k}×${v}`).join(' ')||'—';
+      return`<tr class="${cls}"><td><b>${escHtml(r.name||'?')}</b></td><td>${r.persons_count||0}</td><td>${escHtml(r.activity||'—')}</td><td>${r.currentEmotion||'—'}</td><td>${r.currentPose||'—'}</td><td>${escHtml(objStr)}</td></tr>`;
+    }).join('')||'<tr><td colspan="6" style="color:var(--muted)">—</td></tr>';
+
+  // People table
+  const people=data.people||[];
+  document.getElementById('dbg-people-count').textContent=people.length;
+  document.querySelector('#dbg-people tbody').innerHTML=
+    people.map(p=>`<tr class="${(p.realId||'').startsWith('unknown')?'warn':''}">
+      <td><b>${escHtml(p.name||'?')}</b></td>
+      <td style="color:var(--muted);font-size:.65rem">${escHtml(p.realId||'—')}</td>
+      <td>${escHtml(p.room||'—')}</td>
+      <td>${p.emotion||'—'}</td><td>${p.pose||'—'}</td>
+      <td>${p.confidence!=null?Math.round(p.confidence*100)+'%':'—'}</td>
+    </tr>`).join('')||'<tr><td colspan="6" style="color:var(--muted)">—</td></tr>';
+
+  // Voice commands table
+  const vcmds=(data.voiceCommands||[]).slice().reverse().slice(0,10);
+  document.getElementById('dbg-voice-count').textContent=vcmds.length;
+  document.querySelector('#dbg-voice-cmds tbody').innerHTML=
+    vcmds.map(c=>`<tr>
+      <td>${fmtTs(c.ts)}</td>
+      <td style="color:var(--yellow)">${escHtml(c.stanza||'?')}</td>
+      <td style="color:var(--blue)">${escHtml(c.intent||'?')}</td>
+      <td title="${escHtml(c.text||'')}">${escHtml(c.text||'—')}</td>
+    </tr>`).join('')||'<tr><td colspan="4" style="color:var(--muted)">Nessun comando</td></tr>';
+}
+
+// ── Debug toggle ───────────────────────────────────────────────────────────────
+function toggleDbg(){
+  _dbgOpen=!_dbgOpen;
+  document.getElementById('dbgbody').className='dbg-body'+(_dbgOpen?' open':'');
+  document.getElementById('dbgbtn').textContent=_dbgOpen?'Nascondi':'Mostra';
+  if(_dbgOpen&&_lastRaw){_dbgLastHash='';updateDebug(_lastRaw);} // forza rebuild ora
+}
+
+// ── Device registry ────────────────────────────────────────────────────────────
+function refreshDevices(){
+  fetch('http://'+location.hostname+':1880/gaia/devices')
+    .then(r=>r.json()).then(d=>renderDevices(d.devices||[])).catch(()=>{});
+}
+
+function renderDevices(devices){
+  document.getElementById('dbg-dev-count').textContent=devices.length;
+  const now=Date.now();
+  document.querySelector('#dbg-devices tbody').innerHTML=
+    devices.map(d=>{
+      const online=d.online||(d.lastSeen&&(now-d.lastSeen)<120000);
+      const dot=online?'<span style="color:#3fb950">●</span>':'<span style="color:#6b7a99">●</span>';
+      const ago=d.lastSeen?Math.round((now-d.lastSeen)/1000)+'s fa':'—';
+      const roomOk=KNOWN_ROOMS.some(k=>(d.room||'').toLowerCase().includes(k));
+      return`<tr class="${roomOk?'':'warn'}">
+        <td>${dot} <b>${escHtml(d.id||'?')}</b></td>
+        <td style="color:var(--muted)">${d.type||'?'}</td>
+        <td>
+          <select onchange="assignRoom('${escHtml(d.id||'')}',this.value)" style="background:#0a1020;border:1px solid #2a3a5a;color:var(--text);border-radius:4px;padding:1px 3px;font-size:.68rem">
+            ${KNOWN_ROOMS.map(r=>`<option value="${r}" ${d.room===r?'selected':''}>${r}</option>`).join('')}
+            <option value="unknown" ${!KNOWN_ROOMS.includes(d.room)?'selected':''}>altro</option>
+          </select>
+        </td>
+        <td>${d.verified?'<span style="color:#3fb950">✓</span>':'<span style="color:#e3b341">⚠</span>'} <span style="font-size:.65rem;color:var(--muted)">${d.yolo_score||0}%</span></td>
+        <td style="color:var(--muted);font-size:.7rem">${escHtml(d.ip||'—')}</td>
+        <td style="color:var(--muted);font-size:.7rem">${ago}</td>
+        <td><button class="btn-sm" onclick="assignRoom('${escHtml(d.id||'')}',this.closest('tr').querySelector('select').value)">→</button></td>
+      </tr>`;
+    }).join('')||'<tr><td colspan="7" style="color:var(--muted)">—</td></tr>';
+}
+
+function assignRoom(deviceId,room){
+  if(!deviceId||!room||room==='unknown') return;
+  fetch('http://'+location.hostname+':1880/gaia/device/assign',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:deviceId,room})})
+    .then(r=>r.json()).then(d=>{if(d.ok) setTimeout(refreshDevices,800);}).catch(()=>{});
+}
+
+function reloadBrain(){
+  fetch('http://'+location.hostname+':1880/inject/5266e36842a24f3b',{method:'POST'})
+    .then(()=>{const b=document.querySelector('.dbg-header h3');b.style.color='#3fb950';setTimeout(()=>b.style.color='#58a6ff',1500)}).catch(()=>{});
+}
+
+function exportDebug(){
+  if(!_lastRaw) return;
+  const blob=new Blob([JSON.stringify(_lastRaw,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download=`gaia-debug-${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.json`;a.click();
+}
+
+// ── WebSocket ──────────────────────────────────────────────────────────────────
+function connect(){
+  const proto=location.protocol==='https:'?'wss:':'ws:';
+  const ws=new WebSocket(`${proto}//${location.hostname}:1880/gaia`);
+  document.getElementById('wshost').textContent=location.hostname;
+  ws.onopen=()=>document.getElementById('wsdot').className='ws-dot ok';
+  ws.onmessage=e=>{
+    try{
+      const d=JSON.parse(e.data);
+      _lastRaw=d;
+      updateUI(d);
+      updateDebug(d);
+    }catch(ex){document.getElementById('dbg-raw').textContent='PARSE ERROR: '+e.data.slice(0,200);}
+  };
+  ws.onerror=()=>document.getElementById('wsdot').className='ws-dot err';
+  ws.onclose=()=>{document.getElementById('wsdot').className='ws-dot err';setTimeout(connect,3000);};
+}
+
+connect();
+refreshDevices();
+</script>
+</body>
+</html>

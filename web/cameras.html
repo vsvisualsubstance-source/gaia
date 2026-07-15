@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GAIA · Camere</title>
+<style>
+:root{--bg:#050810;--card:#0e1221;--border:#1e2840;--accent:#00ffcc;--blue:#58a6ff;--yellow:#e3b341;--red:#f85149;--green:#3fb950;--text:#c9d1d9;--muted:#6b7a99}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;padding:16px;min-height:100vh}
+.nav{display:flex;gap:12px;margin-bottom:18px;align-items:center;border-bottom:1px solid var(--border);padding-bottom:12px}
+.nav a{color:var(--muted);text-decoration:none;font-size:.8rem;padding:4px 10px;border-radius:6px;transition:all .15s}
+.nav a:hover{color:var(--text);background:var(--card)}
+.nav a.active{color:var(--accent);background:#001a12}
+.nav-title{font-size:1.1rem;font-weight:700;color:var(--accent);margin-right:8px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:14px}
+.cam-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.cam-head{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border)}
+.cam-room{font-weight:700;font-size:.95rem;text-transform:capitalize}
+.cam-dev{font-size:.7rem;color:var(--muted);font-family:monospace}
+.cam-role{margin-left:auto;font-size:.68rem;background:#0c1e2a;color:var(--accent);border-radius:8px;padding:1px 8px}
+.cam-body{position:relative;aspect-ratio:4/3;background:#080c16;display:flex;align-items:center;justify-content:center}
+.cam-body img{width:100%;height:100%;object-fit:cover;display:block}
+.cam-err{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--muted);font-size:.82rem;background:#080c16}
+.cam-err .big{font-size:2rem;opacity:.5}
+.cam-foot{display:flex;gap:10px;padding:8px 14px;font-size:.72rem;color:var(--muted);align-items:center}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex-shrink:0}
+.dot.ok{background:var(--green);box-shadow:0 0 5px var(--green)}
+.dot.err{background:var(--red)}
+.empty{grid-column:1/-1;text-align:center;color:var(--muted);padding:60px 0}
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <div class="nav-title">📷 Camere</div>
+  <a href="portal.html">⌂</a>
+  <a href="dashboard.html">Dashboard</a>
+  <a href="admin.html">Admin</a>
+  <a href="welcome.html">Welcome</a>
+  <a href="gaia-art/index.html">Arte</a>
+  <span id="count" style="margin-left:auto;color:var(--muted);font-size:.8rem"></span>
+</div>
+
+<div class="grid" id="grid"><div class="empty">Carico i profili device…</div></div>
+
+<script>
+// Griglia di tutte le camere della casa — scoperta automatica via profili
+// semantici (docs/gaia-semantico.md): nessun IP hardcodato, ogni device che
+// dichiara un endpoint mjpeg appare qui. Sorveglianza locale v1.
+const $grid = document.getElementById('grid');
+
+async function load() {
+  let profiles = {};
+  try {
+    const r = await fetch(`http://${location.hostname}:1880/gaia/devices/profiles`);
+    profiles = await r.json();
+  } catch (e) {
+    $grid.innerHTML = '<div class="empty">Endpoint profili non raggiungibile</div>';
+    return;
+  }
+
+  const cams = [];
+  for (const [id, p] of Object.entries(profiles)) {
+    const mjpeg = p.services?.camera?.endpoints?.mjpeg;
+    if (!mjpeg) continue;
+    cams.push({
+      id, mjpeg,
+      room:  p.room_assigned || p.room || '?',
+      role:  p.role || '?',
+      state: p.services?.camera?.state || '?',
+    });
+  }
+
+  document.getElementById('count').textContent =
+    cams.length ? `${cams.length} camere dichiarate` : '';
+
+  if (!cams.length) {
+    $grid.innerHTML = '<div class="empty">Nessun device con camera nei profili</div>';
+    return;
+  }
+
+  $grid.innerHTML = cams.map(c => `
+    <div class="cam-card">
+      <div class="cam-head">
+        <span class="cam-room">${c.room}</span>
+        <span class="cam-dev">${c.id}</span>
+        <span class="cam-role">${c.role}</span>
+      </div>
+      <div class="cam-body">
+        <img src="${c.mjpeg}" alt=""
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+        <div class="cam-err">
+          <span class="big">📡</span>
+          <span>stream non raggiungibile da questa rete</span>
+          <span style="font-size:.68rem">${c.mjpeg}</span>
+        </div>
+      </div>
+      <div class="cam-foot">
+        <span class="dot ${c.state === 'active' ? 'ok' : 'err'}"></span>
+        <span>camera ${c.state}</span>
+      </div>
+    </div>`).join('');
+}
+
+load();
+setInterval(() => {
+  // ricarica solo i metadati (le img MJPEG restano connesse): se compaiono
+  // device nuovi la griglia si ricostruisce
+  fetch(`http://${location.hostname}:1880/gaia/devices/profiles`)
+    .then(r => r.json())
+    .then(p => {
+      const n = Object.values(p).filter(x => x.services?.camera?.endpoints?.mjpeg).length;
+      const cur = document.querySelectorAll('.cam-card').length;
+      if (n !== cur) load();
+    }).catch(() => {});
+}, 15000);
+</script>
+</body>
+</html>

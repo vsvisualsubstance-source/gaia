@@ -1,0 +1,2111 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GAIA Admin</title>
+<style>
+:root {
+  /* Token GAIA condivisi (stessa famiglia di welcome/dashboard/arte):
+     sfondo blu-nero profondo, accento ciano #00ffcc, blu come secondario */
+  --bg:#08090f; --card:#0e1221; --border:#1e2840;
+  --accent:#00ffcc; --blue:#58a6ff; --green:#3fb950; --red:#f85149;
+  --yellow:#e3b341; --cyan:#39c5cf;
+  --text:#c9d1d9; --muted:#6b7a99;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;padding:24px;max-width:960px;margin:0 auto}
+h1{color:var(--accent);font-size:1.6rem;margin-bottom:4px}
+.subtitle{color:var(--muted);font-size:.9rem;margin-bottom:24px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:8px}
+@media(max-width:640px){.grid{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px}
+h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:8px}
+label{display:block;font-size:.82rem;color:var(--muted);margin-bottom:3px;margin-top:10px}
+label:first-of-type{margin-top:0}
+input[type=range]{width:100%;accent-color:var(--accent);margin-bottom:2px}
+.val{font-weight:700;color:var(--accent)}
+input[type=text],input[type=number]{
+  background:var(--bg);border:1px solid var(--border);border-radius:6px;
+  color:var(--text);padding:7px 11px;font-size:.88rem;
+}
+input[type=text]{width:100%;margin-bottom:6px}
+input[type=number]{width:70px}
+button{
+  background:var(--accent);color:#000;border:none;border-radius:6px;
+  padding:8px 16px;cursor:pointer;font-size:.85rem;font-weight:600;margin-top:8px;
+  transition:opacity .15s;
+}
+button:hover{opacity:.85}
+button:disabled{opacity:.4;cursor:default}
+button.secondary{background:var(--card);color:var(--text);border:1px solid var(--border)}
+button.danger{background:var(--red);color:#fff}
+button.small{padding:3px 9px;font-size:.78rem;margin:0}
+
+.rms-wrap{height:18px;border-radius:4px;background:var(--border);overflow:hidden;margin:8px 0}
+.rms-bar{height:100%;width:0;background:var(--green);transition:width .15s}
+.threshold-tick{position:relative;height:4px}
+.threshold-tick::after{
+  content:'';position:absolute;top:0;width:2px;height:10px;
+  background:var(--yellow);border-radius:1px;
+}
+
+.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:.78rem;font-weight:600}
+.badge.idle{background:#162016;color:var(--green)}
+.badge.listening{background:#161e35;color:var(--accent)}
+.badge.processing{background:#2a2010;color:var(--yellow)}
+.badge.enrolling{background:#0f2020;color:var(--cyan)}
+.badge.calibrating{background:#1e1028;color:#c678dd}
+.badge.offline{background:#2a0f0f;color:var(--red)}
+
+.pill-list{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;min-height:28px}
+.pill{display:flex;align-items:center;gap:6px;background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:.82rem}
+.pill .del{background:none;border:none;color:var(--red);cursor:pointer;padding:0;margin:0;font-size:.9rem;line-height:1}
+
+/* ── Persone: card con avatar/thumbnail ─────────────────────────── */
+.person-grid{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px;min-height:28px}
+.person-tile{display:flex;align-items:center;gap:10px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 10px 8px 8px;transition:border-color .15s}
+.person-tile:hover{border-color:#2e3a5e}
+.person-face{width:44px;height:44px;border-radius:50%;object-fit:cover;border:1px solid var(--border);background:#101a2e;flex-shrink:0}
+.person-initial{width:44px;height:44px;border-radius:50%;background:#0c1e2a;color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1.1rem;flex-shrink:0}
+.person-info{display:flex;flex-direction:column;gap:2px;min-width:70px}
+.person-name{font-size:.88rem;font-weight:600;color:var(--text)}
+.person-meta{font-size:.72rem;color:var(--muted)}
+.person-del{background:none;border:none;color:var(--muted);cursor:pointer;font-size:.95rem;padding:4px 6px;margin:0;line-height:1;border-radius:6px;transition:all .15s}
+.person-del:hover{color:var(--red);background:#200d0d}
+
+/* ── Clip audio: strip scorrevole ───────────────────────────────── */
+.clip-strip{display:flex;flex-wrap:wrap;gap:6px;max-height:96px;overflow-y:auto;padding:6px;background:var(--bg);border:1px solid var(--border);border-radius:8px;margin:3px 0 6px}
+.clip-tile{display:inline-flex;align-items:center;background:var(--card);border:1px solid var(--border);border-radius:6px;overflow:hidden}
+.clip-play{background:none;border:none;color:var(--accent);cursor:pointer;font-size:.74rem;padding:3px 8px;margin:0;font-weight:600}
+.clip-play:hover{background:#001a12}
+.clip-del{background:none;border:none;color:var(--muted);cursor:pointer;font-size:.74rem;padding:3px 7px;margin:0;border-left:1px solid var(--border)}
+.clip-del:hover{color:var(--red);background:#200d0d}
+
+.msg{font-size:.82rem;margin-top:8px;min-height:1.1em;color:var(--muted)}
+.section-hdr{grid-column:1/-1;display:flex;align-items:center;gap:12px;margin:12px 0 -4px}
+.section-hdr span{font-size:.72rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);white-space:nowrap;font-weight:600}
+.section-hdr div{flex:1;height:1px;background:var(--border)}
+.msg.ok{color:var(--green)}
+.msg.err{color:var(--red)}
+.msg.info{color:var(--yellow)}
+
+.progress-bar-wrap{height:6px;background:var(--border);border-radius:3px;margin:6px 0;display:none}
+.progress-bar{height:100%;background:var(--cyan);border-radius:3px;transition:width .3s;width:0}
+
+.inline-row{display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap}
+.sep{margin:6px 0;border:none;border-top:1px solid var(--border)}
+
+.automation-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)}
+.automation-row:last-child{border-bottom:none}
+.automation-label{font-size:.88rem}
+.room-toggle-list{margin-left:16px;margin-top:2px;margin-bottom:6px}
+
+/* ── Tab nav ─────────────────────────────────────────────────────── */
+.topnav{display:flex;align-items:center;gap:10px;padding-bottom:10px;margin-bottom:16px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.topnav-title{font-size:1.1rem;font-weight:700;color:var(--accent);margin-right:4px}
+.topnav-link{color:var(--muted);text-decoration:none;font-size:.8rem;padding:3px 9px;border-radius:6px;border:1px solid transparent}
+.topnav-link:hover{color:var(--text);border-color:var(--border)}
+.tab-bar{display:flex;gap:2px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:2px;margin-left:auto}
+.tab-btn{background:none;border:none;color:var(--muted);padding:5px 14px;border-radius:6px;cursor:pointer;font-size:.82rem;font-weight:500;margin:0;transition:all .15s;display:flex;align-items:center;gap:5px}
+.tab-btn:hover{color:var(--text);background:var(--border)}
+.tab-btn.active{background:var(--border);color:var(--text)}
+.tab-panel{display:none}
+.tab-panel.active{display:block}
+.mqtt-dot{width:7px;height:7px;border-radius:50%;background:#444;display:inline-block;transition:background .3s;flex-shrink:0}
+.mqtt-dot.ok{background:var(--green);box-shadow:0 0 5px var(--green)}
+.mqtt-dot.err{background:var(--red)}
+
+/* ── Pi Manager cards (embedded) ─────────────────────────────────── */
+.pm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;margin-top:12px}
+.pi-card{background:var(--bg);border:1px solid var(--border);border-radius:10px;overflow:hidden;transition:border-color .2s}
+.pi-card:hover{border-color:#2e3a5e}
+.pi-card.offline{opacity:.5}
+.pi-card-header{display:flex;align-items:center;gap:10px;padding:12px 16px;background:var(--card);border-bottom:1px solid var(--border)}
+.pi-status-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;background:var(--green)}
+.pi-card.offline .pi-status-dot{background:var(--border)}
+.pi-name-block{flex:1;min-width:0}
+.pi-display-name{font-size:.9rem;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pi-device-id{font-size:.7rem;color:var(--muted);font-family:monospace}
+.pi-uptime{font-size:.72rem;color:var(--muted);white-space:nowrap}
+.pi-card-body{padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.pm-badge{font-size:.72rem;padding:2px 8px;border-radius:4px;background:var(--card);border:1px solid var(--border);color:var(--muted);display:flex;align-items:center;gap:5px}
+.pm-badge.active{color:var(--green);border-color:#1e4030;background:#0d1f18}
+.pm-badge.cap{color:var(--accent);border-color:#1a2e50;background:#0c1428}
+.pm-section-label{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:4px}
+.pm-rename-row{display:flex;flex-direction:column;gap:6px}
+.pm-rename-inputs{display:flex;gap:6px}
+.pm-rename-row input{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:6px 10px;color:var(--text);font-size:.82rem;outline:none;min-width:0}
+.pm-rename-row input:focus{border-color:var(--accent)}
+.pm-btn{padding:6px 12px;border:none;border-radius:5px;font-size:.78rem;cursor:pointer;font-weight:500;transition:opacity .15s;margin:0}
+.pm-btn:hover{opacity:.85}
+.pm-btn.blue{background:#1e4a9e;color:#d0e0ff}
+.pm-btn.green{background:#1a5e38;color:#a0eec0}
+.pm-btn.red{background:#5e1a1a;color:#eea0a0}
+.pm-btn.gray{background:#1e2640;color:#7a8aaa}
+.pm-btn.amber{background:#5e3a10;color:#f0c080}
+.pm-svc-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.pm-svc-btn{display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 5px;border-radius:6px;border:1px solid var(--border);background:var(--bg);cursor:default}
+.pm-svc-btn .svc-icon{font-size:1.1rem}
+.pm-svc-btn .svc-name{font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.pm-svc-btn .svc-state{font-size:.65rem;font-weight:600;padding:1px 6px;border-radius:3px;background:var(--card);color:var(--muted)}
+.pm-svc-btn.running .svc-state{background:#0d2018;color:var(--green)}
+.pm-svc-btn.failed  .svc-state{background:#200d0d;color:var(--red)}
+.pm-svc-toggle{display:flex;gap:3px;margin-top:1px;justify-content:center}
+.pm-svc-toggle .pm-btn{padding:2px 6px;font-size:.65rem}
+.pm-card-actions{display:flex;gap:6px;border-top:1px solid var(--border);padding-top:10px;flex-wrap:wrap}
+.pm-card-actions .pm-btn{flex:1;text-align:center;min-width:60px}
+.pm-log-wrap{margin-top:16px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px}
+.pm-log-wrap h3{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+#pm-log-lines{font-family:monospace;font-size:.72rem;color:var(--muted);max-height:100px;overflow-y:auto}
+.pm-log-entry{padding:1px 0;border-bottom:1px solid var(--card)}
+.pm-log-entry.in{color:var(--green)}
+.pm-log-entry.out{color:var(--accent)}
+.pm-log-entry.err{color:var(--red)}
+
+.toggle{position:relative;display:inline-block;width:42px;height:22px;flex-shrink:0}
+.toggle input{opacity:0;width:0;height:0}
+.toggle-slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:var(--border);border-radius:22px;transition:.15s}
+.toggle-slider::before{position:absolute;content:"";height:16px;width:16px;left:3px;bottom:3px;background:var(--text);border-radius:50%;transition:.15s}
+.toggle input:checked + .toggle-slider{background:var(--green)}
+.toggle input:checked + .toggle-slider::before{transform:translateX(20px);background:#04150a}
+</style>
+</head>
+<body>
+
+<div class="topnav">
+  <div class="topnav-title">GAIA Admin</div>
+  <a href="portal.html" class="topnav-link">⌂ Portal</a>
+  <a href="dashboard.html" class="topnav-link">Dashboard</a>
+  <a href="welcome.html" class="topnav-link">Welcome</a>
+  <a href="cameras.html" class="topnav-link">Camere</a>
+  <a href="gaia-art/index.html" class="topnav-link">Arte</a>
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="showTab('cfg',this)">⚙ Configurazione</button>
+    <button class="tab-btn" onclick="showTab('pi',this)">🍓 Pi Devices <span id="mqtt-dot" class="mqtt-dot"></span></button>
+  </div>
+  <span id="conn-status" style="color:var(--muted);font-size:.8rem">connessione…</span>
+</div>
+
+<div id="tab-cfg" class="tab-panel active">
+<div class="grid">
+
+  <!-- Stato live -->
+  <div class="card" style="grid-column:1/-1">
+    <h2>Microfoni — Stato live</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+
+      <!-- miniPC (gaia_listener) -->
+      <div>
+        <div style="font-size:.78rem;font-weight:600;color:var(--cyan);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">miniPC · <span id="listener-device-name">—</span></div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <span id="state-badge" class="badge offline">offline</span>
+          <span style="margin-left:auto;color:var(--muted);font-size:.8rem">RMS: <span id="vol-num" style="color:var(--text)">0</span></span>
+        </div>
+        <div class="rms-wrap"><div id="rms-bar" class="rms-bar"></div></div>
+        <div id="thresh-tick" class="threshold-tick"></div>
+        <div style="font-size:.78rem;color:var(--muted);margin-top:4px">
+          Soglia: <span id="threshold-live" class="val">300</span> &nbsp;|&nbsp;
+          Device: <span id="device-id" style="color:var(--text)">—</span>
+        </div>
+        <div style="font-size:.78rem;color:var(--muted);margin-top:6px">
+          Gaia model (miniPC): <span id="mp-gaia-conf" style="color:var(--green)">—</span>
+          <span id="mp-gaia-thr-badge" style="margin-left:6px;font-size:.72rem;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:1px 7px;color:var(--muted)">thr <span id="mp-gaia-thr-val">—</span></span>
+          <span id="mp-gaia-inactive-badge" style="margin-left:6px;font-size:.72rem;color:var(--muted)">(non ancora allenato)</span>
+        </div>
+        <div style="position:relative">
+          <div class="rms-wrap" style="margin-top:4px">
+            <div id="mp-gaia-bar" class="rms-bar" style="background:var(--green);transition:width .3s"></div>
+          </div>
+          <div id="mp-gaia-tick" class="threshold-tick"></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:10px">
+          <span id="listener-dot" style="width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0"></span>
+          <span id="listener-txt" style="font-size:.78rem;color:var(--muted)">running</span>
+          <div style="flex:1"></div>
+          <button class="small secondary" onclick="controlListener('restart')" title="Riavvia gaia-listener">↺ Riavvia</button>
+          <button class="small danger"    onclick="controlListener('stop')"    title="Ferma gaia-listener" id="listener-stop-btn">■ Ferma</button>
+          <button class="small secondary" onclick="controlListener('start')"   title="Avvia gaia-listener" id="listener-start-btn" style="display:none">▶ Avvia</button>
+        </div>
+      </div>
+
+      <!-- Voce di stanza (Pi/OPS, gaia-voice) — selettore per N stanze -->
+      <div>
+        <div style="font-size:.78rem;font-weight:600;color:var(--accent);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Stanza ·
+          <select id="pi-room-sel" onchange="piSwitchRoom()" style="background:var(--bg);border:1px solid var(--border);border-radius:5px;color:var(--accent);padding:2px 6px;font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em">
+            <option value="ingresso">ingresso</option>
+          </select>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <span id="pi-state-badge" class="badge offline">offline</span>
+          <span style="margin-left:auto;color:var(--muted);font-size:.8rem">RMS: <span id="pi-vol-num" style="color:var(--text)">0</span></span>
+        </div>
+        <div class="rms-wrap"><div id="pi-rms-bar" class="rms-bar" style="background:var(--accent)"></div></div>
+        <div id="pi-thresh-tick" class="threshold-tick"></div>
+        <div style="font-size:.78rem;color:var(--muted);margin-top:2px">
+          Soglia silenzio: <span id="pi-thr-live" class="val">400</span>
+        </div>
+        <div style="font-size:.78rem;color:var(--muted);margin-top:6px">
+          Trigger base "alexa": <span id="pi-ww-conf" style="color:var(--text)">—</span> <span id="pi-ww-off" style="display:none;color:var(--red);font-size:.7rem;font-weight:600">SPENTO</span>
+        </div>
+        <div style="position:relative">
+          <div class="rms-wrap" style="margin-top:4px">
+            <div id="pi-ww-bar" class="rms-bar" style="background:var(--yellow);transition:width .3s"></div>
+          </div>
+          <div id="pi-ww-tick" class="threshold-tick"></div>
+        </div>
+        <div style="font-size:.78rem;color:var(--muted);margin-top:6px">
+          Gaia model: <span id="pi-gaia-conf" style="color:var(--green)">—</span>
+          <span id="pi-gaia-thr-badge" style="margin-left:6px;font-size:.72rem;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:1px 7px;color:var(--muted)">thr <span id="pi-gaia-thr-val">—</span></span>
+        </div>
+        <div style="position:relative">
+          <div class="rms-wrap" style="margin-top:4px">
+            <div id="pi-gaia-bar" class="rms-bar" style="background:var(--green);transition:width .3s"></div>
+          </div>
+          <div id="pi-gaia-tick" class="threshold-tick"></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:10px;justify-content:flex-end">
+          <button class="small secondary" onclick="controlPiService('restart')" title="Riavvia gaia-voice sul Pi">↺ Riavvia</button>
+          <button class="small danger"    onclick="controlPiService('stop')"    title="Ferma gaia-voice sul Pi">■ Ferma</button>
+          <button class="small secondary" onclick="controlPiService('start')"   title="Avvia gaia-voice sul Pi">▶ Avvia</button>
+        </div>
+      </div>
+
+    </div>
+    <div id="svc-msg" class="msg" style="margin-top:6px"></div>
+  </div>
+
+  <!-- ── Sezione: Configurazione voce ─────────────────────────────────── -->
+  <div class="section-hdr"><span>Configurazione voce</span><div></div></div>
+
+  <!-- Soglie -->
+  <div class="card">
+    <h2>Soglie voce</h2>
+    <label>Soglia attivazione (RMS): <span class="val" id="vt-val">300</span></label>
+    <input type="range" id="vt" min="50" max="1500" step="25" value="300"
+           oninput="document.getElementById('vt-val').textContent=this.value">
+
+    <label>Silenzio fine frase (frame × 30ms): <span class="val" id="sf-val">25</span>
+      <span style="color:var(--muted)"> = <span id="sf-ms">750</span>ms</span>
+    </label>
+    <input type="range" id="sf" min="5" max="100" step="5" value="25"
+           oninput="sfUpdate(this.value)">
+
+    <label>Soglia speaker ID (cosine): <span class="val" id="st-val">0.72</span></label>
+    <input type="range" id="st" min="0.50" max="0.95" step="0.01" value="0.72"
+           oninput="document.getElementById('st-val').textContent=parseFloat(this.value).toFixed(2)">
+
+    <label>Modello Gaia miniPC (allenato sul mic Polycom) — sveglia sopra questa soglia: <span class="val" id="gvt-val">0.80</span></label>
+    <input type="range" id="gvt" min="0.20" max="0.95" step="0.05" value="0.80"
+           oninput="document.getElementById('gvt-val').textContent=parseFloat(this.value).toFixed(2)">
+
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button onclick="saveConfig()">Salva</button>
+      <button class="secondary" onclick="resetSliders()">Ripristina</button>
+    </div>
+    <div id="config-msg" class="msg"></div>
+  </div>
+
+  <!-- Calibrazione -->
+  <div class="card">
+    <h2>Auto-calibrazione miniPC</h2>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:10px">
+      Misura il rumore di fondo per 5 secondi e suggerisce la soglia voce ottimale.<br>
+      <b>Fai silenzio assoluto</b> attorno al microfono Polycom.
+    </p>
+    <button id="cal-btn" onclick="doCalibrate()">▶ Calibra ora (5s)</button>
+    <div id="cal-msg" class="msg"></div>
+    <div id="cal-apply" style="display:none;margin-top:10px">
+      <div style="font-size:.82rem;color:var(--muted);margin-bottom:6px">
+        Rumore fondo (p95): <span id="cal-floor" class="val">—</span>
+        &nbsp;→&nbsp; Soglia suggerita: <span id="cal-sug" class="val">—</span>
+        <span id="cal-ratio" style="color:var(--muted);font-size:.78rem;margin-left:4px"></span>
+      </div>
+      <div style="position:relative;margin-bottom:8px">
+        <div class="rms-wrap" style="margin:0">
+          <div id="cal-floor-bar" style="height:100%;background:var(--muted);opacity:.5;width:0"></div>
+        </div>
+        <div id="cal-sug-tick" class="threshold-tick"></div>
+      </div>
+      <div style="font-size:.76rem;color:var(--muted);margin-bottom:6px">
+        La barra grigia mostra il rumore di fondo; la linea gialla la soglia di attivazione voce.
+      </div>
+      <button class="secondary" style="margin-top:2px" onclick="applyCalibration()">Applica soglia</button>
+    </div>
+  </div>
+
+  <!-- Pi: Soglie wakeword -->
+  <div class="card">
+    <h2>Voce <span id="pi-cfg-room" style="color:var(--accent)">—</span> — Soglie wakeword</h2>
+
+    <label>Trigger base "alexa" (openWakeWord) — sveglia DA SOLO sopra questa soglia: <span class="val" id="pi-wt-val">0.35</span></label>
+    <input type="range" id="pi-wt" min="0.10" max="1.01" step="0.01" value="0.35"
+           oninput="document.getElementById('pi-wt-val').textContent=_wtLabel(this.value)">
+    <div style="font-size:.72rem;color:var(--muted);margin-top:-2px;margin-bottom:4px">
+      Tutto a destra (>1.00) = <b style="color:var(--red)">spento</b>: sveglia solo il modello Gaia della stanza.
+    </div>
+
+    <label>Modello Gaia della stanza (allenato sul SUO mic) — sveglia sopra questa soglia: <span class="val" id="pi-gt-val">0.50</span></label>
+    <input type="range" id="pi-gt" min="0.20" max="0.95" step="0.05" value="0.50"
+           oninput="document.getElementById('pi-gt-val').textContent=parseFloat(this.value).toFixed(2)">
+
+    <label>Soglia silenzio fine frase (RMS): <span class="val" id="pi-st-val">400</span></label>
+    <input type="range" id="pi-st" min="50" max="1500" step="25" value="400"
+           oninput="document.getElementById('pi-st-val').textContent=this.value">
+
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button onclick="savePiConfig()">Salva sul Pi</button>
+      <button class="secondary" onclick="resetPiSliders()">Ripristina</button>
+    </div>
+    <div id="pi-config-msg" class="msg"></div>
+  </div>
+
+  <!-- Pi: Calibrazione -->
+  <div class="card">
+    <h2>Voce <span id="pi-cal-room" style="color:var(--accent)">—</span> — Calibrazione mic</h2>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:10px">
+      Misura il rumore del microfono webcam per 5 secondi e suggerisce la soglia silenzio.<br>
+      <b>Fai silenzio assoluto</b> vicino al Pi (stacca TV, ecc.)
+    </p>
+    <button id="pi-cal-btn" onclick="doPiCalibrate()">▶ Calibra Pi (5s)</button>
+    <div id="pi-cal-msg" class="msg"></div>
+    <div id="pi-cal-apply" style="display:none;margin-top:10px">
+      <div style="font-size:.82rem;color:var(--muted);margin-bottom:6px">
+        Rumore fondo (p95): <span id="pi-cal-floor" class="val">—</span>
+        &nbsp;→&nbsp; Soglia silenzio suggerita: <span id="pi-cal-sug" class="val">—</span>
+        <span id="pi-cal-ratio" style="color:var(--muted);font-size:.78rem;margin-left:4px"></span>
+      </div>
+      <div style="position:relative;margin-bottom:8px">
+        <div class="rms-wrap" style="margin:0">
+          <div id="pi-cal-floor-bar" style="height:100%;background:var(--muted);opacity:.5;width:0"></div>
+        </div>
+        <div id="pi-cal-sug-tick" class="threshold-tick"></div>
+      </div>
+      <div style="font-size:.76rem;color:var(--muted);margin-bottom:6px">
+        Soglia silenzio Pi: quando il volume scende sotto questa soglia, la frase si considera terminata.
+      </div>
+      <button class="secondary" style="margin-top:2px" onclick="applyPiCalibration()">Applica soglia silenzio</button>
+    </div>
+  </div>
+
+  <!-- ── Sezione: Persone ──────────────────────────────────────────────── -->
+  <div class="section-hdr"><span>Persone</span><div></div></div>
+
+  <!-- Enrollment voce -->
+  <div class="card">
+    <h2>Registra voce</h2>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:10px">
+      Parla normalmente durante ogni campione (frasi di senso compiuto).<br>
+      3 campioni da 5s sono sufficienti per un buon riconoscimento.
+    </p>
+    <label>Nome persona</label>
+    <input type="text" id="ev-name" placeholder="es. Mario">
+    <div class="inline-row">
+      <span style="font-size:.82rem;color:var(--muted)">Campioni:</span>
+      <input type="number" id="ev-samples" value="3" min="1" max="5">
+      <span style="font-size:.82rem;color:var(--muted)">Durata (s):</span>
+      <input type="number" id="ev-dur" value="5" min="3" max="10">
+    </div>
+    <button id="ev-btn" onclick="startVoiceEnroll()">▶ Avvia enrollment</button>
+    <div class="progress-bar-wrap" id="ev-prog-wrap">
+      <div id="ev-prog-bar" class="progress-bar"></div>
+    </div>
+    <div id="ev-status" class="msg"></div>
+    <hr class="sep">
+    <label>Oppure carica un file audio già registrato</label>
+    <input type="file" id="ev-file" accept="audio/*">
+    <button class="secondary" onclick="uploadVoiceFile()">📁 Carica file</button>
+  </div>
+
+  <!-- Voci registrate -->
+  <div class="card">
+    <h2>Voci nel DB</h2>
+    <div id="speakers-list" class="person-grid">
+      <span style="color:var(--muted);font-size:.82rem">Caricamento…</span>
+    </div>
+  </div>
+
+  <!-- Enrollment volto -->
+  <div class="card">
+    <h2>Registra volto</h2>
+    <label>Nome persona</label>
+    <input type="text" id="ef-name" placeholder="es. Mario">
+
+    <!-- Preview webcam -->
+    <div id="ef-preview-wrap" style="margin-top:10px;display:none">
+      <video id="ef-video" autoplay muted playsinline
+             style="width:100%;max-height:220px;border-radius:8px;object-fit:cover;background:#0d1117;border:1px solid var(--border)"></video>
+      <canvas id="ef-canvas" style="display:none"></canvas>
+      <div class="inline-row" style="margin-top:6px">
+        <button onclick="captureFaceFrame()" style="flex:1">📸 Scatta foto</button>
+        <button class="secondary" onclick="stopFacePreview()">✕ Chiudi</button>
+      </div>
+    </div>
+
+    <div class="inline-row" style="margin-top:8px">
+      <button onclick="startFacePreview()">📷 Apri webcam</button>
+      <button class="secondary" onclick="saveFace()">🔁 Usa camera YOLO</button>
+    </div>
+    <div id="ef-msg" class="msg"></div>
+    <hr class="sep">
+    <label>Oppure carica una foto</label>
+    <input type="file" id="ef-file" accept="image/*">
+    <button class="secondary" onclick="uploadFaceFile()">📁 Carica foto</button>
+  </div>
+
+  <!-- Volti nel DB -->
+  <div class="card">
+    <h2>Volti nel DB</h2>
+    <div id="faces-list" class="person-grid">
+      <span style="color:var(--muted);font-size:.82rem">Caricamento…</span>
+    </div>
+    <div style="font-size:.78rem;color:var(--muted);margin-top:10px">
+      Dopo aver aggiunto immagini, il face service si aggiorna automaticamente.
+    </div>
+  </div>
+
+  <!-- ── Sezione: Modelli AI ───────────────────────────────────────────── -->
+  <div class="section-hdr"><span>Modelli AI</span><div></div></div>
+
+  <!-- Wakeword Gaia: UNA card, selettore device (pattern anti-esplosione:
+       con N macchine si aggiunge una voce a WW_DEVICES, non una card clone) -->
+  <div class="card">
+    <h2>Wakeword — "Gaia"</h2>
+    <div class="inline-row" style="margin-bottom:10px">
+      <span style="font-size:.82rem;color:var(--muted)">Device:</span>
+      <select id="ww-dev" style="background:var(--bg);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:4px 8px;font-size:.82rem;font-weight:600" onchange="wwSwitchDevice()"></select>
+    </div>
+    <p id="ww-desc" style="font-size:.82rem;color:var(--muted);margin-bottom:10px"></p>
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:10px 12px;margin-bottom:12px;font-size:.79rem;color:var(--muted);line-height:1.5">
+      <b style="color:var(--yellow)">Perché la confidence è bassa (0.6–0.8)?</b><br>
+      Il modello usa LogisticRegression su embedding audio generici — non specializzato per "Gaia".
+      Con pochi campioni la separazione tra "Gaia" e rumore ambientale è ridotta.<br>
+      <b style="color:var(--text)">Come migliorare:</b>
+      aggiungi almeno 20–30 campioni positivi <i>puliti</i> (senza eco, senza rumore),
+      usa campioni negativi variegati (TV accesa, musica, parlato normale),
+      poi riaddestra. Più campioni = maggiore discriminazione.
+    </div>
+    <div class="inline-row" id="ww-mic-row" style="margin-bottom:10px">
+      <span style="font-size:.82rem;color:var(--muted)">🎙 Microfono:</span>
+      <select id="gww-mic" style="background:var(--bg);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:4px 8px;font-size:.82rem" onchange="setAdminMic()">
+        <option value="-1">Default di sistema</option>
+      </select>
+    </div>
+    <div id="ww-status" style="font-size:.82rem;margin-bottom:10px">
+      <span style="color:var(--muted)">Caricamento stato…</span>
+    </div>
+
+    <!-- Meter live del device selezionato: registri e vedi QUI, senza scrollare
+         al pannello "Microfoni — Stato live" in cima alla pagina -->
+    <div id="ww-live" style="background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:8px 12px;margin-bottom:12px">
+      <div style="font-size:.72rem;color:var(--muted);display:flex;justify-content:space-between;align-items:center">
+        <span>🎙 live · <span id="ww-live-state" class="badge offline" style="font-size:.68rem;padding:1px 8px">—</span></span>
+        <span>RMS <span id="ww-live-vol" style="color:var(--text)">0</span></span>
+      </div>
+      <div class="rms-wrap" style="height:10px;margin:5px 0 2px"><div id="ww-live-rms" class="rms-bar"></div></div>
+      <div style="font-size:.72rem;color:var(--muted);margin-top:6px">
+        Gaia model: <span id="ww-live-conf" style="color:var(--green)">—</span>
+        <span style="float:right">thr <span id="ww-live-thr">—</span></span>
+      </div>
+      <div style="position:relative">
+        <div class="rms-wrap" style="height:10px;margin-top:3px"><div id="ww-live-gbar" class="rms-bar" style="background:var(--green);transition:width .3s"></div></div>
+        <div id="ww-live-gtick" class="threshold-tick"></div>
+      </div>
+    </div>
+
+    <label>Campioni POSITIVI — di' "Gaia" chiaramente vicino al mic del device</label>
+    <div class="inline-row">
+      <input type="number" id="ww-dur-pos" value="2" min="1" max="5">
+      <span style="font-size:.78rem;color:var(--muted)">sec</span>
+      <button class="small" id="ww-rec-pos" onclick="wwRecord('positive')">🔴 Registra</button>
+    </div>
+    <input type="file" id="ww-file-pos" accept="audio/*" style="margin-top:6px">
+    <button class="secondary small" onclick="wwUpload('positive')">📁 Carica file</button>
+
+    <label style="margin-top:10px">Campioni NEGATIVI — TV accesa, musica, parlato normale (mai dire "Gaia")</label>
+    <div class="inline-row">
+      <input type="number" id="ww-dur-neg" value="3" min="1" max="10">
+      <span style="font-size:.78rem;color:var(--muted)">sec</span>
+      <button class="small" id="ww-rec-neg" onclick="wwRecord('negative')">🔴 Registra</button>
+    </div>
+    <input type="file" id="ww-file-neg" accept="audio/*" style="margin-top:6px">
+    <button class="secondary small" onclick="wwUpload('negative')">📁 Carica file</button>
+
+    <hr class="sep">
+    <button id="ww-train-btn" onclick="wwTrain()" disabled>🎓 Addestra modello</button>
+    <div id="ww-msg" class="msg"></div>
+  </div>
+
+  <!-- Citofono: raccolta campioni e modello -->
+  <div class="card">
+    <h2>Citofono — Modello suono</h2>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:10px">
+      Registra o carica campioni del suono citofono (positivi) e rumore ambientale (negativi),
+      poi addestra il modello. Il modello viene distribuito al Pi automaticamente (la stanza segue il device).
+    </p>
+    <div class="inline-row" style="margin-bottom:10px">
+      <span style="font-size:.82rem;color:var(--muted)">Stanza Pi:</span>
+      <input type="text" id="db-stanza" value="cucina" oninput="this._touched=true" style="width:100px" placeholder="stanza del Pi">
+    </div>
+    <div id="doorbell-status" style="font-size:.82rem;margin-bottom:10px">
+      <span style="color:var(--muted)">Caricamento stato…</span>
+    </div>
+
+    <label>Campioni POSITIVI (suono citofono)</label>
+    <div class="inline-row">
+      <input type="number" id="db-dur-pos" value="5" min="2" max="15">
+      <span style="font-size:.78rem;color:var(--muted)">sec</span>
+      <button class="small" onclick="recordDoorbell('positive')">🔴 Registra dal Pi</button>
+    </div>
+    <input type="file" id="db-file-pos" accept="audio/*" style="margin-top:6px">
+    <button class="secondary small" onclick="uploadDoorbell('positive')">📁 Carica file</button>
+
+    <label style="margin-top:10px">Campioni NEGATIVI (rumore ambientale/voce)</label>
+    <div class="inline-row">
+      <input type="number" id="db-dur-neg" value="5" min="2" max="15">
+      <span style="font-size:.78rem;color:var(--muted)">sec</span>
+      <button class="small" onclick="recordDoorbell('negative')">🔴 Registra dal Pi</button>
+    </div>
+    <input type="file" id="db-file-neg" accept="audio/*" style="margin-top:6px">
+    <button class="secondary small" onclick="uploadDoorbell('negative')">📁 Carica file</button>
+
+    <hr class="sep">
+    <button id="db-train-btn" onclick="trainDoorbell()" disabled>🎓 Addestra modello</button>
+    <div id="db-msg" class="msg"></div>
+  </div>
+
+  <!-- ── Sezione: Automazioni ──────────────────────────────────────────── -->
+  <div class="section-hdr"><span>Automazioni</span><div></div></div>
+
+  <!-- Automazioni -->
+  <div class="card">
+    <h2>Automazioni</h2>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:10px">
+      Comportamenti automatici che agiscono senza intervento esplicito (luci, alert).
+      Le luci automatiche da mood sono per-stanza e disattive di default.
+    </p>
+    <div id="automations-list">
+      <span style="color:var(--muted);font-size:.82rem">Caricamento…</span>
+    </div>
+  </div>
+
+</div><!-- end .grid -->
+</div><!-- end tab-cfg -->
+
+<!-- ── Pi Devices tab ──────────────────────────────────────────────── -->
+<div id="tab-pi" class="tab-panel">
+
+  <!-- ── miniPC (Gaia Core) ─────────────────────────────────────────── -->
+  <div class="card" style="margin-bottom:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <h2 style="margin:0">Gaia Core (miniPC)</h2>
+      <span id="core-status-badge" class="badge offline">offline</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:.82rem">
+
+      <!-- gaia-listener (voce) -->
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px">
+        <div style="font-size:.72rem;font-weight:600;color:var(--cyan);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Voice (gaia-listener)</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span id="core-listener-dot" style="width:8px;height:8px;border-radius:50%;background:var(--border);flex-shrink:0"></span>
+          <span id="core-listener-txt" style="color:var(--muted);font-size:.78rem">—</span>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="small secondary" onclick="controlListener('restart')" title="Riavvia">↺</button>
+          <button class="small danger"    id="core-stop-btn"  onclick="controlListener('stop')"  title="Ferma">■ Stop</button>
+          <button class="small secondary" id="core-start-btn" onclick="controlListener('start')" title="Avvia" style="display:none">▶ Start</button>
+        </div>
+      </div>
+
+      <!-- gaia-face -->
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px">
+        <div style="font-size:.72rem;font-weight:600;color:var(--cyan);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Face Recognition</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span id="core-face-dot" style="width:8px;height:8px;border-radius:50%;background:var(--border);flex-shrink:0"></span>
+          <span id="core-face-txt" style="color:var(--muted);font-size:.78rem">—</span>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="small secondary" onclick="coreServiceCtrl('gaia-face','restart')">↺</button>
+          <button class="small danger"    onclick="coreServiceCtrl('gaia-face','stop')">■ Stop</button>
+          <button class="small secondary" onclick="coreServiceCtrl('gaia-face','start')">▶ Start</button>
+        </div>
+      </div>
+
+      <!-- gaia-camera -->
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px">
+        <div style="font-size:.72rem;font-weight:600;color:var(--cyan);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Camera Server :8766</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span id="core-cam-dot" style="width:8px;height:8px;border-radius:50%;background:var(--border);flex-shrink:0"></span>
+          <span id="core-cam-txt" style="color:var(--muted);font-size:.78rem">—</span>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="small secondary" onclick="coreServiceCtrl('gaia-camera','restart')">↺</button>
+          <button class="small danger"    onclick="coreServiceCtrl('gaia-camera','stop')">■ Stop</button>
+          <button class="small secondary" onclick="coreServiceCtrl('gaia-camera','start')">▶ Start</button>
+        </div>
+      </div>
+
+      <!-- MJPEG preview -->
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px;display:flex;flex-direction:column;gap:6px">
+        <div style="font-size:.72rem;font-weight:600;color:var(--cyan);text-transform:uppercase;letter-spacing:.05em">Camera Preview</div>
+        <img id="core-cam-preview" src="" alt="stream non disponibile"
+             style="width:100%;border-radius:6px;max-height:120px;object-fit:cover;background:#0a0e1a;display:none">
+        <button class="small secondary" onclick="toggleCamPreview()" id="core-cam-preview-btn">▶ Apri preview</button>
+      </div>
+
+    </div>
+    <div id="core-svc-msg" class="msg" style="margin-top:8px"></div>
+  </div>
+
+  <!-- ── Pi Devices (MQTT) ──────────────────────────────────────────── -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+    <span style="font-size:.8rem;color:var(--muted)">Connessione MQTT ws:<span id="pm-broker-label"></span>:9001</span>
+    <span id="pm-conn-label" style="font-size:.8rem;color:var(--muted)">Disconnesso</span>
+    <button class="secondary small" onclick="pmCleanRooms()" title="Rimuove le stanze senza device e fuori mappa (dati live + topic retained)">🧹 Stanze orfane</button>
+  </div>
+  <div id="pm-no-devices" style="text-align:center;padding:40px 20px;color:var(--muted);font-size:.9rem">
+    Nessun Pi connesso — in attesa di heartbeat…
+  </div>
+  <div class="pm-grid" id="pm-devices-grid" style="display:none"></div>
+  <div class="pm-log-wrap">
+    <h3>Log MQTT</h3>
+    <div id="pm-log-lines"></div>
+  </div>
+
+  <!-- ── Device registrati (provisioning) ───────────────────────────── -->
+  <div class="card" style="margin-top:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <h2 style="margin:0">Device registrati</h2>
+      <button class="small secondary" onclick="loadProvision()">↺ Aggiorna</button>
+    </div>
+    <div style="font-size:.78rem;color:var(--muted);margin-bottom:10px">
+      Device che si sono presentati via <code>/api/provision</code> al boot.
+      Assegna una stanza per renderla autoritativa: il device la applica subito se online.
+    </div>
+    <div id="prov-empty" style="color:var(--muted);font-size:.85rem;text-align:center;padding:16px">Nessun device registrato.</div>
+    <div id="prov-list" style="display:none;overflow-x:auto"></div>
+    <div id="prov-msg" class="msg"></div>
+  </div>
+</div>
+
+<script>
+const API = `http://${location.hostname}:8765`;
+const MJPEG_URL = `http://${location.hostname}:8766/video`;
+let _calSuggested = null;
+let _enrolling      = false;
+let _lastConfig     = {};
+let _piRoom         = 'cucina';
+
+function piSwitchRoom() {
+  _piRoom = document.getElementById('pi-room-sel').value;
+  // il prossimo poll di /api/status (2s) ridipinge stats/soglie/calibrazione
+}
+let _piCalSuggested = null;
+let _lastPiConfig   = {};
+
+function _wtLabel(v) {
+  return parseFloat(v) > 1 ? 'OFF' : parseFloat(v).toFixed(2);
+}
+
+function _setPiTick(id, fraction) {
+  fraction = Math.min(1, fraction);
+  const wrap = document.getElementById(id);
+  if (!wrap) return;
+  let el = wrap.querySelector('.pi-tick-el');
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'pi-tick-el';
+    el.style.cssText = 'position:absolute;top:-7px;width:2px;height:14px;background:var(--yellow);border-radius:1px;';
+    wrap.style.position = 'relative';
+    wrap.appendChild(el);
+  }
+  el.style.left = Math.min(100, Math.max(0, fraction * 100)) + '%';
+}
+
+function sfUpdate(v) {
+  document.getElementById('sf-val').textContent = v;
+  document.getElementById('sf-ms').textContent  = v * 30;
+}
+
+// ── Poll ogni 2s ─────────────────────────────────────────────────────────────
+async function poll() {
+  try {
+    const r = await fetch(`${API}/api/status`, {signal: AbortSignal.timeout(3000)});
+    if (!r.ok) throw new Error();
+    const d = await r.json();
+    updateUI(d);
+    document.getElementById('conn-status').textContent  = 'connesso';
+    document.getElementById('conn-status').style.color  = 'var(--green)';
+  } catch {
+    document.getElementById('conn-status').textContent  = 'offline – API non raggiungibile';
+    document.getElementById('conn-status').style.color  = 'var(--red)';
+    document.getElementById('state-badge').textContent  = 'offline';
+    document.getElementById('state-badge').className    = 'badge offline';
+  }
+  setTimeout(poll, 2000);
+}
+
+function updateUI(d) {
+  const s   = d.stats    || {};
+  const cfg = d.config   || {};
+  const piStatsMap = d.pi_stats || {};
+
+  // ── Voce di stanza: selettore per N stanze (Pi, OPS, future) ─────────
+  // Prima si mostrava piEntries[0]: con due stanze attive (ingresso+cucina)
+  // vinceva chi pubblicava per primo dopo il restart e l'altra spariva.
+  const piRooms = Object.keys(piStatsMap).sort();
+  const roomSel = document.getElementById('pi-room-sel');
+  const wantOptions = piRooms.join(',');
+  if (roomSel.dataset.rooms !== wantOptions && piRooms.length) {
+    roomSel.innerHTML = piRooms.map(r => `<option value="${r}">${r}</option>`).join('');
+    roomSel.dataset.rooms = wantOptions;
+    if (!piRooms.includes(_piRoom)) _piRoom = piRooms[0];
+    roomSel.value = _piRoom;
+  }
+  if (piRooms.includes(_piRoom)) {
+    const piRoom = _piRoom;
+    const pi = piStatsMap[piRoom];
+    document.getElementById('pi-vol-num').textContent  = Math.round(pi.vol || 0);
+    const piState = pi.state || 'listening';
+    const piB     = document.getElementById('pi-state-badge');
+    piB.textContent = piState;
+    piB.className   = 'badge ' + piState;
+    const piPct = Math.min(100, (pi.vol || 0) / 8000 * 100);
+    document.getElementById('pi-rms-bar').style.width  = piPct + '%';
+    const wwConf   = pi.ww_confidence   || 0;
+    const gaiaConf = pi.gaia_confidence || 0;
+    document.getElementById('pi-ww-conf').textContent  = wwConf.toFixed(3);
+    document.getElementById('pi-ww-bar').style.width   = Math.min(100, wwConf * 100) + '%';
+
+    // aggiorna label con Gaia confidence
+    const gaiaEl = document.getElementById('pi-gaia-conf');
+    if (gaiaEl) gaiaEl.textContent = gaiaConf.toFixed(3);
+    const gaiaBar = document.getElementById('pi-gaia-bar');
+    if (gaiaBar) gaiaBar.style.width = Math.min(100, gaiaConf * 100) + '%';
+
+    // threshold ticks sui tre bar del Pi
+    _setPiTick('pi-thresh-tick', (pi.silence_threshold || 400) / 8000);
+    _setPiTick('pi-ww-tick',     (pi.ww_threshold  || 0.35));
+    const wwOff = document.getElementById('pi-ww-off');
+    if (wwOff) wwOff.style.display = (pi.ww_threshold || 0) > 1 ? '' : 'none';
+    _setPiTick('pi-gaia-tick',   (pi.gaia_threshold || 0.70));
+    const silThrEl = document.getElementById('pi-thr-live');
+    if (silThrEl) silThrEl.textContent = pi.silence_threshold || 400;
+    const gaiaThrEl = document.getElementById('pi-gaia-thr-val');
+    if (gaiaThrEl) gaiaThrEl.textContent = (pi.gaia_threshold || 0.70).toFixed(2);
+
+    // aggiorna label stanza nelle card soglie/calibrazione
+    document.getElementById('pi-cfg-room').textContent = piRoom;
+    document.getElementById('pi-cal-room').textContent = piRoom;
+
+    // aggiorna slider Pi dal live config (solo se non in drag)
+    if (document.activeElement?.type !== 'range') {
+      if (pi.ww_threshold  != null) { document.getElementById('pi-wt').value = pi.ww_threshold;   document.getElementById('pi-wt-val').textContent = _wtLabel(pi.ww_threshold); }
+      if (pi.gaia_threshold != null){ document.getElementById('pi-gt').value = pi.gaia_threshold;  document.getElementById('pi-gt-val').textContent = parseFloat(pi.gaia_threshold).toFixed(2); }
+      if (pi.silence_threshold != null){ document.getElementById('pi-st').value = pi.silence_threshold; document.getElementById('pi-st-val').textContent = pi.silence_threshold; }
+    }
+    _piRoom = piRoom;
+  }
+
+  // ── Meter live nella card Wakeword (device selezionato) ──────────────
+  {
+    const D = WW_DEVICES[_wwDev] || {};
+    let live = null;
+    const _sr = typeof D.statsRoom === 'function' ? D.statsRoom() : D.statsRoom;
+    if (_sr === null) {
+      live = { vol: s.vol, state: s.state,
+               conf: s.gaia_verify_confidence, thr: s.gaia_verify_threshold };
+    } else if (_sr) {
+      const q = piStatsMap[_sr] || {};
+      live = { vol: q.vol, state: q.state,
+               conf: q.gaia_confidence, thr: q.gaia_threshold };
+    }
+    if (live) {
+      const st = live.state || 'offline';
+      const badge = document.getElementById('ww-live-state');
+      badge.textContent = st;
+      badge.className = 'badge ' + st;
+      badge.style.fontSize = '.68rem'; badge.style.padding = '1px 8px';
+      document.getElementById('ww-live-vol').textContent = Math.round(live.vol || 0);
+      document.getElementById('ww-live-rms').style.width =
+        Math.min(100, (live.vol || 0) / (D.rmsScale || 8000) * 100) + '%';
+      const conf = live.conf || 0, thr = live.thr || 0.8;
+      document.getElementById('ww-live-conf').textContent = conf.toFixed(3);
+      document.getElementById('ww-live-thr').textContent  = thr.toFixed(2);
+      document.getElementById('ww-live-gbar').style.width = Math.min(100, conf * 100) + '%';
+      _setPiTick('ww-live-gtick', thr);
+    }
+  }
+
+  // ── Pi calibrate result ──────────────────────────────────────────────
+  const piCal = (d.pi_calibrate || {})[_piRoom];
+  if (piCal) {
+    const pcFloor = piCal.noise_floor || 0;
+    const pcSug   = piCal.suggested_threshold || 0;
+    document.getElementById('pi-cal-floor').textContent = Math.round(pcFloor);
+    document.getElementById('pi-cal-sug').textContent   = pcSug;
+    document.getElementById('pi-cal-apply').style.display = 'block';
+    _piCalSuggested = pcSug;
+    if (pcFloor && pcSug) {
+      const scale = Math.max(pcSug * 1.3, 2000);
+      document.getElementById('pi-cal-floor-bar').style.width = Math.min(100, pcFloor / scale * 100) + '%';
+      _setPiTick('pi-cal-sug-tick', pcSug / scale);
+      document.getElementById('pi-cal-ratio').textContent = `(×${(pcSug / pcFloor).toFixed(1)} rumore)`;
+    }
+  }
+
+  // RMS bar
+  const vol = s.vol || 0;
+  const thr = s.threshold || cfg.voice_threshold || 300;
+  document.getElementById('vol-num').textContent    = Math.round(vol);
+  document.getElementById('threshold-live').textContent = thr;
+  document.getElementById('device-id').textContent  = s.device_id || cfg.device_id || '—';
+  const listenerDevNameEl = document.getElementById('listener-device-name');
+  if (listenerDevNameEl) listenerDevNameEl.textContent = s.device_name || '—';
+  const pct = Math.min(100, vol / 2000 * 100);
+  document.getElementById('rms-bar').style.width    = pct + '%';
+  // Threshold tick
+  const tick = document.getElementById('thresh-tick');
+  const tickPct = Math.min(100, thr / 2000 * 100);
+  tick.style.setProperty('--tick-left', tickPct + '%');
+  tick.querySelector('::after') ; // just trigger layout
+  tick.style.cssText = `position:relative;height:4px`;
+  // Use a nested element instead
+  let tickEl = document.getElementById('tick-el');
+  if (!tickEl) {
+    tickEl = document.createElement('div');
+    tickEl.id = 'tick-el';
+    tickEl.style.cssText = 'position:absolute;top:-7px;width:2px;height:14px;background:var(--yellow);border-radius:1px;';
+    tick.appendChild(tickEl);
+  }
+  tickEl.style.left = tickPct + '%';
+
+  // State badge
+  const state = s.state || 'offline';
+  const badge = document.getElementById('state-badge');
+  badge.textContent = state;
+  badge.className   = 'badge ' + (state || 'offline');
+
+  // Sync sliders (only when not actively dragging)
+  if (document.activeElement?.type !== 'range') {
+    const vt  = cfg.voice_threshold || 300;
+    const sf  = cfg.silence_frames  || 25;
+    const st  = cfg.speaker_threshold || 0.72;
+    const gvt = s.gaia_verify_threshold || cfg.gaia_verify_threshold || 0.80;
+    if (vt !== _lastConfig.vt) { document.getElementById('vt').value = vt; document.getElementById('vt-val').textContent = vt; }
+    if (sf !== _lastConfig.sf) { document.getElementById('sf').value = sf; sfUpdate(sf); }
+    if (st !== _lastConfig.st) { document.getElementById('st').value = st; document.getElementById('st-val').textContent = parseFloat(st).toFixed(2); }
+    if (gvt !== _lastConfig.gvt) { document.getElementById('gvt').value = gvt; document.getElementById('gvt-val').textContent = parseFloat(gvt).toFixed(2); }
+    _lastConfig = {vt, sf, st, gvt};
+  }
+
+  // Barra live confidence Gaia (miniPC) — stesso pattern del Pi
+  const gaiaVerifyConf   = s.gaia_verify_confidence || 0;
+  const gaiaVerifyThr    = s.gaia_verify_threshold  || 0.80;
+  const gaiaVerifyActive = s.gaia_verify_active === true;
+  const mpGaiaConfEl = document.getElementById('mp-gaia-conf');
+  if (mpGaiaConfEl) mpGaiaConfEl.textContent = gaiaVerifyConf.toFixed(3);
+  const mpGaiaBar = document.getElementById('mp-gaia-bar');
+  if (mpGaiaBar) mpGaiaBar.style.width = Math.min(100, gaiaVerifyConf * 100) + '%';
+  const mpGaiaThrVal = document.getElementById('mp-gaia-thr-val');
+  if (mpGaiaThrVal) mpGaiaThrVal.textContent = gaiaVerifyThr.toFixed(2);
+  _setPiTick('mp-gaia-tick', gaiaVerifyThr);
+  const mpInactiveBadge = document.getElementById('mp-gaia-inactive-badge');
+  if (mpInactiveBadge) mpInactiveBadge.style.display = gaiaVerifyActive ? 'none' : '';
+
+  // Listener service status — Configurazione tab
+  const listenerActive = d.listener_active !== false;
+  const dot  = document.getElementById('listener-dot');
+  const txt  = document.getElementById('listener-txt');
+  const sBtn = document.getElementById('listener-start-btn');
+  const xBtn = document.getElementById('listener-stop-btn');
+  if (dot)  dot.style.background  = listenerActive ? 'var(--green)' : 'var(--red)';
+  if (txt)  txt.textContent        = listenerActive ? 'running' : 'stopped';
+  if (sBtn) sBtn.style.display    = listenerActive ? 'none' : '';
+  if (xBtn) xBtn.style.display    = listenerActive ? ''     : 'none';
+
+  // Core tab — miniPC services
+  updateCoreDot('core-listener', listenerActive);
+  updateCoreDot('core-face',     d.services?.['gaia-face']     !== 'inactive');
+  updateCoreDot('core-cam',      d.services?.['gaia-camera']   !== 'inactive');
+  // Aggiorna btn start/stop listener nel Core tab
+  const csBtn = document.getElementById('core-start-btn');
+  const cxBtn = document.getElementById('core-stop-btn');
+  if (csBtn) csBtn.style.display = listenerActive ? 'none' : '';
+  if (cxBtn) cxBtn.style.display = listenerActive ? '' : 'none';
+  document.getElementById('core-status-badge').className = 'badge ' + (listenerActive ? 'ok' : 'offline');
+  document.getElementById('core-status-badge').textContent = listenerActive ? 'online' : 'offline';
+
+  // Enrollment progress
+  if (state === 'enrolling' && s.enroll_sample) {
+    const total = s.enroll_total || 3;
+    const cur   = s.enroll_sample;
+    document.getElementById('ev-status').textContent  = `🎙 Campione ${cur}/${total} — parla ora…`;
+    document.getElementById('ev-status').className    = 'msg info';
+    document.getElementById('ev-prog-wrap').style.display = 'block';
+    document.getElementById('ev-prog-bar').style.width = (cur / total * 100) + '%';
+  } else if (_enrolling && s.enrolled !== undefined) {
+    _enrolling = false;
+    document.getElementById('ev-btn').disabled = false;
+    document.getElementById('ev-prog-wrap').style.display = 'none';
+    document.getElementById('ev-prog-bar').style.width = '0';
+    if (s.success) {
+      setMsg('ev-status', `✓ ${s.enrolled} registrato (${s.samples} campioni)`, 'ok');
+    } else {
+      setMsg('ev-status', '✗ Enrollment fallito — parla più vicino al microfono', 'err');
+    }
+  }
+
+  // Calibration result
+  const cal = d.calibrate_result || {};
+  if (cal.suggested_threshold && cal.suggested_threshold !== _calSuggested) {
+    _calSuggested = cal.suggested_threshold;
+    const cFloor = cal.noise_floor || 0;
+    const cSug   = cal.suggested_threshold;
+    document.getElementById('cal-floor').textContent = Math.round(cFloor);
+    document.getElementById('cal-sug').textContent   = cSug;
+    document.getElementById('cal-apply').style.display = 'block';
+    document.getElementById('cal-btn').disabled = false;
+    if (cFloor && cSug) {
+      const scale = Math.max(cSug * 1.3, 2000);
+      document.getElementById('cal-floor-bar').style.width = Math.min(100, cFloor / scale * 100) + '%';
+      _setPiTick('cal-sug-tick', cSug / scale);
+      document.getElementById('cal-ratio').textContent = `(×${(cSug / cFloor).toFixed(1)} rumore)`;
+    }
+    setMsg('cal-msg', `Noise floor: ${Math.round(cFloor)} RMS`, 'ok');
+  }
+
+  // Lists
+  renderSpeakers(d.speakers || []);
+  renderFaces(d.faces || []);
+}
+
+// Dirty-check: /api/status arriva ogni 2s — ricostruire l'innerHTML ogni volta
+// farebbe sfarfallare le card e ricaricare le thumbnail ad ogni poll.
+let _speakersKey = null, _facesKey = null;
+
+function renderSpeakers(list) {
+  const key = JSON.stringify(list);
+  if (key === _speakersKey) return;
+  _speakersKey = key;
+  const el = document.getElementById('speakers-list');
+  if (!list.length) {
+    el.innerHTML = '<span style="color:var(--muted);font-size:.82rem">Nessuna voce registrata</span>';
+    return;
+  }
+  el.innerHTML = list.map(n =>
+    `<div class="person-tile">
+       <div class="person-initial">${(n[0] || '?').toUpperCase()}</div>
+       <div class="person-info">
+         <span class="person-name">${n}</span>
+         <span class="person-meta">🎤 impronta vocale</span>
+       </div>
+       <button class="person-del" onclick="deleteSpeaker('${n}')" title="Rimuovi voce">✕</button>
+     </div>`
+  ).join('');
+}
+
+function renderFaces(list) {
+  const key = JSON.stringify(list);
+  if (key === _facesKey) return;
+  _facesKey = key;
+  const el = document.getElementById('faces-list');
+  if (!list.length) {
+    el.innerHTML = '<span style="color:var(--muted);font-size:.82rem">Nessun volto registrato</span>';
+    return;
+  }
+  el.innerHTML = list.map(f =>
+    `<div class="person-tile">
+       <img class="person-face" alt="" src="${API}/api/faces/${encodeURIComponent(f.name)}/thumb"
+            onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+       <div class="person-initial" style="display:none">${(f.name[0] || '?').toUpperCase()}</div>
+       <div class="person-info">
+         <span class="person-name">${f.name}</span>
+         <span class="person-meta">${f.images} ${f.images === 1 ? 'immagine' : 'immagini'}</span>
+       </div>
+       <button class="person-del" onclick="deleteFace('${f.name}')" title="Rimuovi volto">✕</button>
+     </div>`
+  ).join('');
+}
+
+// ── Azioni ────────────────────────────────────────────────────────────────────
+async function saveConfig() {
+  const body = {
+    voice_threshold:   parseInt(document.getElementById('vt').value),
+    silence_frames:    parseInt(document.getElementById('sf').value),
+    speaker_threshold: parseFloat(document.getElementById('st').value),
+    gaia_verify_threshold: parseFloat(document.getElementById('gvt').value),
+  };
+  try {
+    const r = await fetch(`${API}/api/config`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+    });
+    const d = await r.json();
+    setMsg('config-msg', d.ok ? '✓ Configurazione salvata' : '✗ Errore', d.ok ? 'ok' : 'err');
+  } catch { setMsg('config-msg', '✗ Errore di connessione', 'err'); }
+  setTimeout(() => setMsg('config-msg', ''), 3000);
+}
+
+function resetSliders() {
+  document.getElementById('vt').value = _lastConfig.vt || 300; document.getElementById('vt-val').textContent = _lastConfig.vt || 300;
+  document.getElementById('sf').value = _lastConfig.sf || 25;  sfUpdate(_lastConfig.sf || 25);
+  document.getElementById('st').value = _lastConfig.st || 0.72; document.getElementById('st-val').textContent = parseFloat(_lastConfig.st || 0.72).toFixed(2);
+  document.getElementById('gvt').value = _lastConfig.gvt || 0.80; document.getElementById('gvt-val').textContent = parseFloat(_lastConfig.gvt || 0.80).toFixed(2);
+}
+
+async function doCalibrate() {
+  document.getElementById('cal-btn').disabled = true;
+  document.getElementById('cal-apply').style.display = 'none';
+  _calSuggested = null;
+  setMsg('cal-msg', '🔊 Silenzio… misurazione in corso (5s)', 'info');
+  try {
+    await fetch(`${API}/api/calibrate`, {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+  } catch { setMsg('cal-msg', '✗ Errore', 'err'); document.getElementById('cal-btn').disabled = false; }
+}
+
+async function applyCalibration() {
+  if (!_calSuggested) return;
+  document.getElementById('vt').value = _calSuggested;
+  document.getElementById('vt-val').textContent = _calSuggested;
+  await saveConfig();
+}
+
+// ── Pi voice config ─────────────────────────────────────────────────────────
+async function savePiConfig() {
+  const wt = parseFloat(document.getElementById('pi-wt').value);
+  const gt = parseFloat(document.getElementById('pi-gt').value);
+  const st = parseInt(document.getElementById('pi-st').value);
+  setMsg('pi-config-msg', 'Invio configurazione al Pi…', 'info');
+  try {
+    const r = await fetch(`${API}/api/pi-voice/config`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({room: _piRoom, wakeword_threshold: wt, gaia_threshold: gt, silence_threshold: st})
+    });
+    const d = await r.json();
+    setMsg('pi-config-msg', d.ok ? `✓ Configurazione applicata (${_piRoom})` : `✗ ${d.error}`, d.ok ? 'ok' : 'err');
+    _lastPiConfig = {wt, gt, st};
+  } catch { setMsg('pi-config-msg', '✗ Errore di rete', 'err'); }
+}
+
+function resetPiSliders() {
+  if (_lastPiConfig.wt != null) { document.getElementById('pi-wt').value = _lastPiConfig.wt; document.getElementById('pi-wt-val').textContent = parseFloat(_lastPiConfig.wt).toFixed(2); }
+  if (_lastPiConfig.gt != null) { document.getElementById('pi-gt').value = _lastPiConfig.gt; document.getElementById('pi-gt-val').textContent = parseFloat(_lastPiConfig.gt).toFixed(2); }
+  if (_lastPiConfig.st != null) { document.getElementById('pi-st').value = _lastPiConfig.st; document.getElementById('pi-st-val').textContent = _lastPiConfig.st; }
+}
+
+async function doPiCalibrate() {
+  document.getElementById('pi-cal-btn').disabled = true;
+  document.getElementById('pi-cal-apply').style.display = 'none';
+  _piCalSuggested = null;
+  setMsg('pi-cal-msg', `🔊 Silenzio… misuro rumore Pi ${_piRoom} (5s)`, 'info');
+  try {
+    await fetch(`${API}/api/pi-voice/calibrate`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({room: _piRoom, duration_s: 5})
+    });
+    setTimeout(() => { document.getElementById('pi-cal-btn').disabled = false; }, 8000);
+  } catch {
+    setMsg('pi-cal-msg', '✗ Errore di rete', 'err');
+    document.getElementById('pi-cal-btn').disabled = false;
+  }
+}
+
+async function applyPiCalibration() {
+  if (!_piCalSuggested) return;
+  document.getElementById('pi-st').value = _piCalSuggested;
+  document.getElementById('pi-st-val').textContent = _piCalSuggested;
+  await savePiConfig();
+}
+
+async function startVoiceEnroll() {
+  const name = document.getElementById('ev-name').value.trim();
+  if (!name) { setMsg('ev-status', '✗ Inserisci un nome', 'err'); return; }
+  const samples    = parseInt(document.getElementById('ev-samples').value);
+  const duration_s = parseInt(document.getElementById('ev-dur').value);
+  document.getElementById('ev-btn').disabled = true;
+  setMsg('ev-status', `Avvio enrollment per "${name}"…`, 'info');
+  _enrolling = true;
+  try {
+    await fetch(`${API}/api/enroll/voice`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({name, samples, duration_s})
+    });
+  } catch { setMsg('ev-status', '✗ Errore', 'err'); document.getElementById('ev-btn').disabled = false; _enrolling = false; }
+}
+
+async function saveFace() {
+  const name = document.getElementById('ef-name').value.trim();
+  if (!name) { setMsg('ef-msg', '✗ Inserisci un nome', 'err'); return; }
+  try {
+    const r = await fetch(`${API}/api/enroll/face`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name})
+    });
+    const d = await r.json();
+    setMsg('ef-msg',
+      d.ok ? `✓ Pronto — il prossimo frame verrà salvato come "${name}"` : `✗ ${d.error}`,
+      d.ok ? 'ok' : 'err'
+    );
+  } catch { setMsg('ef-msg', '✗ Errore di connessione', 'err'); }
+}
+
+async function deleteSpeaker(name) {
+  try {
+    const r = await fetch(`${API}/api/speaker/${name}/delete`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error||'errore');
+    // La lista si aggiorna al prossimo poll() (ogni 2s)
+  } catch(e) { console.error('deleteSpeaker:', e); }
+}
+
+async function deleteFace(name) {
+  try {
+    const r = await fetch(`${API}/api/face/${name}/delete`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error||'errore');
+    // La lista si aggiorna al prossimo poll()
+  } catch(e) { console.error('deleteFace:', e); }
+}
+
+function setMsg(id, text, cls='') {
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.className   = 'msg ' + cls;
+}
+
+// ── Automazioni (Node-RED, non il backend admin su :8765) ──────────────────
+const NODERED_API = `http://${location.hostname}:1880`;
+
+function renderAutomationRow(a) {
+  if (a.scope === 'global') {
+    return `
+      <div class="automation-row">
+        <span class="automation-label">${a.label}</span>
+        <label class="toggle">
+          <input type="checkbox" ${a.enabled ? 'checked' : ''} onchange="toggleAutomation('${a.id}', this.checked)">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>`;
+  }
+  const rooms = Object.entries(a.rooms || {});
+  const roomsHtml = rooms.length
+    ? rooms.map(([room, enabled]) => `
+      <div class="automation-row">
+        <span class="automation-label" style="color:var(--muted)">↳ ${room}</span>
+        <label class="toggle">
+          <input type="checkbox" ${enabled ? 'checked' : ''} onchange="toggleAutomation('${a.id}', this.checked, '${room}')">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>`).join('')
+    : '<div style="color:var(--muted);font-size:.78rem;padding:4px 0">Nessuna stanza nota</div>';
+  return `
+    <div class="automation-row" style="border-bottom:none;padding-bottom:0">
+      <span class="automation-label">${a.label}</span>
+    </div>
+    <div class="room-toggle-list">${roomsHtml}</div>`;
+}
+
+async function loadAutomations() {
+  const el = document.getElementById('automations-list');
+  try {
+    const r = await fetch(`${NODERED_API}/gaia/automations`, {signal: AbortSignal.timeout(3000)});
+    if (!r.ok) throw new Error();
+    const d = await r.json();
+    el.innerHTML = (d.automations || []).map(renderAutomationRow).join('');
+  } catch {
+    el.innerHTML = '<span style="color:var(--red);font-size:.82rem">Errore di connessione a Node-RED</span>';
+  }
+}
+
+async function toggleAutomation(id, enabled, room) {
+  try {
+    const r = await fetch(`${NODERED_API}/gaia/automations/toggle`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({id, enabled, room})
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'errore sconosciuto');
+  } catch (e) {
+    alert("Errore nel salvare l'automazione: " + (e.message || e));
+  }
+  loadAutomations();
+}
+
+// ── Preview webcam per enrollment volto ────────────────────────────────────
+let _faceStream = null;
+
+async function startFacePreview() {
+  const wrap  = document.getElementById('ef-preview-wrap');
+  const video = document.getElementById('ef-video');
+  try {
+    _faceStream = await navigator.mediaDevices.getUserMedia({
+      video: {width:{ideal:640}, height:{ideal:480}, facingMode:'user'}
+    });
+    video.srcObject = _faceStream;
+    wrap.style.display = 'block';
+    setMsg('ef-msg', '📷 Webcam attiva — posizionati e premi Scatta', 'info');
+  } catch(e) {
+    setMsg('ef-msg', `✗ Webcam non disponibile: ${e.message}`, 'err');
+  }
+}
+
+function stopFacePreview() {
+  if (_faceStream) { _faceStream.getTracks().forEach(t => t.stop()); _faceStream = null; }
+  document.getElementById('ef-preview-wrap').style.display = 'none';
+  document.getElementById('ef-video').srcObject = null;
+  setMsg('ef-msg', '', '');
+}
+
+async function captureFaceFrame() {
+  const name = document.getElementById('ef-name').value.trim();
+  if (!name) { setMsg('ef-msg', '✗ Inserisci un nome prima di scattare', 'err'); return; }
+  const video  = document.getElementById('ef-video');
+  const canvas = document.getElementById('ef-canvas');
+  canvas.width  = video.videoWidth  || 640;
+  canvas.height = video.videoHeight || 480;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  const b64 = canvas.toDataURL('image/jpeg', 0.92).split(',')[1];
+  setMsg('ef-msg', 'Caricamento foto…', 'info');
+  try {
+    const r = await fetch(`${API}/api/enroll/face-upload`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({name, image_base64: b64})
+    });
+    const d = await r.json();
+    if (d.ok) {
+      setMsg('ef-msg', `✓ Foto salvata per "${name}" — scatta altri frame se vuoi`, 'ok');
+    } else {
+      setMsg('ef-msg', `✗ ${d.error||'errore'}`, 'err');
+    }
+  } catch(e) { setMsg('ef-msg', `✗ Errore: ${e.message}`, 'err'); }
+}
+
+// ── Upload file (voce/volto) ────────────────────────────────────────────────
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload  = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadVoiceFile() {
+  const name = document.getElementById('ev-name').value.trim();
+  const fileInput = document.getElementById('ev-file');
+  if (!name) { setMsg('ev-status', '✗ Inserisci un nome', 'err'); return; }
+  if (!fileInput.files.length) { setMsg('ev-status', '✗ Seleziona un file audio', 'err'); return; }
+  setMsg('ev-status', 'Caricamento…', 'info');
+  try {
+    const b64 = await readFileAsBase64(fileInput.files[0]);
+    const r = await fetch(`${API}/api/enroll/voice-upload`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({name, audio_base64: b64})
+    });
+    const d = await r.json();
+    if (d.ok) {
+      setMsg('ev-status', `Elaborazione file per "${name}"…`, 'info');
+      _enrolling = true;  // il poll() esistente raccoglie enrolled/success
+    } else {
+      setMsg('ev-status', `✗ ${d.error || 'errore'}`, 'err');
+    }
+  } catch { setMsg('ev-status', '✗ Errore di connessione', 'err'); }
+}
+
+// ── Core tab helpers ──────────────────────────────────────────────────────────
+function updateCoreDot(id, active) {
+  const dot = document.getElementById(id + '-dot');
+  const txt = document.getElementById(id + '-txt');
+  if (dot) dot.style.background = active ? 'var(--green)' : 'var(--red)';
+  if (txt) txt.textContent      = active ? 'running' : 'stopped';
+}
+
+let _corePreviewOpen = false;
+function toggleCamPreview() {
+  const img = document.getElementById('core-cam-preview');
+  const btn = document.getElementById('core-cam-preview-btn');
+  _corePreviewOpen = !_corePreviewOpen;
+  if (_corePreviewOpen) {
+    img.src = MJPEG_URL;
+    img.style.display = 'block';
+    btn.textContent = '■ Chiudi preview';
+  } else {
+    img.src = '';
+    img.style.display = 'none';
+    btn.textContent = '▶ Apri preview';
+  }
+}
+
+async function coreServiceCtrl(svc, action) {
+  const msgEl = document.getElementById('core-svc-msg');
+  if (msgEl) { msgEl.textContent = `${action} ${svc}…`; msgEl.className = 'msg info'; }
+  try {
+    const r = await fetch(`${API}/api/core-service/${svc}/${action}`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'
+    });
+    const d = await r.json();
+    if (msgEl) {
+      msgEl.textContent = d.ok ? `✓ ${svc}: ${action}` : `✗ ${d.error || 'errore'}`;
+      msgEl.className   = 'msg ' + (d.ok ? 'ok' : 'err');
+    }
+  } catch {
+    if (msgEl) { msgEl.textContent = '✗ Errore connessione'; msgEl.className = 'msg err'; }
+  }
+  setTimeout(() => { if (msgEl) msgEl.textContent = ''; }, 5000);
+}
+
+// ── Controllo servizi voce ────────────────────────────────────────────────────
+async function controlListener(action) {
+  const labels = {start:'Avvio', stop:'Arresto', restart:'Riavvio'};
+  setMsg('svc-msg', `${labels[action]||action} gaia-listener…`, 'info');
+  try {
+    const r = await fetch(`${API}/api/service/listener/${action}`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'
+    });
+    const d = await r.json();
+    setMsg('svc-msg',
+      d.ok ? `✓ gaia-listener: ${action}` : `✗ ${d.error || d.output || 'errore (sudo mancante?)'}`,
+      d.ok ? 'ok' : 'err');
+  } catch { setMsg('svc-msg', '✗ Errore di connessione', 'err'); }
+  setTimeout(() => setMsg('svc-msg', ''), 5000);
+}
+
+async function controlPiService(action) {
+  const labels = {start:'Avvio', stop:'Arresto', restart:'Riavvio'};
+  setMsg('svc-msg', `${labels[action]||action} Pi ${_piRoom} voice…`, 'info');
+  try {
+    const r = await fetch(`${API}/api/pi-service/${_piRoom}/${action}`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'
+    });
+    const d = await r.json();
+    setMsg('svc-msg',
+      d.ok ? `✓ Pi ${_piRoom} voice: ${action}` : `✗ ${d.error || 'errore'}`,
+      d.ok ? 'ok' : 'err');
+  } catch { setMsg('svc-msg', '✗ Errore di connessione', 'err'); }
+  setTimeout(() => setMsg('svc-msg', ''), 5000);
+}
+
+async function uploadFaceFile() {
+  const name = document.getElementById('ef-name').value.trim();
+  const fileInput = document.getElementById('ef-file');
+  if (!name) { setMsg('ef-msg', '✗ Inserisci un nome', 'err'); return; }
+  if (!fileInput.files.length) { setMsg('ef-msg', '✗ Seleziona una foto', 'err'); return; }
+  setMsg('ef-msg', 'Caricamento…', 'info');
+  try {
+    const b64 = await readFileAsBase64(fileInput.files[0]);
+    const r = await fetch(`${API}/api/enroll/face-upload`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({name, image_base64: b64})
+    });
+    const d = await r.json();
+    setMsg('ef-msg', d.ok ? `✓ Foto caricata per "${name}"` : `✗ ${d.error || 'errore'}`, d.ok ? 'ok' : 'err');
+  } catch { setMsg('ef-msg', '✗ Errore di connessione', 'err'); }
+}
+
+// ── Selezione microfono ────────────────────────────────────────────────────
+async function loadMicrophones() {
+  try {
+    const r = await fetch(`${API}/api/microphones`, {signal: AbortSignal.timeout(3000)});
+    const d = await r.json();
+    const sel = document.getElementById('gww-mic');
+    if (!sel) return;
+    sel.innerHTML = '';
+    (d.devices || []).forEach(dev => {
+      const opt = document.createElement('option');
+      opt.value = dev.name;   // ALSA device string es. "plughw:CARD=Communicator,DEV=0"
+      opt.textContent = `${dev.label} (${dev.name})`;
+      if (dev.name === d.current || dev.label.toLowerCase().includes('communicator')) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    if (sel.options.length > 0) await setAdminMic();
+  } catch(e) { console.warn('loadMicrophones:', e); }
+}
+
+async function setAdminMic() {
+  const sel = document.getElementById('gww-mic');
+  if (!sel) return;
+  await fetch(`${API}/api/admin/set-mic`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({alsa_device: sel.value})
+  }).catch(()=>{});
+}
+
+// ── Wakeword Gaia ──────────────────────────────────────────────────────────
+function _clipButtons(apiBase, label, indices, refreshFn) {
+  if (!indices || !indices.length) return '<span style="color:var(--muted);font-size:.78rem">nessuno</span>';
+  const tiles = indices.map(i =>
+    `<span class="clip-tile">` +
+    `<button class="clip-play" title="Ascolta clip ${i+1}" onclick="playClip('${apiBase}','${label}',${i})">▶ ${i+1}</button>` +
+    `<button class="clip-del" title="Elimina clip ${i+1}" onclick="deleteClip('${apiBase}','${label}',${i},'${refreshFn}')">🗑</button>` +
+    `</span>`
+  ).join('');
+  return `<div class="clip-strip">${tiles}</div>`;
+}
+
+// Riassegna innerHTML solo se cambiato: i refresh girano ogni 5s e senza
+// questo check la strip perderebbe la posizione di scroll e sfarfallerebbe.
+function _setHtmlIfChanged(el, html) {
+  if (el._prevHtml !== html) { el.innerHTML = html; el._prevHtml = html; }
+}
+
+async function playClip(apiBase, label, idx) {
+  try {
+    const r = await fetch(`${API}${apiBase}/${label}/${idx}`, {signal: AbortSignal.timeout(5000)});
+    if (!r.ok) { alert('Clip non trovata'); return; }
+    const blob = await r.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = new Audio(url);
+    a.onended  = () => URL.revokeObjectURL(url);
+    a.play();
+  } catch(e) { alert('Errore playback: ' + e.message); }
+}
+
+async function deleteClip(apiBase, label, idx, refreshFn) {
+  const msgId = refreshFn === 'wwRefresh' ? 'ww-msg' : 'db-msg';
+  setMsg(msgId, `Eliminazione clip ${idx+1}…`, 'info');
+  try {
+    const r = await fetch(`${API}${apiBase}/${label}/${idx}`, {
+      method: 'POST',   // usa POST con _method=DELETE per massima compatibilità browser
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({_method:'DELETE'})
+    });
+    if (!r.ok) { setMsg(msgId, `✗ HTTP ${r.status}`, 'err'); return; }
+    const d = await r.json();
+    if (d.ok) {
+      setMsg(msgId, `✓ Clip ${idx+1} eliminata`, 'ok');
+      await window[refreshFn]();
+    } else {
+      setMsg(msgId, `✗ ${d.error||'errore'}`, 'err');
+    }
+  } catch(e) {
+    setMsg(msgId, `✗ Errore: ${e.message}`, 'err');
+  }
+}
+
+// ── Wakeword Gaia: card unica con selettore device ───────────────────────────
+// Anti-esplosione card: per aggiungere una macchina (es. OPS quando la voce
+// sarà pronta) si aggiunge UNA voce a WW_DEVICES + gli endpoint dedicati in
+// gaia_admin.py — niente card clonate.
+// Stanza ATTUALE di ogni device dai profili semantici (Node-RED): label,
+// meter live e registrazioni seguono il device quando viene spostato.
+const _devRooms = { 'pi-fd75d8': 'cucina', 'ops-silvermini2': 'soggiorno', 'minipc-core-node-0': 'salotto' };
+function _wwRoom(key) { return _devRooms[(WW_DEVICES[key] || {}).deviceId] || ''; }
+async function loadDeviceRooms() {
+  try {
+    const r = await fetch(`http://${location.hostname}:1880/gaia/devices/profiles`, {signal: AbortSignal.timeout(4000)});
+    const profs = await r.json();
+    const snap = JSON.stringify(_devRooms);
+    for (const [id, p] of Object.entries(profs)) _devRooms[id] = p.room_assigned || p.room || _devRooms[id];
+    if (JSON.stringify(_devRooms) !== snap) _wwInitSelect();
+    const dbs = document.getElementById('db-stanza');
+    if (dbs && !dbs._touched) dbs.value = _devRooms['pi-fd75d8'];
+  } catch (e) { /* Node-RED offline: restano i default */ }
+}
+setInterval(loadDeviceRooms, 60000);
+
+const WW_DEVICES = {
+  minipc: {
+    name: 'miniPC / Core', deviceId: 'minipc-core-node-0',
+    desc:  'Modello dedicato al mic del miniPC. Il miniPC si sveglia se whisper sente ' +
+           '"gaia" nel parlato OPPURE se questo modello supera la sua soglia (slider ' +
+           'nella card Soglie voce). Dopo il training si ricarica al volo.',
+    api:   '/api/gaia-wakeword-minipc',
+    statsRoom: null, rmsScale: 1500,   // stats del listener locale (d.stats)
+    mic:   true,
+    recLabel: '🔴 Registra dal miniPC',
+    record: (label, dur) => fetch(`${API}/api/gaia-wakeword/record-local`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({label, duration_s: dur})}),
+    recDelay: dur => (dur + 1) * 1000,
+    trainOk: '✓ Modello Gaia (miniPC) addestrato e ricaricato — attivo subito',
+    trainRefreshDelay: 3000,
+  },
+  pi: {
+    name: 'Pi', deviceId: 'pi-fd75d8',
+    desc:  'Modello per il mic del Pi (ora in {ROOM}). La stanza si sveglia se il trigger base ' +
+           '"alexa" supera la SUA soglia OPPURE se questo modello supera la propria ' +
+           '(entrambe nella card "Voce {ROOM} — Soglie wakeword"). Distribuito via OTA.',
+    api:   '/api/gaia-wakeword',
+    statsRoom: () => _wwRoom('pi'), rmsScale: 8000,
+    mic:   false,
+    recLabel: '📡 Registra dal Pi — {ROOM}',
+    record: (label, dur) => fetch(`${API}/api/gaia-wakeword/record`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({label, duration_s: dur, stanza: _wwRoom('pi') || _piRoom})}),
+    recDelay: dur => (dur + 3) * 1000,
+    trainOk: '✓ Modello Gaia addestrato e distribuito al Pi',
+    trainRefreshDelay: 0,
+  },
+  ops: {
+    name: 'OPS', deviceId: 'ops-silvermini2',
+    desc:  'Modello per il mic di OPS (ora in {ROOM}). La stanza si sveglia se il trigger ' +
+           'base "alexa" supera la SUA soglia OPPURE se questo modello supera la propria ' +
+           '(card "Voce {ROOM} — Soglie wakeword"; trigger base spegnibile a >1). ' +
+           'Dopo il training: OTA mirato + ricarica a caldo, attivo in pochi secondi.',
+    api:   '/api/gaia-wakeword-ops',
+    statsRoom: () => _wwRoom('ops'), rmsScale: 8000,
+    mic:   false,
+    recLabel: '📡 Registra da OPS — {ROOM}',
+    record: (label, dur) => fetch(`${API}/api/gaia-wakeword/record`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({label, duration_s: dur, stanza: _wwRoom('ops') || 'soggiorno'})}),
+    recDelay: dur => (dur + 3) * 1000,
+    trainOk: '✓ Modello Gaia (OPS) addestrato e inviato a OPS — riavvia voice da Pi Manager',
+    trainRefreshDelay: 0,
+  },
+};
+let _wwDev = 'minipc';
+
+function wwSwitchDevice() {
+  _wwDev = document.getElementById('ww-dev').value;
+  const D = WW_DEVICES[_wwDev];
+  document.getElementById('ww-desc').textContent = D.desc.replace(/\{ROOM\}/g, _wwRoom(_wwDev) || '?');
+  document.getElementById('ww-mic-row').style.display = D.mic ? '' : 'none';
+  const recLbl = D.recLabel.replace(/\{ROOM\}/g, _wwRoom(_wwDev) || '?');
+  document.getElementById('ww-rec-pos').textContent = recLbl;
+  document.getElementById('ww-rec-neg').textContent = recLbl;
+  document.getElementById('ww-status')._prevHtml = null;   // forza il redraw
+  setMsg('ww-msg', '');
+  wwRefresh();
+}
+
+function _wwInitSelect() {
+  const sel = document.getElementById('ww-dev');
+  sel.innerHTML = Object.entries(WW_DEVICES).map(([k, d]) => {
+    const room = d.deviceId ? (_devRooms[d.deviceId] || '?') : null;
+    return `<option value="${k}">${d.name}${room ? ' — ' + room : ''}</option>`;
+  }).join('');
+  sel.value = _wwDev;
+  wwSwitchDevice();
+}
+
+async function wwRefresh() {
+  const D = WW_DEVICES[_wwDev];
+  try {
+    const r = await fetch(`${API}${D.api}/status`, {signal: AbortSignal.timeout(3000)});
+    const d = await r.json();
+    const el  = document.getElementById('ww-status');
+    const btn = document.getElementById('ww-train-btn');
+    const imbalanced = d.negative < d.positive * 0.6;
+    const warn = imbalanced
+      ? `<div style="margin-top:4px;padding:5px 8px;background:#2a1a00;border:1px solid var(--yellow);border-radius:5px;font-size:.78rem;color:var(--yellow)">
+           ⚠ Troppo pochi negativi (${d.negative}) rispetto ai positivi (${d.positive}) — il modello avrà bias.<br>
+           Aggiungi almeno ${Math.ceil(d.positive * 0.8) - d.negative} negativi: <b>TV accesa</b>, parlato normale, musica.
+         </div>` : '';
+    _setHtmlIfChanged(el,
+      `<div style="margin-bottom:4px">` +
+        `Campioni: <b style="color:var(--green)">${d.positive}</b> positivi / <b style="color:var(--blue)">${d.negative}</b> negativi` +
+        (d.model_exists ? ' &nbsp;|&nbsp; <span style="color:var(--green)">✓ Modello attivo</span>'
+                        : ' &nbsp;|&nbsp; <span style="color:var(--muted)">nessun modello ancora</span>') +
+      `</div>${warn}` +
+      `<div style="font-size:.78rem;color:var(--muted);margin-top:6px;margin-bottom:2px">Positivi: ${_clipButtons(D.api + '/clip','positive',d.positive_clips,'wwRefresh')}</div>` +
+      `<div style="font-size:.78rem;color:var(--muted)">Negativi: ${_clipButtons(D.api + '/clip','negative',d.negative_clips,'wwRefresh')}</div>`);
+    btn.disabled = (d.positive < 3 || d.negative < 3);
+    btn.title    = btn.disabled ? 'Servono almeno 3 campioni positivi e 3 negativi'
+                                : `Addestra il modello (${D.label})`;
+  } catch {}
+}
+
+async function wwRecord(label) {
+  const D = WW_DEVICES[_wwDev];
+  const dur = parseInt(document.getElementById(`ww-dur-${label==='positive'?'pos':'neg'}`).value);
+  const hint = label === 'positive' ? 'di\' "Gaia" chiaramente' : 'TV accesa / parlato normale (mai "Gaia")';
+  setMsg('ww-msg', `🔴 ${D.label} — registrazione ${dur}s — ${hint}…`, 'info');
+  try {
+    const r = await D.record(label, dur);
+    const d = await r.json();
+    if (d.ok) {
+      setTimeout(async () => {
+        await wwRefresh();
+        setMsg('ww-msg', `✓ Campione ${label} acquisito`, 'ok');
+      }, D.recDelay(dur));
+    } else { setMsg('ww-msg', `✗ ${d.error||'errore'}`, 'err'); }
+  } catch { setMsg('ww-msg', '✗ Errore di connessione', 'err'); }
+}
+
+async function wwUpload(label) {
+  const D = WW_DEVICES[_wwDev];
+  const fileInput = document.getElementById(`ww-file-${label==='positive'?'pos':'neg'}`);
+  if (!fileInput.files.length) { setMsg('ww-msg', '✗ Seleziona un file', 'err'); return; }
+  setMsg('ww-msg', 'Caricamento…', 'info');
+  try {
+    const b64 = await readFileAsBase64(fileInput.files[0]);
+    const r = await fetch(`${API}${D.api}/upload`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({label, audio_base64: b64})
+    });
+    const d = await r.json();
+    if (d.ok) { await wwRefresh(); setMsg('ww-msg', `✓ File ${label} caricato`, 'ok'); }
+    else { setMsg('ww-msg', `✗ ${d.error||'errore'}`, 'err'); }
+  } catch { setMsg('ww-msg', '✗ Errore di connessione', 'err'); }
+}
+
+async function wwTrain() {
+  const D = WW_DEVICES[_wwDev];
+  document.getElementById('ww-train-btn').disabled = true;
+  setMsg('ww-msg', `🎓 Addestramento modello (${D.label})…`, 'info');
+  try {
+    const r = await fetch(`${API}${D.api}/train`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'
+    });
+    const d = await r.json();
+    if (d.ok) {
+      setTimeout(async () => { await wwRefresh(); setMsg('ww-msg', D.trainOk, 'ok'); },
+                 D.trainRefreshDelay);
+    } else { setMsg('ww-msg', `✗ ${d.error||'errore'}`, 'err'); }
+  } catch { setMsg('ww-msg', '✗ Errore di connessione', 'err'); }
+  document.getElementById('ww-train-btn').disabled = false;
+}
+
+loadMicrophones();
+_wwInitSelect();
+loadDeviceRooms();
+setInterval(wwRefresh, 5000);
+
+// ── Citofono ───────────────────────────────────────────────────────────────
+async function refreshDoorbellStatus() {
+  try {
+    const r = await fetch(`${API}/api/doorbell/status`, {signal: AbortSignal.timeout(3000)});
+    const d = await r.json();
+    const el = document.getElementById('doorbell-status');
+    const trainBtn = document.getElementById('db-train-btn');
+    _setHtmlIfChanged(el,
+      `<div style="margin-bottom:6px">` +
+        `Campioni: <b style="color:var(--green)">${d.positive}</b> positivi / <b style="color:var(--blue)">${d.negative}</b> negativi` +
+        (d.model_exists ? ' &nbsp;|&nbsp; <span style="color:var(--green)">✓ Modello presente</span>' : '') +
+      `</div>` +
+      `<div style="font-size:.78rem;color:var(--muted);margin-bottom:2px">Positivi: ${_clipButtons('/api/doorbell/clip','positive',d.positive_clips,'refreshDoorbellStatus')}</div>` +
+      `<div style="font-size:.78rem;color:var(--muted)">Negativi: ${_clipButtons('/api/doorbell/clip','negative',d.negative_clips,'refreshDoorbellStatus')}</div>`);
+    trainBtn.disabled = (d.positive < 3 || d.negative < 3);
+    trainBtn.title    = trainBtn.disabled ? 'Servono almeno 3 campioni positivi e 3 negativi' : 'Addestra il modello';
+  } catch {}
+}
+
+async function recordDoorbell(label) {
+  const dur    = parseInt(document.getElementById(`db-dur-${label==='positive'?'pos':'neg'}`).value);
+  const stanza = (document.getElementById('db-stanza')?.value || _devRooms['pi-fd75d8'] || 'cucina').trim();
+  setMsg('db-msg', `🔴 Registrazione ${label} in corso (${dur}s) → Pi ${stanza}…`, 'info');
+  try {
+    const r = await fetch(`${API}/api/doorbell/record`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({label, duration_s: dur, stanza})
+    });
+    const d = await r.json();
+    if (d.ok) {
+      setTimeout(async () => {
+        await refreshDoorbellStatus();
+        setMsg('db-msg', `✓ Campione ${label} registrato`, 'ok');
+      }, (dur + 2) * 1000);
+    } else {
+      setMsg('db-msg', `✗ ${d.error || 'errore'}`, 'err');
+    }
+  } catch { setMsg('db-msg', '✗ Errore di connessione', 'err'); }
+}
+
+async function uploadDoorbell(label) {
+  const fileInput = document.getElementById(`db-file-${label==='positive'?'pos':'neg'}`);
+  if (!fileInput.files.length) { setMsg('db-msg', '✗ Seleziona un file', 'err'); return; }
+  setMsg('db-msg', 'Caricamento…', 'info');
+  try {
+    const b64 = await readFileAsBase64(fileInput.files[0]);
+    const r = await fetch(`${API}/api/doorbell/upload`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({label, audio_base64: b64})
+    });
+    const d = await r.json();
+    if (d.ok) {
+      await refreshDoorbellStatus();
+      setMsg('db-msg', `✓ File ${label} caricato`, 'ok');
+    } else {
+      setMsg('db-msg', `✗ ${d.error || 'errore'}`, 'err');
+    }
+  } catch { setMsg('db-msg', '✗ Errore di connessione', 'err'); }
+}
+
+async function trainDoorbell() {
+  document.getElementById('db-train-btn').disabled = true;
+  setMsg('db-msg', '🎓 Addestramento in corso…', 'info');
+  try {
+    const r = await fetch(`${API}/api/doorbell/train`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'
+    });
+    const d = await r.json();
+    if (d.ok) {
+      await refreshDoorbellStatus();
+      setMsg('db-msg', '✓ Modello addestrato e distribuito al Pi', 'ok');
+    } else {
+      setMsg('db-msg', `✗ ${d.error || 'errore training'}`, 'err');
+    }
+  } catch { setMsg('db-msg', '✗ Errore di connessione', 'err'); }
+  document.getElementById('db-train-btn').disabled = false;
+}
+
+refreshDoorbellStatus();
+setInterval(refreshDoorbellStatus, 5000);
+
+loadAutomations();
+
+poll();
+
+// ── Tab switching ─────────────────────────────────────────────────────────────
+function showTab(id, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  btn.classList.add('active');
+  history.replaceState(null, '', '#' + id);   // deep-link condivisibile
+  if (id === 'pi' && !_pmClient) initPiManager();
+  if (id === 'pi') loadProvision();
+}
+
+// Deep-link: admin.html#pi apre direttamente il tab (usato dal redirect
+// di pi-manager.html e dai link nelle altre pagine)
+window.addEventListener('DOMContentLoaded', () => {
+  const t = (location.hash || '').replace('#', '');
+  if (t && document.getElementById('tab-' + t)) {
+    const btn = document.querySelector(`.tab-btn[onclick*="'${t}'"]`);
+    if (btn) showTab(t, btn);
+  }
+});
+
+// ── Provisioning — device registrati via /api/provision ─────────────────────
+async function loadProvision() {
+  const listEl  = document.getElementById('prov-list');
+  const emptyEl = document.getElementById('prov-empty');
+  try {
+    const r = await fetch(`${API}/api/provision/devices`);
+    const d = await r.json();
+    const devices = Object.entries(d.devices || {});
+    if (!devices.length) {
+      listEl.style.display = 'none'; emptyEl.style.display = 'block';
+      return;
+    }
+    emptyEl.style.display = 'none'; listEl.style.display = 'block';
+    const fmtTs = ms => ms ? new Date(ms).toLocaleString('it-IT') : '—';
+    let html = `<table style="width:100%;border-collapse:collapse;font-size:.8rem">
+      <tr style="color:var(--muted);text-align:left">
+        <th style="padding:6px 8px">Device</th><th style="padding:6px 8px">HW</th>
+        <th style="padding:6px 8px">IP</th><th style="padding:6px 8px">SW</th>
+        <th style="padding:6px 8px">Stanza</th><th style="padding:6px 8px">Visto</th>
+        <th style="padding:6px 8px"></th>
+      </tr>`;
+    for (const [id, dev] of devices) {
+      const assigned = dev.stanza;
+      const stanzaCell = assigned
+        ? `<span style="color:var(--green,#3fb950)">${assigned}</span>`
+        : (dev.stanza_claim
+            ? `<span style="color:var(--muted)">${dev.stanza_claim} <em>(dichiarata)</em></span>`
+            : `<span style="color:var(--yellow,#d29922)">da assegnare</span>`);
+      html += `<tr style="border-top:1px solid var(--border)">
+        <td style="padding:6px 8px;font-weight:600">${id}</td>
+        <td style="padding:6px 8px;color:var(--muted)">${dev.hw || '—'}</td>
+        <td style="padding:6px 8px">${dev.ip || '—'}</td>
+        <td style="padding:6px 8px">${dev.sw_version || '—'}</td>
+        <td style="padding:6px 8px">${stanzaCell}</td>
+        <td style="padding:6px 8px;color:var(--muted)">${fmtTs(dev.last_seen)}</td>
+        <td style="padding:6px 8px;white-space:nowrap">
+          <input id="prov-in-${id}" placeholder="stanza" value="${assigned || dev.stanza_claim || ''}"
+                 style="width:90px;padding:3px 6px;font-size:.78rem">
+          <button class="small secondary" onclick="suggestRoom('${id}', '${dev.stanza_claim || assigned || ''}')" title="Suggerisci stanza dagli oggetti rilevati dalla camera (non assegna, solo suggerimento)">🔍</button>
+          <button class="small secondary" onclick="assignDevice('${id}')">✓ Assegna</button>
+          <button class="small danger" onclick="forgetDevice('${id}')" title="Rimuovi dal registro">✕</button>
+        </td>
+      </tr>`;
+    }
+    listEl.innerHTML = html + '</table>';
+  } catch (e) {
+    provMsg('✗ Errore caricamento: ' + e.message, false);
+  }
+}
+
+function provMsg(txt, ok) {
+  const el = document.getElementById('prov-msg');
+  el.textContent = txt;
+  el.className = 'msg ' + (ok ? 'ok' : 'err');
+  setTimeout(() => { el.textContent = ''; }, 5000);
+}
+
+async function suggestRoom(id, currentRoomKey) {
+  if (!currentRoomKey) { provMsg('✗ Nessuna stanza attuale nota per questo device — impossibile suggerire', false); return; }
+  try {
+    const r = await fetch(`http://${location.hostname}:1880/gaia/room-guess?room=${encodeURIComponent(currentRoomKey)}`);
+    const d = await r.json();
+    if (!d.ok || !d.best) {
+      provMsg(`ℹ️ Nessun suggerimento (oggetti insufficienti rilevati per "${currentRoomKey}")`, false);
+      return;
+    }
+    document.getElementById(`prov-in-${id}`).value = d.best.room;
+    const objs = (d.best.matched_objects || []).join(', ') || '—';
+    provMsg(`🔍 Suggerito: ${d.best.room} (${d.best.score}% — oggetti: ${objs}). Verifica e premi Assegna.`, true);
+  } catch (e) { provMsg('✗ ' + e.message, false); }
+}
+
+async function assignDevice(id) {
+  const stanza = (document.getElementById(`prov-in-${id}`).value || '').trim();
+  if (!stanza) { provMsg('✗ Inserisci il nome della stanza', false); return; }
+  try {
+    const r = await fetch(`${API}/api/provision/assign`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({device_id: id, stanza})
+    });
+    const d = await r.json();
+    provMsg(d.ok ? `✓ ${id} → ${stanza} (applicata via MQTT se online)` : `✗ ${d.error || 'errore'}`, d.ok);
+    loadProvision();
+  } catch (e) { provMsg('✗ ' + e.message, false); }
+}
+
+async function forgetDevice(id) {
+  if (!confirm(`Rimuovere ${id} dal registro provisioning?`)) return;
+  try {
+    const r = await fetch(`${API}/api/provision/forget`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({device_id: id})
+    });
+    const d = await r.json();
+    provMsg(d.ok ? `✓ ${id} rimosso` : `✗ ${d.error || 'errore'}`, d.ok);
+    loadProvision();
+  } catch (e) { provMsg('✗ ' + e.message, false); }
+}
+
+// ── Pi Manager MQTT ──────────────────────────────────────────────────────────
+let _pmClient = null;
+const _pmDevices = {};
+const PM_SVC_META = {
+  yolo:      { label: 'YOLO',      icon: '👁️' },
+  mediapipe: { label: 'MediaPipe', icon: '🖐️' },
+  voice:     { label: 'Voice',     icon: '🎤' },
+  camera:    { label: 'Camera',    icon: '📷' },
+  screen:    { label: 'Screen',    icon: '🖥️' },
+  scene:     { label: 'Scene',     icon: '🏞️' },
+  kiosk:     { label: 'Kiosk',     icon: '📺' },
+};
+
+async function pmCleanRooms() {
+  try {
+    const base = `http://${location.hostname}:1880`;
+    const rooms = (await (await fetch(`${base}/gaia/rooms`)).json()).rooms;
+    const orphans = Object.entries(rooms)
+      .filter(([n, v]) => !v.devices.length && !v.in_map).map(([n]) => n);
+    if (!orphans.length) { alert('Nessuna stanza orfana — tutto pulito ✓'); return; }
+    if (!confirm(`Stanze orfane (nessun device, fuori mappa): ${orphans.join(', ')}\nPulisco dati e topic retained?`)) return;
+    for (const room of orphans)
+      await fetch(`${base}/gaia/rooms/clean`, { method: 'POST',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ room }) });
+    alert('Pulite: ' + orphans.join(', '));
+  } catch (e) { alert('Errore pulizia: ' + e.message); }
+}
+
+function initPiManager() {
+  const host = location.hostname;
+  document.getElementById('pm-broker-label').textContent = host;
+  const mqttUrl = `ws://${host}:9001`;
+
+  // Dynamic load of mqtt.js if not already available
+  function startMqtt() {
+    _pmClient = mqtt.connect(mqttUrl);
+    _pmClient.on('connect', () => {
+      pmSetConn(true);
+      _pmClient.subscribe('gaia/device/+/status');
+      pmLog('in', `Connesso a ${mqttUrl}`);
+    });
+    _pmClient.on('error',   e  => { pmSetConn(false); pmLog('err', e.message || 'Errore MQTT'); });
+    _pmClient.on('offline', () => pmSetConn(false));
+    _pmClient.on('reconnect', () => pmLog('err', 'Riconnessione…'));
+    _pmClient.on('message', (topic, raw) => {
+      if (!raw || !raw.length) return;
+      try {
+        const d = JSON.parse(raw.toString());
+        const id = d.device_id;
+        if (!id) return;
+        const isNew = !_pmDevices[id];
+        d._lastSeen = Date.now();
+        d._offline  = false;
+        _pmDevices[id] = d;
+        isNew ? pmBuildCard(id, d) : pmPatchCard(id, d);
+        pmLog('in', `[${id}] stanza=${d.stanza||'?'} ip=${d.ip||'?'}`);
+      } catch(e) { pmLog('err', 'Parse: ' + e.message); }
+    });
+    setInterval(() => {
+      const now = Date.now();
+      for (const [id, d] of Object.entries(_pmDevices)) {
+        const was = d._offline;
+        d._offline = (now - d._lastSeen) > 90000;
+        if (was !== d._offline) pmPatchCard(id, d);
+      }
+    }, 10000);
+  }
+
+  if (typeof mqtt !== 'undefined') {
+    startMqtt();
+  } else {
+    const s = document.createElement('script');
+    s.src = 'https://unpkg.com/mqtt/dist/mqtt.min.js';
+    s.onload = startMqtt;
+    s.onerror = () => pmLog('err', 'Impossibile caricare mqtt.js');
+    document.head.appendChild(s);
+  }
+}
+
+function pmSetConn(ok) {
+  const dot   = document.getElementById('mqtt-dot');
+  const label = document.getElementById('pm-conn-label');
+  if (dot)   dot.className   = 'mqtt-dot ' + (ok ? 'ok' : 'err');
+  if (label) label.textContent = ok ? 'Connesso' : 'Disconnesso';
+  if (label) label.style.color = ok ? 'var(--green)' : 'var(--red)';
+}
+
+function pmEsc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function pmFmtUp(sec) { if(!sec)return''; const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60); return h?`${h}h ${m}m`:`${m}m`; }
+
+function pmSvcKeys(d) {
+  return [...new Set([...Object.keys(d.services||{}), ...Object.keys(d.config||{})])];
+}
+function pmSvcBtnHtml(key, d) {
+  const meta  = PM_SVC_META[key] || {label:key, icon:'⚙️'};
+  const state = (d.services||{})[key] || 'inactive';
+  const cls   = state==='active'?'running':state==='failed'?'failed':'';
+  return `<div class="pm-svc-btn ${cls}" data-svc="${key}">
+    <span class="svc-icon">${meta.icon}</span>
+    <span class="svc-name">${meta.label}</span>
+    <span class="svc-state">${state}</span>
+    <div class="pm-svc-toggle">
+      <button class="pm-btn green pm-svc-on" data-svc="${key}" title="Avvia">▶</button>
+      <button class="pm-btn red pm-svc-off"  data-svc="${key}" title="Stop">■</button>
+      <button class="pm-btn gray pm-svc-rst" data-svc="${key}" title="Restart">↺</button>
+    </div>
+  </div>`;
+}
+function pmCapBadges(d) {
+  const caps = d.capabilities||{};
+  const b = [caps.camera?`<span class="pm-badge cap">📷 Camera</span>`:'', caps.mic?`<span class="pm-badge cap">🎤 Mic</span>`:''].filter(Boolean).join('');
+  return b?`<div style="display:flex;gap:6px;flex-wrap:wrap">${b}</div>`:'';
+}
+
+function pmBuildCard(id, d) {
+  const grid = document.getElementById('pm-devices-grid');
+  document.getElementById('pm-no-devices').style.display = 'none';
+  grid.style.display = 'grid';
+
+  const card = document.createElement('div');
+  card.id = `pm-card-${id}`;
+  card.className = 'pi-card' + (d._offline?' offline':'');
+
+  const svcKeys = pmSvcKeys(d);
+  const cols = Math.min(Math.max(svcKeys.length, 1), 3);
+
+  card.innerHTML = `
+  <div class="pi-card-header">
+    <div class="pi-status-dot"></div>
+    <div class="pi-name-block">
+      <div class="pi-display-name">${pmEsc(d.name||d.stanza||id)}</div>
+      <div class="pi-device-id">${pmEsc(id)} · <span class="pm-ip-span">${pmEsc(d.ip||'?')}</span></div>
+    </div>
+    <div class="pi-uptime">${pmFmtUp(d.uptime)}</div>
+  </div>
+  <div class="pi-card-body">
+    ${pmCapBadges(d)}
+    <div>
+      <div class="pm-section-label">Stanza / Nome display</div>
+      <div class="pm-rename-row">
+        <div class="pm-rename-inputs">
+          <input class="pm-inp-stanza" placeholder="stanza" value="${pmEsc(d.stanza||'')}">
+          <input class="pm-inp-name"   placeholder="nome display" value="${pmEsc(d.name||'')}">
+        </div>
+        <button class="pm-btn blue pm-btn-rename" style="width:100%">💾 Salva</button>
+      </div>
+    </div>
+    ${svcKeys.length?`<div>
+      <div class="pm-section-label">Servizi</div>
+      <div class="pm-svc-grid" style="grid-template-columns:repeat(${cols},1fr)">${svcKeys.map(k=>pmSvcBtnHtml(k,d)).join('')}</div>
+    </div>`:''}
+    <div class="pm-card-actions">
+      <button class="pm-btn gray pm-btn-status">Status</button>
+      <button class="pm-btn amber pm-btn-reboot">Reboot</button>
+      <button class="pm-btn red pm-btn-remove">✕ Rimuovi</button>
+    </div>
+  </div>`;
+
+  grid.appendChild(card);
+  pmAttachEvents(id, card);
+}
+
+function pmPatchCard(id, d) {
+  const card = document.getElementById(`pm-card-${id}`);
+  if (!card) { pmBuildCard(id, d); return; }
+  card.className = 'pi-card' + (d._offline?' offline':'');
+  const dn = card.querySelector('.pi-display-name');
+  if (dn) dn.textContent = d.name||d.stanza||id;
+  const ip = card.querySelector('.pm-ip-span');
+  if (ip) ip.textContent = d.ip||'?';
+  const ut = card.querySelector('.pi-uptime');
+  if (ut) ut.textContent = pmFmtUp(d.uptime);
+  const services = d.services||{};
+  card.querySelectorAll('.pm-svc-btn[data-svc]').forEach(btn => {
+    const svc = btn.dataset.svc;
+    const state = services[svc]||'inactive';
+    const stEl = btn.querySelector('.svc-state');
+    if (stEl) stEl.textContent = state;
+    btn.classList.remove('running','failed');
+    if (state==='active')  btn.classList.add('running');
+    if (state==='failed')  btn.classList.add('failed');
+  });
+  const inpS = card.querySelector('.pm-inp-stanza');
+  const inpN = card.querySelector('.pm-inp-name');
+  if (inpS && document.activeElement!==inpS) inpS.value = d.stanza||'';
+  if (inpN && document.activeElement!==inpN) inpN.value = d.name||'';
+}
+
+function pmAttachEvents(id, card) {
+  card.querySelector('.pm-btn-rename').onclick = function() {
+    const stanza = card.querySelector('.pm-inp-stanza').value.trim().toLowerCase().replace(/\s+/g,'-');
+    const name   = card.querySelector('.pm-inp-name').value.trim() || stanza;
+    if (!stanza) return;
+    const dn = card.querySelector('.pi-display-name');
+    if (dn) dn.textContent = name;
+    const btn = this;
+    btn.style.background = '#1a8a50';
+    btn.textContent = '✓ Salvato';
+    setTimeout(() => { btn.style.background=''; btn.textContent='💾 Salva'; }, 1500);
+    pmSend(id, {action:'set_config', stanza, name});
+  };
+  card.querySelectorAll('.pm-svc-on').forEach(b  => b.onclick = () => pmSend(id, {action:'enable',  service:b.dataset.svc}));
+  card.querySelectorAll('.pm-svc-off').forEach(b  => b.onclick = () => pmSend(id, {action:'disable', service:b.dataset.svc}));
+  card.querySelectorAll('.pm-svc-rst').forEach(b  => b.onclick = () => pmSend(id, {action:'restart', service:b.dataset.svc}));
+  card.querySelector('.pm-btn-status').onclick  = () => pmSend(id, {action:'status'});
+  card.querySelector('.pm-btn-reboot').onclick  = () => { if(confirm(`Riavviare ${id}?`)) pmSend(id, {action:'reboot'}); };
+  card.querySelector('.pm-btn-remove').onclick  = () => {
+    if (!confirm(`Rimuovere "${id}" dalla lista?`)) return;
+    if (_pmClient) _pmClient.publish(`gaia/device/${id}/status`, '', {retain:true, qos:1});
+    delete _pmDevices[id];
+    card.remove();
+    if (!Object.keys(_pmDevices).length) {
+      document.getElementById('pm-no-devices').style.display = '';
+      document.getElementById('pm-devices-grid').style.display = 'none';
+    }
+    pmLog('out', `Rimosso retained: gaia/device/${id}/status`);
+  };
+}
+
+function pmSend(id, payload) {
+  if (!_pmClient) return;
+  const t = `gaia/device/${id}/command`;
+  _pmClient.publish(t, JSON.stringify(payload));
+  pmLog('out', `→ ${t} ${JSON.stringify(payload)}`);
+}
+
+const _pmLogEl = document.getElementById('pm-log-lines');
+function pmLog(type, msg) {
+  const t  = new Date().toTimeString().slice(0,8);
+  const el = document.createElement('div');
+  el.className = `pm-log-entry ${type}`;
+  el.innerHTML = `<span style="color:var(--muted);margin-right:8px">${t}</span>${pmEsc(msg)}`;
+  _pmLogEl.prepend(el);
+  while (_pmLogEl.children.length > 60) _pmLogEl.lastChild.remove();
+}
+</script>
+</body>
+</html>

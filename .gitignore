@@ -90,3 +90,4 @@ minipc/script/gaia_wakeword_samples/doorbell/
 minipc/script/gaia_wakeword_samples/*.pkl
 pi/agent/gaia_core.json
 minipc/script/provision_registry.json
+web/*.bak*
