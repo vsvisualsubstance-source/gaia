@@ -12,7 +12,7 @@ import signal
 import logging
 import queue
 import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from multiprocessing.shared_memory import SharedMemory
 
 import cv2
@@ -74,7 +74,11 @@ class MJPEGHandler(BaseHTTPRequestHandler):
 
 
 def _mjpeg_server_thread():
-    srv = HTTPServer(('0.0.0.0', config.MJPEG_PORT), MJPEGHandler)
+    # ThreadingHTTPServer: ogni client MJPEG tiene la connessione per sempre
+    # (kiosk!) — col server single-thread il primo client monopolizzava lo
+    # stream e tutti gli altri restavano in coda senza mai essere accettati.
+    srv = ThreadingHTTPServer(('0.0.0.0', config.MJPEG_PORT), MJPEGHandler)
+    srv.daemon_threads = True
     srv.timeout = 1.0
     log.info(f"MJPEG stream attivo: http://0.0.0.0:{config.MJPEG_PORT}/video")
     while _running:
