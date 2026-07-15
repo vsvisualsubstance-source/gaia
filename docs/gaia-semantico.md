@@ -150,6 +150,20 @@ ri-derivano i topic; se la stanza vecchia resta senza device, la assign fa
 La mappa disegnata (`roomGraph`, ora `_v:3` con `soggiorno`) non viene mai toccata
 dalla pulizia: quella è la casa, non i dati.
 
-Attenzione nota: su OPS il publisher mediapipe si annuncia come
-`ops-silvermini2-mp` (device_id separato dall'agent `ops-silvermini2`) — da
-unificare lato OPS, altrimenti ogni spostamento va riassegnato due volte.
+Nota storica: il device `ops-silvermini2-mp` era un RELITTO del mediapipe
+standalone pre-manifest (muto da 9 giorni) — rimosso il 2026-07-15 con il
+nuovo `POST /gaia/device/forget {device_id}` (rifiuta se il device è vivo,
+pulisce entry nel registry + retained config/profile/status). Il mediapipe
+attuale eredita DEVICE_ID dall'agent: nessuna doppia identità.
+
+## Robustezza (2026-07-15)
+
+- **Backup notturno** (cron core 03:30, `minipc/script/gaia_backup.sh`):
+  campioni wakeword, faces, voice_db, brain/memories/thoughts, flows →
+  /media/core/D/backups/gaia + Pi ~/gaia-backup. Esito retained su
+  `gaia/backup/status`.
+- **Health check** (tab Device Registry, ogni 60s): device muto >3 min →
+  alert Telegram con messaggio di rientro; dead-man backup (>26h o fallito).
+  Gotcha: un full-deploy riconsegna i profili retained e azzera i lastSeen —
+  nei 3 minuti dopo un deploy gli offline sono mascherati.
+- **Web UI versionata**: /media/core/D/gaia-web è un symlink a `web/` nel repo.

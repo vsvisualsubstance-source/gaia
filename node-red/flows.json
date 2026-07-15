@@ -2611,6 +2611,11 @@
         "props": [
             {
                 "p": "payload"
+            },
+            {
+                "p": "topic",
+                "v": "gaia/device/all/command",
+                "vt": "str"
             }
         ],
         "repeat": "",
@@ -4097,6 +4102,142 @@
         "libs": [],
         "x": 380,
         "y": 1060,
+        "wires": [
+            [
+                "dr_mqtt_config_out"
+            ],
+            [
+                "dr_http_response"
+            ]
+        ]
+    },
+    {
+        "id": "health_inject",
+        "type": "inject",
+        "z": "tab_device_registry",
+        "name": "ogni 60s",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "60",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 150,
+        "y": 1140,
+        "wires": [
+            [
+                "health_fn"
+            ]
+        ]
+    },
+    {
+        "id": "health_fn",
+        "type": "function",
+        "z": "tab_device_registry",
+        "name": "HealthCheck",
+        "func": "// Health check (ogni 60s): device muti e backup vecchio → Telegram.\n// Un alert per episodio + messaggio di rientro (niente spam).\nconst brain = global.get('gaiaBrain') || {};\nconst h = brain._health = brain._health || { offline: {}, backupAlerted: false };\nconst now = Date.now();\nconst out = [];\n\n// 1. Device: heartbeat+profilo ogni 30s → muto se lastSeen > 3 min\nfor (const [id, d] of Object.entries(brain.devices || {})) {\n    if (!d.lastSeen) continue;\n    if (id.endsWith('-mp')) continue;   // publisher secondario, non un device\n    const offline = now - d.lastSeen > 180000;\n    const was = !!h.offline[id];\n    if (offline && !was) {\n        h.offline[id] = now;\n        out.push(`⚠️ ${id} (${d.room || '?'}) non risponde da 3 minuti.`);\n    } else if (!offline && was) {\n        const mins = Math.round((now - h.offline[id]) / 60000);\n        delete h.offline[id];\n        out.push(`✅ ${id} (${d.room || '?'}) è tornato online (giù ~${mins} min).`);\n    }\n}\n\n// 2. Dead-man backup: gaia/backup/status (retained) salvato in brain._backup\nconst b = brain._backup;\nif (b && b.ts) {\n    const stale = now - b.ts > 26 * 3600 * 1000;\n    const failed = b.ok === false;\n    if ((stale || failed) && !h.backupAlerted) {\n        h.backupAlerted = true;\n        out.push(failed\n            ? \"⚠️ Backup GAIA: l'ultimo backup è FALLITO — vedi /media/core/D/backups/gaia_backup.log\"\n            : '⚠️ Backup GAIA: nessun backup completato nelle ultime 26 ore.');\n    } else if (!stale && !failed) {\n        h.backupAlerted = false;\n    }\n}\n\nglobal.set('gaiaBrain', brain);\nif (!out.length) return null;\nreturn [out.map(content => ({ payload: {\n    chatId: 1180846253, type: 'message', content } }))];\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 340,
+        "y": 1140,
+        "wires": [
+            [
+                "health_telegram"
+            ]
+        ]
+    },
+    {
+        "id": "health_telegram",
+        "type": "telegram sender",
+        "z": "tab_device_registry",
+        "name": "Alert Telegram",
+        "bot": "00a66cdeeffcbf5d",
+        "haserroroutput": false,
+        "outputs": 1,
+        "x": 560,
+        "y": 1140,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "backup_mqtt_in",
+        "type": "mqtt in",
+        "z": "tab_device_registry",
+        "name": "Backup Status",
+        "topic": "gaia/backup/status",
+        "qos": "1",
+        "datatype": "auto-detect",
+        "broker": "29b6d5926d1a95ec",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 150,
+        "y": 1200,
+        "wires": [
+            [
+                "backup_fn"
+            ]
+        ]
+    },
+    {
+        "id": "backup_fn",
+        "type": "function",
+        "z": "tab_device_registry",
+        "name": "BackupStatus",
+        "func": "// gaia/backup/status (retained) → brain._backup per il dead-man switch\nlet p = msg.payload;\nif (typeof p === 'string') { try { p = JSON.parse(p); } catch (e) { return null; } }\nif (!p || !p.ts) return null;\nlet brain = global.get('gaiaBrain') || {};\nbrain._backup = { ok: p.ok !== false, ts: p.ts, size_bytes: p.size_bytes || 0 };\nglobal.set('gaiaBrain', brain);\nreturn null;\n",
+        "outputs": 0,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 350,
+        "y": 1200,
+        "wires": []
+    },
+    {
+        "id": "forget_http",
+        "type": "http in",
+        "z": "tab_device_registry",
+        "name": "POST /gaia/device/forget",
+        "url": "/gaia/device/forget",
+        "method": "post",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 170,
+        "y": 1260,
+        "wires": [
+            [
+                "forget_fn"
+            ]
+        ]
+    },
+    {
+        "id": "forget_fn",
+        "type": "function",
+        "z": "tab_device_registry",
+        "name": "DeviceForget",
+        "func": "// POST /gaia/device/forget {device_id, force?}\n// Dimentica un device morto/relitto: entry nel registry + clear dei suoi\n// retained (config, profile, status agent). Rifiuta se vivo (<10 min).\nconst body = msg.payload || {};\nconst id = (body.device_id || '').trim();\nif (!id) { msg.statusCode = 400; msg.payload = { ok: false, error: 'device_id richiesto' }; return [null, msg]; }\n\nlet brain = global.get('gaiaBrain') || {};\nconst d = (brain.devices || {})[id];\nif (!d) { msg.statusCode = 404; msg.payload = { ok: false, error: `${id} non in registry` }; return [null, msg]; }\nconst ageMin = d.lastSeen ? Math.round((Date.now() - d.lastSeen) / 60000) : null;\nif (ageMin !== null && ageMin < 10 && body.force !== true) {\n    msg.statusCode = 409;\n    msg.payload = { ok: false, error: `${id} visto ${ageMin} min fa — sembra vivo. Usa force:true per insistere` };\n    return [null, msg];\n}\ndelete brain.devices[id];\nglobal.set('gaiaBrain', brain);\n\nconst topics = [`gaia/devices/${id}/config`, `gaia/devices/${id}/profile`, `gaia/device/${id}/status`];\ntopics.forEach(t => node.send([{ topic: t, payload: '', retain: true }, null]));\nnode.warn(`[Registry] Dimenticato device ${id} (muto da ${ageMin} min)`);\nmsg.payload = { ok: true, device_id: id, was_silent_min: ageMin, retained_cleared: topics };\nreturn [null, msg];\n",
+        "outputs": 2,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 390,
+        "y": 1260,
         "wires": [
             [
                 "dr_mqtt_config_out"
