@@ -130,6 +130,22 @@ def _unlink_if_exists(name):
         pass
 
 
+def _create_or_attach(name, size):
+    """Crea il segmento; se esiste ancora lo riaggancia (Windows: unlink() è
+    un no-op e il segmento vive finché i lettori yolo/mediapipe tengono un
+    handle — al restart della sola camera la create pura fa FileExistsError)."""
+    try:
+        return SharedMemory(name=name, create=True, size=size)
+    except FileExistsError:
+        shm = SharedMemory(name=name, create=False)
+        if shm.size < size:
+            shm.close()
+            raise   # risoluzione cambiata: segmento vecchio troppo piccolo
+        log.warning(f"Riaggancio segmento esistente: {name} ({shm.size}B)")
+        return shm
+
+
+
 def _open_camera():
     # Su Windows il backend MSMF di default fallisce silenziosamente il grab
     # (isOpened()==True ma read() non ritorna mai un frame) su alcune webcam
@@ -164,8 +180,8 @@ def main():
     _unlink_if_exists(SHM_HEADER_NAME)
     _unlink_if_exists(SHM_FRAME_NAME)
 
-    header_shm = SharedMemory(name=SHM_HEADER_NAME, create=True, size=max(HEADER_SIZE, 64))
-    frame_shm  = SharedMemory(name=SHM_FRAME_NAME,  create=True, size=frame_bytes)
+    header_shm = _create_or_attach(SHM_HEADER_NAME, max(HEADER_SIZE, 64))
+    frame_shm  = _create_or_attach(SHM_FRAME_NAME, frame_bytes)
     log.info(f"Shared memory creata: {SHM_HEADER_NAME}, {SHM_FRAME_NAME}")
 
     # Avvia MJPEG server in background
