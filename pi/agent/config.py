@@ -65,6 +65,7 @@ SERVICE_MAP = {
     "voice":     "gaia-voice",
     "camera":    "gaia-camera",   # gestito come dipendenza di yolo/mediapipe, non attivabile a mano
     "screen":    "gaia-screen",   # superficie asemica su display DSI (pi/screen)
+    "kiosk":     "gaia-kiosk",    # Welcome su display DSI (cage+Chromium) — Conflicts con screen
 }
 
 # File di ambiente condiviso — agent lo scrive, i servizi lo leggono
@@ -78,6 +79,7 @@ SERVICE_DIRS = {
     "agent":     _BASE,
     "camera":    os.path.join(_GAIA_ROOT, "camera"),
     "screen":    os.path.join(_GAIA_ROOT, "screen"),
+    "kiosk":     os.path.join(_GAIA_ROOT, "kiosk"),
 }
 
 # Se il manifest dichiara servizi, sostituisce ENTRAMBE le mappe (l'entry

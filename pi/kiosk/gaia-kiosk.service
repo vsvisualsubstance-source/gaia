@@ -1,0 +1,28 @@
+[Unit]
+Description=GAIA Kiosk - Welcome su display DSI (cage + Chromium)
+After=network-online.target gaia-camera.service
+Wants=network-online.target
+# Un solo padrone del display: accendere il kiosk spegne la superficie
+# asemica (gaia-screen) e viceversa. Si sceglie da Pi Manager/Telegram.
+Conflicts=gaia-screen.service
+
+[Service]
+User=asemico
+PAMName=login
+TTYPath=/dev/tty2
+EnvironmentFile=-/etc/gaia/device.conf
+EnvironmentFile=-/etc/gaia/kiosk.conf
+# --password-store=basic: senza, Chromium chiede di sbloccare il portachiavi
+# GNOME a ogni avvio e il kiosk resta bloccato sul dialog.
+ExecStart=/bin/sh -c 'exec cage -- chromium-browser --kiosk \
+  --ozone-platform=wayland \
+  --password-store=basic \
+  --noerrdialogs --disable-infobars --no-first-run \
+  --disable-session-crashed-bubble \
+  --autoplay-policy=no-user-gesture-required \
+  "${KIOSK_URL:-http://${MQTT_HOST:-192.168.1.142}:1880/welcome.html?cam=localhost&room=${CAMERA_NAME:-cucina}}"'
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

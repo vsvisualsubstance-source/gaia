@@ -177,7 +177,7 @@ def all_statuses() -> dict:
 
 
 # Servizi che dipendono dal frame broker condiviso (camera_server) — vedi _sync_camera
-CAMERA_CONSUMERS = ("yolo", "mediapipe")
+CAMERA_CONSUMERS = ("yolo", "mediapipe", "kiosk")   # kiosk: bolla MJPEG della welcome (localhost:8766)
 
 
 def _camera_consumer_count(cfg: dict) -> int:

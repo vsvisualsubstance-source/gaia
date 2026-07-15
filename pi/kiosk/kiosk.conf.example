@@ -1,0 +1,8 @@
+# /etc/gaia/kiosk.conf — override opzionali per gaia-kiosk
+#
+# Di default il kiosk apre la Welcome del Core con la camera locale e la
+# stanza presa da /etc/gaia/device.conf (CAMERA_NAME) — segue il device
+# quando cambia stanza, nessun hardcode.
+#
+# Per puntare a un'altra pagina (es. dashboard, o welcome di un'altra room):
+# KIOSK_URL=http://192.168.1.142:1880/welcome.html?cam=localhost&room=cucina
