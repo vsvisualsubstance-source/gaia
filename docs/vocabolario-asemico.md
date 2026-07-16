@@ -40,8 +40,8 @@ nessuna dipendenza, ~250 righe).
 
 | Fase | Cosa | Dove si aggancia |
 |---|---|---|
-| v2 — Inchiostro dal mood | colore/spessore/velocità di scrittura da `soul.mood` + palette Arte Viva | `field.setInk()` già esposto; palette in `gaia-art/script.js` (`PALETTES`) |
-| v3 — Gesture → glifi | le gesture MediaPipe (`rooms[].mediapipe.people[].gestures`) diventano segni: un gesto "scrive" | payload WS già pronto (multi-persona dal 2026-07-04) |
+| v2 — Inchiostro dal mood — **FATTO 2026-07-16** | `setMood()` in asemic.js: colore (accent palette Arte Viva), spessore e velocità di scrittura da `soul.mood`, transizione lerp ~2s; solo inchiostro 'out' (l'umano resta blu: identità, non stato); pi/screen segue via `gaia/brain/state` (anche il sigillo respira nel colore del mood); test: `welcome.html?mood=stress` | welcome `feedAsemic`, pi/screen `_lerp_mood` |
+| v3 — Gesture → glifi — **FATTO 2026-07-16** | il gesto diventa parola italiana, la parola glifo (GESTURE_WORDS: fist=pugno, point=indice, victory=vittoria, three=tre, open_hand=saluto — vocabolario apprendibile); welcome legge `rooms[].gesture` (stanza del kiosk), pi/screen si abbona a `gaia/mediapipe/pose` filtrando la propria stanza, cooldown 30s | welcome `feedAsemic`, pi/screen `_on_message` |
 | v4 — Pi screen | piccolo display sul Pi che scrive ciò che il Pi sente/dice, "vivo" | porting Python dell'algoritmo (stesso seed); hardware da scegliere (SPI/OLED?); si aggancia a `gaia/voice/tts/{stanza}` e `gaia/voice/command/{stanza}` |
 | v5 — Gioco RPG | glifi = rune/vocaboli del mondo di gioco; il vocabolario imparato in casa È quello del gioco | `brain.gamification` + blocco Gaming (docs/web-sections.md §3) |
 | v6 — Vocabolario condiviso | estrarre l'algoritmo in una spec unica (JS+Python identici, test di parità sugli stessi seed) | `asemic.js` è la reference; aggiungere `pi/` port quando parte v4 |

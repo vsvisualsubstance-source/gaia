@@ -236,6 +236,9 @@ let _vtimer  = null;
 // e ciò che sente (comandi vocali, banda bassa, blu). Stessa parola = stesso
 // glifo, sempre: un vocabolario che si impara guardando. Engine: asemic.js.
 const _asemic = new AsemicField(document.getElementById('asemic-canvas'));
+// v2: ?mood=stress forza l'inchiostro per test/demo (ignora il mood live)
+const _asemicMoodForced = _params.get('mood');
+if (_asemicMoodForced) _asemic.setMood(_asemicMoodForced);
 let _asTtsTs = 0, _asVcTs = 0, _asThought = '';
 const _asRecent = new Map();   // testo → ts, per non riscrivere doppioni ravvicinati
 
@@ -249,7 +252,19 @@ function asemicSay(text, dir) {
   _asemic.say(text, dir);
 }
 
+// v3: le gesture MediaPipe scrivono — il gesto diventa parola, la parola glifo.
+// Parole italiane: sono vocabolario apprendibile (stesso segno ovunque, per sempre).
+const GESTURE_WORDS = { fist: 'pugno', point: 'indice', victory: 'vittoria',
+                        three: 'tre', open_hand: 'saluto' };
+
 function feedAsemic(d) {
+  // v2: l'inchiostro di Gaia segue il suo umore (soul.mood dal payload WS)
+  if (!_asemicMoodForced && d.soul && d.soul.mood) _asemic.setMood(d.soul.mood);
+  // v3: gesto della stanza del kiosk (o della prima stanza che gesticola)
+  const gRooms = d.rooms || [];
+  const gRoom = ROOM ? gRooms.find(r => (r.id || r.name) === ROOM)
+                     : gRooms.find(r => GESTURE_WORDS[r.gesture]);
+  if (gRoom && GESTURE_WORDS[gRoom.gesture]) asemicSay(GESTURE_WORDS[gRoom.gesture], 'in');
   if (d.tts && d.tts.ts && d.tts.ts !== _asTtsTs) {
     _asTtsTs = d.tts.ts;
     asemicSay(d.tts.text, 'out');

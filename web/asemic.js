@@ -1,4 +1,4 @@
-/* GAIA · Vocabolario Asemico — engine v1
+/* GAIA · Vocabolario Asemico — engine v2 (inchiostro dal mood; algoritmo glifi INVARIATO da v1)
  *
  * Trasforma testo (TTS in/out, pensieri) in scrittura asemica: glifi inventati
  * ma DETERMINISTICI — la stessa parola produce sempre lo stesso glifo, su ogni
@@ -74,6 +74,21 @@
         return glyph;
     }
 
+    // ── v2: inchiostro dal mood ───────────────────────────────────────────
+    // Solo 'out': la voce di Gaia porta l'umore. L'inchiostro umano resta blu
+    // (è identità, non stato). Colori = accent delle PALETTES di Arte Viva
+    // (web/gaia-art/script.js) — tenere allineati. speed scala il ritmo di
+    // scrittura: calma scrive lenta, stress scrive nervosa.
+    const MOOD_INKS = {
+        neutra:    { ink: '0,255,204',   width: 1.7, speed: 1.0  },
+        calm:      { ink: '80,230,190',  width: 1.5, speed: 0.8  },
+        stress:    { ink: '255,115,85',  width: 2.4, speed: 1.35 },
+        social:    { ink: '255,195,100', width: 2.0, speed: 1.15 },
+        curiosity: { ink: '190,135,255', width: 1.8, speed: 1.05 },
+    };
+    const MOOD_ALIAS = { serena: 'calm', sofferente: 'stress', instabile: 'stress',
+                         viva: 'social', stabile: 'neutra', neutrale: 'neutra' };
+
     // ── Campo di scrittura ────────────────────────────────────────────────
     class AsemicField {
         constructor(canvas, opts = {}) {
@@ -98,6 +113,31 @@
         }
 
         setInk(dir, rgb) { if (this.style[dir]) this.style[dir].ink = rgb; }
+
+        // v2: l'inchiostro di Gaia segue il mood, con transizione fluida
+        // (il colore scivola verso il nuovo umore in ~2s, non scatta).
+        setMood(mood) {
+            const key = MOOD_ALIAS[mood] || (MOOD_INKS[mood] ? mood : 'neutra');
+            this._moodTarget = MOOD_INKS[key];
+        }
+
+        _lerpMood() {
+            const t = this._moodTarget;
+            if (!t) return;
+            const st = this.style.out;
+            const cur = st.ink.split(',').map(Number);
+            const dst = t.ink.split(',').map(Number);
+            const k = 0.04;
+            const next = cur.map((c, i) => c + (dst[i] - c) * k);
+            st.ink   = next.map(v => Math.round(v)).join(',');
+            st.width = st.width + (t.width - st.width) * k;
+            st.speed = (st.speed || 1) + (t.speed - (st.speed || 1)) * k;
+            if (next.every((v, i) => Math.abs(v - dst[i]) < 1)) {
+                st.ink = t.ink; st.width = t.width; st.speed = t.speed;
+                this._moodTarget = null;
+            }
+            this._dirty = true;
+        }
 
         _resize() {
             this.dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -158,7 +198,8 @@
             this.sentences.push({
                 items, dir,
                 born: performance.now(),
-                writeMs: 260 * items.length + 400,           // ritmo di scrittura
+                // ritmo di scrittura: la speed del mood accelera/rallenta la mano
+                writeMs: (260 * items.length + 400) / ((this.style[dir].speed || 1)),
                 holdMs: 9000, fadeMs: 5000,
             });
             while (this.sentences.length > this.maxSentences) this.sentences.shift();
@@ -166,6 +207,7 @@
         }
 
         _frame() {
+            this._lerpMood();
             const now = performance.now();
             // pulizia frasi esaurite
             this.sentences = this.sentences.filter(s =>
