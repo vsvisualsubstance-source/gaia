@@ -1608,7 +1608,7 @@
         "type": "function",
         "z": "6087d338d264e627",
         "name": "Gestisci messaggi Telegram",
-        "func": "\nconst brain = global.get('gaiaBrain') || {};\nconst msgPayload = msg.payload;\nlet chatId = msgPayload.chatId;\nlet incomingText = \"\";\n\nif (typeof msgPayload.content === 'string') {\n    incomingText = msgPayload.content;\n} else if (msgPayload.content && msgPayload.content.text) {\n    incomingText = msgPayload.content.text;\n} else if (msgPayload.text) {\n    incomingText = msgPayload.text;\n}\nif (!chatId && msgPayload.chat && msgPayload.chat.id) {\n    chatId = msgPayload.chat.id;\n}\nif (!incomingText) return null;\n\nflow.set(\"lastTelegramChatId\", chatId);\n\n// Comandi slash\nif (incomingText.startsWith('/stato') || incomingText.startsWith('/report')) {\n    const data = global.get('gaiaDashboardPayload');\n    let reply = \"\";\n    if (!data) {\n        reply = \"Nessun dato disponibile. Riprova tra qualche secondo.\";\n    } else {\n        try {\n            const peopleList = (data.people || []).map(p => `${p.name} (${p.room})`).join(', ') || 'nessuno';\n            const lightsOn  = (data.lights || []).filter(l => l.power).length;\n            const lightsTot = (data.lights || []).length;\n            const plantsList = (data.plants || []).map(p => `${p.id} ${p.moisture}%`).join(', ') || '—';\n            const prog = data.progression || {};\n            const roomLines = (data.rooms || []).map(r => {\n                let l = `· ${r.name}: ${r.persons_count || 0}p`;\n                if (r.speaking) l += ` 🎤${r.speaking}`;\n                if (r.scene) l += ' 👁';\n                return l;\n            }).join('\\n') || '—';\n            const devs = Object.values(brain.devices || {}).filter(d => d.profile);\n            const devLines = devs.map(d => {\n                const on = Object.entries(d.profile.services || {})\n                    .filter(([k, v]) => v.state === 'active').map(([k]) => k);\n                return `· ${d.room || d.id} [${d.role || '?'}]: ${on.join(', ') || 'tutto spento'}`;\n            }).join('\\n') || '—';\n            const q = (brain.settings || {}).quietHours || { start: 23, end: 8 };\n            const h = new Date().getHours();\n            const quiet = q.start > q.end ? (h >= q.start || h < q.end) : (h >= q.start && h < q.end);\n            reply = `🏠 *REPORT CASA*\\n`\n                + `👥 ${peopleList}\\n`\n                + `💡 Luci: ${lightsOn}/${lightsTot} accese\\n`\n                + `🌱 ${plantsList}\\n`\n                + `💖 Umore: ${data.soul?.mood || 'neutra'} · Vita ${data.soul?.lifeIndex || 50}%\\n`\n                + `🎮 Lv.${prog.level || 1} ${prog.activeClass || 'Neutro'} · ${prog.xp || 0}/${prog.xpNextLevel || 1000} XP\\n`\n                + (quiet ? `🌙 ore di silenzio (annunci solo qui)\\n` : `🔊 annunci vocali attivi\\n`)\n                + `\\n*Stanze*\\n${roomLines}\\n\\n*Device*\\n${devLines}`;\n        } catch (e) {\n            reply = \"Errore nel formato dati: \" + e.message;\n        }\n    }\n    msg.payload = { chatId: chatId, type: \"message\", content: reply, options: { parse_mode: 'Markdown' } };\n    return [null, msg, null];\n}\n\n// ── Intent detection — mappa testo → chiave stanza (uguale a Prepara prompt chat) ─\nconst ROOM_PATTERNS = [\n    { re: /\\barea[ _]tv\\b/,              room: 'tv' },\n    { re: /\\bsoggiorno\\b/,               room: 'soggiorno' },\n    { re: /\\bsalotto\\b/,                 room: 'salotto' },\n    { re: /\\bingresso\\b/,                room: 'ingresso' },\n    { re: /\\bcorridoio\\b/,               room: 'corridoio' },\n    { re: /\\bsala\\b/,                    room: 'sala' },\n    { re: /\\bnotte\\b|\\bcamera\\b|\\bbedroom\\b/, room: 'notte' },\n    { re: /\\btutte\\b|\\btutto\\b|\\bcasa\\b/,    room: 'tutte' },\n];\n\nconst t = incomingText.toLowerCase();\nlet action_override = null;\n\n// ── Comandi servizi (multi-device, guidati dai profili semantici) ──────────\nconst svcMatch = t.match(/^\\/?(attiva|disattiva|start|stop|abilita|disabilita)\\s+(yolo|mediapipe|voice|screen|scene|kiosk|mediaplayer)(?:\\s+(\\S+))?/i);\nif (svcMatch || t === '/servizi' || t === '/pi' || t === '/device') {\n    const devices = Object.values(brain.devices || {}).filter(d => d.profile);\n\n    if (!svcMatch) {\n        let reply = '📡 *Device e servizi GAIA*\\n';\n        devices.forEach(d => {\n            reply += `\\n*${d.room || d.id}* — ${d.id} (${d.role || '?'})\\n`;\n            Object.entries(d.profile.services || {}).forEach(([k, v]) => {\n                if (k === 'camera') return;   // dipendenza automatica, non toggolabile\n                reply += `  ${v.state === 'active' ? '🟢' : '⚪️'} ${k}\\n`;\n            });\n        });\n        reply += '\\n`/attiva <servizio> [stanza]` · `/disattiva <servizio> [stanza]`\\n';\n        reply += 'Servizi: yolo · mediapipe · voice · screen · scene · kiosk · mediaplayer\\n(schermo Pi: kiosk e screen si escludono a vicenda)\\n';\n        reply += 'Senza stanza agisce su TUTTI i device che hanno quel servizio.\\n';\n        reply += '`/stato` per il report completo della casa.';\n        msg.payload = { chatId, type: 'message', content: reply, options: { parse_mode: 'Markdown' } };\n        return [null, msg, null];\n    }\n\n    const action  = /^(attiva|start|abilita)$/i.test(svcMatch[1]) ? 'enable' : 'disable';\n    const service = svcMatch[2].toLowerCase();\n    const where   = (svcMatch[3] || '').toLowerCase();\n\n    let targets = devices.filter(d => (d.profile.services || {})[service]);\n    if (where) {\n        targets = targets.filter(d =>\n            (d.room || '').toLowerCase() === where || d.id.toLowerCase().includes(where));\n    }\n    if (!targets.length) {\n        msg.payload = { chatId, type: 'message',\n            content: `Nessun device con \\\"${service}\\\"${where ? ` in ${where}` : ''}.` };\n        return [null, msg, null];\n    }\n\n    const emoji = action === 'enable' ? '✅' : '🔴';\n    const verb  = action === 'enable' ? 'abilitato' : 'disabilitato';\n    const mqttMsgs = targets.map(d => ({\n        topic:   `gaia/device/${d.id}/command`,\n        payload: JSON.stringify({ action, service })\n    }));\n    const names = targets.map(d => d.room || d.id).join(', ');\n    const replyMsg = { ...msg, payload: { chatId, type: 'message',\n        content: `${emoji} ${service} ${verb} su: ${names}` } };\n    return [null, replyMsg, mqttMsgs];\n}\n// ────────────────────────────────────────────────────────────────────────────\n\nconst roomMatch = ROOM_PATTERNS.find(r => r.re.test(t));\nconst effectiveStanza = roomMatch ? roomMatch.room : 'soggiorno';\n\n// Stato emotivo\nif (/come stai|stato (emotivo|animo)|mostra.*stato|esprimi|tuo umore/.test(t)) {\n    action_override = { tipo: 'stato' };\n}\n// Accendi\nelse if (/\\baccend[ia]\\b/.test(t) && /\\b(luce|luci|lampada|tutto)\\b/.test(t)) {\n    action_override = { tipo: 'hue', stanza: effectiveStanza, power: true };\n}\n// Spegni\nelse if (/\\bspegn[ia]\\b/.test(t) && /\\b(luce|luci|lampada|tutto)\\b/.test(t)) {\n    action_override = { tipo: 'hue', stanza: effectiveStanza, power: false };\n}\n// Abbassa\nelse if (/\\b(abbass[ai]|dimm[ae]r?)\\b/.test(t) && /\\b(luce|luci|luminosit)\\b/.test(t)) {\n    action_override = { tipo: 'hue', stanza: effectiveStanza, brightness: 25 };\n}\n// Alza\nelse if (/\\b(alz[ai]|aumenta)\\b/.test(t) && /\\b(luce|luci|luminosit)\\b/.test(t)) {\n    action_override = { tipo: 'hue', stanza: effectiveStanza, brightness: 85 };\n}\nelse {\n    // Scene\n    const sceneMatch = t.match(/\\b(alba|relax|focus|sera|notte|festa|tempesta|natura)\\b/);\n    if (sceneMatch) action_override = { tipo: 'hue', stanza: effectiveStanza, scena: sceneMatch[1] };\n    // Colori\n    if (!action_override) {\n        const colorMatch = t.match(/\\b(rosso|verde|blu|giallo|arancio|viola|rosa|bianco|warm|cool)\\b/);\n        if (colorMatch && /\\b(luce|luci|colore|metti)\\b/.test(t))\n            action_override = { tipo: 'hue', stanza: effectiveStanza, colore: colorMatch[1] };\n    }\n    // Luce calda/fredda\n    if (!action_override) {\n        if (/luce calda|luci calde/.test(t)) action_override = { tipo: 'hue', stanza: effectiveStanza, colore: 'warm' };\n        else if (/luce fredda|luci fredde/.test(t)) action_override = { tipo: 'hue', stanza: effectiveStanza, colore: 'cool' };\n    }\n    // Percentuale\n    if (!action_override) {\n        const pctMatch = t.match(/(?:al|a)\\s+(\\d{1,3})\\s*%/);\n        if (pctMatch && /\\b(luce|luci)\\b/.test(t))\n            action_override = { tipo: 'hue', stanza: effectiveStanza, brightness: parseInt(pctMatch[1]) };\n    }\n}\n\n// Prompt Ollama\nlet peopleDesc = [];\nObject.entries(brain.presence || {}).forEach(([name, data]) => {\n    if (data.present) {\n        const room = data.room || 'soggiorno';\n        const act = (brain.rooms?.[room] || {}).activity || '';\n        const actTxt = act === 'working' ? 'sta lavorando' : act === 'resting' ? 'sta riposando' : act === 'sitting' ? 'è seduto' : 'è presente';\n        peopleDesc.push(`${name} ${actTxt} in ${room}`);\n    }\n});\nconst contextPeople = peopleDesc.length ? peopleDesc.join(', ') : 'nessuno';\nconst prompt = `Sei Gaia, la coscienza della casa. Umore: \"${(brain.mood?.state || 'neutra')}\". In casa: ${contextPeople}. TelegramUser dice: \"${incomingText}\". Rispondi in italiano, max 30 parole. Solo testo.`;\n\nconst ollamaMsg = {\n    url: \"http://localhost:11434/api/generate\",\n    method: \"POST\",\n    headers: { \"Content-Type\": \"application/json\" },\n    payload: { model: 'qwen2.5:3b-instruct-q4_K_M', prompt: prompt, stream: false },\n    originalChatId: chatId,\n    action_override: action_override,\n    person: 'Telegram',\n    stanza: effectiveStanza\n};\nreturn [ollamaMsg, null];\n",
+        "func": "\nconst brain = global.get('gaiaBrain') || {};\nconst msgPayload = msg.payload;\nlet chatId = msgPayload.chatId;\nlet incomingText = \"\";\n\nif (typeof msgPayload.content === 'string') {\n    incomingText = msgPayload.content;\n} else if (msgPayload.content && msgPayload.content.text) {\n    incomingText = msgPayload.content.text;\n} else if (msgPayload.text) {\n    incomingText = msgPayload.text;\n}\nif (!chatId && msgPayload.chat && msgPayload.chat.id) {\n    chatId = msgPayload.chat.id;\n}\nif (!incomingText) return null;\n\nflow.set(\"lastTelegramChatId\", chatId);\n\n// Comandi slash\nif (incomingText.startsWith('/stato') || incomingText.startsWith('/report')) {\n    const data = global.get('gaiaDashboardPayload');\n    let reply = \"\";\n    if (!data) {\n        reply = \"Nessun dato disponibile. Riprova tra qualche secondo.\";\n    } else {\n        try {\n            const peopleList = (data.people || []).map(p => `${p.name} (${p.room})`).join(', ') || 'nessuno';\n            const lightsOn  = (data.lights || []).filter(l => l.power).length;\n            const lightsTot = (data.lights || []).length;\n            const plantsList = (data.plants || []).map(p => `${p.id} ${p.moisture}%`).join(', ') || '—';\n            const prog = data.progression || {};\n            const roomLines = (data.rooms || []).map(r => {\n                let l = `· ${r.name}: ${r.persons_count || 0}p`;\n                if (r.speaking) l += ` 🎤${r.speaking}`;\n                if (r.scene) l += ' 👁';\n                return l;\n            }).join('\\n') || '—';\n            const devs = Object.values(brain.devices || {}).filter(d => d.profile);\n            const devLines = devs.map(d => {\n                const on = Object.entries(d.profile.services || {})\n                    .filter(([k, v]) => v.state === 'active').map(([k]) => k);\n                return `· ${d.room || d.id} [${d.role || '?'}]: ${on.join(', ') || 'tutto spento'}`;\n            }).join('\\n') || '—';\n            const q = (brain.settings || {}).quietHours || { start: 23, end: 8 };\n            const h = new Date().getHours();\n            const quiet = q.start > q.end ? (h >= q.start || h < q.end) : (h >= q.start && h < q.end);\n            reply = `🏠 *REPORT CASA*\\n`\n                + `👥 ${peopleList}\\n`\n                + `💡 Luci: ${lightsOn}/${lightsTot} accese\\n`\n                + `🌱 ${plantsList}\\n`\n                + `💖 Umore: ${data.soul?.mood || 'neutra'} · Vita ${data.soul?.lifeIndex || 50}%\\n`\n                + `🎮 Lv.${prog.level || 1} ${prog.activeClass || 'Neutro'} · ${prog.xp || 0}/${prog.xpNextLevel || 1000} XP\\n`\n                + (quiet ? `🌙 ore di silenzio (annunci solo qui)\\n` : `🔊 annunci vocali attivi\\n`)\n                + `\\n*Stanze*\\n${roomLines}\\n\\n*Device*\\n${devLines}`;\n        } catch (e) {\n            reply = \"Errore nel formato dati: \" + e.message;\n        }\n    }\n    msg.payload = { chatId: chatId, type: \"message\", content: reply, options: { parse_mode: 'Markdown' } };\n    return [null, msg, null];\n}\n\n// ── Intent detection — mappa testo → chiave stanza (uguale a Prepara prompt chat) ─\nconst ROOM_PATTERNS = [\n    { re: /\\barea[ _]tv\\b/,              room: 'tv' },\n    { re: /\\bsoggiorno\\b/,               room: 'soggiorno' },\n    { re: /\\bsalotto\\b/,                 room: 'salotto' },\n    { re: /\\bingresso\\b/,                room: 'ingresso' },\n    { re: /\\bcorridoio\\b/,               room: 'corridoio' },\n    { re: /\\bsala\\b/,                    room: 'sala' },\n    { re: /\\bnotte\\b|\\bcamera\\b|\\bbedroom\\b/, room: 'notte' },\n    { re: /\\btutte\\b|\\btutto\\b|\\bcasa\\b/,    room: 'tutte' },\n];\n\nconst t = incomingText.toLowerCase();\nlet action_override = null;\n\n// ── /musica: radio e musica per stanza (preset condivisi con la card web) ──\nconst musicaMatch = t.match(/^\\/?musica(?:\\s+(.+))?$/i);\nif (musicaMatch) {\n    const presets = global.get('gaiaMediaPresets') || [];\n    const mediaRooms = Object.values(brain.devices || {})\n        .filter(d => d.profile && ((d.profile.services || {}).mediaplayer || {}).state === 'active')\n        .map(d => d.room).filter(Boolean);\n    const bm = brain.media || {};\n    const args = (musicaMatch[1] || '').trim();\n\n    // stanza di default: dove c'è gente E un player, altrimenti il primo player\n    const roomsWithPeople = Object.values(brain.presence || {})\n        .filter(pp => pp.present).map(pp => pp.room);\n    const defRoom = mediaRooms.find(r => roomsWithPeople.includes(r)) || mediaRooms[0];\n\n    if (!args) {\n        let r = '🎵 Musica\\n';\n        mediaRooms.forEach(rm => {\n            const st = bm[rm] || {};\n            r += `\\n${rm}: ${st.state === 'playing' ? '▶️ ' + (st.title || st.url || '') : (st.state || 'pronto')}`;\n        });\n        r += '\\n\\nPreset: ' + presets.map(pp => pp.id).join(' · ');\n        r += '\\n/musica <preset> [stanza] · /musica stop [stanza]';\n        r += '\\n/musica volume 40 [stanza] · /musica cerca <nome radio> [stanza]';\n        msg.payload = { chatId, type: 'message', content: r };\n        return [null, msg, null];\n    }\n\n    let m2;\n    if ((m2 = args.match(/^stop(?:\\s+(\\S+))?$/i))) {\n        const rooms = m2[1] ? [m2[1].toLowerCase()] : mediaRooms;\n        const outs = rooms.map(rm => ({ topic: `gaia/media/${rm}/command`,\n                                        payload: JSON.stringify({ action: 'stop' }) }));\n        msg.payload = { chatId, type: 'message', content: `⏹ Musica fermata: ${rooms.join(', ')}` };\n        return [null, msg, outs];\n    }\n    if ((m2 = args.match(/^volume\\s+(\\d{1,3})(?:\\s+(\\S+))?$/i))) {\n        const rm = (m2[2] || defRoom || '').toLowerCase();\n        msg.payload = { chatId, type: 'message', content: `🔊 Volume ${m2[1]} in ${rm}` };\n        return [null, msg, [{ topic: `gaia/media/${rm}/command`,\n                              payload: JSON.stringify({ action: 'volume', value: parseInt(m2[1]) }) }]];\n    }\n    if ((m2 = args.match(/^cerca\\s+(.+)$/i))) {\n        const parts = m2[1].trim().split(/\\s+/);\n        let rm = defRoom;\n        if (parts.length > 1 && mediaRooms.includes(parts[parts.length - 1].toLowerCase()))\n            rm = parts.pop().toLowerCase();\n        msg.payload = { chatId, type: 'message', content: `🔎 Cerco \"${parts.join(' ')}\" per ${rm}…` };\n        return [null, msg, [{ topic: 'gaia/media/search',\n                              payload: JSON.stringify({ query: parts.join(' '), room: rm, chatId }) }]];\n    }\n    // /musica <preset> [stanza]\n    const toks = args.split(/\\s+/);\n    let rm = defRoom;\n    if (toks.length > 1 && mediaRooms.includes(toks[toks.length - 1].toLowerCase()))\n        rm = toks.pop().toLowerCase();\n    const key = toks.join(' ').toLowerCase();\n    const pr = presets.find(pp => pp.id === key)\n            || presets.find(pp => pp.name.toLowerCase().includes(key));\n    if (!pr) {\n        msg.payload = { chatId, type: 'message',\n            content: `Preset \"${key}\" non trovato. Prova: ${presets.map(pp => pp.id).join(' · ')}\\nOppure: /musica cerca ${key}` };\n        return [null, msg, null];\n    }\n    if (!rm) {\n        msg.payload = { chatId, type: 'message', content: 'Nessun player attivo in casa (accendi mediaplayer da Pi Manager).' };\n        return [null, msg, null];\n    }\n    msg.payload = { chatId, type: 'message', content: `▶️ ${pr.name} in ${rm}` };\n    return [null, msg, [{ topic: `gaia/media/${rm}/command`,\n                          payload: JSON.stringify({ action: 'play', url: pr.url }) }]];\n}\n\n// ── Comandi servizi (multi-device, guidati dai profili semantici) ──────────\nconst svcMatch = t.match(/^\\/?(attiva|disattiva|start|stop|abilita|disabilita)\\s+(yolo|mediapipe|voice|screen|scene|kiosk|mediaplayer)(?:\\s+(\\S+))?/i);\nif (svcMatch || t === '/servizi' || t === '/pi' || t === '/device') {\n    const devices = Object.values(brain.devices || {}).filter(d => d.profile);\n\n    if (!svcMatch) {\n        let reply = '📡 *Device e servizi GAIA*\\n';\n        devices.forEach(d => {\n            reply += `\\n*${d.room || d.id}* — ${d.id} (${d.role || '?'})\\n`;\n            Object.entries(d.profile.services || {}).forEach(([k, v]) => {\n                if (k === 'camera') return;   // dipendenza automatica, non toggolabile\n                reply += `  ${v.state === 'active' ? '🟢' : '⚪️'} ${k}\\n`;\n            });\n        });\n        reply += '\\n`/attiva <servizio> [stanza]` · `/disattiva <servizio> [stanza]`\\n';\n        reply += 'Servizi: yolo · mediapipe · voice · screen · scene · kiosk · mediaplayer\\n(schermo Pi: kiosk e screen si escludono a vicenda)\\n';\n        reply += 'Senza stanza agisce su TUTTI i device che hanno quel servizio.\\n';\n        reply += '`/stato` per il report completo della casa.';\n        msg.payload = { chatId, type: 'message', content: reply, options: { parse_mode: 'Markdown' } };\n        return [null, msg, null];\n    }\n\n    const action  = /^(attiva|start|abilita)$/i.test(svcMatch[1]) ? 'enable' : 'disable';\n    const service = svcMatch[2].toLowerCase();\n    const where   = (svcMatch[3] || '').toLowerCase();\n\n    let targets = devices.filter(d => (d.profile.services || {})[service]);\n    if (where) {\n        targets = targets.filter(d =>\n            (d.room || '').toLowerCase() === where || d.id.toLowerCase().includes(where));\n    }\n    if (!targets.length) {\n        msg.payload = { chatId, type: 'message',\n            content: `Nessun device con \\\"${service}\\\"${where ? ` in ${where}` : ''}.` };\n        return [null, msg, null];\n    }\n\n    const emoji = action === 'enable' ? '✅' : '🔴';\n    const verb  = action === 'enable' ? 'abilitato' : 'disabilitato';\n    const mqttMsgs = targets.map(d => ({\n        topic:   `gaia/device/${d.id}/command`,\n        payload: JSON.stringify({ action, service })\n    }));\n    const names = targets.map(d => d.room || d.id).join(', ');\n    const replyMsg = { ...msg, payload: { chatId, type: 'message',\n        content: `${emoji} ${service} ${verb} su: ${names}` } };\n    return [null, replyMsg, mqttMsgs];\n}\n// ────────────────────────────────────────────────────────────────────────────\n\nconst roomMatch = ROOM_PATTERNS.find(r => r.re.test(t));\nconst effectiveStanza = roomMatch ? roomMatch.room : 'soggiorno';\n\n// Stato emotivo\nif (/come stai|stato (emotivo|animo)|mostra.*stato|esprimi|tuo umore/.test(t)) {\n    action_override = { tipo: 'stato' };\n}\n// Accendi\nelse if (/\\baccend[ia]\\b/.test(t) && /\\b(luce|luci|lampada|tutto)\\b/.test(t)) {\n    action_override = { tipo: 'hue', stanza: effectiveStanza, power: true };\n}\n// Spegni\nelse if (/\\bspegn[ia]\\b/.test(t) && /\\b(luce|luci|lampada|tutto)\\b/.test(t)) {\n    action_override = { tipo: 'hue', stanza: effectiveStanza, power: false };\n}\n// Abbassa\nelse if (/\\b(abbass[ai]|dimm[ae]r?)\\b/.test(t) && /\\b(luce|luci|luminosit)\\b/.test(t)) {\n    action_override = { tipo: 'hue', stanza: effectiveStanza, brightness: 25 };\n}\n// Alza\nelse if (/\\b(alz[ai]|aumenta)\\b/.test(t) && /\\b(luce|luci|luminosit)\\b/.test(t)) {\n    action_override = { tipo: 'hue', stanza: effectiveStanza, brightness: 85 };\n}\nelse {\n    // Scene\n    const sceneMatch = t.match(/\\b(alba|relax|focus|sera|notte|festa|tempesta|natura)\\b/);\n    if (sceneMatch) action_override = { tipo: 'hue', stanza: effectiveStanza, scena: sceneMatch[1] };\n    // Colori\n    if (!action_override) {\n        const colorMatch = t.match(/\\b(rosso|verde|blu|giallo|arancio|viola|rosa|bianco|warm|cool)\\b/);\n        if (colorMatch && /\\b(luce|luci|colore|metti)\\b/.test(t))\n            action_override = { tipo: 'hue', stanza: effectiveStanza, colore: colorMatch[1] };\n    }\n    // Luce calda/fredda\n    if (!action_override) {\n        if (/luce calda|luci calde/.test(t)) action_override = { tipo: 'hue', stanza: effectiveStanza, colore: 'warm' };\n        else if (/luce fredda|luci fredde/.test(t)) action_override = { tipo: 'hue', stanza: effectiveStanza, colore: 'cool' };\n    }\n    // Percentuale\n    if (!action_override) {\n        const pctMatch = t.match(/(?:al|a)\\s+(\\d{1,3})\\s*%/);\n        if (pctMatch && /\\b(luce|luci)\\b/.test(t))\n            action_override = { tipo: 'hue', stanza: effectiveStanza, brightness: parseInt(pctMatch[1]) };\n    }\n}\n\n// Prompt Ollama\nlet peopleDesc = [];\nObject.entries(brain.presence || {}).forEach(([name, data]) => {\n    if (data.present) {\n        const room = data.room || 'soggiorno';\n        const act = (brain.rooms?.[room] || {}).activity || '';\n        const actTxt = act === 'working' ? 'sta lavorando' : act === 'resting' ? 'sta riposando' : act === 'sitting' ? 'è seduto' : 'è presente';\n        peopleDesc.push(`${name} ${actTxt} in ${room}`);\n    }\n});\nconst contextPeople = peopleDesc.length ? peopleDesc.join(', ') : 'nessuno';\nconst prompt = `Sei Gaia, la coscienza della casa. Umore: \"${(brain.mood?.state || 'neutra')}\". In casa: ${contextPeople}. TelegramUser dice: \"${incomingText}\". Rispondi in italiano, max 30 parole. Solo testo.`;\n\nconst ollamaMsg = {\n    url: \"http://localhost:11434/api/generate\",\n    method: \"POST\",\n    headers: { \"Content-Type\": \"application/json\" },\n    payload: { model: 'qwen2.5:3b-instruct-q4_K_M', prompt: prompt, stream: false },\n    originalChatId: chatId,\n    action_override: action_override,\n    person: 'Telegram',\n    stanza: effectiveStanza\n};\nreturn [ollamaMsg, null];\n",
         "outputs": 3,
         "timeout": 0,
         "noerr": 0,
@@ -4245,6 +4245,263 @@
             [
                 "dr_http_response"
             ]
+        ]
+    },
+    {
+        "id": "tab_media",
+        "type": "tab",
+        "label": "Media",
+        "disabled": false,
+        "info": "Musica/radio per stanza — preset, stato player, comandi (docs/core-distribuito.md §Media player)"
+    },
+    {
+        "id": "media_presets_init",
+        "type": "inject",
+        "z": "tab_media",
+        "name": "carica preset",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": true,
+        "onceDelay": 0.5,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 140,
+        "y": 80,
+        "wires": [
+            [
+                "media_presets_fn"
+            ]
+        ]
+    },
+    {
+        "id": "media_presets_fn",
+        "type": "function",
+        "z": "tab_media",
+        "name": "Media Presets",
+        "func": "// Preset radio condivisi (web + Telegram). Per modificarli si edita QUI.\nconst PRESETS = [\n    { id: 'rai1',       name: 'Rai Radio 1',       url: 'https://icestreaming.rai.it/1.mp3' },\n    { id: 'rai2',       name: 'Rai Radio 2',       url: 'https://icestreaming.rai.it/2.mp3' },\n    { id: 'rai3',       name: 'Rai Radio 3',       url: 'https://icestreaming.rai.it/3.mp3' },\n    { id: 'virgin',     name: 'Virgin Radio',      url: 'https://icy.unitedradio.it/Virgin.mp3' },\n    { id: '105',        name: 'Radio 105',         url: 'https://icy.unitedradio.it/Radio105.mp3' },\n    { id: 'montecarlo', name: 'Radio Monte Carlo', url: 'https://icy.unitedradio.it/RMC.mp3' },\n    { id: 'popolare',   name: 'Radio Popolare',    url: 'https://live.radiopopolare.it/mp3' },\n    { id: 'paradise',   name: 'Radio Paradise',    url: 'https://stream.radioparadise.com/mp3-192' },\n];\nglobal.set('gaiaMediaPresets', PRESETS);\nnode.warn(`[Media] ${PRESETS.length} preset radio caricati`);\nreturn null;\n",
+        "outputs": 0,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 330,
+        "y": 80,
+        "wires": []
+    },
+    {
+        "id": "media_status_in",
+        "type": "mqtt in",
+        "z": "tab_media",
+        "name": "Media Status",
+        "topic": "gaia/media/+/status",
+        "qos": "1",
+        "datatype": "auto-detect",
+        "broker": "29b6d5926d1a95ec",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 140,
+        "y": 140,
+        "wires": [
+            [
+                "media_norm_fn"
+            ]
+        ]
+    },
+    {
+        "id": "media_norm_fn",
+        "type": "function",
+        "z": "tab_media",
+        "name": "MediaNorm",
+        "func": "// gaia/media/{room}/status → brain.media[room] (payload vuoto = player via)\nconst room = msg.topic.split('/')[2];\nlet brain = global.get('gaiaBrain') || {};\nbrain.media = brain.media || {};\nlet p = msg.payload;\nif (Buffer.isBuffer(p)) p = p.toString('utf8');\nif (typeof p === 'string') {\n    if (!p.trim()) { delete brain.media[room]; global.set('gaiaBrain', brain); return null; }\n    try { p = JSON.parse(p); } catch (e) { return null; }\n}\nif (!p || typeof p !== 'object') return null;\nbrain.media[room] = { state: p.state, title: p.title, url: p.url,\n                      volume: p.volume, ts: p.ts || Date.now() };\nglobal.set('gaiaBrain', brain);\nreturn null;\n",
+        "outputs": 0,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 330,
+        "y": 140,
+        "wires": []
+    },
+    {
+        "id": "media_state_http",
+        "type": "http in",
+        "z": "tab_media",
+        "name": "GET /gaia/media/state",
+        "url": "/gaia/media/state",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 160,
+        "y": 200,
+        "wires": [
+            [
+                "media_state_fn"
+            ]
+        ]
+    },
+    {
+        "id": "media_state_fn",
+        "type": "function",
+        "z": "tab_media",
+        "name": "MediaState",
+        "func": "// GET /gaia/media/state → player per stanza + preset (per la card web)\nconst brain = global.get('gaiaBrain') || {};\nconst players = {};\nfor (const d of Object.values(brain.devices || {})) {\n    const mp = d.profile && (d.profile.services || {}).mediaplayer;\n    if (mp) players[d.room || d.id] = { device: d.id, service: mp.state,\n                                        ...(brain.media || {})[d.room] };\n}\nmsg.payload = { players, presets: global.get('gaiaMediaPresets') || [], ts: Date.now() };\nmsg.headers = { 'Access-Control-Allow-Origin': '*' };\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 370,
+        "y": 200,
+        "wires": [
+            [
+                "media_state_resp"
+            ]
+        ]
+    },
+    {
+        "id": "media_state_resp",
+        "type": "http response",
+        "z": "tab_media",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 560,
+        "y": 200,
+        "wires": []
+    },
+    {
+        "id": "media_cmd_http",
+        "type": "http in",
+        "z": "tab_media",
+        "name": "POST /gaia/media/cmd",
+        "url": "/gaia/media/cmd",
+        "method": "post",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 160,
+        "y": 260,
+        "wires": [
+            [
+                "media_cmd_fn"
+            ]
+        ]
+    },
+    {
+        "id": "media_cmd_fn",
+        "type": "function",
+        "z": "tab_media",
+        "name": "MediaCmd",
+        "func": "// POST /gaia/media/cmd {room, action, url?, value?} → publish al player\nconst b = msg.payload || {};\nif (!b.room || !b.action) {\n    msg.statusCode = 400; msg.payload = { ok: false, error: 'room e action richiesti' };\n    return [null, msg];\n}\nconst out = { topic: `gaia/media/${b.room}/command`,\n              payload: JSON.stringify({ action: b.action, url: b.url, value: b.value }) };\nconst resp = { ...msg, payload: { ok: true, room: b.room, action: b.action },\n               headers: { 'Access-Control-Allow-Origin': '*' } };\nreturn [out, resp];\n",
+        "outputs": 2,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 370,
+        "y": 260,
+        "wires": [
+            [
+                "media_cmd_mqtt"
+            ],
+            [
+                "media_cmd_resp"
+            ]
+        ]
+    },
+    {
+        "id": "media_cmd_mqtt",
+        "type": "mqtt out",
+        "z": "tab_media",
+        "name": "→ player",
+        "topic": "",
+        "qos": "0",
+        "retain": "false",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "29b6d5926d1a95ec",
+        "x": 560,
+        "y": 240,
+        "wires": []
+    },
+    {
+        "id": "media_cmd_resp",
+        "type": "http response",
+        "z": "tab_media",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 560,
+        "y": 280,
+        "wires": []
+    },
+    {
+        "id": "notify_tg_in",
+        "type": "mqtt in",
+        "z": "tab_media",
+        "name": "Notify Telegram",
+        "topic": "gaia/notify/telegram",
+        "qos": "1",
+        "datatype": "auto-detect",
+        "broker": "29b6d5926d1a95ec",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 150,
+        "y": 340,
+        "wires": [
+            [
+                "notify_tg_fn"
+            ]
+        ]
+    },
+    {
+        "id": "notify_tg_fn",
+        "type": "function",
+        "z": "tab_media",
+        "name": "NotifyTelegram",
+        "func": "// gaia/notify/telegram {chatId?, text} → messaggio Telegram\n// Canale riusabile: anche i servizi python (gaia_admin) possono notificare.\nlet p = msg.payload;\nif (typeof p === 'string') { try { p = JSON.parse(p); } catch (e) { return null; } }\nif (!p || !p.text) return null;\nmsg.payload = { chatId: p.chatId || 1180846253, type: 'message', content: p.text };\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 350,
+        "y": 340,
+        "wires": [
+            [
+                "notify_tg_sender"
+            ]
+        ]
+    },
+    {
+        "id": "notify_tg_sender",
+        "type": "telegram sender",
+        "z": "tab_media",
+        "name": "→ Telegram",
+        "bot": "00a66cdeeffcbf5d",
+        "haserroroutput": false,
+        "outputs": 1,
+        "x": 550,
+        "y": 340,
+        "wires": [
+            []
         ]
     }
 ]

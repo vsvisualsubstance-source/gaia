@@ -81,6 +81,10 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 .light-bri{color:var(--muted);font-size:.72rem}
 
 .sensor-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.media-chip{padding:3px 10px;border:1px solid var(--border);border-radius:999px;font-size:.78rem;cursor:pointer;color:var(--muted)}
+.media-chip.on{color:var(--accent);border-color:var(--accent)}
+.media-btn{background:var(--card);border:1px solid var(--border);border-radius:6px;color:var(--fg);padding:4px 12px;cursor:pointer;font-size:1rem}
+.media-btn:hover{border-color:var(--accent)}
 .sensor-item{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px 10px}
 .sensor-label{font-size:.7rem;color:var(--muted)}
 .sensor-val{font-size:.9rem;font-weight:600;color:var(--accent)}
@@ -130,6 +134,7 @@ button.btn-sm.active{border-color:var(--accent);color:var(--accent)}
   <div id="sec-people"  style="display:none"></div>
   <div id="sec-rooms"   style="display:none"></div>
   <div id="sec-voice"   style="display:none"></div>
+  <div id="sec-media"   style="display:none"></div>
   <div id="sec-lights"  style="display:none"></div>
   <div id="sec-sensors" style="display:none"></div>
   <div id="sec-plants"  style="display:none"></div>
@@ -548,6 +553,80 @@ function connect(){
 
 connect();
 refreshDevices();
+
+// ── Card Musica: player per stanza (preset radio + libreria su D) ────────────
+const MEDIA_API = `http://${location.hostname}:1880`;
+const MUSIC_API = `http://${location.hostname}:8765`;
+let _mediaBuilt = false, _mediaRoom = null, _mediaFiles = [];
+
+function buildMediaCard() {
+  document.getElementById('sec-media').innerHTML = `
+  <div class="card">
+    <div class="card-title"><span>🎵</span> Musica</div>
+    <div id="media-rooms" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"></div>
+    <div id="media-now" style="font-size:.85rem;color:var(--muted);margin-bottom:8px">⏹ fermo</div>
+    <div style="display:flex;gap:6px;margin-bottom:8px">
+      <select id="media-preset" style="flex:1;min-width:0;background:var(--card);color:var(--fg);border:1px solid var(--border);border-radius:6px;padding:4px">
+        <option value="">— scegli —</option>
+      </select>
+      <button class="media-btn" onclick="mediaPlaySel()" title="Play">▶️</button>
+      <button class="media-btn" onclick="mediaCmd('stop')" title="Stop">⏹</button>
+    </div>
+    <input id="media-vol" type="range" min="0" max="100" value="60" style="width:100%"
+           onchange="mediaCmd('volume', {value: parseInt(this.value)})">
+  </div>`;
+  loadMusicFiles();
+}
+
+async function mediaRefresh() {
+  try {
+    const d = await (await fetch(`${MEDIA_API}/gaia/media/state`)).json();
+    const rooms = Object.entries(d.players || {}).filter(([r, p]) => p.service === 'active');
+    const el = document.getElementById('sec-media');
+    if (!rooms.length) { el.style.display = 'none'; return; }
+    if (!_mediaBuilt) { buildMediaCard(); _mediaBuilt = true; }
+    el.style.display = '';
+    if (!_mediaRoom || !rooms.find(([r]) => r === _mediaRoom)) _mediaRoom = rooms[0][0];
+    document.getElementById('media-rooms').innerHTML = rooms.map(([r]) =>
+      `<span class="media-chip${r === _mediaRoom ? ' on' : ''}" onclick="_mediaRoom='${r}';mediaRefresh()">${r}</span>`).join('');
+    const st = d.players[_mediaRoom] || {};
+    document.getElementById('media-now').textContent =
+      st.state === 'playing' ? `▶️ ${st.title || st.url || ''}`
+      : st.state === 'paused' ? '⏸ in pausa' : '⏹ fermo';
+    const vol = document.getElementById('media-vol');
+    if (document.activeElement !== vol && st.volume != null) vol.value = st.volume;
+    const sel = document.getElementById('media-preset');
+    if (sel.options.length <= 1) (d.presets || []).forEach(p => sel.add(new Option('📻 ' + p.name, p.url)));
+  } catch (e) { /* Node-RED momentaneamente giù */ }
+}
+
+async function loadMusicFiles() {
+  try {
+    const d = await (await fetch(`${MUSIC_API}/api/music/list`)).json();
+    _mediaFiles = d.files || [];
+    if (!_mediaFiles.length) return;
+    const sel = document.getElementById('media-preset');
+    const og = document.createElement('optgroup'); og.label = '📁 Libreria (D/musica)';
+    _mediaFiles.forEach(f => og.appendChild(new Option(f.name, f.url)));
+    sel.appendChild(og);
+  } catch (e) {}
+}
+
+async function mediaCmd(action, extra = {}) {
+  if (!_mediaRoom) return;
+  await fetch(`${MEDIA_API}/gaia/media/cmd`, { method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ room: _mediaRoom, action, ...extra }) });
+  setTimeout(mediaRefresh, 800);
+}
+
+function mediaPlaySel() {
+  const url = document.getElementById('media-preset').value;
+  if (url) mediaCmd('play', { url });
+}
+
+setInterval(mediaRefresh, 5000);
+mediaRefresh();
 </script>
 </body>
 </html>

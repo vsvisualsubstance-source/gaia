@@ -95,7 +95,20 @@ stop · {"action":"volume","value":0-100}; status retained su
 `gaia/media/{stanza}/status` {state,title,url,volume}. La stanza segue il
 registry come voice (retained clear della vecchia al cambio). Endpoint nel
 profilo semantico. Testato live: Rai Radio 3 in cucina, play/stop/volume ok.
-TODO: variante OPS/Windows (serve mpv.exe), sorgenti locali da D, preset radio.
+**2026-07-16 sera — completati OPS, minipc e i 4 punti UX:**
+- OPS: mpv (winget shinchiro.mpv, `C:\Program Files\MPV Player`), IPC su named
+  pipe, entry nel manifest — testato live in soggiorno.
+- minipc: def nel local_agent (fix capability audio: aplay con locale italiana
+  dice "scheda" non "card" → LANG=C); serve `sudo apt install mpv` (utente).
+- Preset radio: tab Media in Node-RED (`gaiaMediaPresets`, editabili nel nodo
+  "Media Presets"), `GET /gaia/media/presets|state`, `POST /gaia/media/cmd`.
+- Card 🎵 nella dashboard (stanze attive, preset+libreria, volume, now playing).
+- Telegram: `/musica` (stato), `/musica <preset> [stanza]`, `stop`, `volume N`,
+  `cerca <nome> [stanza]` (directory TuneIn/opml via gaia_admin → play+notify).
+- Libreria locale: file in `/media/core/D/musica` → `GET /api/music/list` +
+  streaming `/music/<file>` da gaia_admin (ora ThreadingHTTPServer: lo streaming
+  bloccava l'API single-thread, stessa classe di bug del MJPEG).
+- Canale notify riusabile: `gaia/notify/telegram` {chatId?, text} → bot.
 
 
 Candidato: **mpv in modalità IPC** (`--input-ipc-server=/tmp/mpv.sock`) pilotato da un

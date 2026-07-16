@@ -50,8 +50,8 @@ def _record_arecord(alsa_device: str, duration_s: int, wav_path: str) -> bool:
     except Exception as e:
         log.error(f"arecord error: {e}")
         return False
-from http.server import HTTPServer, BaseHTTPRequestHandler
-from urllib.parse import urlparse, unquote
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
+from urllib.parse import urlparse, unquote, quote as _quote
 import paho.mqtt.client as mqtt
 
 MQTT_BROKER = "localhost"
@@ -67,6 +67,10 @@ PI_VOICE_SYNC_TARGETS = [
 
 PI_BASE_REPO   = os.path.expanduser("~/core-node-0/pi")  # root pi/ nel repo (serveFile legge da qui)
 MINIPC_IP      = "192.168.1.142"
+# Libreria musicale locale (punto 3 media): file su D serviti in streaming
+# da questa API — i player (mpv) leggono http://core:8765/music/<file>
+MUSIC_DIR      = "/media/core/D/musica"
+MUSIC_EXT      = ('.mp3', '.flac', '.ogg', '.wav', '.m4a', '.aac', '.opus')
 NODERED_PORT   = 1880
 
 
@@ -192,9 +196,49 @@ log = logging.getLogger("gaia_admin")
 _state: dict = {"stats": {}, "calibrate_result": {}, "pi_stats": {}, "pi_calibrate": {}}
 _mqtt: mqtt.Client | None = None
 
+def _media_search_worker(payload: dict):
+    """Ricerca stazioni radio (directory TuneIn/opml) → play + notifica Telegram.
+    Arriva da Telegram via gaia/media/search {query, room, chatId}."""
+    import urllib.request as _rq
+    q    = (payload.get("query") or "").strip()
+    room = payload.get("room") or "cucina"
+    chat = payload.get("chatId")
+
+    def _notify(text):
+        if _mqtt:
+            _mqtt.publish("gaia/notify/telegram",
+                          json.dumps({"chatId": chat, "text": text}))
+    if not q:
+        return
+    try:
+        url = ("http://opml.radiotime.com/Search.ashx?render=json&formats=mp3,aac"
+               "&query=" + _quote(q))
+        with _rq.urlopen(url, timeout=10) as r:
+            data = json.loads(r.read())
+        stations = [it for it in data.get("body", [])
+                    if it.get("type") == "audio" and it.get("item") == "station"]
+        if not stations:
+            _notify(f'Nessuna stazione trovata per "{q}".')
+            return
+        best = stations[0]
+        # l'URL della stazione è una playlist: la prima riga è lo stream vero
+        with _rq.urlopen(best["URL"], timeout=10) as r:
+            stream = r.read().decode("utf8", "ignore").splitlines()[0].strip()
+        if _mqtt:
+            _mqtt.publish(f"gaia/media/{room}/command",
+                          json.dumps({"action": "play", "url": stream}))
+        alt = " · ".join(s2.get("text", "?") for s2 in stations[1:4])
+        _notify(f"▶️ {best.get('text', '?')} in {room}"
+                + (f"\nAlternative: {alt}" if alt else ""))
+    except Exception as e:
+        log.warning(f"media search: {e}")
+        _notify(f"Ricerca stazioni fallita ({e}).")
+
+
 # ── MQTT ──────────────────────────────────────────────────────────────────────
 def _on_connect(c, u, f, rc, p):
     log.info(f"MQTT connesso (rc={rc})")
+    c.subscribe("gaia/media/search")             # ricerca stazioni da Telegram
     c.subscribe("gaia/voice/stats/+")            # minipc + stanze Pi
     c.subscribe("gaia/voice/calibrate_result/+") # calibrazione Pi
     c.subscribe("gaia/admin/calibrate_result")   # calibrazione miniPC
@@ -203,7 +247,9 @@ def _on_message(c, u, msg):
     try:
         payload = json.loads(msg.payload.decode())
         source  = msg.topic.split("/")[-1]   # "minipc", "ingresso", ecc.
-        if msg.topic.startswith("gaia/voice/stats/"):
+        if msg.topic == "gaia/media/search":
+            threading.Thread(target=_media_search_worker, args=(payload,), daemon=True).start()
+        elif msg.topic.startswith("gaia/voice/stats/"):
             if source == "minipc":
                 _state["stats"] = payload
                 if payload.get("success") and payload.get("enrolled"):
@@ -349,6 +395,42 @@ class AdminHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         p = urlparse(self.path).path
+
+        # Libreria musicale: lista file su D
+        if p == "/api/music/list":
+            files = []
+            for root, _dirs, names in os.walk(MUSIC_DIR):
+                for n in sorted(names):
+                    if n.lower().endswith(MUSIC_EXT):
+                        rel = os.path.relpath(os.path.join(root, n), MUSIC_DIR)
+                        files.append({"name": rel,
+                                      "url": f"http://{MINIPC_IP}:{HTTP_PORT}/music/{_quote(rel)}"})
+            self._json({"files": files, "dir": MUSIC_DIR})
+            return
+
+        # Streaming di un file della libreria (per mpv nelle stanze)
+        if p.startswith("/music/"):
+            rel  = unquote(p[len("/music/"):])
+            base = os.path.realpath(MUSIC_DIR)
+            full = os.path.realpath(os.path.join(MUSIC_DIR, rel))
+            if not full.startswith(base + os.sep) or not os.path.isfile(full):
+                self.send_response(404); self._cors(); self.end_headers()
+                return
+            ext = full.rsplit(".", 1)[-1].lower()
+            ctype = {"mp3": "audio/mpeg", "flac": "audio/flac", "ogg": "audio/ogg",
+                     "wav": "audio/wav", "m4a": "audio/mp4", "aac": "audio/aac",
+                     "opus": "audio/opus"}.get(ext, "application/octet-stream")
+            self.send_response(200)
+            self._cors()
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(os.path.getsize(full)))
+            self.end_headers()
+            try:
+                with open(full, "rb") as f:
+                    shutil.copyfileobj(f, self.wfile)
+            except (BrokenPipeError, ConnectionResetError):
+                pass          # player ha chiuso (stop/cambio brano): normale
+            return
 
         # Playback clip: /api/gaia-wakeword/clip/{label}/{index}
         if p.startswith("/api/gaia-wakeword/clip/"):
@@ -1048,4 +1130,9 @@ class AdminHandler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     threading.Thread(target=_start_mqtt, daemon=True).start()
     log.info(f"Gaia Admin API → http://0.0.0.0:{HTTP_PORT}")
-    HTTPServer(("0.0.0.0", HTTP_PORT), AdminHandler).serve_forever()
+    # ThreadingHTTPServer: /music/ streamma file audio per la durata del
+    # brano — col server single-thread bloccherebbe tutta l'admin API
+    # (stessa classe di bug del MJPEG camera, 2026-07-15).
+    srv = ThreadingHTTPServer(("0.0.0.0", HTTP_PORT), AdminHandler)
+    srv.daemon_threads = True
+    srv.serve_forever()
