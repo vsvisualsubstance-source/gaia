@@ -38,7 +38,31 @@ Con la proposta manifest (`docs/core-distribuito.md`), i punti 4 diventano una r
 
 ---
 
-## Modulo 1 — AV Herbarium (le piante suonano)
+## Modulo 1 — AV Herbarium (le piante suonano) — V1 FATTA 2026-07-16
+
+**Implementata** (`pi/herbarium/`, servizio a contratto gaia-herbarium) partendo
+dai test originali dell'utente ritrovati sul Pi (`t1.carxp`, ora versionato come
+`patch.carxp`: MIDI Enforce Scale → Quantization → 3× Yoshimi):
+- **Carla headless** (`--no-gui`) con **pipewire-jack**: RtAudio/pulse falliva
+  sotto systemd ("Unable to create stream: Timeout"), col driver JACK sopra
+  pipewire convive col mediaplayer sulla stessa uscita. Richiede:
+  `AudioDriver=JACK` in ~/.config/falkTX/Carla2.conf e
+  `CARLA_BIN=pw-jack carla` in /etc/gaia/herbarium.conf.
+- **Hotplug MIDI**: qualsiasi sorgente hardware (kernel client ALSA seq ≠
+  System/Through) viene collegata da sola — via aconnect se Carla è in ALSA,
+  via pw-link (Midi-Bridge → Carla:events-in) quando è in JACK. Anche le
+  uscite audio (Carla:audio-outN → sink ALSA) si cablano da sole: JACK non
+  auto-collega. Riprova finché Carla non è pronto (~25s per i 3 Yoshimi).
+- **MQTT**: aseqdump osserva le stesse sorgenti → `gaia/herbarium/{stanza}/note`
+  {note, velocity, channel}; heartbeat retained su `/state` {sources, notes_1m}.
+- **Brain**: evento normalizzato source=herbarium → `_award('natura')` (XP
+  Druido) + curiosity/calm con cooldown 30s. Telegram: /attiva herbarium.
+- **Test E2E senza piante**: `sudo modprobe snd-virmidi midi_devs=1` crea un
+  client kernel che il modulo aggancia da solo; scrivere byte MIDI raw su
+  /dev/snd/midiC*D0 suona Yoshimi e pubblica le note (10/10 verificate).
+
+### Design originale (per riferimento)
+
 
 **Idea**: sensori sulle piante (tocco capacitivo / biopotenziali) → note ed eventi →
 synth in tempo reale → audio dal Pi. La pianta diventa uno strumento e una presenza.
