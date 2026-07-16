@@ -57,6 +57,12 @@ dai test originali dell'utente ritrovati sul Pi (`t1.carxp`, ora versionato come
   {note, velocity, channel}; heartbeat retained su `/state` {sources, notes_1m}.
 - **Brain**: evento normalizzato source=herbarium → `_award('natura')` (XP
   Druido) + curiosity/calm con cooldown 30s. Telegram: /attiva herbarium.
+- **GOTCHA ProcessMode**: con `ProcessMode=3` (patchbay) in Carla2.conf le
+  connessioni interne del progetto NON vengono ripristinate sotto `--no-gui`
+  → silenzio totale con note che fluiscono. Serve `ProcessMode=2` (rack):
+  concatena i plugin nell'ordine del progetto, che per questa catena seriale
+  è esattamente giusto. Il segnale dei 3 Yoshimi sommati può clippare
+  (picco a fondo scala a velocity 90) — se distorce, abbassare i Main volume.
 - **Test E2E senza piante**: `sudo modprobe snd-virmidi midi_devs=1` crea un
   client kernel che il modulo aggancia da solo; scrivere byte MIDI raw su
   /dev/snd/midiC*D0 suona Yoshimi e pubblica le note (10/10 verificate).
