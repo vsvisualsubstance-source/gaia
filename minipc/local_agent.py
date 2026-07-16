@@ -58,6 +58,14 @@ _DEFAULT_CFG = {
 # Ogni servizio è un processo Python locale.
 # env_extra: variabili aggiuntive oltre a quelle di sistema + stanza.
 _SERVICE_DEFS = {
+    "mediaplayer": {
+        # musica/radio nel salotto — stesso modulo del Pi (pi/mediaplayer),
+        # venv D per paho 2.x; audio della sessione utente core (PipeWire).
+        "cmd": ["/media/core/D/venv/bin/python3",
+                "/home/core/core-node-0/pi/mediaplayer/main.py"],
+        "cwd": "/home/core/core-node-0/pi/mediaplayer",
+        "env_extra": {"XDG_RUNTIME_DIR": "/run/user/1000", "CAMERA_NAME": "salotto"},
+    },
     "kiosk": {
         # Welcome sul touchscreen del salotto (il minipc non si sposta,
         # room hardcoded). Firefox è l'unico browser installato; --kiosk
@@ -181,7 +189,10 @@ def detect_capabilities() -> dict:
     # F4 gaia-semantico: capability estese → il Core suggerisce i moduli
     caps["audio_out"] = False
     try:
-        r = subprocess.run(["aplay", "-l"], capture_output=True, text=True, timeout=5)
+        # LANG=C: con locale italiana aplay scrive "scheda 0:" e il match
+        # "card" falliva — il minipc risultava senza audio pur avendo la ALC3234
+        r = subprocess.run(["aplay", "-l"], capture_output=True, text=True, timeout=5,
+                           env={**os.environ, "LANG": "C"})
         caps["audio_out"] = "card" in r.stdout
     except Exception:
         pass

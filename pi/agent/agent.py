@@ -127,7 +127,10 @@ def detect_capabilities() -> dict:
     # F4 gaia-semantico: capability estese → il Core suggerisce i moduli
     caps["audio_out"] = False
     try:
-        r = subprocess.run(["aplay", "-l"], capture_output=True, text=True, timeout=5)
+        # LANG=C: con locale italiana aplay scrive "scheda 0:" e il match
+        # "card" falliva — il minipc risultava senza audio pur avendo la ALC3234
+        r = subprocess.run(["aplay", "-l"], capture_output=True, text=True, timeout=5,
+                           env={**os.environ, "LANG": "C"})
         caps["audio_out"] = "card" in r.stdout
     except Exception:
         pass

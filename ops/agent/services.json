@@ -67,6 +67,18 @@
       "cwd": "C:\\gaia",
       "check_script": false,
       "_nota": "Welcome sul monitor OPS. Il task agent è 'Solo interattivo' quindi Edge appare sul desktop. user-data-dir dedicato: il processo resta figlio dell'agent (stop funziona)."
+    },
+    "mediaplayer": {
+      "cmd": [
+        "C:\\gaia\\venv\\Scripts\\python.exe",
+        "main.py"
+      ],
+      "cwd": "C:\\gaia\\pi\\mediaplayer",
+      "env_extra": {
+        "PYTHONUNBUFFERED": "1",
+        "MPV_BIN": "C:\\Program Files\\MPV Player\\mpv.exe"
+      },
+      "_nota": "musica/radio per stanza — mpv IPC su named pipe (vedi pi/mediaplayer)"
     }
   },
   "camera_consumers": [
