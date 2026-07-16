@@ -86,7 +86,17 @@ mediapipe+face vivono sempre sulla stessa macchina.
 3. Fase 2: migrazione OPS vera (visione+voce sul monitor touch) secondo
    `project-architettura-core-ops`.
 
-## Media player (il servizio che sblocca il ruolo "media")
+## Media player (il servizio che sblocca il ruolo "media") — V1 FATTO 2026-07-16
+
+**Implementato su Pi** (`pi/mediaplayer/`, servizio a contratto gaia-mediaplayer,
+toggle da Pi Manager e /attiva mediaplayer): mpv IPC + wrapper MQTT.
+`gaia/media/{stanza}/command` — {"action":"play","url":...} · pause · resume ·
+stop · {"action":"volume","value":0-100}; status retained su
+`gaia/media/{stanza}/status` {state,title,url,volume}. La stanza segue il
+registry come voice (retained clear della vecchia al cambio). Endpoint nel
+profilo semantico. Testato live: Rai Radio 3 in cucina, play/stop/volume ok.
+TODO: variante OPS/Windows (serve mpv.exe), sorgenti locali da D, preset radio.
+
 
 Candidato: **mpv in modalità IPC** (`--input-ipc-server=/tmp/mpv.sock`) pilotato da un
 piccolo wrapper Python MQTT (`gaia/media/{room}/command`: play/pause/volume/url) — così

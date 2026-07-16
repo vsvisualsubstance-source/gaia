@@ -1,0 +1,20 @@
+[Unit]
+Description=GAIA Mediaplayer — musica/radio per stanza (mpv + MQTT)
+After=network-online.target
+# Gestito da gaia-agent — NON abilitare con systemctl enable
+
+[Service]
+Type=simple
+User=asemico
+WorkingDirectory=/home/asemico/gaia/mediaplayer
+EnvironmentFile=/etc/gaia/device.conf
+EnvironmentFile=-/etc/gaia/mediaplayer.conf
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 /home/asemico/gaia/mediaplayer/main.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

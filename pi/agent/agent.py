@@ -106,6 +106,9 @@ def _service_endpoints(key: str, stanza: str, ip: str) -> dict:
                 "stats": f"gaia/voice/stats/{stanza}"}
     if key == "mediapipe":
         return {"pose": "gaia/mediapipe/pose"}
+    if key == "mediaplayer":
+        return {"command": f"gaia/media/{stanza}/command",
+                "status": f"gaia/media/{stanza}/status"}
     if key == "yolo":
         return {"frame": f"gaia/{stanza}/frame",
                 "snapshot": f"gaia/{stanza}/snapshot"}
