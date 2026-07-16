@@ -19,6 +19,14 @@ Ogni AP_RETRY_S l'AP viene comunque abbassato per RETRY_WINDOW_S per
 lasciare che NetworkManager ritenti l'autoconnect alle reti note (caso
 "il router era solo spento").
 
+Il portale è anche il MENU STANDALONE (2026-07-16, "modalità bosco"):
+quando il Pi è isolato (installazione artistica, nessun Core) la stessa
+pagina — dal telefono via hotspot o dal touchscreen (kiosk →
+http://localhost/) — permette di accendere/spegnere i servizi gaia-*,
+regolare il volume e riavviare. I toggle passano da systemctl (siamo
+root) e persistono in agent/device.json, così l'agent riporta tutto
+allo stesso stato al prossimo boot anche senza rete.
+
 Gira come root (nmcli + porta 80). Config via env / EnvironmentFile
 /etc/gaia/provision.conf:
   AP_IFACE=wlan0  AP_PASSWORD=gaiasetup  PORTAL_PORT=80
@@ -27,6 +35,7 @@ Gira come root (nmcli + porta 80). Config via env / EnvironmentFile
 """
 import json
 import os
+import pwd
 import re
 import socket
 import subprocess
@@ -174,6 +183,114 @@ def save_stanza(stanza: str):
         log(f"Errore salvataggio stanza (ignoro): {e}")
 
 
+# ── Servizi standalone (menu nel portale) ─────────────────────────────
+GAIA_SERVICES = [
+    ("herbarium",   "🌿", "Herbarium — le piante suonano"),
+    ("mediaplayer", "🎵", "Media player"),
+    ("screen",      "✴️", "Sigillo asemico (display)"),
+    ("kiosk",       "🖥️", "Welcome kiosk (display)"),
+    ("voice",       "🎤", "Voce — wakeword e TTS"),
+    ("yolo",        "👁️", "Visione YOLO"),
+    ("mediapipe",   "🖐️", "MediaPipe — gesti e pose"),
+]
+_SVC_NAMES       = {s[0] for s in GAIA_SERVICES}
+SVC_CONFLICTS    = {"screen": "kiosk", "kiosk": "screen"}  # Conflicts= reciproco nei .service
+CAMERA_CONSUMERS = ("yolo", "mediapipe", "kiosk")          # stessa lista di agent.py
+
+
+def _systemctl(*args) -> subprocess.CompletedProcess:
+    return subprocess.run(["systemctl", *args], capture_output=True, text=True, timeout=60)
+
+
+def _svc_active(name: str) -> bool:
+    return _systemctl("is-active", f"gaia-{name}").stdout.strip() == "active"
+
+
+def _load_device_cfg() -> dict:
+    try:
+        return json.load(open(DEVICE_JSON))
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_device_cfg(cfg: dict):
+    try:
+        st = os.stat(DEVICE_JSON) if os.path.exists(DEVICE_JSON) else os.stat(_GAIA_ROOT)
+        with open(DEVICE_JSON, "w") as f:
+            json.dump(cfg, f, indent=2)
+        os.chown(DEVICE_JSON, st.st_uid, st.st_gid)  # il portale è root: il file resta dell'utente
+    except OSError as e:
+        log(f"Errore salvataggio device.json (ignoro): {e}")
+
+
+def _sync_camera(cfg: dict):
+    """Stesso refcount dell'agent: camera accesa sse un consumer è abilitato.
+    Serve perché qui bypassiamo l'agent (che gestisce la camera solo sui
+    comandi MQTT — e nel bosco MQTT non c'è)."""
+    services = cfg.get("services", {})
+    want = any(services.get(k, {}).get("enabled") for k in CAMERA_CONSUMERS)
+    if want != _svc_active("camera"):
+        _systemctl("start" if want else "stop", "gaia-camera")
+
+
+def toggle_service(name: str, action: str) -> tuple[bool, str]:
+    """systemctl start/stop + persistenza enabled in device.json."""
+    if name not in _SVC_NAMES or action not in ("start", "stop"):
+        return False, "servizio o azione non validi"
+    cfg = _load_device_cfg()
+    services = cfg.setdefault("services", {})
+    if action == "start" and name in SVC_CONFLICTS:
+        # systemd ferma l'altro da solo (Conflicts=): allinea solo il flag
+        services.setdefault(SVC_CONFLICTS[name], {})["enabled"] = False
+    r = _systemctl(action, f"gaia-{name}")
+    if r.returncode != 0:
+        return False, (r.stderr or r.stdout).strip()[:200]
+    services.setdefault(name, {})["enabled"] = (action == "start")
+    _sync_camera(cfg)
+    _save_device_cfg(cfg)
+    log(f"Servizio {name}: {action}")
+    return True, ""
+
+
+def _audio_user() -> pwd.struct_passwd:
+    return pwd.getpwuid(os.stat(_GAIA_ROOT).st_uid)
+
+
+def _wpctl(*args) -> subprocess.CompletedProcess:
+    """wpctl nella sessione PipeWire dell'utente gaia (il portale è root)."""
+    u = _audio_user()
+    return subprocess.run(
+        ["runuser", "-u", u.pw_name, "--", "env",
+         f"XDG_RUNTIME_DIR=/run/user/{u.pw_uid}", "wpctl", *args],
+        capture_output=True, text=True, timeout=10)
+
+
+def get_volume() -> int | None:
+    try:
+        m = re.search(r"Volume:\s*([\d.]+)",
+                      _wpctl("get-volume", "@DEFAULT_AUDIO_SINK@").stdout)
+        return round(float(m.group(1)) * 100) if m else None
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return None
+
+
+def set_volume(pct: int):
+    _wpctl("set-volume", "@DEFAULT_AUDIO_SINK@", f"{max(0, min(100, int(pct)))}%")
+
+
+def services_state() -> dict:
+    cfg = _load_device_cfg()
+    services = cfg.get("services", {})
+    return {
+        "services": [
+            {"name": n, "icon": ic, "label": lb, "active": _svc_active(n),
+             "enabled": services.get(n, {}).get("enabled", False)}
+            for n, ic, lb in GAIA_SERVICES],
+        "volume": get_volume(),
+        "stanza": cfg.get("stanza"),
+    }
+
+
 # ── Captive portal ────────────────────────────────────────────────────
 PORTAL_HTML = """<!DOCTYPE html>
 <html lang="it"><head><meta charset="utf-8">
@@ -197,11 +314,33 @@ PORTAL_HTML = """<!DOCTYPE html>
       padding:10px 14px;border-radius:8px;margin-top:16px;font-size:.95rem}
  .ring{width:64px;height:64px;border-radius:50%;border:3px solid #00ffcc;
       margin:8px auto 0;box-shadow:0 0 24px #00ffcc55}
+ h2{font-size:.85rem;color:#8b949e;margin:26px 0 10px;text-transform:uppercase;letter-spacing:.06em}
+ .svc{display:flex;align-items:center;gap:10px;padding:10px 12px;background:#161b22;
+      border:1px solid #30363d;border-radius:10px;margin-bottom:8px}
+ .svc .nm{flex:1;font-size:.95rem}
+ .dot{width:10px;height:10px;border-radius:50%;background:#30363d;flex-shrink:0}
+ .dot.on{background:#3fb950;box-shadow:0 0 8px #3fb95088}
+ .svc button{width:auto;margin:0;padding:8px 14px;min-height:40px;font-size:.85rem;border-radius:8px}
+ .svc button.stop{background:#21262d;color:#e6edf3;border:1px solid #30363d}
+ .volrow{display:flex;align-items:center;gap:12px;padding:4px 2px;font-size:1.1rem}
+ .volrow input{flex:1;accent-color:#00ffcc;padding:0}
+ .volrow span.pct{width:48px;text-align:right;font-size:.9rem;color:#8b949e}
+ details{margin-top:26px}
+ summary{color:#8b949e;font-size:.85rem;text-transform:uppercase;letter-spacing:.06em;
+      cursor:pointer;margin-bottom:4px}
+ .ghost{background:none;border:1px solid #30363d;color:#8b949e;font-weight:400;
+      min-height:44px;padding:10px;font-size:.9rem}
 </style></head><body><div class="box">
 <div class="ring"></div>
 <h1>Ciao, sono Gaia</h1>
 <p class="sub">%SUBTITLE%</p>
 %ERROR%
+<h2>Servizi</h2>
+<div id="svcs" style="color:#8b949e;font-size:.9rem">carico…</div>
+<div class="volrow">🔊<input type="range" id="vol" min="0" max="100" value="60"
+  oninput="document.getElementById('vollab').textContent=this.value+'%'"
+  onchange="setVol(this.value)"><span class="pct" id="vollab">—</span></div>
+<details %WIFI_OPEN%><summary>Rete WiFi</summary>
 <form onsubmit="return send(this)">
   <label>Rete WiFi</label>
   <select name="ssid" id="ssid">%OPTIONS%</select>
@@ -212,6 +351,9 @@ PORTAL_HTML = """<!DOCTYPE html>
   <button id="btn" type="submit">Connetti Gaia →</button>
 </form>
 <div id="msg"></div>
+</details>
+<button class="ghost" style="width:100%;margin-top:26px"
+  onclick="if(confirm('Riavviare Gaia?'))fetch('/reboot',{method:'POST'})">↻ Riavvia Gaia</button>
 <script>
 function send(f){
   document.getElementById('btn').disabled = true;
@@ -225,6 +367,33 @@ function send(f){
   }).catch(()=>{ document.getElementById('btn').disabled = false; });
   return false;
 }
+function svcRow(s){
+  return '<div class="svc"><span class="dot '+(s.active?'on':'')+'"></span>'+
+    '<span class="nm">'+s.icon+' '+s.label+'</span>'+
+    '<button class="'+(s.active?'stop':'')+'" onclick="toggle(\\''+s.name+'\\','+s.active+',this)">'+
+    (s.active?'Spegni':'Accendi')+'</button></div>';
+}
+function render(d){
+  document.getElementById('svcs').innerHTML = d.services.map(svcRow).join('');
+  var v = document.getElementById('vol');
+  if(d.volume!=null && document.activeElement!==v){
+    v.value = d.volume;
+    document.getElementById('vollab').textContent = d.volume+'%';
+  }
+}
+function loadSvcs(){ fetch('/services').then(r=>r.json()).then(render).catch(()=>{}); }
+function toggle(name,active,btn){
+  btn.disabled = true; btn.textContent = '…';
+  fetch('/service',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({service:name, action:active?'stop':'start'})})
+  .then(r=>r.json()).then(d=>{ render(d); if(d.error) alert(d.error); })
+  .catch(()=>loadSvcs());
+}
+function setVol(v){
+  fetch('/volume',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({value:+v})});
+}
+loadSvcs(); setInterval(loadSvcs, 10000);
 </script>
 </div></body></html>"""
 
@@ -237,16 +406,22 @@ CAPTIVE_PROBES = ("/generate_204", "/gen_204", "/hotspot-detect.html",
 
 class PortalHandler(BaseHTTPRequestHandler):
 
+    def _send_json(self, obj, code=200):
+        body = json.dumps(obj).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", len(body))
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self):
         path = urlparse(self.path).path
         if path == "/status":
             with _state_lock:
-                body = json.dumps({k: _state[k] for k in ("mode", "last_error")}).encode()
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", len(body))
-            self.end_headers()
-            self.wfile.write(body)
+                self._send_json({k: _state[k] for k in ("mode", "last_error")})
+            return
+        if path == "/services":
+            self._send_json(services_state())
             return
         with _state_lock:
             cur_mode = _state["mode"]
@@ -274,14 +449,16 @@ class PortalHandler(BaseHTTPRequestHandler):
         opts = "".join(
             f'<option value="{s["ssid"]}">{s["ssid"]}  ({s["signal"]}%)</option>'
             for s in ssids) or '<option value="">nessuna rete trovata</option>'
-        subtitle = ("Collegami alla rete WiFi di casa per completare l'installazione."
+        subtitle = ("Accendi i servizi che vuoi qui sotto — funziono anche da sola. "
+                    "Oppure collegami alla rete WiFi di casa."
                     if cur_mode == "ap" else
-                    "Sono online. Da qui puoi cambiarmi rete WiFi — se qualcosa va storto, "
-                    "dopo 3 minuti accendo l'hotspot di soccorso Gaia-Setup.")
+                    "Sono online. Da qui gestisci i miei servizi e la rete WiFi — se qualcosa "
+                    "va storto, dopo 3 minuti accendo l'hotspot di soccorso Gaia-Setup.")
         html = (PORTAL_HTML
                 .replace("%OPTIONS%", opts)
                 .replace("%SUBTITLE%", subtitle)
                 .replace("%SSID%", AP_SSID)
+                .replace("%WIFI_OPEN%", "open" if cur_mode == "ap" else "")
                 .replace("%ERROR%", f'<div class="err">Ultimo tentativo fallito: {err}</div>' if err else ""))
         body = html.encode()
         self.send_response(200)
@@ -292,27 +469,50 @@ class PortalHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
-        if path != "/connect":
-            self.send_response(404); self.end_headers(); return
         length = int(self.headers.get("Content-Length", 0))
         try:
-            body = json.loads(self.rfile.read(length))
+            body = json.loads(self.rfile.read(length)) if length else {}
         except ValueError:
             self.send_response(400); self.end_headers(); return
-        ssid = (body.get("ssid") or "").strip()
-        with _state_lock:
-            _state["submitted"] = {
-                "ssid": ssid,
-                "psk": body.get("psk") or "",
-                "stanza": (body.get("stanza") or "").strip(),
-            }
-        log(f"Portale: credenziali ricevute per '{ssid}'")
-        resp = json.dumps({"ok": True}).encode()
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", len(resp))
-        self.end_headers()
-        self.wfile.write(resp)
+
+        if path == "/connect":
+            ssid = (body.get("ssid") or "").strip()
+            with _state_lock:
+                _state["submitted"] = {
+                    "ssid": ssid,
+                    "psk": body.get("psk") or "",
+                    "stanza": (body.get("stanza") or "").strip(),
+                }
+            log(f"Portale: credenziali ricevute per '{ssid}'")
+            self._send_json({"ok": True})
+            return
+
+        if path == "/service":
+            ok, err = toggle_service((body.get("service") or "").strip(),
+                                     (body.get("action") or "").strip())
+            state = services_state()
+            state["ok"] = ok
+            if err:
+                state["error"] = err
+            self._send_json(state)
+            return
+
+        if path == "/volume":
+            try:
+                set_volume(int(body.get("value")))
+            except (TypeError, ValueError):
+                self._send_json({"ok": False}, 400)
+                return
+            self._send_json({"ok": True, "volume": get_volume()})
+            return
+
+        if path == "/reboot":
+            log("Riavvio richiesto dal portale")
+            self._send_json({"ok": True})
+            threading.Timer(2, lambda: subprocess.run(["systemctl", "reboot"])).start()
+            return
+
+        self.send_response(404); self.end_headers()
 
     def log_message(self, *_):
         pass

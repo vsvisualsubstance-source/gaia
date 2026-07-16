@@ -111,3 +111,41 @@ Il portale non è più solo il soccorso offline: gira SEMPRE (porta 80 del Pi).
   `connection.autoconnect-priority` (`sudo nmcli connection modify <nome>
   connection.autoconnect-priority 10`). Il portale aggiunge profili standard,
   quindi convivono con qualsiasi configurazione manuale.
+
+## Modalità Bosco — menu servizi standalone (2026-07-16)
+
+Nato per l'installazione artistica nel bosco: Pi isolato, nessun Core, nessuna
+rete. Il portale (già root, porta 80, sempre attivo) è diventato anche la UI
+standalone del device — la stessa pagina in AP mode e online.
+
+**Flusso nel bosco**: accensione → nessuna rete nota → dopo OFFLINE_GRACE_S
+(3 min) hotspot `Gaia-Setup-XXXX` → dal telefono il captive portal si apre da
+solo → sezione **Servizi** in cima alla pagina: toggle per herbarium,
+mediaplayer, screen, kiosk, voice, yolo, mediapipe + slider volume + Riavvia.
+La rete WiFi è in un `<details>` (aperto in AP mode, chiuso online).
+
+In realtà per lo scenario base non serve nemmeno il telefono: l'**agent
+riporta i servizi allo stato di `device.json` a ogni boot, senza rete** —
+si abilita herbarium a casa, nel bosco basta dare corrente.
+
+**Endpoint** (oltre a `/`, `/status`, `/connect`):
+- `GET /services` → `{services:[{name,icon,label,active,enabled}], volume, stanza}`
+- `POST /service` `{service, action:start|stop}` → systemctl + persistenza
+  `enabled` in `agent/device.json` (ownership preservata: il portale è root ma
+  il file resta dell'utente) → risponde con lo stato completo aggiornato
+- `POST /volume` `{value:0-100}` → `wpctl` nella sessione PipeWire dell'utente
+  (via `runuser` + `XDG_RUNTIME_DIR`)
+- `POST /reboot` → `systemctl reboot` dopo 2s
+
+**Coerenza col resto del sistema**:
+- Camera: il portale replica il refcount dell'agent (`CAMERA_CONSUMERS` =
+  yolo/mediapipe/kiosk) perché l'agent sincronizza la camera solo sui comandi
+  MQTT — e nel bosco MQTT non c'è.
+- kiosk/screen: `Conflicts=` reciproco nei .service — systemd ferma l'altro,
+  il portale allinea solo il flag `enabled`.
+- A casa (Core presente) la UI resta Pi Manager/Telegram; i due percorsi
+  scrivono lo stesso `device.json`, quindi non divergono al boot successivo.
+
+**Touchscreen nel bosco**: il kiosk può puntare al portale locale —
+`KIOSK_URL=http://localhost/` in `/etc/gaia/kiosk.conf` — e il menu servizi
+appare sul display DSI touch. (Non attivarlo insieme a screen: Conflicts.)
