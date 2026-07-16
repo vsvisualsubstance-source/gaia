@@ -46,6 +46,7 @@ def _mpv_start():
         os.unlink(config.MPV_SOCK)
     _mpv = subprocess.Popen(
         [config.MPV_BIN, "--idle=yes", "--no-video", "--no-terminal",
+         "--force-window=no",
          f"--input-ipc-server={config.MPV_SOCK}",
          f"--volume={config.DEFAULT_VOLUME}"],
     )
@@ -214,6 +215,16 @@ def main():
 
     last_status = 0.0
     while _running:
+        # Watchdog: se mpv muore (chiuso a mano, crash) lo si rilancia —
+        # senza, il wrapper resta vivo ma sordo (successo su OPS 2026-07-16).
+        if _mpv and _mpv.poll() is not None:
+            print(f"[Media] mpv terminato (rc={_mpv.returncode}) — riavvio")
+            try:
+                _mpv_start()
+                print("[Media] mpv riavviato")
+            except Exception as e:
+                print(f"[Media] riavvio mpv fallito: {e}")
+                time.sleep(5)
         if time.time() - last_status >= config.STATUS_EVERY_S:
             last_status = time.time()
             try:
