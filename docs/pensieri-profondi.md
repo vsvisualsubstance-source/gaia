@@ -82,3 +82,30 @@ file, per sopravvivere ai riavvii Node-RED).
 
 **Nota:** `Load Brain at StartUp` → `Parse Brain` ha `wires: [[]]` (non collegato in output) —
 verificare se il caricamento del brain salvato su file funziona ancora prima di affidarcisi.
+
+## Evoluzione linguistica v2 — mood vivo + lessico personale (2026-07-16)
+
+Il mood era rimasto SEMPRE 'neutra' dal fix del 04-07: diagnosi — non un bug ma
+sorgenti povere. `curiosity` non aveva NESSUNA sorgente, `calm` poteva solo
+scendere, e decadimento 0.002/s (bonus 0.1 = 50 secondi di vita) contro eventi
+domestici sparsi = stato invisibile. Correzioni in GAIA Brain:
+
+- decadimento 0.0008/s (un bonus vive ~2 min) + **isteresi** (entra a 0.12,
+  esce sotto 0.06 — niente flicker);
+- nuove sorgenti: sconosciuto che entra → curiosity +0.2; scena che CAMBIA
+  (SceneNorm) → curiosity +0.1; quiete col tick (gente presente, nessun motion
+  da 4+ min) → calm +0.004/tick; social enter portato a +0.15.
+
+**Lessico personale** (la vera evoluzione): `Extract Thought` conteggia le
+parole significative dei pensieri in `brain.lexicon` (rolling top-80, stopword
+filtrate, persistito in brain.json); `Build Prompt (Contestuale)` inietta le
+8 più consolidate (count≥3) come "parole che senti tue" + una riga di
+**maturità dal livello RPG**: ≤3 semplice e concreta, 4-7 metafore domestiche,
+8+ voce matura. Il tono cresce col vissuto della casa.
+
+Effetto collaterale voluto: col mood finalmente vivo, l'inchiostro asemico v2
+(welcome + schermino Pi) cambierà colore davvero — calm verde-acqua, stress
+corallo, social ambra, curiosity viola.
+
+Verifica live: da osservare nei prossimi giorni (mood ≠ neutra dopo transizioni
+reali; `grep lexicon /home/core/gaia/brain.json` dopo qualche pensiero).
