@@ -32,3 +32,6 @@ PATCH      = _get("HERBARIUM_PATCH", os.path.join(_BASE, "patch.carxp"))
 CARLA_BIN  = _get("CARLA_BIN", "carla")
 SCAN_EVERY_S      = int(_get("HERBARIUM_SCAN_S", "5"))
 HEARTBEAT_EVERY_S = int(_get("HERBARIUM_HEARTBEAT_S", "30"))
+# note anche in locale (udp://127.0.0.1) per gaia-screen: nel bosco non c'è
+# broker MQTT, il canale localhost funziona sempre
+UDP_PORT          = int(_get("HERBARIUM_UDP_PORT", "8791"))

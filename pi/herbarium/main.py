@@ -21,6 +21,7 @@ import os
 import re
 import shlex
 import signal
+import socket
 import subprocess
 import threading
 import time
@@ -153,8 +154,12 @@ def _sync_wiring():
             threading.Thread(target=_dump_reader, args=(_dump,), daemon=True).start()
 
 
+_udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+
 def _dump_reader(proc):
-    """aseqdump → eventi nota su MQTT (formato: '... Note on 0, note 60, velocity 90')."""
+    """aseqdump → eventi nota su MQTT (formato: '... Note on 0, note 60, velocity 90')
+    + copia locale UDP per gaia-screen (funziona anche senza broker, nel bosco)."""
     for line in proc.stdout:
         m = re.search(r"Note on\s+(\d+), note (\d+), velocity (\d+)", line)
         if not m:
@@ -166,9 +171,13 @@ def _dump_reader(proc):
         with _lock:
             _note_times.append(now)
             del _note_times[:-200]
-        _mqtt.publish(f"gaia/herbarium/{_current_room}/note",
-                      json.dumps({"note": note, "velocity": vel,
-                                  "channel": ch, "ts": int(now * 1000)}))
+        payload = json.dumps({"note": note, "velocity": vel,
+                              "channel": ch, "ts": int(now * 1000)})
+        _mqtt.publish(f"gaia/herbarium/{_current_room}/note", payload)
+        try:
+            _udp.sendto(payload.encode(), ("127.0.0.1", config.UDP_PORT))
+        except OSError:
+            pass
 
 
 # ── MQTT ──────────────────────────────────────────────────────────────────────

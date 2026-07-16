@@ -2,3 +2,4 @@
 # CAMERA_NAME arriva da /etc/gaia/device.conf (agent); qui solo override.
 #CELL=44
 #MQTT_HOST=192.168.1.142
+#HERB_UDP_PORT=8791   # note da gaia-herbarium (udp localhost — funziona senza broker)

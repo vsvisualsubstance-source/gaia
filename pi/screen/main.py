@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 """
-GAIA Screen — superficie asemica per display DSI (v4 + inchiostro dal mood v2).
+GAIA Screen — superficie asemica per display DSI (v4 + mood v2 + herbarium).
 
 Il piccolo schermo del Pi "vive": in quiete respira il sigillo della propria
 stanza; quando Gaia parla nella stanza scrive i glifi in ciano (banda alta),
 quando l'umano parla scrive il comando in blu (banda bassa). Stesso engine
 deterministico della Welcome (parità JS/Python verificata).
+
+Herbarium: quando le piante suonano, ogni nota diventa una parola del
+solfeggio (do, dodiesis, re…) e la pianta "scrive" la pagina in verde foglia
+— alfabeto deterministico di 12 glifi. Le note arrivano via UDP localhost
+da gaia-herbarium: nel bosco (nessun Core, nessun broker) funziona uguale.
 
 Rendering: pygame su KMSDRM (framebuffer, niente X/Wayland) — ~30MB, adatto
 a girare accanto a yolo/mediapipe/voice.
@@ -17,6 +22,8 @@ import json
 import math
 import os
 import signal
+import socket
+import threading
 import time
 
 os.environ.setdefault("SDL_VIDEODRIVER", "kmsdrm")
@@ -151,6 +158,61 @@ GESTURE_WORDS = {"fist": "pugno", "point": "indice", "victory": "vittoria",
 _gesture_last: dict = {}     # parola → ts ultimo disegno (cooldown 30s)
 
 
+# ── Herbarium: le piante scrivono ─────────────────────────────────────────────
+# nota MIDI → parola del solfeggio → glifo (alfabeto deterministico di 12 segni)
+NOTE_WORDS = ["do", "dodiesis", "re", "rediesis", "mi", "fa", "fadiesis",
+              "sol", "soldiesis", "la", "ladiesis", "si"]
+INK_HERB = (120, 240, 110)           # verde foglia — distinto dal teal calm
+HERB_FADE_MS = 14000
+HERB_REVEAL_MS = 420
+_herb_pending: list = []             # (note, velocity) dal thread UDP
+_herb_glyphs: list = []              # {"g","x","y","cell","vel","born"}
+_herb_cursor = {"x": None, "y": 0.0, "last": 0.0}
+
+
+def _herb_udp_listener():
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.bind(("127.0.0.1", config.HERB_UDP_PORT))
+    except OSError as e:
+        print(f"[Screen] Herbarium UDP non disponibile: {e}")
+        return
+    print(f"[Screen] In ascolto note herbarium su udp:{config.HERB_UDP_PORT}")
+    while True:
+        try:
+            data, _ = sock.recvfrom(512)
+            n = json.loads(data)
+            _herb_pending.append((int(n["note"]), int(n.get("velocity", 90))))
+        except (ValueError, KeyError, TypeError):
+            continue
+        except OSError:
+            return
+
+
+def _herb_place(note: int, vel: int, W: int, H: int, now: float):
+    """La pianta scrive: cursore che avanza e va a capo come su una pagina.
+    Note gravi = segni più grandi; dopo 30s di silenzio riparte dall'alto."""
+    word = NOTE_WORDS[note % 12]
+    g = glyph_for(word)
+    octave = max(0, min(8, note // 12 - 1))
+    cell = CELL * (1.25 - octave * 0.07)
+    cur = _herb_cursor
+    if cur["x"] is None or now - cur["last"] > 30000:
+        cur["x"], cur["y"] = W * 0.04, H * 0.08
+    if now - cur["last"] > 5000:
+        print(f"[Screen] Herbarium scrive: {word} (nota {note})")
+    adv = cell * g["wide"] * 0.82 + cell * 0.25
+    if cur["x"] + adv > W * 0.96:
+        cur["x"] = W * 0.04
+        cur["y"] += CELL * 1.6
+        if cur["y"] > H * 0.86:
+            cur["y"] = H * 0.08
+    _herb_glyphs.append({"g": g, "x": cur["x"], "y": cur["y"], "cell": cell,
+                         "vel": vel, "born": now})
+    cur["x"] += adv
+    cur["last"] = now
+
+
 def _on_message(client, userdata, msg):
     if msg.topic == "gaia/mediapipe/pose":
         try:
@@ -207,6 +269,8 @@ def main():
     client.connect_async(config.MQTT_HOST, config.MQTT_PORT, 60)
     client.loop_start()
 
+    threading.Thread(target=_herb_udp_listener, daemon=True).start()
+
     sigil = glyph_for(config.ROOM)      # il "nome" della stanza come sigillo
     clock = pygame.time.Clock()
 
@@ -224,17 +288,31 @@ def main():
         _sentences[:] = [s for s in _sentences
                          if now - s["born"] < s["write_ms"] + HOLD_MS + FADE_MS]
 
+        while _herb_pending:
+            note, vel = _herb_pending.pop(0)
+            _herb_place(note, vel, W, H, now)
+        _herb_glyphs[:] = [h for h in _herb_glyphs if now - h["born"] < HERB_FADE_MS]
+
         screen.fill((0, 0, 0))
 
-        # sigillo della stanza che respira (sempre, più fioco se ci sono frasi)
+        # sigillo della stanza che respira (sempre, più fioco se si scrive)
         t = now / 1000.0
         breath = 0.10 + 0.07 * (0.5 + 0.5 * math.sin(t * 0.6))
-        if _sentences:
+        if _sentences or _herb_glyphs:
             breath *= 0.4
         sig_cell = 140
         sw = sig_cell * sigil["wide"]
         sig_item = {"g": sigil, "x": (W - sw) / 2, "y": H / 2 - 70, "order": 0}
         draw_glyph(screen, sig_item, 1.0, breath, ink_out(), cell=sig_cell)
+
+        # la pianta scrive: velocity = intensità dell'inchiostro
+        for hgl in _herb_glyphs:
+            age = now - hgl["born"]
+            reveal = min(1.0, age / HERB_REVEAL_MS)
+            alpha = 0.35 + 0.6 * min(1.0, hgl["vel"] / 110)
+            if age > HERB_FADE_MS - 4000:
+                alpha *= (HERB_FADE_MS - age) / 4000
+            draw_glyph(screen, hgl, reveal, alpha, INK_HERB, cell=hgl["cell"])
 
         for s in _sentences:
             age = now - s["born"]

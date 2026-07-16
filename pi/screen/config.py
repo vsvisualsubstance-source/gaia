@@ -21,6 +21,7 @@ _defaults = {
     'MQTT_HOST':   '192.168.1.142',
     'MQTT_PORT':   '1883',
     'CELL':        '44',         # dimensione base glifo in px
+    'HERB_UDP_PORT': '8791',     # note da gaia-herbarium (udp localhost, no broker)
 }
 
 _file_cfg = _load_conf('/etc/gaia/screen.conf')
@@ -31,3 +32,4 @@ ROOM      = _cfg['CAMERA_NAME']
 MQTT_HOST = _cfg['MQTT_HOST']
 MQTT_PORT = int(_cfg['MQTT_PORT'])
 CELL      = float(_cfg['CELL'])
+HERB_UDP_PORT = int(_cfg['HERB_UDP_PORT'])
