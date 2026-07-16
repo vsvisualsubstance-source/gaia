@@ -30,5 +30,7 @@ MQTT_PORT = int(_get("MQTT_PORT", "1883"))
 IS_WIN         = os.name == "nt"
 MPV_BIN        = _get("MPV_BIN", "mpv")
 MPV_SOCK       = _get("MPV_SOCK", r"\\.\pipe\gaia-mpv" if IS_WIN else "/tmp/gaia-mpv.sock")
+# es. "alsa/plughw:CARD=Headphones,DEV=0" per forzare il jack del Pi
+MPV_AUDIO_DEVICE = _get("MPV_AUDIO_DEVICE", "")
 DEFAULT_VOLUME = int(_get("MEDIA_VOLUME", "60"))
 STATUS_EVERY_S = int(_get("MEDIA_STATUS_EVERY_S", "5"))

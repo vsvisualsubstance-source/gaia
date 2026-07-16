@@ -44,12 +44,13 @@ def _mpv_start():
     global _mpv
     if not config.IS_WIN and os.path.exists(config.MPV_SOCK):
         os.unlink(config.MPV_SOCK)
-    _mpv = subprocess.Popen(
-        [config.MPV_BIN, "--idle=yes", "--no-video", "--no-terminal",
-         "--force-window=no",
-         f"--input-ipc-server={config.MPV_SOCK}",
-         f"--volume={config.DEFAULT_VOLUME}"],
-    )
+    args = [config.MPV_BIN, "--idle=yes", "--no-video", "--no-terminal",
+            "--force-window=no",
+            f"--input-ipc-server={config.MPV_SOCK}",
+            f"--volume={config.DEFAULT_VOLUME}"]
+    if config.MPV_AUDIO_DEVICE:
+        args.append(f"--audio-device={config.MPV_AUDIO_DEVICE}")
+    _mpv = subprocess.Popen(args)
     if config.IS_WIN:
         time.sleep(2)                        # la pipe non è verificabile con exists
         return
