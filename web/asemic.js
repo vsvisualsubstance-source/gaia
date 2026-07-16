@@ -98,8 +98,11 @@
             // meno luminoso del ciano su fondo scuro — compensa con alpha e
             // tratto maggiori, altrimenti a parità di valori sparisce.
             this.style = {
-                out: { ink: opts.inkOut || '0,255,204',  alpha: 0.16, width: 1.7, glow: 4.5 },
-                in:  { ink: opts.inkIn  || '88,166,255', alpha: 0.30, width: 2.2, glow: 6.0 },
+                out:  { ink: opts.inkOut  || '0,255,204',   alpha: 0.16, width: 1.7, glow: 4.5 },
+                in:   { ink: opts.inkIn   || '88,166,255',  alpha: 0.30, width: 2.2, glow: 6.0 },
+                // herbarium: la pianta scrive in verde foglia (banda centrale);
+                // inchiostro fisso — è la sua identità, come il blu dell'umano
+                herb: { ink: opts.inkHerb || '120,240,110', alpha: 0.24, width: 1.9, glow: 5.0 },
             };
             this.maxSentences = opts.maxSentences || 3;
             this.cell = opts.cell || 0;                      // 0 = auto da viewport
@@ -175,8 +178,9 @@
             }
 
             // banda verticale: Gaia scrive in alto; l'umano sotto il centro ma
-            // sopra la zona saluto/bolla camera del kiosk (~0.75+)
-            const baseBand = dir === 'out' ? 0.24 : 0.63;
+            // sopra la zona saluto/bolla camera del kiosk (~0.75+); la pianta
+            // (herb) nella banda centrale, tra le due
+            const baseBand = dir === 'out' ? 0.24 : dir === 'herb' ? 0.44 : 0.63;
             const y0 = this.H * (baseBand + (seed() - 0.5) * 0.06);
             const items = [];
             let gi = 0;

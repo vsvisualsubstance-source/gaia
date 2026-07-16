@@ -257,6 +257,26 @@ function asemicSay(text, dir) {
 const GESTURE_WORDS = { fist: 'pugno', point: 'indice', victory: 'vittoria',
                         three: 'tre', open_hand: 'saluto' };
 
+// Herbarium: nota MIDI → parola del solfeggio → glifo (stesso alfabeto di 12
+// segni di pi/screen: la pianta ha la stessa calligrafia su ogni superficie).
+const NOTE_WORDS = ['do', 'dodiesis', 're', 'rediesis', 'mi', 'fa', 'fadiesis',
+                    'sol', 'soldiesis', 'la', 'ladiesis', 'si'];
+let _asHerbTs = Date.now();   // solo note nuove (non lo storico del buffer)
+let _asHerbLastSay = 0;
+
+function feedHerbarium(h) {
+  if (!h || !h.notes || !h.notes.length) return;
+  const notes = h.notes.filter(n => n.ts > _asHerbTs &&
+                                    (!ROOM || n.room === ROOM));
+  if (!notes.length) return;
+  _asHerbTs = notes[notes.length - 1].ts;
+  const now = Date.now();
+  if (now - _asHerbLastSay < 4000) return;   // una frase ogni 4s max
+  _asHerbLastSay = now;
+  const text = notes.slice(-10).map(n => NOTE_WORDS[n.note % 12]).join(' ');
+  _asemic.say(text, 'herb');                 // niente dedup: le piante si ripetono
+}
+
 function feedAsemic(d) {
   // v2: l'inchiostro di Gaia segue il suo umore (soul.mood dal payload WS)
   if (!_asemicMoodForced && d.soul && d.soul.mood) _asemic.setMood(d.soul.mood);
@@ -280,6 +300,8 @@ function feedAsemic(d) {
     _asThought = d.thought;
     asemicSay(d.thought, 'out');
   }
+  // le piante scrivono (se la visualizzazione è attiva, il campo c'è)
+  feedHerbarium(d.herbarium);
 }
 
 // ── Clock ─────────────────────────────────────────────────────────────────────

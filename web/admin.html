@@ -653,6 +653,16 @@ button.small{padding:3px 9px;font-size:.78rem;margin:0}
         <button class="small secondary" onclick="toggleCamPreview()" id="core-cam-preview-btn">▶ Apri preview</button>
       </div>
 
+      <!-- Herbarium → superfici web -->
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px">
+        <div style="font-size:.72rem;font-weight:600;color:var(--cyan);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">🌿 Herbarium → Web</div>
+        <div style="color:var(--muted);font-size:.78rem;margin-bottom:8px">Le note delle piante scritte in glifi asemici sulla welcome (verde foglia). Sul display del Pi la scrittura è locale e resta sempre attiva.</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span id="herbweb-dot" style="width:8px;height:8px;border-radius:50%;background:var(--border);flex-shrink:0"></span>
+          <button class="small secondary" id="herbweb-btn" onclick="toggleHerbWeb()">…</button>
+        </div>
+      </div>
+
     </div>
     <div id="core-svc-msg" class="msg" style="margin-top:8px"></div>
   </div>
@@ -1340,6 +1350,36 @@ function toggleCamPreview() {
   }
 }
 
+// ── Herbarium → superfici web (flag su Node-RED, persistito via MQTT retained)
+let _herbWebOn = null;
+
+function _herbWebRender() {
+  const dot = document.getElementById('herbweb-dot');
+  const btn = document.getElementById('herbweb-btn');
+  if (!dot || !btn) return;
+  dot.style.background = _herbWebOn ? 'var(--ok, #3fb950)' : 'var(--border)';
+  btn.textContent = _herbWebOn ? '■ Disattiva' : '▶ Attiva';
+}
+
+async function loadHerbWeb() {
+  try {
+    const d = await (await fetch('/gaia/config/herbweb')).json();
+    _herbWebOn = d.enabled !== false;
+  } catch { _herbWebOn = null; }
+  _herbWebRender();
+}
+
+async function toggleHerbWeb() {
+  try {
+    const d = await (await fetch('/gaia/config/herbweb', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({enabled: !_herbWebOn})
+    })).json();
+    _herbWebOn = d.enabled;
+  } catch {}
+  _herbWebRender();
+}
+
 async function coreServiceCtrl(svc, action) {
   const msgEl = document.getElementById('core-svc-msg');
   if (msgEl) { msgEl.textContent = `${action} ${svc}…`; msgEl.className = 'msg info'; }
@@ -1770,6 +1810,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const btn = document.querySelector(`.tab-btn[onclick*="'${t}'"]`);
     if (btn) showTab(t, btn);
   }
+  loadHerbWeb();
 });
 
 // ── Provisioning — device registrati via /api/provision ─────────────────────
