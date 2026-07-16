@@ -42,13 +42,16 @@ signal.signal(signal.SIGINT, _shutdown)
 # ── mpv IPC ───────────────────────────────────────────────────────────────────
 def _mpv_start():
     global _mpv
-    if os.path.exists(config.MPV_SOCK):
+    if not config.IS_WIN and os.path.exists(config.MPV_SOCK):
         os.unlink(config.MPV_SOCK)
     _mpv = subprocess.Popen(
-        ["mpv", "--idle=yes", "--no-video", "--no-terminal",
+        [config.MPV_BIN, "--idle=yes", "--no-video", "--no-terminal",
          f"--input-ipc-server={config.MPV_SOCK}",
          f"--volume={config.DEFAULT_VOLUME}"],
     )
+    if config.IS_WIN:
+        time.sleep(2)                        # la pipe non è verificabile con exists
+        return
     for _ in range(50):                      # attesa socket (max 5s)
         if os.path.exists(config.MPV_SOCK):
             return
@@ -56,8 +59,31 @@ def _mpv_start():
     raise RuntimeError("mpv non ha creato il socket IPC")
 
 
+def _ipc_win(command: list):
+    """IPC su Windows: mpv usa una named pipe, non un socket unix."""
+    try:
+        with open(config.MPV_SOCK, "r+b", buffering=0) as pipe:
+            pipe.write((json.dumps({"command": command}) + "\n").encode())
+            deadline = time.time() + 2
+            while time.time() < deadline:
+                line = pipe.readline()
+                if not line:
+                    break
+                try:
+                    d = json.loads(line)
+                    if "error" in d:
+                        return d
+                except ValueError:
+                    continue
+    except OSError as e:
+        print(f"[Media] IPC pipe errore: {e}")
+    return None
+
+
 def _ipc(command: list):
     """Invia un comando IPC a mpv e ritorna la risposta (o None)."""
+    if config.IS_WIN:
+        return _ipc_win(command)
     try:
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         s.settimeout(2)

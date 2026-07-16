@@ -27,6 +27,8 @@ ROOM      = _get("CAMERA_NAME", "cucina")        # stanza iniziale (registry pu√
 MQTT_HOST = _get("MQTT_HOST", "192.168.1.142")
 MQTT_PORT = int(_get("MQTT_PORT", "1883"))
 
-MPV_SOCK       = _get("MPV_SOCK", "/tmp/gaia-mpv.sock")
+IS_WIN         = os.name == "nt"
+MPV_BIN        = _get("MPV_BIN", "mpv")
+MPV_SOCK       = _get("MPV_SOCK", r"\\.\pipe\gaia-mpv" if IS_WIN else "/tmp/gaia-mpv.sock")
 DEFAULT_VOLUME = int(_get("MEDIA_VOLUME", "60"))
 STATUS_EVERY_S = int(_get("MEDIA_STATUS_EVERY_S", "5"))
