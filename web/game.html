@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GAIA — Il Gioco</title>
+<style>
+:root{--bg:#050810;--card:#0e1221;--border:#1e2840;--accent:#00ffcc;--blue:#58a6ff;
+      --gold:#ffd65a;--red:#ff5555;--green:#33ff88;--magenta:#ff00ff;--cyan:#00ffff;
+      --text:#c9d1d9;--muted:#6b7a99}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;
+     padding:16px;min-height:100vh}
+
+.nav{display:flex;gap:12px;margin-bottom:18px;align-items:center;border-bottom:1px solid var(--border);padding-bottom:12px}
+.nav a{color:var(--muted);text-decoration:none;font-size:.8rem;padding:4px 10px;border-radius:6px}
+.nav a:hover{color:var(--text);background:var(--card)}
+.nav a.active{color:var(--gold);background:#1a1505}
+.nav-title{font-size:1.1rem;font-weight:700;color:var(--gold);margin-right:8px;display:flex;align-items:center;gap:8px}
+.ws-dot{width:8px;height:8px;border-radius:50%;background:var(--muted);display:inline-block}
+.ws-dot.ok{background:var(--green);box-shadow:0 0 6px var(--green)}
+.ws-dot.err{background:var(--red)}
+
+/* ── Eroe (Gaia) ── */
+.hero{background:linear-gradient(135deg,#0e1221,#131022);border:1px solid #2a2540;
+      border-radius:14px;padding:18px;margin-bottom:16px;display:flex;gap:18px;
+      align-items:center;flex-wrap:wrap}
+.hero-level{font-size:2.4rem;font-weight:800;color:var(--gold);line-height:1;
+      text-shadow:0 0 18px #ffd65a44}
+.hero-class{font-size:1rem;font-weight:700}
+.hero-xp{flex:1;min-width:220px}
+.xp-bar{height:10px;border-radius:5px;background:#141a2e;overflow:hidden;border:1px solid #2a2540}
+.xp-fill{height:100%;background:linear-gradient(90deg,#b8860b,#ffd65a);transition:width .6s}
+.xp-label{font-size:.72rem;color:var(--muted);margin-top:4px}
+.runes{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.rune{background:#0c0f1e;border:1px solid #3a3320;border-radius:10px;padding:6px 10px;
+      display:flex;flex-direction:column;align-items:center;gap:2px;min-width:64px}
+.rune canvas{display:block}
+.rune span{font-size:.62rem;color:var(--gold);letter-spacing:.04em}
+.mood-chip{font-size:.72rem;color:var(--muted);border:1px solid var(--border);
+      border-radius:10px;padding:3px 10px}
+
+/* ── Mappa biomi ── */
+h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:18px 0 10px}
+.biomes{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.biome{background:var(--card);border:1px solid var(--border);border-radius:12px;
+       padding:14px;position:relative;transition:border-color .4s,box-shadow .4s}
+.biome.alive{border-color:#3a5a40;box-shadow:0 0 14px #33ff8822}
+.biome-head{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.biome-name{font-weight:700;font-size:.95rem;text-transform:capitalize}
+.biome-kind{font-size:.7rem;color:var(--gold);letter-spacing:.05em}
+.biome-stats{display:flex;flex-wrap:wrap;gap:6px;font-size:.74rem;color:var(--muted)}
+.biome-stats span{background:#0a0e1c;border:1px solid var(--border);border-radius:8px;padding:2px 8px}
+.biome-herb{margin-top:8px;font-size:.72rem;color:var(--green)}
+.fog{display:flex;flex-wrap:wrap;gap:8px}
+.fog-tile{background:#0a0d18;border:1px dashed #1a2135;border-radius:10px;padding:6px 12px;
+      font-size:.72rem;color:#3a4560;text-transform:capitalize}
+
+/* ── Archetipi + diario ── */
+.bottom{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-top:4px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px}
+.arch-row{font-size:.78rem;margin-bottom:2px;display:flex;justify-content:space-between}
+.arch-bar{height:7px;border-radius:4px;background:#141a2e;overflow:hidden;margin-bottom:8px}
+.arch-fill{height:100%;transition:width .5s}
+.diary{list-style:none;font-size:.8rem}
+.diary li{padding:5px 0;border-bottom:1px solid #131a2c;display:flex;gap:8px}
+.diary li:last-child{border:none}
+.diary .t{color:#3a4560;font-size:.7rem;white-space:nowrap;padding-top:2px}
+.diary .gold{color:var(--gold)}
+.diary .green{color:var(--green)}
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <div class="nav-title"><div class="ws-dot" id="wsdot"></div>GAIA · Gioco</div>
+  <a href="portal.html">⌂</a>
+  <a href="dashboard.html">Dashboard</a>
+  <a href="game.html" class="active">Gioco</a>
+  <a href="gaia-art/index.html">Arte</a>
+  <a href="welcome.html">Welcome</a>
+  <span style="color:var(--muted);font-size:.8rem;margin-left:auto" id="ts-label"></span>
+</div>
+
+<div class="hero" id="hero">in ascolto del mondo…</div>
+
+<h2>La mappa — biomi vivi</h2>
+<div class="biomes" id="biomes"></div>
+<h2>Nella nebbia — terre senza sensi</h2>
+<div class="fog" id="fog"></div>
+
+<div class="bottom">
+  <div class="card"><h2 style="margin-top:0">Le vie dell'anima</h2><div id="arch"></div></div>
+  <div class="card"><h2 style="margin-top:0">Diario delle imprese</h2><ul class="diary" id="diary"></ul></div>
+</div>
+
+<script src="asemic.js"></script>
+<script>
+// ── Vocabolario condiviso (stesse mappe di welcome/dashboard/pi-screen) ──────
+const RUNE_WORDS = { base_grid:'fondamenta', ambient_particles_low:'polvere',
+                     shield_dome:'scudo', rune_circle:'cerchio',
+                     glyph_trail:'sentiero', crystal_garden:'giardino',
+                     starfield:'stelle', phoenix_core:'fenice' };
+const NOTE_WORDS = ['do','dodiesis','re','rediesis','mi','fa','fadiesis',
+                    'sol','soldiesis','la','ladiesis','si'];
+const CLASS_COLOR = { Mago:'var(--cyan)', Bardo:'var(--magenta)',
+                      Guerriero:'var(--red)', Druido:'var(--green)', Neutro:'var(--muted)' };
+const ARCH = [['mago','Mago','#00ffff','🪄'],['bardo','Bardo','#ff00ff','🎭'],
+              ['guerriero','Guerriero','#ff5555','⚔️'],['druido','Druido','#33ff88','🌿']];
+
+function escHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+// il WS arriva a rate alto: innerHTML solo se cambia (niente flicker dei canvas)
+function setHtml(id, html){
+  const el = document.getElementById(id);
+  if (el && el.innerHTML !== html) el.innerHTML = html;
+}
+
+// ── Mini-renderer glifi (generazione da asemic.js, disegno locale) ──────────
+function drawGlyphOn(cv, word, color, lw){
+  if (!window.AsemicGlyphs || cv.dataset.drawn === word) return;
+  cv.dataset.drawn = word;
+  const g = AsemicGlyphs.glyphFor(word);
+  const ctx = cv.getContext('2d');
+  ctx.clearRect(0,0,cv.width,cv.height);
+  const w = cv.width*0.84, h = cv.height*0.76, ox = cv.width*0.08, oy = cv.height*0.12;
+  ctx.strokeStyle = color; ctx.lineWidth = lw||1.3; ctx.lineCap='round'; ctx.lineJoin='round';
+  for (const st of g.strokes){
+    const pts = st.pts;
+    ctx.beginPath();
+    ctx.moveTo(ox+pts[0][0]*w, oy+pts[0][1]*h);
+    if (pts.length===2) ctx.lineTo(ox+pts[1][0]*w, oy+pts[1][1]*h);
+    else {
+      for (let i=1;i<pts.length-1;i++){
+        const mx=(pts[i][0]+pts[i+1][0])/2*w, my=(pts[i][1]+pts[i+1][1])/2*h;
+        ctx.quadraticCurveTo(ox+pts[i][0]*w, oy+pts[i][1]*h, ox+mx, oy+my);
+      }
+      const l=pts[pts.length-1]; ctx.lineTo(ox+l[0]*w, oy+l[1]*h);
+    }
+    ctx.stroke();
+  }
+  if (g.dot){ ctx.beginPath(); ctx.arc(ox+g.dot.x*w, oy+g.dot.y*h, 1.4, 0, Math.PI*2);
+              ctx.fillStyle=color; ctx.fill(); }
+}
+function drawAll(){
+  document.querySelectorAll('canvas[data-word]').forEach(cv=>
+    drawGlyphOn(cv, cv.dataset.word, cv.dataset.color||'rgba(255,214,90,.9)', +cv.dataset.lw||1.3));
+}
+
+// ── Eroe ───────────────────────────────────────────────────────────────────
+function renderHero(d){
+  const p = d.progression||{}, mood = (d.soul||{}).mood||'neutra';
+  const pct = Math.min(100, Math.round((p.xp||0)/(p.xpNextLevel||1000)*100));
+  const cls = p.activeClass||'Neutro';
+  setHtml('hero', `
+    <div style="text-align:center">
+      <div class="hero-level">Lv.${p.level||1}</div>
+      <div class="hero-class" style="color:${CLASS_COLOR[cls]||'var(--muted)'}">${escHtml(cls)}</div>
+    </div>
+    <div class="hero-xp">
+      <div class="xp-bar"><div class="xp-fill" style="width:${pct}%"></div></div>
+      <div class="xp-label">${p.xp||0} / ${p.xpNextLevel||1000} XP · <span class="mood-chip">umore: ${escHtml(mood)}</span></div>
+    </div>
+    <div class="runes">${(p.unlockedAssets||[]).map(a=>{
+      const w = RUNE_WORDS[a]||a.replace(/_/g,' ');
+      return `<div class="rune" title="${escHtml(a)}"><canvas data-word="${escHtml(w)}" width="44" height="34"></canvas><span>${escHtml(w)}</span></div>`;
+    }).join('')||'<span style="color:var(--muted);font-size:.75rem">nessuna runa rivelata</span>'}</div>`);
+}
+
+// ── Biomi ──────────────────────────────────────────────────────────────────
+function biomeKind(r, herbRooms){
+  if (herbRooms.has(r.id))            return ['🌿','Giardino sonoro'];
+  if ((r.persons_count||0) > 0)       return ['🔥','Focolare vivo'];
+  if (r.darkness)                     return ['🌑','Penombra'];
+  if (r.temperature != null && r.temperature >= 27) return ['🏜️','Terra calda'];
+  if (r.temperature != null && r.temperature <= 20) return ['🧊','Terra fredda'];
+  return ['🍃','Radura quieta'];
+}
+
+function renderBiomes(d){
+  const rooms = d.rooms||[];
+  const herbRooms = new Set(((d.herbarium||{}).notes||[]).map(n=>n.room));
+  setHtml('biomes', rooms.map(r=>{
+    const [ic, kind] = biomeKind(r, herbRooms);
+    const stats = [];
+    if (r.temperature != null)   stats.push(`🌡 ${r.temperature}°C`);
+    if (r.ambient_light != null) stats.push(`☀ ${Math.round(r.ambient_light)} lx`);
+    if (r.persons_count)         stats.push(`👥 ${r.persons_count}`);
+    if (r.emotion)               stats.push(`✨ ${escHtml(r.emotion)}`);
+    if (r.gesture)               stats.push(`🖐 ${escHtml(r.gesture)}`);
+    if (r.speaking)              stats.push(`🗣 ${escHtml(r.speaking)}`);
+    const herb = herbRooms.has(r.id)
+      ? `<div class="biome-herb">♪ ${((d.herbarium||{}).notes||[]).filter(n=>n.room===r.id).slice(-6).map(n=>NOTE_WORDS[n.note%12]).join(' ')}</div>` : '';
+    return `<div class="biome${(r.persons_count||0)>0?' alive':''}">
+      <div class="biome-head">
+        <canvas data-word="${escHtml(r.id)}" data-color="rgba(0,255,204,.75)" data-lw="1.1" width="34" height="28"></canvas>
+        <div><div class="biome-name">${escHtml(r.name||r.id)}</div>
+        <div class="biome-kind">${ic} ${kind}</div></div>
+      </div>
+      <div class="biome-stats">${stats.map(s=>`<span>${s}</span>`).join('')||'<span>silenzio</span>'}</div>
+      ${herb}</div>`;
+  }).join('') || '<div style="color:var(--muted);font-size:.85rem">nessun bioma attivo</div>');
+
+  // fog of war: stanze del grafo senza dati vivi
+  const known = new Set(rooms.map(r=>r.id));
+  const fog = Object.keys(d.roomGraph||{}).filter(k=>k!=='_v' && !known.has(k));
+  setHtml('fog',
+    fog.map(k=>`<div class="fog-tile">${escHtml(k)}</div>`).join('') ||
+    '<span style="color:var(--muted);font-size:.75rem">—</span>');
+}
+
+// ── Archetipi ──────────────────────────────────────────────────────────────
+function renderArch(d){
+  const stats = ((d.progression||{}).stats)||{};
+  const tot = Object.values(stats).reduce((s,v)=>s+(v||0),0)||1;
+  setHtml('arch', ARCH.map(([k,n,c,ic])=>{
+    const v = stats[k]||0;
+    return `<div class="arch-row"><span>${ic} ${n}</span><span style="color:${c}">${v}</span></div>
+      <div class="arch-bar"><div class="arch-fill" style="width:${Math.round(v/tot*100)}%;background:${c}"></div></div>`;
+  }).join(''));
+}
+
+// ── Diario delle imprese (eventi → linguaggio di gioco) ────────────────────
+const _diary = [];        // {ts, html} — accumulato lato client
+let _lastEvTs = 0, _lastVoiceTs = 0, _lastThought = '';
+
+function tell(ts, html){
+  if (_diary.some(x=>x.ts===ts && x.html===html)) return;
+  _diary.push({ts, html});
+  _diary.sort((a,b)=>b.ts-a.ts);
+  if (_diary.length>40) _diary.length = 40;
+}
+
+function feedDiary(d){
+  for (const e of (d.events||[])){
+    if (e.ts <= _lastEvTs) continue;
+    const room = e.device||'';
+    if (e.category==='levelup')
+      tell(e.ts, `<span class="gold">⭐ Gaia ascende al livello ${escHtml(e.value)}</span>`);
+    else if (e.category==='presence' && e.value==='enter')
+      tell(e.ts, `${e.person&&e.person!=='unknown'?escHtml(e.person):'Un viandante'} giunge nel bioma`);
+    else if (e.category==='music')
+      tell(e.ts, `<span class="green">♪ Le piante intonano ${escHtml(NOTE_WORDS[(e.value||0)%12])}</span>`);
+    else if (e.category==='gesture' && e.value)
+      tell(e.ts, `Un segno della mano: ${escHtml(e.value)}`);
+    else if (e.category==='motion' && e.value===true && e.source==='hue')
+      tell(e.ts, `Passi risuonano (${escHtml(room.split('_')[1]||'sentiero')})`);
+  }
+  const evs = d.events||[];
+  if (evs.length) _lastEvTs = Math.max(_lastEvTs, evs[evs.length-1].ts);
+
+  const vc = (d.voiceCommands||[]).slice(-1)[0];
+  if (vc && vc.ts && vc.ts !== _lastVoiceTs){
+    _lastVoiceTs = vc.ts;
+    tell(vc.ts, `🗣 Incantesimo di voce: «${escHtml(vc.text)}»`);
+  }
+  if (d.thought && d.thought !== _lastThought){
+    _lastThought = d.thought;
+    tell(d.ts||Date.now(), `💭 Gaia riflette: «${escHtml(d.thought.slice(0,90))}${d.thought.length>90?'…':''}»`);
+  }
+  setHtml('diary', _diary.slice(0,14).map(x=>
+    `<li><span class="t">${new Date(x.ts).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})}</span><span>${x.html}</span></li>`
+  ).join('') || '<li><span style="color:var(--muted)">il diario è ancora bianco</span></li>');
+}
+
+// ── WS ─────────────────────────────────────────────────────────────────────
+function connect(){
+  const ws = new WebSocket(`ws://${location.hostname}:1880/gaia`);
+  const dot = document.getElementById('wsdot');
+  ws.onopen  = () => dot.className = 'ws-dot ok';
+  ws.onclose = () => { dot.className = 'ws-dot err'; setTimeout(connect, 3000); };
+  ws.onerror = () => ws.close();
+  ws.onmessage = e => {
+    let d; try { d = JSON.parse(e.data); } catch { return; }
+    document.getElementById('ts-label').textContent =
+      d.ts ? new Date(d.ts).toLocaleTimeString() : '';
+    renderHero(d);
+    renderBiomes(d);
+    renderArch(d);
+    feedDiary(d);
+    drawAll();
+  };
+}
+connect();
+</script>
+</body>
+</html>
