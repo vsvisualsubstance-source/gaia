@@ -86,10 +86,33 @@ via context API e via WS raw, ~8 frame/12s col tick attivo).
   mostra le rune rivelate come mini-canvas nei chip (AsemicGlyphs.glyphFor
   esportato — parità JS/Python verificata su 'cerchio').
 
-## Prossimi passi (non fatti)
+## game.html — la superficie di gioco (2026-07-17)
 
-- Superficie di gioco dedicata game.html (in corso 2026-07-17).
-- Tap Switch Hue (4 bottoni, di nuovo vivo) come controller di azioni rituali.
+`:1880/game.html` (nav "Gioco"): eroe (livello/archetipo/XP oro/rune come
+glifi asemici), **mappa a biomi** delle stanze con dati reali (temperatura,
+lux, oscurità, presenze, emozioni, note piante → bioma derivato: Giardino
+sonoro, Focolare vivo, Penombra, Terra calda/fredda, Radura quieta), fog of
+war per stanze del roomGraph senza sensori, barre archetipi, **diario delle
+imprese** (eventi → linguaggio di gioco). Guardia innerHTML-se-cambia (WS a
+rate alto). Nessun nodo Node-RED nuovo: consuma il payload esistente.
+
+## Tap Switch — i riti (2026-07-17)
+
+Hue Tap (4 bottoni fisici, stato in `Hue_tap_switch_1_Stato_interruttore_a_pulsante`,
+valori 34=1, 16=2, 17=3, 18=4): HueNorm → categoria `button` → brain:
+`_award('rituale')` (12 XP Mago cd 30s) + evento `{source:'rpg',
+category:'ritual', value:btn}` + 3° output → `gaia/rpg/action`. Flow
+`ActionFX (riti)`:
+1. **Rito della luce** — scena archetipo 10s su Tutte_le_luci, ripristino live (fetch OpenHAB).
+2. **Musica sì/no** — toggle primo preset nella stanza del Tap (`MUSIC_ROOM='soggiorno'` in ActionFX — adattare se il Tap si sposta).
+3. **Vessillo** — stato RPG (Lv/XP/umore/rune) su Telegram via `gaia/notify/telegram`.
+4. **Quiete** — stop musica in ogni stanza con player.
+
+Tutti e 4 verificati live (bottoni simulati via busmqtt). LIMITE: ripremere
+lo stesso bottone non cambia lo stato dell'item OpenHAB → nessun evento;
+per ripetere un rito serve premere prima un altro tasto. Anti-rimbalzo 3s.
+
+## Prossimi passi (non fatti)
 - Asset 3D reali per i nomi riservati in `ASSET_ORDER`.
 - Preset TouchDesigner al level-up.
 - Bilanciamento XP/cooldown dopo qualche giorno con tutte le sorgenti attive

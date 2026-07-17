@@ -236,6 +236,8 @@ function feedDiary(d){
     const room = e.device||'';
     if (e.category==='levelup')
       tell(e.ts, `<span class="gold">⭐ Gaia ascende al livello ${escHtml(e.value)}</span>`);
+    else if (e.category==='ritual')
+      tell(e.ts, `<span class="gold">🔔 Rito ${escHtml(e.value)} invocato al Tap</span>`);
     else if (e.category==='presence' && e.value==='enter')
       tell(e.ts, `${e.person&&e.person!=='unknown'?escHtml(e.person):'Un viandante'} giunge nel bioma`);
     else if (e.category==='music')
