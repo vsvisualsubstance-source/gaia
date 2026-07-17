@@ -104,7 +104,7 @@ def make_sentence(text: str, direction: str, W: int, H: int) -> dict | None:
             line_w = 0.0
         lines[-1].append((w, g, adv))
         line_w += adv
-    y0 = H * (0.16 if direction == "out" else 0.60)
+    y0 = H * (0.16 if direction == "out" else 0.38 if direction == "rune" else 0.60)
     items, order = [], 0
     for li, line in enumerate(lines):
         tot = sum(a for _, _, a in line)
@@ -149,6 +149,7 @@ def _on_connect(client, userdata, flags, rc, properties=None):
     client.subscribe(f"gaia/voice/command/{config.ROOM}")
     client.subscribe("gaia/brain/state")     # v2: mood → inchiostro
     client.subscribe("gaia/mediapipe/pose")  # v3: gesture → glifi
+    client.subscribe("gaia/rpg/levelup")     # v5: runa nuova in oro
     print(f"[Screen] MQTT connesso — stanza {config.ROOM}")
 
 
@@ -156,6 +157,15 @@ def _on_connect(client, userdata, flags, rc, properties=None):
 GESTURE_WORDS = {"fist": "pugno", "point": "indice", "victory": "vittoria",
                  "three": "tre", "open_hand": "saluto"}
 _gesture_last: dict = {}     # parola → ts ultimo disegno (cooldown 30s)
+
+
+# ── RPG (v5): le rune — asset sbloccato → parola italiana → glifo in oro ─────
+# Stessa mappa di web/welcome.html e dashboard: la runa è identica ovunque.
+RUNE_WORDS = {"base_grid": "fondamenta", "ambient_particles_low": "polvere",
+              "shield_dome": "scudo", "rune_circle": "cerchio",
+              "glyph_trail": "sentiero", "crystal_garden": "giardino",
+              "starfield": "stelle", "phoenix_core": "fenice"}
+INK_RUNE = (255, 214, 90)
 
 
 # ── Herbarium: le piante scrivono ─────────────────────────────────────────────
@@ -214,6 +224,14 @@ def _herb_place(note: int, vel: int, W: int, H: int, now: float):
 
 
 def _on_message(client, userdata, msg):
+    if msg.topic == "gaia/rpg/levelup":
+        try:
+            p = json.loads(msg.payload)
+        except ValueError:
+            return
+        word = RUNE_WORDS.get(p.get("asset") or "", "ascesa")
+        _pending.append((word, "rune"))
+        return
     if msg.topic == "gaia/mediapipe/pose":
         try:
             p = json.loads(msg.payload)
@@ -319,8 +337,9 @@ def main():
             phase = 1.0
             if age > s["write_ms"] + HOLD_MS:
                 phase = max(0.0, 1 - (age - s["write_ms"] - HOLD_MS) / FADE_MS)
-            ink = ink_out() if s["dir"] == "out" else INK_IN
-            base_alpha = 0.85 if s["dir"] == "out" else 0.95
+            ink = (INK_RUNE if s["dir"] == "rune"
+                   else ink_out() if s["dir"] == "out" else INK_IN)
+            base_alpha = 0.95 if s["dir"] in ("in", "rune") else 0.85
             per_glyph = s["write_ms"] / max(len(s["items"]), 1)
             for item in s["items"]:
                 g_age = age - item["order"] * per_glyph

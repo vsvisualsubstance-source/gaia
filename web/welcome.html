@@ -264,6 +264,25 @@ const NOTE_WORDS = ['do', 'dodiesis', 're', 'rediesis', 'mi', 'fa', 'fadiesis',
 let _asHerbTs = Date.now();   // solo note nuove (non lo storico del buffer)
 let _asHerbLastSay = 0;
 
+// v5: le rune di gioco — ogni asset RPG sbloccato è una parola italiana, la
+// parola una runa (stesso determinismo di tutto il vocabolario). Al level-up
+// la runa nuova si scrive in oro. Stessa mappa in pi/screen e dashboard.
+const RUNE_WORDS = { base_grid: 'fondamenta', ambient_particles_low: 'polvere',
+                     shield_dome: 'scudo', rune_circle: 'cerchio',
+                     glyph_trail: 'sentiero', crystal_garden: 'giardino',
+                     starfield: 'stelle', phoenix_core: 'fenice' };
+let _asAssets = null;   // baseline al primo payload: non riscrivere il passato
+
+function feedRunes(prog) {
+  const assets = (prog && prog.unlockedAssets) || [];
+  if (_asAssets === null) { _asAssets = new Set(assets); return; }
+  for (const a of assets) {
+    if (_asAssets.has(a)) continue;
+    _asAssets.add(a);
+    _asemic.say(RUNE_WORDS[a] || a.replace(/_/g, ' '), 'rune');
+  }
+}
+
 function feedHerbarium(h) {
   if (!h || !h.notes || !h.notes.length) return;
   const notes = h.notes.filter(n => n.ts > _asHerbTs &&
@@ -302,6 +321,8 @@ function feedAsemic(d) {
   }
   // le piante scrivono (se la visualizzazione è attiva, il campo c'è)
   feedHerbarium(d.herbarium);
+  // v5: runa nuova al level-up
+  feedRunes(d.progression);
 }
 
 // ── Clock ─────────────────────────────────────────────────────────────────────

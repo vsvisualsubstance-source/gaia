@@ -103,6 +103,8 @@
                 // herbarium: la pianta scrive in verde foglia (banda centrale);
                 // inchiostro fisso — è la sua identità, come il blu dell'umano
                 herb: { ink: opts.inkHerb || '120,240,110', alpha: 0.24, width: 1.9, glow: 5.0 },
+                // v5: le rune di gioco — oro, rare (solo level-up/sblocchi RPG)
+                rune: { ink: opts.inkRune || '255,214,90',  alpha: 0.34, width: 2.4, glow: 8.0 },
             };
             this.maxSentences = opts.maxSentences || 3;
             this.cell = opts.cell || 0;                      // 0 = auto da viewport
@@ -179,8 +181,9 @@
 
             // banda verticale: Gaia scrive in alto; l'umano sotto il centro ma
             // sopra la zona saluto/bolla camera del kiosk (~0.75+); la pianta
-            // (herb) nella banda centrale, tra le due
-            const baseBand = dir === 'out' ? 0.24 : dir === 'herb' ? 0.44 : 0.63;
+            // (herb) nella banda centrale; le rune (v5) appena sopra il centro
+            const baseBand = dir === 'out' ? 0.24 : dir === 'rune' ? 0.40
+                           : dir === 'herb' ? 0.44 : 0.63;
             const y0 = this.H * (baseBand + (seed() - 0.5) * 0.06);
             const items = [];
             let gi = 0;
@@ -310,5 +313,9 @@
     }
 
     global.AsemicField = AsemicField;
+    // v5: accesso diretto ai glifi per renderer esterni (mini-rune nelle card).
+    // Espone solo la GENERAZIONE (deterministica, regola d'oro): il disegno
+    // resta libero — ogni superficie può renderizzare i tratti come vuole.
+    global.AsemicGlyphs = { glyphFor };
 
 })(window);

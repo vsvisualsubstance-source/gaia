@@ -69,10 +69,28 @@ Sandbox (stub Node-RED): level-up a cavallo di soglia → livello 2, XP residuo 
 Live: comando vocale via MQTT → +25 XP e `stats.mago` incrementato nel payload WS (visto
 via context API e via WS raw, ~8 frame/12s col tick attivo).
 
+## Level-up multisensoriale (2026-07-17)
+
+- Il brain ha un **3° output** → `gaia/rpg/levelup` (topic MQTT, payload
+  {level, class, asset, ts}) emesso nel blocco level-up.
+- **Luci**: flow `RPG Levelup` (mqtt in) → `LevelupFX` → HueExecutor — scena
+  10s su Tutte_le_luci nel colore dell'archetipo (Mago ciano, Bardo magenta,
+  Guerriero rosso, Druido verde, Neutro bianco caldo), poi ripristino dello
+  stato PRECEDENTE letto vivo da OpenHAB REST con `fetch` nel function node
+  (brain.lights può essere stantio — successo davvero al primo test).
+  Anti-doppione 30s per level-up multipli nello stesso while.
+- **Rune (Asemico v5)**: ogni asset ha una parola italiana (`RUNE_WORDS`:
+  fondamenta, polvere, scudo, cerchio, sentiero, giardino, stelle, fenice) →
+  glifo = runa. Al level-up: welcome scrive la runa in ORO (stile `rune` in
+  asemic.js, banda 0.40), pi/screen idem (sub `gaia/rpg/levelup`), dashboard
+  mostra le rune rivelate come mini-canvas nei chip (AsemicGlyphs.glyphFor
+  esportato — parità JS/Python verificata su 'cerchio').
+
 ## Prossimi passi (non fatti)
 
-- Superficie di gioco dedicata (oggi il "gioco" è la scena 3D + card dashboard).
-- Collegamento multisensoriale: level-up → scena luci OpenHAB / preset TouchDesigner.
+- Superficie di gioco dedicata game.html (in corso 2026-07-17).
+- Tap Switch Hue (4 bottoni, di nuovo vivo) come controller di azioni rituali.
 - Asset 3D reali per i nomi riservati in `ASSET_ORDER`.
-- Vocabolario Asemico v5: glifi come rune di gioco (`docs/vocabolario-asemico.md`).
-- Bilanciamento XP/cooldown dopo qualche giorno di uso reale.
+- Preset TouchDesigner al level-up.
+- Bilanciamento XP/cooldown dopo qualche giorno con tutte le sorgenti attive
+  (al 2026-07-17: Lv.4 Guerriero, druido fermo a 6 azioni per piante staccate).
