@@ -2054,7 +2054,7 @@
         "type": "function",
         "z": "tab_device_registry",
         "name": "AssignDevice",
-        "func": "\n// ─────────────────────────────────────────────────────────────────────────────\n// Admin: assegna stanza a device\n// POST /gaia/device/assign  {device_id, room}\n// ─────────────────────────────────────────────────────────────────────────────\n\nconst body = msg.payload || {};\nconst deviceId = body.device_id;\nconst newRoom  = body.room;\n\nif (!deviceId || !newRoom) {\n    msg.statusCode = 400;\n    msg.payload = { ok: false, error: 'device_id e room richiesti' };\n    return [null, msg];\n}\n\nlet brain = global.get('gaiaBrain') || {};\nbrain.devices = brain.devices || {};\n\nif (!brain.devices[deviceId]) {\n    msg.statusCode = 404;\n    msg.payload = { ok: false, error: `device ${deviceId} non trovato` };\n    return [null, msg];\n}\n\nconst old = brain.devices[deviceId].room;\nbrain.devices[deviceId].room     = newRoom;\nbrain.devices[deviceId].verified = false;   // richiede riverifica YOLO\nbrain.devices[deviceId].assigned_by = 'admin';\n\nglobal.set('gaiaBrain', brain);\n\n// Pubblica nuova config retained\nconst configPayload = JSON.stringify({\n    room:        newRoom,\n    verified:    false,\n    assigned_by: 'admin',\n    ts:          Date.now(),\n});\n\nmsg.configTopic   = `gaia/devices/${deviceId}/config`;\nmsg.configPayload = configPayload;\n\nnode.warn(`[Registry] Admin: ${deviceId} room ${old} → ${newRoom}`);\n\n// Auto-pulizia: se la stanza vecchia resta senza device, i suoi dati live e\n// i topic retained (scene, voice status) diventano orfani — via subito.\nif (old && old !== newRoom) {\n    const stillThere = Object.values(brain.devices)\n        .filter(d => d.room === old && d.id !== deviceId);\n    if (!stillThere.length) {\n        if ((brain.rooms || {})[old]) delete brain.rooms[old];\n        global.set('gaiaBrain', brain);\n        [`gaia/scene/${old}`, `gaia/voice/status/${old}`].forEach(t =>\n            node.send([{ configTopic: t, configPayload: '' }, null]));\n        node.warn(`[Registry] Stanza '${old}' orfana dopo lo spostamento → pulita`);\n    }\n}\n\nconst httpResp = { ...msg, payload: { ok: true, device_id: deviceId, room: newRoom } };\nreturn [msg, httpResp];\n",
+        "func": "\n// ─────────────────────────────────────────────────────────────────────────────\n// Admin: assegna stanza a device\n// POST /gaia/device/assign  {device_id, room}\n// ─────────────────────────────────────────────────────────────────────────────\n\nconst body = msg.payload || {};\nconst deviceId = body.device_id;\nconst newRoom  = body.room;\n\nif (!deviceId || !newRoom) {\n    msg.statusCode = 400;\n    msg.payload = { ok: false, error: 'device_id e room richiesti' };\n    return [null, msg];\n}\n\nlet brain = global.get('gaiaBrain') || {};\nbrain.devices = brain.devices || {};\n\nif (!brain.devices[deviceId]) {\n    msg.statusCode = 404;\n    msg.payload = { ok: false, error: `device ${deviceId} non trovato` };\n    return [null, msg];\n}\n\nconst old = brain.devices[deviceId].room;\nbrain.devices[deviceId].room     = newRoom;\nbrain.devices[deviceId].verified = false;   // richiede riverifica YOLO\nbrain.devices[deviceId].assigned_by = 'admin';\n\nglobal.set('gaiaBrain', brain);\n\n// Pubblica nuova config retained\nconst configPayload = JSON.stringify({\n    room:        newRoom,\n    verified:    false,\n    assigned_by: 'admin',\n    ts:          Date.now(),\n});\n\nmsg.configTopic   = `gaia/devices/${deviceId}/config`;\nmsg.configPayload = configPayload;\n\n// Anche i file LOCALI dell'agent (device.conf/device.json) devono seguire:\n// senza broker (modalità bosco) vale la stanza locale — scoperto 2026-07-19\n// col trasloco del Pi (retained ok ma device.conf rimasto sulla vecchia).\nmsg.agentCmdTopic   = `gaia/device/${deviceId}/command`;\nmsg.agentCmdPayload = JSON.stringify({ action: 'set_config', stanza: newRoom });\n\nnode.warn(`[Registry] Admin: ${deviceId} room ${old} → ${newRoom}`);\n\n// Auto-pulizia: se la stanza vecchia resta senza device, i suoi dati live e\n// i topic retained (scene, voice status) diventano orfani — via subito.\nif (old && old !== newRoom) {\n    const stillThere = Object.values(brain.devices)\n        .filter(d => d.room === old && d.id !== deviceId);\n    if (!stillThere.length) {\n        if ((brain.rooms || {})[old]) delete brain.rooms[old];\n        global.set('gaiaBrain', brain);\n        [`gaia/scene/${old}`, `gaia/voice/status/${old}`].forEach(t =>\n            node.send([{ configTopic: t, configPayload: '' }, null]));\n        node.warn(`[Registry] Stanza '${old}' orfana dopo lo spostamento → pulita`);\n    }\n}\n\nconst httpResp = { ...msg, payload: { ok: true, device_id: deviceId, room: newRoom } };\nreturn [msg, httpResp];\n",
         "outputs": 2,
         "timeout": 0,
         "noerr": 0,
@@ -2077,8 +2077,8 @@
         "type": "function",
         "z": "tab_device_registry",
         "name": "SetConfigTopic",
-        "func": "\n// Imposta topic e payload per MQTT out (retained)\nmsg.topic   = msg.configTopic;\nmsg.payload = msg.configPayload;\nmsg.retain  = true;\nreturn msg;\n",
-        "outputs": 1,
+        "func": "\n// Out 1 (retained): config del registry. Out 2 (NON retained): comando\n// set_config all'agent — allinea device.conf/device.json locali (bosco).\nmsg.topic   = msg.configTopic;\nmsg.payload = msg.configPayload;\nmsg.retain  = true;\nconst cmd = msg.agentCmdTopic\n    ? { topic: msg.agentCmdTopic, payload: msg.agentCmdPayload }\n    : null;\nreturn [msg, cmd];\n",
+        "outputs": 2,
         "timeout": 0,
         "noerr": 0,
         "initialize": "",
@@ -2089,6 +2089,9 @@
         "wires": [
             [
                 "dr_mqtt_config_out"
+            ],
+            [
+                "dr_mqtt_cmd_out"
             ]
         ]
     },
@@ -5002,6 +5005,24 @@
         "broker": "29b6d5926d1a95ec",
         "x": 700,
         "y": 400,
+        "wires": []
+    },
+    {
+        "id": "dr_mqtt_cmd_out",
+        "type": "mqtt out",
+        "z": "tab_device_registry",
+        "name": "→ Agent cmd",
+        "topic": "",
+        "qos": "1",
+        "retain": "false",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "29b6d5926d1a95ec",
+        "x": 790,
+        "y": 240,
         "wires": []
     }
 ]
