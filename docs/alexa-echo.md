@@ -25,7 +25,19 @@ stanza**. Collegato a:
   con retained `{"enabled":false}` su `gaia/config/echoannounce`.
 - **Vessillo** (Tap tasto 3): oltre a Telegram, parla in soggiorno.
 
-## Orecchie — `LastVoice → brain`
+## Orecchie — `LastVoice → brain` — ⚠️ BLOCCATE DA AMAZON (2026-07-19)
+
+**Stato reale**: tutta la catena a valle è pronta e testata, ma il canale
+`lastVoiceCommand` del binding ufficiale 4.2 NON riceve dati — Amazon ha
+rimosso l'API activities/lastSpokenText (problema noto in community, tutte le
+versioni 4.x/5.x; su OH5 c'è un trade-off "o TTS o lastVoiceCommand" legato
+allo stato di login). Verificato dal vivo: frase all'Echo → item resta NULL.
+NON tentare fix cambiando login/binding senza mettere in conto di PERDERE il
+TTS (che funziona ed è la parte usata). Se un futuro aggiornamento del binding
+rianima il canale, le orecchie si accendono DA SOLE: regola, MQTT, EchoEars e
+branch nel brain restano al loro posto.
+
+### La catena pronta (dormiente)
 
 Regola DSL `gaia-data/openhab/conf/rules/gaia-echo.rules`: ogni update di
 `gGaiaEchoVoice` → MQTT `openhab/echo/{Item}/voice` (stesso broker Thing
