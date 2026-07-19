@@ -19,6 +19,11 @@ from resemblyzer import VoiceEncoder, preprocess_wav
 MQTT_BROKER   = "localhost"
 MQTT_PORT     = 1883
 TOPIC_COMANDO = "gaia/voice/command/minipc"
+TOPIC_MEDIA   = "gaia/media/+/status"
+# Musica = niente ascolto: whisper allucina sulla radio ("gaia" in loop, frasi
+# inventate) e gonfia XP/diario. Open space: la radio del soggiorno arriva
+# anche al mic del salotto, quindi il gate copre entrambe.
+MEDIA_GATE_ROOMS = {"salotto", "soggiorno"}
 TOPIC_STATO   = "gaia/voice/status/minipc"
 TOPIC_STATS   = "gaia/voice/stats/minipc"
 TOPIC_TTS     = "gaia/voice/tts/minipc"
@@ -104,6 +109,15 @@ def frames_to_wav(frames: list[bytes]) -> bytes:
         wf.setnchannels(1); wf.setsampwidth(2); wf.setframerate(TARGET_RATE)
         wf.writeframes(b"".join(frames))
     return buf.getvalue()
+
+def is_garbage_transcript(text: str) -> bool:
+    """Allucinazione whisper su musica/rumore: la stessa parola in loop
+    (visto dal vivo: 'gaia' ripetuto 74 volte). Frase lunga con pochissime
+    parole distinte = spazzatura."""
+    toks = [t.strip(".,;:!?").lower() for t in text.split()]
+    toks = [t for t in toks if t]
+    return len(toks) >= 6 and len(set(toks)) <= max(1, len(toks) // 5)
+
 
 def rms(frame: bytes) -> float:
     d = np.frombuffer(frame, dtype=np.int16).astype(np.float32)
@@ -354,6 +368,7 @@ class GaiaListener:
 
         self._cmd_queue = queue.Queue()
         self._busy      = False  # True durante enrollment/calibrazione: blocca il loop audio
+        self._media_playing: dict = {}   # stanza → bool (da gaia/media/+/status retained)
 
         # MQTT
         self.mqtt = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
@@ -388,8 +403,26 @@ class GaiaListener:
     def _on_connect(self, c, u, f, rc, p):
         log.info(f"MQTT connesso (rc={rc})")
         c.subscribe(TOPIC_ADMIN)
+        c.subscribe(TOPIC_MEDIA)
+
+    def _media_gated(self) -> bool:
+        return any(self._media_playing.get(r) for r in MEDIA_GATE_ROOMS)
 
     def _on_admin_msg(self, client, userdata, msg):
+        if msg.topic.startswith("gaia/media/"):
+            stanza = msg.topic.split("/")[2]
+            try:
+                st = json.loads(msg.payload.decode()).get("state")
+            except Exception:
+                st = None
+            was = self._media_gated()
+            self._media_playing[stanza] = (st == "playing")
+            now_gated = self._media_gated()
+            if now_gated != was:
+                log.info("Musica %s → ascolto %s" %
+                         ("in riproduzione" if now_gated else "ferma",
+                          "SOSPESO" if now_gated else "riattivato"))
+            return
         try:
             payload = json.loads(msg.payload.decode())
             leaf    = msg.topic.split("/")[-1]
@@ -705,6 +738,10 @@ class GaiaListener:
                 text = text[len(prefix):].strip()
                 break
 
+        if text and is_garbage_transcript(text):
+            log.info(f"Trascrizione degenere scartata: {text[:60]!r}")
+            text = ""
+
         self._publish_comando(text, *result_speaker[0])
         self._publish_stato(self.STATE_IDLE)
 
@@ -751,6 +788,11 @@ class GaiaListener:
 
                 # IDLE: accumula e cerca wake word
                 if self.state == self.STATE_IDLE:
+                    # Musica in salotto/soggiorno: wake sospeso (falsi trigger
+                    # + allucinazioni whisper). Il toggle resta su Telegram/web.
+                    if self._media_gated():
+                        speech_frames = []; silence_count = 0
+                        continue
                     # Verifica via embedding (parallela al text-search whisper sotto —
                     # se il modello miniPC non e' ancora allenato, feed() ritorna
                     # sempre 0.0 e questo blocco e' un no-op, nessun cambio di

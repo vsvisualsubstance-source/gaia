@@ -91,6 +91,7 @@ def _on_connect(client, userdata, flags, rc, properties=None):
     client.subscribe(_topic_tts())
     client.subscribe(_topic_record_clip())
     client.subscribe(_topic_admin())
+    client.subscribe("gaia/media/+/status")   # gate wake durante la musica
     client.subscribe(f"gaia/devices/{config.DEVICE_ID}/config", qos=1)
     for t in _ota.topics():
         client.subscribe(t, qos=1)
@@ -121,10 +122,29 @@ def _on_disconnect(client, userdata, rc, properties=None):
         print(f"[MQTT] Disconnesso inaspettatamente (rc={rc}), riconnessione...")
 
 
+_media_playing: dict = {}   # stanza → bool (gaia/media/+/status retained)
+
+
+def _is_garbage_transcript(text: str) -> bool:
+    """Allucinazione whisper su musica/rumore: stessa parola in loop.
+    Frase lunga con pochissime parole distinte = spazzatura."""
+    toks = [t.strip(".,;:!?").lower() for t in text.split()]
+    toks = [t for t in toks if t]
+    return len(toks) >= 6 and len(set(toks)) <= max(1, len(toks) // 5)
+
+
 def _on_message(client, userdata, msg):
     topic = msg.topic
     if topic in _ota.topics():
         _ota.handle(topic, msg.payload)
+        return
+    if topic.startswith("gaia/media/") and topic.endswith("/status"):
+        stanza = topic.split("/")[2]
+        try:
+            st = json.loads(msg.payload).get("state")
+        except Exception:
+            st = None
+        _media_playing[stanza] = (st == "playing")
         return
     if topic == f"gaia/devices/{config.DEVICE_ID}/config":
         _handle_device_config(client, msg.payload)
@@ -633,6 +653,10 @@ def main():
         if not wakeword_detected:
             continue  # torna all'inizio dell'outer loop per gestire clip requests
 
+        if _media_playing.get(_current_room):
+            print("[GAIA Voice] Wakeword ignorato: musica in riproduzione nella stanza.")
+            continue
+
         print("[GAIA Voice] Wakeword rilevato — parla ora...")
 
         # ── Fase 2: registrazione ──────────────────────────────────
@@ -652,6 +676,10 @@ def main():
         _publish_status("processing")
         text = _transcribe(audio)
         print(f"[STT] '{text}'")
+
+        if text and _is_garbage_transcript(text):
+            print(f"[STT] Trascrizione degenere scartata: '{text[:60]}'")
+            text = ""
 
         if text:
             _publish_command(text)
