@@ -55,3 +55,55 @@ category:'speech', room}` → brain: push in `brain.voiceCommands`
   è la via per creare item/regole senza credenziali API.
 - Il bagno e la cucina ora hanno una voce; il bagno resta senza orecchie Gaia
   native — l'Echo è il primo sensore di quella stanza.
+
+## Allarmi mirati e promemoria per stanza (2026-07-20)
+
+Costruiti sopra il canale `gaia/echo/say` già esistente — due consumatori nuovi
+in tab_media (Node-RED).
+
+### Allarme citofono/doorbell
+
+`mqtt in gaia/+/alarm` (topic già usato da `pi/voice/main.py` per il
+classificatore citofono, mai consumato finora) → `DoorbellAlarm`:
+anti-spam 15s, poi annuncia **ovunque** (non solo "dove sei" — un citofono è
+urgente): `gaia/echo/say {all:true}`, `gaia/voice/tts/{ingresso,soggiorno,salotto}`
+(le stanze con voce Gaia — no-op silenzioso dove il servizio non è attivo),
+Telegram. Evento `{source:'doorbell', category:'alarm'}` nel brain (diary/game.html).
+
+**⚠️ Stato reale del rilevamento (2026-07-20): NON allenato.** Il classificatore
+citofono (`doorbell_verifier.pkl`) ha 0 campioni positivi e 1 negativo — non è
+mai stato distribuito al Pi (`~/gaia/voice/models/` non lo contiene). La CATENA
+è pronta e testata con un evento MQTT simulato; per farla scattare davvero
+serve: registrare campioni citofono reali da admin.html (come per il wakeword),
+allenare, OTA al Pi. Fino ad allora `gaia/{room}/alarm` non riceve mai nulla
+da solo — ma qualsiasi altra sorgente (un sensore fisico, un pulsante) può
+pubblicare sullo stesso topic e l'annuncio funziona già.
+
+### Promemoria per stanza
+
+Motore semplice, in-memory (non sopravvive a un riavvio di Node-RED — i
+promemoria sono per l'ordine dei minuti/ore, non pensati per durare giorni):
+- `POST /gaia/reminder {room, text, delay_min}` → crea, ritorna `{id, due_ts}`
+- `GET /gaia/reminder` → lista pendenti
+- `POST /gaia/reminder/cancel {id}` → annulla
+- Inject `Reminder Tick (30s)` → `ReminderFire`: annuncia i promemoria scaduti
+  SOLO nella loro stanza (`gaia/echo/say {room}` + `gaia/voice/tts/{room}`,
+  niente `all:true` — a differenza del citofono, un promemoria è per chi è lì),
+  li rimuove dalla lista, evento `{source:'reminder', category:'reminder'}` nel brain.
+
+**Telegram**: `/promemoria <stanza> <minuti> <testo>` (es. `/promemoria cucina
+10 togli la pasta`), `/promemoria` da solo = lista, `/promemoria annulla <id>`.
+Manipola direttamente `global.gaiaReminders` (stesso array usato dagli
+endpoint HTTP — un solo stato condiviso).
+
+Verificato dal vivo: citofono simulato → 5 messaggi corretti + evento nel
+brain; promemoria da HTTP con delay 0.5min → scattato al minuto giusto SOLO
+in cucina, rimosso dalla lista; annullamento manuale funzionante. Il comando
+Telegram condivide la stessa logica testata via HTTP — verifica diretta da
+Telegram lasciata all'utente (il nodo `telegram receiver` non è simulabile
+via MQTT).
+
+**Gotcha Node-RED**: una funzione con più messaggi sullo STESSO output va
+ritornata come `[msgArray, altroOutput]`, non `[[msgArray], altroOutput]` —
+il doppio annidamento produce "Function tried to send a message of type
+Array" (capitato qui, corretto subito).
