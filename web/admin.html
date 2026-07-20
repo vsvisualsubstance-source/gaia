@@ -2103,17 +2103,33 @@ function pmPatchCard(id, d) {
 }
 
 function pmAttachEvents(id, card) {
-  card.querySelector('.pm-btn-rename').onclick = function() {
+  card.querySelector('.pm-btn-rename').onclick = async function() {
     const stanza = card.querySelector('.pm-inp-stanza').value.trim().toLowerCase().replace(/\s+/g,'-');
     const name   = card.querySelector('.pm-inp-name').value.trim() || stanza;
     if (!stanza) return;
     const dn = card.querySelector('.pi-display-name');
     if (dn) dn.textContent = name;
     const btn = this;
-    btn.style.background = '#1a8a50';
-    btn.textContent = '✓ Salvato';
+    btn.disabled = true; btn.textContent = '…';
+    // Via completa (2026-07-20): /api/provision/assign sincronizza
+    // provision_registry.json (letto dall'agent a ogni riavvio — un
+    // mancato aggiornamento qui fa tornare indietro la stanza al prossimo
+    // crash-loop) E il registro Node-RED (pulizia retained stanza vecchia).
+    // Un semplice set_config via MQTT (come prima) aggiornava SOLO l'agent.
+    try {
+      const r = await fetch(`${API}/api/provision/assign`, {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({device_id: id, stanza, name})
+      });
+      const d = await r.json();
+      btn.style.background = d.ok ? '#1a8a50' : '#8a1a1a';
+      btn.textContent = d.ok ? '✓ Salvato' : '✗ Errore';
+    } catch {
+      btn.style.background = '#8a1a1a';
+      btn.textContent = '✗ Errore rete';
+    }
+    btn.disabled = false;
     setTimeout(() => { btn.style.background=''; btn.textContent='💾 Salva'; }, 1500);
-    pmSend(id, {action:'set_config', stanza, name});
   };
   card.querySelectorAll('.pm-svc-on').forEach(b  => b.onclick = () => pmSend(id, {action:'enable',  service:b.dataset.svc}));
   card.querySelectorAll('.pm-svc-off').forEach(b  => b.onclick = () => pmSend(id, {action:'disable', service:b.dataset.svc}));

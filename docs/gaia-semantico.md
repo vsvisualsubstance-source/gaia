@@ -135,11 +135,28 @@ campioni non devono mai finire nel dataset di un'altra macchina
 Tutto ciò che riguarda il *contesto* (topic tts/command/status, presenze, scene,
 speaker attribution) segue la **stanza assegnata** nel Device Registry.
 
-**Cambio stanza** — un'unica azione: riassegnare il device (Pi Manager o
-`POST /gaia/device/assign`). Il registry pubblica la config retained, i servizi
-ri-derivano i topic; se la stanza vecchia resta senza device, la assign fa
-**auto-pulizia** (dati live in brain.rooms + clear dei retained
-`gaia/scene/{room}` e `gaia/voice/status/{room}`).
+**Cambio stanza — endpoint CANONICO: `POST /api/provision/assign`** (gaia_admin.py,
+porta 8765; usato da Pi Manager "💾 Salva" dal 2026-07-20). È l'unico che
+sincronizza TUTTI E TRE i registri in un colpo solo:
+1. `provision_registry.json` (gaia_admin) — **letto dall'agent ad OGNI riavvio
+   del processo** (`_provision_register()` in agent.py, non solo al boot del
+   Pi: anche in un crash-loop). Se resta indietro, la prossima volta che
+   l'agent si riavvia la stanza TORNA a quella vecchia, silenziosamente.
+2. Registro Node-RED (`POST /gaia/device/assign` interno) — config retained +
+   **auto-pulizia** della stanza vecchia se resta senza device (dati live in
+   brain.rooms + clear dei retained `gaia/scene/{room}` e `gaia/voice/status/{room}`).
+3. Comando diretto `set_config` all'agent via MQTT — applica subito se online.
+
+**Bug reale successo il 2026-07-19/20** (device pi-fd75d8, cucina→ingresso):
+un assign fatto chiamando SOLO il registro Node-RED (punto 2, via curl diretto)
+ha lasciato indietro `provision_registry.json` (punto 1). Al riavvio successivo
+dell'agent — innescato da un restart di mosquitto che ha mandato l'agent in
+crash-loop — `_provision_register()` ha richiesto la stanza a gaia_admin e si
+è visto rispondere "cucina", tornando indietro. Il bottone "💾 Salva" del Pi
+Manager aveva lo STESSO buco dal lato opposto (mandava solo il punto 3, via
+MQTT diretto dal browser, saltando 1 e 2) — corretto nello stesso commit.
+**Non chiamare mai `/gaia/device/assign` o un `set_config` diretto da soli:
+sempre `/api/provision/assign`.**
 
 **Pulizia manuale** (stanze sbagliate/orfane):
 - `GET  /gaia/rooms` — stato stanze: device assegnati, in_map, scene, presenze
