@@ -379,17 +379,53 @@ def _publish_stats(vol: float, state: str, ww_conf: float, gaia_conf: float = 0.
     )
 
 
+def _persist_voice_conf(updates: dict):
+    """Scrive le soglie tarate in config.CONF_PATH — senza questo, sopravvivono
+    solo finche' il servizio non si riavvia (bug trovato 2026-07-20, stesso
+    file sul Pi). Preserva righe/commenti esistenti."""
+    path = config.CONF_PATH
+    lines, seen = [], set()
+    try:
+        with open(path) as f:
+            for raw in f:
+                line = raw.rstrip("\n")
+                stripped = line.strip()
+                if stripped and not stripped.startswith("#") and "=" in stripped:
+                    key = stripped.split("=", 1)[0].strip()
+                    if key in updates:
+                        lines.append(f"{key}={updates[key]}")
+                        seen.add(key)
+                        continue
+                lines.append(line)
+    except FileNotFoundError:
+        pass
+    for k, v in updates.items():
+        if k not in seen:
+            lines.append(f"{k}={v}")
+    try:
+        with open(path, "w") as f:
+            f.write("\n".join(lines) + "\n")
+    except OSError as e:
+        print(f"[Config] Impossibile salvare {path}: {e}")
+
+
 def _apply_config(data: dict):
     global _GAIA_THRESHOLD
+    updates = {}
     if "wakeword_threshold" in data:
         config.WAKEWORD_THRESHOLD = float(data["wakeword_threshold"])
+        updates["WAKEWORD_THRESHOLD"] = f"{config.WAKEWORD_THRESHOLD:.2f}"
         print(f"[Config] WAKEWORD_THRESHOLD -> {config.WAKEWORD_THRESHOLD:.2f}")
     if "gaia_threshold" in data:
         _GAIA_THRESHOLD = float(data["gaia_threshold"])
+        updates["GAIA_THRESHOLD"] = f"{_GAIA_THRESHOLD:.2f}"
         print(f"[Config] GAIA_THRESHOLD -> {_GAIA_THRESHOLD:.2f}")
     if "silence_threshold" in data:
         config.SILENCE_THRESHOLD = int(data["silence_threshold"])
+        updates["SILENCE_THRESHOLD"] = str(config.SILENCE_THRESHOLD)
         print(f"[Config] SILENCE_THRESHOLD -> {config.SILENCE_THRESHOLD}")
+    if updates:
+        _persist_voice_conf(updates)
 
 
 def _do_record_clip(label: str, duration_s: int):

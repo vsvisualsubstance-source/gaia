@@ -397,18 +397,56 @@ def _publish_pi_stats(vol: float, state: str, ww_conf: float, gaia_conf: float =
     )
 
 
+def _persist_voice_conf(updates: dict):
+    """Scrive le soglie tarate in config.CONF_PATH — senza questo, sopravvivono
+    solo finché il servizio non si riavvia (erano solo in memoria: bug trovato
+    2026-07-20, la taratura da Admin si perdeva a ogni restart di gaia-voice).
+    Preserva righe/commenti esistenti (voice.conf è anche editabile a mano)."""
+    path = config.CONF_PATH
+    lines, seen = [], set()
+    try:
+        with open(path) as f:
+            for raw in f:
+                line = raw.rstrip("\n")
+                stripped = line.strip()
+                if stripped and not stripped.startswith("#") and "=" in stripped:
+                    key = stripped.split("=", 1)[0].strip()
+                    if key in updates:
+                        lines.append(f"{key}={updates[key]}")
+                        seen.add(key)
+                        continue
+                lines.append(line)
+    except FileNotFoundError:
+        pass
+    for k, v in updates.items():
+        if k not in seen:
+            lines.append(f"{k}={v}")
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            f.write("\n".join(lines) + "\n")
+    except OSError as e:
+        print(f"[Config] Impossibile salvare {path}: {e}")
+
+
 def _apply_pi_config(data: dict):
-    """Aggiorna i threshold live via MQTT senza riavvio."""
+    """Aggiorna i threshold live via MQTT e li persiste (sopravvivono al riavvio)."""
     global _GAIA_THRESHOLD, _DOORBELL_THRESHOLD
+    updates = {}
     if "wakeword_threshold" in data:
         config.WAKEWORD_THRESHOLD = float(data["wakeword_threshold"])
+        updates["WAKEWORD_THRESHOLD"] = f"{config.WAKEWORD_THRESHOLD:.2f}"
         print(f"[Config] WAKEWORD_THRESHOLD → {config.WAKEWORD_THRESHOLD:.2f}")
     if "gaia_threshold" in data:
         _GAIA_THRESHOLD = float(data["gaia_threshold"])
+        updates["GAIA_THRESHOLD"] = f"{_GAIA_THRESHOLD:.2f}"
         print(f"[Config] GAIA_THRESHOLD → {_GAIA_THRESHOLD:.2f}")
     if "silence_threshold" in data:
         config.SILENCE_THRESHOLD = int(data["silence_threshold"])
+        updates["SILENCE_THRESHOLD"] = str(config.SILENCE_THRESHOLD)
         print(f"[Config] SILENCE_THRESHOLD → {config.SILENCE_THRESHOLD}")
+    if updates:
+        _persist_voice_conf(updates)
 
 
 def _do_calibrate(duration_s: int = 5):

@@ -36,7 +36,8 @@ _defaults = {
 
 # Nessun /etc/gaia su Windows: file di conf facoltativo accanto allo script
 # (stessa convenzione env > file > default degli altri servizi OPS/Pi).
-_file_cfg = _load_conf(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'voice.conf'))
+CONF_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'voice.conf')
+_file_cfg = _load_conf(CONF_PATH)
 _cfg = {**_defaults, **_file_cfg, **{k: os.environ[k] for k in _defaults if k in os.environ}}
 
 # ── Device identity ───────────────────────────────────────────────────

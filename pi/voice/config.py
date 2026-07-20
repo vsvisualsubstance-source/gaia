@@ -33,7 +33,8 @@ _defaults = {
     'PIPER_SAMPLE_RATE':    '22050',
 }
 
-_file_cfg = _load_conf('/etc/gaia/voice.conf')
+CONF_PATH = '/etc/gaia/voice.conf'
+_file_cfg = _load_conf(CONF_PATH)
 _cfg = {**_defaults, **_file_cfg, **{k: os.environ[k] for k in _defaults if k in os.environ}}
 
 # ── Device identity ───────────────────────────────────────────────────
