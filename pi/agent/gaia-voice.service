@@ -9,6 +9,11 @@ User=pi
 WorkingDirectory=/opt/gaia/voice
 EnvironmentFile=/etc/gaia/device.conf
 EnvironmentFile=-/etc/gaia/voice.conf
+# PipeWire della sessione utente: senza questa var l'aplay del TTS (ALSA
+# "default" -> pulse/pipewire) non trova il bus e resta muto in silenzio —
+# nessun errore, nessun log, semplicemente nessun suono (stesso gotcha
+# risolto per gaia-herbarium, mai applicato qui finché non serviva davvero).
+Environment=XDG_RUNTIME_DIR=/run/user/1000
 ExecStart=/opt/gaia/voice/start.sh
 Restart=on-failure
 RestartSec=5
