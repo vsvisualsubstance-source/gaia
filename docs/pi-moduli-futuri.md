@@ -108,6 +108,48 @@ registrazione RMS, **preset pentatonica_calma e drone_modale confermati
 all'orecchio dall'utente**. Quando arriva la scheda USB reale: si collega da
 sola come sensore (stesso hotplug generico), zero modifiche al codice.
 
+### V2.1 — Sorgenti alternative selezionabili (2026-07-21)
+
+In attesa della scheda vera (o come modalità permanente), due "sorgenti di
+note" ALTERNATIVE, mutuamente esclusive (Conflicts= reciproco, stesso schema
+di screen/kiosk), entrambe registrate nell'agent (`herbsim`/`herbmp` in
+`pi/agent/config.py` SERVICE_MAP) → attivabili da Pi Manager/Telegram come
+ogni altro servizio:
+
+- **`plant_simulator.py`** (`gaia-herbarium-sim`): note/velocity/tempo A CASO
+  sulla porta VirMIDI a indice più basso — il "rumore puro" che il motore
+  musicale deve rendere musica.
+- **`mediapipe_source.py`** (`gaia-herbarium-mediapipe`): "la stanza suona in
+  risposta a chi la abita" — legge `gaia/mediapipe/pose` (person_detected,
+  gesture, emotion, smile_score, attention, pose, people_count — SOLO segnali
+  categorici/derivati, niente coordinate mano) e mappa: attention→registro
+  base (sinistra grave/destra acuta), gesture→scostamento fisso (stesso
+  spirito del vocabolario GESTURE_WORDS asemico), smile_score→più acuto+più
+  energico, pose sitting→un'ottava sotto, people_count→più energia. Una nota
+  per ogni CAMBIO di stato (non a ogni tick, mediapipe pubblica ogni ~1s
+  anche da fermo), intervallo minimo 1.5s anti-raffica. NESSUNA logica di
+  scala/accordo qui: quella resta sempre di music_engine.py lato herbarium
+  principale — questo script decide solo "cosa succede → quale nota grezza".
+
+Entrambi scrivono sulla STESSA porta "sensore" (mai su engine_out): il resto
+della catena (osservazione, music_engine, bus verso Carla) è invariato e
+condiviso. Verificato dal vivo: mappatura gesti→note corretta (es. victory +
+3 persone + sorriso 60 → nota 72 vel 107), catena end-to-end fino a Carla,
+**4 gesti diversi confermati all'orecchio dall'utente**.
+
+**GOTCHA IMPORTANTE trovato durante il test**: dopo un'ora circa di silenzio
+(nessuna nota, herbarium acceso ma inattivo) l'audio smette di suonare pur
+con la catena tecnicamente intatta (bus wired, note osservate su MQTT,
+nessun errore in log) — serve un riavvio di `gaia-herbarium` per farlo
+ripartire. Sospetto: sospensione idle di PipeWire/WirePlumber sul sink
+(`session.suspend-timeout-seconds`) che non si risveglia correttamente al
+primo dato MIDI dopo la sospensione. **NON RISOLTO** — l'utente ha scelto di
+limitarsi a documentare per ora (non blocca l'uso, il modulo si usa a sessioni
+non 24/7 indefinite). Se ricapita: prima cosa da controllare, riavviare
+`gaia-herbarium` — se risolve, conferma la teoria. Possibili fix futuri: nota
+heartbeat quasi impercettibile ogni N minuti quando inattivo, o riavvio
+periodico via timer systemd.
+
 ### Design originale (per riferimento)
 
 
