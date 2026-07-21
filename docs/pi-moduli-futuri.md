@@ -67,6 +67,47 @@ dai test originali dell'utente ritrovati sul Pi (`t1.carxp`, ora versionato come
   client kernel che il modulo aggancia da solo; scrivere byte MIDI raw su
   /dev/snd/midiC*D0 suona Yoshimi e pubblica le note (10/10 verificate).
 
+### V2 — Motore musicale (2026-07-21): da "note a caso" a musica vera
+
+I sensori mandano numeri casuali — la musicalità la decide `music_engine.py`
+(puro Python, zero dipendenze, testabile senza hardware): scala (cromatica,
+maggiore, minore, pentatoniche, blues, dorica, misolidia — nomi delle
+fondamentali in solfeggio, stesso vocabolario di pi/screen NOTE_WORDS),
+accordo costruito impilando GRADI della scala (1-3-5 diatonico, resta
+consonante sia in maggiore che in minore, non semitoni fissi), preset che
+fissano scala+accordo+registro+dinamica in un colpo ("il tipo di musica").
+6 preset pronti: `pentatonica_calma` (default — pentatonica è "a prova di
+errore" con input casuale), `accordi_maggiori`, `drone_modale`,
+`arpeggio_arioso` (accordo strimpellato con delay crescente),
+`blues_notturno`, `cromatico_libero` (comportamento pre-v2, nessun filtro).
+
+**Architettura del bus MIDI** (permanente da `/etc/modprobe.d/gaia-herbarium-virmidi.conf`,
+`snd-virmidi midi_devs=2` — sopravvive al reboot): due porte VirMIDI, quella
+con l'indice sub-device PIÙ ALTO è sempre il "bus verso Carla" (`engine_out`,
+`_find_engine_out` in main.py — trovato per nome, non per numero di card:
+robusto ai cambi di numerazione tra un boot e l'altro), collegata a Carla
+SEMPRE appena scoperta (non hotplug, fissa). Qualsiasi ALTRO client kernel
+(indice più basso del simulatore, o in futuro la scheda USB reale) è un
+"sensore": osservato con aseqdump per MQTT/XP **ma MAI collegato
+direttamente a Carla** — il grezzo passa SEMPRE dal motore prima di
+suonare. `_dump_reader` per ogni nota osservata chiama anche
+`music_engine.voice()` e scrive il risultato (nota/e trasformate, con delay
+per l'arpeggio) sul device raw del bus (`_write_note`/`_write_note_off`,
+stessa tecnica byte-a-byte dei test originali, `threading.Timer` per la
+durata fissa — non quella reale del sensore: un trigger casuale non ha un
+"note-off" musicalmente significativo).
+
+**Preset a caldo**: `gaia/herbarium/{stanza}/music {"preset":"..."}`.
+**Simulatore** (`plant_simulator.py`, zero dipendenze): scrive note/velocity/
+tempo A CASO sulla porta a indice più basso — l'hotplug lo vede come un
+sensore qualsiasi, utile per sviluppare/ascoltare senza aspettare la scheda.
+
+Verificato dal vivo 2026-07-21: cablaggio bus→Carla al primo colpo (pw-link,
+matching per nome "Virtual Raw MIDI {card}-{dev}"), segnale confermato via
+registrazione RMS, **preset pentatonica_calma e drone_modale confermati
+all'orecchio dall'utente**. Quando arriva la scheda USB reale: si collega da
+sola come sensore (stesso hotplug generico), zero modifiche al codice.
+
 ### Design originale (per riferimento)
 
 

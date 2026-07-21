@@ -35,3 +35,7 @@ HEARTBEAT_EVERY_S = int(_get("HERBARIUM_HEARTBEAT_S", "30"))
 # note anche in locale (udp://127.0.0.1) per gaia-screen: nel bosco non c'è
 # broker MQTT, il canale localhost funziona sempre
 UDP_PORT          = int(_get("HERBARIUM_UDP_PORT", "8791"))
+
+# Motore musicale: preset di default (scale.md in music_engine.py). Cambiabile
+# a caldo via MQTT gaia/herbarium/{stanza}/music {"preset": "..."}.
+ENGINE_PRESET = _get("HERBARIUM_ENGINE_PRESET", "pentatonica_calma")
