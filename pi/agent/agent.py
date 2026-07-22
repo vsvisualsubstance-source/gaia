@@ -212,9 +212,36 @@ def _sync_camera(cfg: dict):
         _systemctl("stop", config.SERVICE_MAP["camera"])
 
 
+# Servizi che richiedono un ALTRO servizio attivo per funzionare — avviato
+# automaticamente insieme (herbmp legge gaia/mediapipe/pose: senza mediapipe
+# resta sordo). NON disabilitato automaticamente quando il richiedente si
+# spegne: mediapipe può servire ad altro (RPG, game.html) anche da solo.
+SERVICE_DEPENDENCIES = {
+    "herbmp": ("mediapipe",),
+}
+
+
+def _sync_dependencies(key: str, cfg: dict):
+    """Avvia (se non già attivi) i servizi da cui 'key' dipende e li marca
+    enabled in cfg — idempotente, propaga anche la dipendenza camera se la
+    dipendenza stessa è un CAMERA_CONSUMER (es. mediapipe)."""
+    for dep in SERVICE_DEPENDENCIES.get(key, ()):
+        if dep not in config.SERVICE_MAP:
+            continue
+        cfg.setdefault("services", {}).setdefault(dep, {})["enabled"] = True
+        if service_status(dep) != "active":
+            print(f"[Agent] Avvio {dep} (richiesto da {key})")
+            _systemctl("start", config.SERVICE_MAP[dep])
+            time.sleep(1)
+        if dep in CAMERA_CONSUMERS:
+            _sync_camera(cfg)
+
+
 def enable_service(key: str, cfg: dict = None) -> bool:
-    if key in CAMERA_CONSUMERS and cfg is not None:
-        _sync_camera(cfg)
+    if cfg is not None:
+        _sync_dependencies(key, cfg)
+        if key in CAMERA_CONSUMERS:
+            _sync_camera(cfg)
     unit = config.SERVICE_MAP.get(key)
     if not unit:
         return False
