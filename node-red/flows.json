@@ -1375,7 +1375,7 @@
         "id": "8413226ebd217235",
         "type": "mqtt in",
         "z": "7ae9100865fc18b4",
-        "name": "Vision Snapshot",
+        "name": "Vision Snapshot (DISCONNESSO da Simula Riconoscimento — 2026-07-22, vedi memoria)",
         "topic": "gaia/+/snapshot",
         "qos": "2",
         "datatype": "auto-detect",
@@ -1386,9 +1386,7 @@
         "x": 180,
         "y": 360,
         "wires": [
-            [
-                "7f0dbac70bf5eeae"
-            ]
+            []
         ]
     },
     {
@@ -5358,6 +5356,54 @@
         "broker": "29b6d5926d1a95ec",
         "x": 600,
         "y": 1460,
+        "wires": []
+    },
+    {
+        "id": "merge_identity_http",
+        "type": "http in",
+        "z": "tab_device_registry",
+        "name": "POST /gaia/admin/merge-identity",
+        "url": "/gaia/admin/merge-identity",
+        "method": "post",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 220,
+        "y": 1500,
+        "wires": [
+            [
+                "merge_identity_fn"
+            ]
+        ]
+    },
+    {
+        "id": "merge_identity_fn",
+        "type": "function",
+        "z": "tab_device_registry",
+        "name": "MergeIdentity",
+        "func": "// POST /gaia/admin/merge-identity {from, into} — unisce due identità\n// duplicate in brain.presence/people/gamification (es. maiuscola/minuscola).\n// \"from\" viene cancellata, \"into\" resta e assorbe visits/lastSeen più recenti.\nconst brain = global.get('gaiaBrain') || {};\nconst { from, into } = msg.payload || {};\nif (!from || !into || from === into) {\n    msg.statusCode = 400;\n    msg.payload = { ok: false, error: 'from e into richiesti e diversi' };\n    return msg;\n}\nlet moved = [];\nif (brain.presence && brain.presence[from]) {\n    if (!brain.presence[into]) brain.presence[into] = brain.presence[from];\n    else if ((brain.presence[from].lastSeen || 0) > (brain.presence[into].lastSeen || 0)) {\n        brain.presence[into] = { ...brain.presence[into], ...brain.presence[from] };\n    }\n    delete brain.presence[from];\n    moved.push('presence');\n}\nif (brain.people && brain.people[from]) {\n    if (!brain.people[into]) brain.people[into] = brain.people[from];\n    else {\n        brain.people[into].visits = (brain.people[into].visits || 0) + (brain.people[from].visits || 0);\n        brain.people[into].lastSeen = Math.max(brain.people[into].lastSeen || 0, brain.people[from].lastSeen || 0);\n    }\n    delete brain.people[from];\n    moved.push('people');\n}\nif (brain.vision && brain.vision.people && brain.vision.people[from]) {\n    delete brain.vision.people[from];\n    moved.push('vision.people');\n}\nglobal.set('gaiaBrain', brain);\nmsg.payload = { ok: true, from, into, moved };\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 460,
+        "y": 1500,
+        "wires": [
+            [
+                "merge_identity_resp"
+            ]
+        ]
+    },
+    {
+        "id": "merge_identity_resp",
+        "type": "http response",
+        "z": "tab_device_registry",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 670,
+        "y": 1500,
         "wires": []
     }
 ]

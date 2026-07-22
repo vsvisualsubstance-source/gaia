@@ -1,0 +1,9 @@
+# Venv dedicato: /media/core/D/face-env (fuori da /home, per spazio — i modelli
+# InsightFace + le cache pesano centinaia di MB). NON un venv del repo standard.
+faiss-cpu==1.14.2
+insightface==1.0.1
+numpy==2.4.6
+onnx==1.21.0
+onnxruntime==1.26.0
+opencv-python==4.13.0.92
+paho-mqtt==2.1.0

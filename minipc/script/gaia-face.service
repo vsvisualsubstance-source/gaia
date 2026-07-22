@@ -1,0 +1,22 @@
+[Unit]
+Description=GAIA Face Recognition Service (InsightFace + FAISS)
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=core
+WorkingDirectory=/media/core/D/face-env
+ExecStart=/media/core/D/face-env/bin/python3 /media/core/D/face-env/face_service.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+Environment=PYTHONUNBUFFERED=1
+Environment=HOME=/home/core
+Environment=OMP_NUM_THREADS=4
+Environment=MKL_NUM_THREADS=4
+
+[Install]
+WantedBy=multi-user.target
