@@ -108,6 +108,20 @@ registrazione RMS, **preset pentatonica_calma e drone_modale confermati
 all'orecchio dall'utente**. Quando arriva la scheda USB reale: si collega da
 sola come sensore (stesso hotplug generico), zero modifiche al codice.
 
+**GOTCHA trovato 2026-07-22** (cambio periferiche sul Pi — webcam+Polycom
+aggiunti — ha spostato snd-virmidi da card 4 a card 0): il matching MIDI
+sopra descritto era **fragile e falliva silenziosamente**. PipeWire espone
+i client VirMIDI via `pw-link` con un'etichetta PROPRIA generica e
+incrementale ("Virtual MIDI Card N", scollegata dal numero di card/device
+ALSA) — il nome ALSA completo ("Virtual Raw MIDI {card}-{dev}") non compare
+MAI in quella riga; ha "funzionato" la prima volta solo per coincidenza del
+contatore N. Fix: matching sul suffisso di porta stabile ("VirMIDI
+{card}-{dev}", sempre presente) invece del nome client completo —
+`_find_engine_out` ora espone anche `pw_name` per questo. Sintomo tipico se
+si ripresenta: Carla attivo, note osservate su MQTT, **nessun suono e
+nessun errore** — controllare i log per "Bus motore collegato": se manca,
+è questo.
+
 ### V2.1 — Sorgenti alternative selezionabili (2026-07-21)
 
 In attesa della scheda vera (o come modalità permanente), due "sorgenti di
