@@ -123,7 +123,16 @@ def _find_engine_out(clients):
         return None
     candidates.sort()
     dev, cid, port, card, name = candidates[-1]
-    return {"id": cid, "port": port, "card": card, "dev": dev, "name": name}
+    # pw-link espone questi client con un'etichetta PROPRIA generica e
+    # incrementale ("Virtual MIDI Card N", scollegata dal numero di card/
+    # device ALSA) — il nome ALSA completo ("Virtual Raw MIDI {card}-{dev}")
+    # NON compare da nessuna parte in quella riga, quindi il match falliva
+    # sempre in silenzio dopo un riavvio con un numero di card diverso da
+    # quello visto la prima volta (bug trovato dal vivo 2026-07-22, cambio
+    # periferiche ha spostato virmidi da card 4 a card 0). La parte STABILE
+    # è il suffisso della porta, es. "VirMIDI 0-1" — quello sì compare sempre.
+    pw_name = f"VirMIDI {card}-{dev}"
+    return {"id": cid, "port": port, "card": card, "dev": dev, "name": name, "pw_name": pw_name}
 
 
 def _pw_wire_audio(env) -> None:
@@ -158,7 +167,7 @@ def _pw_wire_engine_out(eng_out) -> bool:
         return False
     wired = False
     for out in outs:
-        if "Midi-Bridge" in out and eng_out["name"] in out:
+        if "Midi-Bridge" in out and eng_out["pw_name"] in out:
             r = subprocess.run(["pw-link", out.strip(), "Carla:events-in"],
                                capture_output=True, text=True, timeout=5, env=env)
             if r.returncode == 0:
