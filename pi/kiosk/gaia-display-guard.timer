@@ -1,0 +1,10 @@
+[Unit]
+Description=GAIA display guard — controllo periodico (ogni minuto)
+
+[Timer]
+OnBootSec=90s
+OnUnitActiveSec=60s
+Unit=gaia-display-guard.service
+
+[Install]
+WantedBy=timers.target

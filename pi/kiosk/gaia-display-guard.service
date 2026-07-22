@@ -1,0 +1,6 @@
+[Unit]
+Description=GAIA display guard — rispegne il DSI se kiosk/screen sono spenti
+
+[Service]
+Type=oneshot
+ExecStart=/home/asemico/gaia/kiosk/display_guard.sh
