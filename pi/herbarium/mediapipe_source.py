@@ -17,8 +17,10 @@ derivati, niente coordinate mano grezze):
   pose (sitting/standing/...)    -> sitting un'ottava sotto
   people_count                   -> più persone, più energia (velocity)
 
-Una nota per ogni CAMBIO di stato (non a ogni tick — mediapipe pubblica ogni
-~1s anche da fermo), con un intervallo minimo anti-raffica.
+Una nota a ogni tick di presenza (2026-07-22: prima solo sul CAMBIO di
+categoria — ma 'pose' ha solo standing/sitting, quindi camminare per la
+stanza restando in piedi non generava mai nulla; ora basta esserci), con un
+intervallo minimo anti-raffica tarato appena sotto il tick di mediapipe.
 
 Selezionabile in ALTERNATIVA a plant_simulator.py — mai insieme (Conflicts=
 nella unit systemd): scriverebbero sulla stessa porta e si confonderebbero.
@@ -35,9 +37,14 @@ import config
 
 GESTURE_OFFSETS = {"fist": 0, "point": 3, "victory": 5, "three": 7, "open_hand": 10}
 ATTENTION_BASE = {"center": 60, "left": 52, "right": 68, "unknown": 60}
-MIN_INTERVAL_S = 1.5   # anti-raffica: la stanza non deve mitragliare note
+# 'pose' ha SOLO due valori (standing/sitting) — non esiste un vero segnale
+# di movimento in mediapipe. Per "reagire a chi si muove" la nota scatta a
+# ogni tick di presenza (non solo al cambio categoria: muoversi restando
+# 'standing' non generava mai nulla) — l'intervallo minimo resta l'unico
+# freno, tarato appena sotto il tick di mediapipe (~1s) per sentirsi vivo
+# senza mitragliare.
+MIN_INTERVAL_S = 1.0
 
-_last: dict = {}
 _last_note_ts = 0.0
 _path: str | None = None
 
@@ -91,25 +98,19 @@ def _on_message(client, userdata, msg):
     if config.ROOM and p.get("camera") not in (None, config.ROOM):
         return
     if not p.get("person_detected"):
-        _last.clear()
         return
 
     now = time.time()
+    if (now - _last_note_ts) < MIN_INTERVAL_S:
+        return
+    _last_note_ts = now
+
     gesture   = p.get("gesture") or "none"
     emotion   = p.get("emotion") or "neutral"
     attention = p.get("attention") or "center"
     pose      = p.get("pose") or "standing"
     smile     = p.get("smile_score") or 0
     people    = p.get("people_count") or 1
-
-    state = (gesture, emotion, attention, pose)
-    changed = state != (_last.get("gesture"), _last.get("emotion"),
-                        _last.get("attention"), _last.get("pose"))
-    _last.update(gesture=gesture, emotion=emotion, attention=attention, pose=pose)
-
-    if not changed or (now - _last_note_ts) < MIN_INTERVAL_S:
-        return
-    _last_note_ts = now
 
     note = ATTENTION_BASE.get(attention, 60)
     note += GESTURE_OFFSETS.get(gesture, 0)

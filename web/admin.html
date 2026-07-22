@@ -1929,6 +1929,17 @@ const PM_SVC_META = {
   herbmp:    { label: 'Herb. MP',  icon: '🕺' },
 };
 
+// Preset del motore musicale herbarium (music_engine.py PRESETS — tenere allineati)
+const HERB_PRESETS = [
+  ['pentatonica_calma', 'Pentatonica calma'],
+  ['accordi_maggiori',  'Accordi maggiori'],
+  ['drone_modale',      'Drone modale'],
+  ['arpeggio_arioso',   'Arpeggio arioso'],
+  ['blues_notturno',    'Blues notturno'],
+  ['cromatico_libero',  'Cromatico libero'],
+];
+const _pmHerbPreset = {};   // stanza -> preset attuale (da gaia/herbarium/+/state)
+
 async function pmCleanRooms() {
   try {
     const base = `http://${location.hostname}:1880`;
@@ -1955,6 +1966,7 @@ function initPiManager() {
     _pmClient.on('connect', () => {
       pmSetConn(true);
       _pmClient.subscribe('gaia/device/+/status');
+      _pmClient.subscribe('gaia/herbarium/+/state');
       pmLog('in', `Connesso a ${mqttUrl}`);
     });
     _pmClient.on('error',   e  => { pmSetConn(false); pmLog('err', e.message || 'Errore MQTT'); });
@@ -1962,6 +1974,18 @@ function initPiManager() {
     _pmClient.on('reconnect', () => pmLog('err', 'Riconnessione…'));
     _pmClient.on('message', (topic, raw) => {
       if (!raw || !raw.length) return;
+      if (topic.startsWith('gaia/herbarium/') && topic.endsWith('/state')) {
+        try {
+          const st = JSON.parse(raw.toString());
+          const stanza = topic.split('/')[2];
+          if (st && st.preset) {
+            _pmHerbPreset[stanza] = st.preset;
+            document.querySelectorAll(`.pm-inp-herbpreset[data-stanza="${stanza}"]`)
+              .forEach(sel => { sel.value = st.preset; });
+          }
+        } catch(e) {}
+        return;
+      }
       try {
         const d = JSON.parse(raw.toString());
         const id = d.device_id;
@@ -2067,6 +2091,15 @@ function pmBuildCard(id, d) {
       <div class="pm-section-label">Servizi</div>
       <div class="pm-svc-grid" style="grid-template-columns:repeat(${cols},1fr)">${svcKeys.map(k=>pmSvcBtnHtml(k,d)).join('')}</div>
     </div>`:''}
+    ${svcKeys.includes('herbarium')?`<div>
+      <div class="pm-section-label">🌿 Stile musicale (herbarium)</div>
+      <div class="pm-rename-row">
+        <select class="pm-inp-herbpreset" data-stanza="${pmEsc(d.stanza||'')}" style="flex:1">
+          ${HERB_PRESETS.map(([k,l])=>`<option value="${k}" ${(_pmHerbPreset[d.stanza]||'pentatonica_calma')===k?'selected':''}>${l}</option>`).join('')}
+        </select>
+        <button class="pm-btn blue pm-btn-herbpreset" style="width:auto;padding:0 14px">Applica</button>
+      </div>
+    </div>`:''}
     <div class="pm-card-actions">
       <button class="pm-btn gray pm-btn-status">Status</button>
       <button class="pm-btn amber pm-btn-reboot">Reboot</button>
@@ -2088,6 +2121,8 @@ function pmPatchCard(id, d) {
   if (ip) ip.textContent = d.ip||'?';
   const ut = card.querySelector('.pi-uptime');
   if (ut) ut.textContent = pmFmtUp(d.uptime);
+  const presetSel = card.querySelector('.pm-inp-herbpreset');
+  if (presetSel && d.stanza) presetSel.dataset.stanza = d.stanza;
   const services = d.services||{};
   card.querySelectorAll('.pm-svc-btn[data-svc]').forEach(btn => {
     const svc = btn.dataset.svc;
@@ -2136,6 +2171,15 @@ function pmAttachEvents(id, card) {
   card.querySelectorAll('.pm-svc-on').forEach(b  => b.onclick = () => pmSend(id, {action:'enable',  service:b.dataset.svc}));
   card.querySelectorAll('.pm-svc-off').forEach(b  => b.onclick = () => pmSend(id, {action:'disable', service:b.dataset.svc}));
   card.querySelectorAll('.pm-svc-rst').forEach(b  => b.onclick = () => pmSend(id, {action:'restart', service:b.dataset.svc}));
+  const presetBtn = card.querySelector('.pm-btn-herbpreset');
+  if (presetBtn) presetBtn.onclick = () => {
+    const sel = card.querySelector('.pm-inp-herbpreset');
+    const stanza = sel?.dataset.stanza;
+    if (!stanza || !sel.value || !_pmClient) return;
+    _pmClient.publish(`gaia/herbarium/${stanza}/music`, JSON.stringify({preset: sel.value}));
+    pmLog('out', `Herbarium ${stanza}: preset → ${sel.value}`);
+    presetBtn.textContent = '✓'; setTimeout(() => { presetBtn.textContent = 'Applica'; }, 1200);
+  };
   card.querySelector('.pm-btn-status').onclick  = () => pmSend(id, {action:'status'});
   card.querySelector('.pm-btn-reboot').onclick  = () => { if(confirm(`Riavviare ${id}?`)) pmSend(id, {action:'reboot'}); };
   card.querySelector('.pm-btn-remove').onclick  = () => {
