@@ -45,6 +45,7 @@ nessuna dipendenza, ~250 righe).
 | v4 — Pi screen | piccolo display sul Pi che scrive ciò che il Pi sente/dice, "vivo" | porting Python dell'algoritmo (stesso seed); hardware da scegliere (SPI/OLED?); si aggancia a `gaia/voice/tts/{stanza}` e `gaia/voice/command/{stanza}` |
 | Herbarium — le piante scrivono — **FATTO 2026-07-16** | nota MIDI → parola del solfeggio (`NOTE_WORDS`: do, dodiesis, re… alfabeto deterministico di 12 glifi) → la pianta scrive in verde foglia (120,240,110). **pi/screen**: cursore sinistra→destra con a-capo, note gravi = segni più grandi, velocity = intensità inchiostro, fade 14s, riparte dall'alto dopo 30s di silenzio; trasporto **UDP localhost :8791** da gaia-herbarium (nel bosco non c'è broker — il canale locale funziona sempre). **welcome** (a casa): note→buffer `gaiaHerbNotes` in HerbariumNorm→campo `herbarium.notes` nel payload WS (ThreeViewEngineGAME)→`feedHerbarium` scrive frasi di solfeggio con inchiostro `herb` (banda centrale 0.44, terzo stile in asemic.js), max una ogni 4s; toggle in **Admin→Pi (card Core, 🌿 Herbarium → Web)** = GET/POST `/gaia/config/herbweb`, flag persistito come MQTT retained `gaia/config/herbweb` | pi/screen `_herb_place`/`_herb_udp_listener`, pi/herbarium `_dump_reader`, welcome `feedHerbarium`, Node-RED tab_media `herbweb_*` |
 | v5 — Rune di gioco — **FATTO 2026-07-17** | asset RPG sbloccato → parola italiana (`RUNE_WORDS`) → runa in ORO (stile `rune` ink 255,214,90 banda 0.40 in asemic.js; `INK_RUNE` in pi/screen via `gaia/rpg/levelup`; mini-canvas nei chip dashboard con `AsemicGlyphs.glyphFor` esportato). Dettagli in docs/rpg-engine.md §Level-up multisensoriale | welcome `feedRunes`, pi/screen `_on_message`, dashboard `drawRunes` |
+| Sogni — **FATTO 2026-07-23** | Night Reflection (21:00) genera anche un vero sogno (Ollama, temperatura 1.15, prompt di libera associazione — non un riassunto) a partire dal riassunto del giorno + mood + lessico; salvato in `brain.dreams` (max 30, persistito write-only in `dreams.json`, stesso pattern non-riletto-al-boot di `memories.json`). Stile `dream` in asemic.js: viola (190,135,255), scrittura lenta (speed 0.55), tenuta lunghissima (75-90s contro i 9-10s normali). welcome.html mostra il testo in un pannello dedicato + bottone "raccontamelo" (`POST /gaia/dream/tell`, narrazione Echo+voce Gaia); `/sogno` su Telegram fa lo stesso. Dettagli: [[project-pensieri-profondi]] | Node-RED tab Inject (`night_dream_prompt_fn`→`night_dream_ollama_req`→`save_dream_fn`), MQTT retained `gaia/brain/dream`, welcome `feedAsemic`/`tellDream`, pi/screen `_on_message` |
 | v6 — Vocabolario condiviso | estrarre l'algoritmo in una spec unica (JS+Python identici, test di parità sugli stessi seed) | `asemic.js` è la reference; aggiungere `pi/` port quando parte v4 |
 
 ## Regole per chi ci lavora
@@ -54,3 +55,13 @@ nessuna dipendenza, ~250 righe).
   consapevolmente.
 - L'engine è condiviso: nuove superfici includono `asemic.js`, non copiano il codice.
 - Testo → glifi è one-way per design (non è cifratura, è calligrafia): non serve "decodifica".
+
+**Gotcha Sogni (pi/screen)**: `_sentences` resta un'unica lista condivisa capata a
+`MAX_SENTENCES=3` per TUTTI gli stili (out/in/rune/dream) — se durante la tenuta lunga di
+un sogno (75-90s) arrivano 3 nuove frasi (tts/comandi/rune), il sogno viene evitto
+anticipatamente dallo `shift()`. Accettato per ora (stesso trade-off già preso con le rune):
+non ho dato al sogno una coda propria per non introdurre una seconda struttura dati parallela
+per un caso raro. Verificato dal vivo solo il boot pulito del servizio (log, nessun crash,
+MQTT connesso) — la resa visiva vera non è stata controllata perché sul Pi il display è
+attualmente posseduto da `gaia-kiosk` (welcome), non da `gaia-screen`; `Conflicts=` reciproco
+impedirebbe di far girare entrambi per un confronto affiancato.

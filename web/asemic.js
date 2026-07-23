@@ -105,6 +105,10 @@
                 herb: { ink: opts.inkHerb || '120,240,110', alpha: 0.24, width: 1.9, glow: 5.0 },
                 // v5: le rune di gioco — oro, rare (solo level-up/sblocchi RPG)
                 rune: { ink: opts.inkRune || '255,214,90',  alpha: 0.34, width: 2.4, glow: 8.0 },
+                // Sogni (2026-07-23): stesso viola della curiosità in MOOD_INKS —
+                // un sogno è coscienza che divaga, non annuncio. Scrittura più
+                // lenta (speed) e tenuta molto più lunga (gestita da chi chiama say).
+                dream: { ink: opts.inkDream || '190,135,255', alpha: 0.20, width: 1.6, glow: 5.5, speed: 0.55 },
             };
             this.maxSentences = opts.maxSentences || 3;
             this.cell = opts.cell || 0;                      // 0 = auto da viewport
@@ -183,7 +187,7 @@
             // sopra la zona saluto/bolla camera del kiosk (~0.75+); la pianta
             // (herb) nella banda centrale; le rune (v5) appena sopra il centro
             const baseBand = dir === 'out' ? 0.24 : dir === 'rune' ? 0.40
-                           : dir === 'herb' ? 0.44 : 0.63;
+                           : dir === 'herb' ? 0.44 : dir === 'dream' ? 0.50 : 0.63;
             const y0 = this.H * (baseBand + (seed() - 0.5) * 0.06);
             const items = [];
             let gi = 0;
@@ -205,9 +209,11 @@
             this.sentences.push({
                 items, dir,
                 born: performance.now(),
-                // ritmo di scrittura: la speed del mood accelera/rallenta la mano
+                // ritmo di scrittura: la speed del mood (o del sogno) accelera/rallenta la mano
                 writeMs: (260 * items.length + 400) / ((this.style[dir].speed || 1)),
-                holdMs: 9000, fadeMs: 5000,
+                // un sogno resta visibile molto più a lungo — è un evento raro, non un annuncio
+                holdMs: dir === 'dream' ? 75000 : 9000,
+                fadeMs: dir === 'dream' ? 9000 : 5000,
             });
             while (this.sentences.length > this.maxSentences) this.sentences.shift();
             this._dirty = true;

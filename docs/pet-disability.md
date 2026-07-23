@@ -56,10 +56,11 @@ Tre automazioni indipendenti, ciascuna con cooldown 1 minuto per tipo di alert
 3. **Fuoco/fumo**: `brain.rooms[room].objects.fire === true` (da YOLO) → alert
    `ALLARME INCENDIO`. Disattivabile via `brain.automations.fireAlarm`.
 
-**Da fare per renderlo operativo**: stesso problema di Pet Concierge — output non wired.
-Questo è particolarmente critico qui perché si tratta di allarmi di sicurezza (caduta,
-incendio): **prima di dichiarare questa funzione "in produzione" verificare il collegamento
-reale in Node-RED**, non fidarsi del fatto che il codice esista.
+Wiring verificato di nuovo il 2026-07-23 (audit generale): `Disability` è collegato ad
+`Alert / Command Bus` esattamente come Pet Concierge, catena end-to-end confermata. Resta
+**non testato con una condizione vera** (solo trigger manuale via API, che verifica l'assenza
+di errori ma non la consegna reale di un alert) — dato che si tratta di allarmi di sicurezza
+(caduta, incendio), farlo prima di considerarlo pienamente affidabile.
 
 ## Roadmap
 

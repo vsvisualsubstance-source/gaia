@@ -18,6 +18,15 @@ html,body{width:100%;height:100%;overflow:hidden;user-select:none;-webkit-user-s
 #thought{font-size:clamp(.85rem,2.2vw,1.2rem);font-style:italic;color:#3a4870;max-width:55vw;text-align:center;line-height:1.5;min-height:1.6em;transition:color .5s}
 #thought.visible{color:#6b7a99}
 
+/* ── Sogni (2026-07-23): il sogno notturno di Gaia, visibile finché non arriva il prossimo ── */
+#dream-wrap{display:flex;flex-direction:column;align-items:center;gap:8px;max-width:55vw;opacity:0;max-height:0;overflow:hidden;transition:opacity .6s,max-height .6s}
+#dream-wrap.visible{opacity:1;max-height:14em;margin-top:6px}
+#dream-label{font-size:.68rem;letter-spacing:.14em;text-transform:uppercase;color:#3d2f5c}
+#dream-text{font-size:clamp(.8rem,2vw,1.05rem);font-style:italic;color:#8a6fd6;text-align:center;line-height:1.5}
+#dream-tell{background:none;border:1px solid #3d2f5c;color:#8a6fd6;font-size:.7rem;padding:6px 16px;border-radius:20px;cursor:pointer;min-height:0;letter-spacing:.04em;transition:all .2s}
+#dream-tell:hover{border-color:#8a6fd6;background:#8a6fd61a}
+#dream-tell:disabled{opacity:.4;cursor:default}
+
 /* ── Presence overlay ─────────────────────────────────────────────── */
 #presence{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding-bottom:10vh;gap:18px;z-index:3;pointer-events:none;transition:opacity .4s}
 #presence.hidden{opacity:0;pointer-events:none}
@@ -119,6 +128,11 @@ html,body{width:100%;height:100%;overflow:hidden;user-select:none;-webkit-user-s
   <canvas id="avatar-canvas"></canvas>
   <div id="clock"></div>
   <div id="thought"></div>
+  <div id="dream-wrap">
+    <div id="dream-label">💭 il sogno di stanotte</div>
+    <div id="dream-text"></div>
+    <button id="dream-tell" onclick="tellDream()">🔊 raccontamelo</button>
+  </div>
 </div>
 
 <!-- ── Camera bubble (MJPEG dal camera_server :8766; vista MediaPipe in GREETED) ── -->
@@ -239,7 +253,7 @@ const _asemic = new AsemicField(document.getElementById('asemic-canvas'));
 // v2: ?mood=stress forza l'inchiostro per test/demo (ignora il mood live)
 const _asemicMoodForced = _params.get('mood');
 if (_asemicMoodForced) _asemic.setMood(_asemicMoodForced);
-let _asTtsTs = 0, _asVcTs = 0, _asThought = '';
+let _asTtsTs = 0, _asVcTs = 0, _asThought = '', _asDreamTs = 0;
 const _asRecent = new Map();   // testo → ts, per non riscrivere doppioni ravvicinati
 
 function asemicSay(text, dir) {
@@ -318,6 +332,12 @@ function feedAsemic(d) {
   if (d.thought && d.thought !== _asThought) {
     _asThought = d.thought;
     asemicSay(d.thought, 'out');
+  }
+  // Sogni: si scrive UNA volta, quando arriva un sogno nuovo (Night Reflection,
+  // 21:00) — tenuta lunghissima gestita dallo stile 'dream' di asemic.js.
+  if (d.lastDream && d.lastDreamTs && d.lastDreamTs !== _asDreamTs) {
+    _asDreamTs = d.lastDreamTs;
+    _asemic.say(d.lastDream, 'dream');
   }
   // le piante scrivono (se la visualizzazione è attiva, il campo c'è)
   feedHerbarium(d.herbarium);
@@ -453,6 +473,15 @@ function connectWS() {
         tEl.className = th ? 'visible' : '';
       }
 
+      // Aggiorna il sogno di stanotte
+      const dr = d.lastDream || '';
+      const dEl = document.getElementById('dream-text');
+      const dwEl = document.getElementById('dream-wrap');
+      if (dEl.textContent !== dr) {
+        dEl.textContent = dr;
+        dwEl.classList.toggle('visible', !!dr);
+      }
+
       // Presenza — non interrompe il wizard
       if (_state === 'WIZARD') return;
 
@@ -538,6 +567,17 @@ function renderMp(person) {
   const n = mp.people_count || 0;
   cntEl.hidden = n < 2;
   if (n >= 2) cntEl.textContent = `👥 ${n}`;
+}
+
+// ── Sogni: narrazione a voce del sogno di stanotte (Echo + voce Gaia) ───────
+async function tellDream() {
+  const btn = document.getElementById('dream-tell');
+  btn.disabled = true;
+  try {
+    const r = await fetch('/gaia/dream/tell', { method: 'POST' });
+    if (!r.ok) throw new Error('nessun sogno');
+  } catch {}
+  setTimeout(() => { btn.disabled = false; }, 4000);
 }
 
 // ── Wizard ────────────────────────────────────────────────────────────────────

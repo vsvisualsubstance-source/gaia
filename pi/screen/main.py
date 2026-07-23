@@ -36,6 +36,8 @@ import config
 from asemic_engine import glyph_for, sample_stroke
 
 INK_IN = (88, 166, 255)          # umano: sempre blu (identità, non stato)
+INK_DREAM = (190, 135, 255)      # sogni (2026-07-23): viola, stesso "curiosity" del mood
+DREAM_HOLD_MS = 90000            # un sogno resta a lungo — evento raro, non un annuncio
 
 # v2: l'inchiostro di Gaia segue il mood (da gaia/brain/state). Stessi valori
 # di web/asemic.js MOOD_INKS / palette Arte Viva — tenere allineati.
@@ -104,7 +106,8 @@ def make_sentence(text: str, direction: str, W: int, H: int) -> dict | None:
             line_w = 0.0
         lines[-1].append((w, g, adv))
         line_w += adv
-    y0 = H * (0.16 if direction == "out" else 0.38 if direction == "rune" else 0.60)
+    y0 = H * (0.16 if direction == "out" else 0.38 if direction == "rune"
+              else 0.46 if direction == "dream" else 0.60)
     items, order = [], 0
     for li, line in enumerate(lines):
         tot = sum(a for _, _, a in line)
@@ -113,8 +116,13 @@ def make_sentence(text: str, direction: str, W: int, H: int) -> dict | None:
             items.append({"g": g, "x": x, "y": y0 + li * CELL * 1.5, "order": order})
             order += 1
             x += adv
+    # un sogno si scrive più lento (speed fissa 0.55, indipendente dal mood) e
+    # resta visibile molto più a lungo — evento raro, non un annuncio
+    speed = 0.55 if direction == "dream" else _mood["speed"]
+    hold_ms = DREAM_HOLD_MS if direction == "dream" else HOLD_MS
     return {"items": items, "dir": direction, "born": time.time() * 1000,
-            "write_ms": (WRITE_MS_PER_GLYPH * len(items) + 400) / _mood["speed"]}
+            "write_ms": (WRITE_MS_PER_GLYPH * len(items) + 400) / speed,
+            "hold_ms": hold_ms}
 
 
 def draw_glyph(surface, item, reveal: float, alpha: float, ink, cell: float = None):
@@ -150,6 +158,7 @@ def _on_connect(client, userdata, flags, rc, properties=None):
     client.subscribe("gaia/brain/state")     # v2: mood → inchiostro
     client.subscribe("gaia/mediapipe/pose")  # v3: gesture → glifi
     client.subscribe("gaia/rpg/levelup")     # v5: runa nuova in oro
+    client.subscribe("gaia/brain/dream")     # Sogni: Night Reflection (21:00), retained
     print(f"[Screen] MQTT connesso — stanza {config.ROOM}")
 
 
@@ -223,7 +232,23 @@ def _herb_place(note: int, vel: int, W: int, H: int, now: float):
     cur["last"] = now
 
 
+_dream_last_ts = 0   # dedup: il topic è retained, si ripresenta ad ogni (ri)connessione
+
+
 def _on_message(client, userdata, msg):
+    if msg.topic == "gaia/brain/dream":
+        global _dream_last_ts
+        try:
+            p = json.loads(msg.payload)
+        except ValueError:
+            return
+        ts = p.get("ts") or 0
+        text = (p.get("text") or "").strip()
+        if not text or ts == _dream_last_ts:
+            return
+        _dream_last_ts = ts
+        _pending.append((text, "dream"))
+        return
     if msg.topic == "gaia/rpg/levelup":
         try:
             p = json.loads(msg.payload)
@@ -304,7 +329,7 @@ def main():
                 del _sentences[:-MAX_SENTENCES]
 
         _sentences[:] = [s for s in _sentences
-                         if now - s["born"] < s["write_ms"] + HOLD_MS + FADE_MS]
+                         if now - s["born"] < s["write_ms"] + s.get("hold_ms", HOLD_MS) + FADE_MS]
 
         while _herb_pending:
             note, vel = _herb_pending.pop(0)
@@ -334,10 +359,12 @@ def main():
 
         for s in _sentences:
             age = now - s["born"]
+            hold = s.get("hold_ms", HOLD_MS)
             phase = 1.0
-            if age > s["write_ms"] + HOLD_MS:
-                phase = max(0.0, 1 - (age - s["write_ms"] - HOLD_MS) / FADE_MS)
+            if age > s["write_ms"] + hold:
+                phase = max(0.0, 1 - (age - s["write_ms"] - hold) / FADE_MS)
             ink = (INK_RUNE if s["dir"] == "rune"
+                   else INK_DREAM if s["dir"] == "dream"
                    else ink_out() if s["dir"] == "out" else INK_IN)
             base_alpha = 0.95 if s["dir"] in ("in", "rune") else 0.85
             per_glyph = s["write_ms"] / max(len(s["items"]), 1)

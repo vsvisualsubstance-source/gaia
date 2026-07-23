@@ -109,3 +109,34 @@ corallo, social ambra, curiosity viola.
 
 Verifica live: da osservare nei prossimi giorni (mood ≠ neutra dopo transizioni
 reali; `grep lexicon /home/core/gaia/brain.json` dopo qualche pensiero).
+
+## Sogni (2026-07-23)
+
+Terza uscita di Night Reflection (21:00), in parallelo al riassunto:
+```
+Save Daily Memory → Night Dream Prompt → Night Dream Ollama → Save Dream → {MQTT retained, dreams.json}
+```
+`Night Dream Prompt` ricicla il riassunto appena scritto in `brain.memories` + `mood.state` +
+le 6 parole più consolidate del lessico, ma con un prompt diverso da quello diurno — non
+"riassumi", ma "sogna: libera associazione, non-sequitur poetico" — e `temperature: 1.15`
+(contro il default degli altri prompt) apposta per un output meno coerente/più immaginifico.
+`Save Dream` salva in `brain.dreams` (max 30, in memoria) e persiste `dreams.json` — stesso
+pattern write-only-non-riletto-al-boot di `memories.json` (limite noto, non nuovo, non risolto
+qui).
+
+Il sogno esce anche dalla cognizione pura: pubblica retained su MQTT `gaia/brain/dream`
+(lo riceve `pi/screen`, che lo scrive in viola con tenuta lunghissima — 75-90s contro i 9-10s
+normali, v. `docs/vocabolario-asemico.md` §Sogni) ed è esposto nel payload WS come
+`lastDream`/`lastDreamWords`/`lastDreamTs` (welcome.html mostra un pannello dedicato sotto il
+pensiero corrente). Due modi per farselo raccontare a voce (Echo + voce Gaia, stesso canale
+di `/dillo`): `/sogno` su Telegram, o il bottone "raccontamelo" nella welcome
+(`POST /gaia/dream/tell`, tab_media).
+
+Verificato dal vivo con un trigger manuale dell'inject "Night Reflection"
+(`POST /inject/5e12f921ba0407e8`): prompt generato → risposta Ollama → salvato in
+`brain.dreams` + `dreams.json` → pubblicato retained su `gaia/brain/dream` → comparso nel
+payload WS (`lastDream`) → `/gaia/dream/tell` risponde `{ok:true, text, mood}` — intera catena
+confermata in un'unica sessione di test. Non ancora verificato: la resa visiva su
+`pi/screen` (il Pi ha `gaia-kiosk`, non `gaia-screen`, come proprietario attuale del display —
+v. gotcha in `docs/vocabolario-asemico.md`) e il comando `/sogno` da Telegram vero (il nodo
+`telegram receiver` non è simulabile via MQTT/HTTP, stesso limite già noto per `/promemoria`).
