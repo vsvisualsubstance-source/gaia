@@ -72,6 +72,12 @@ def describe(jpeg: bytes) -> str | None:
         "images": [base64.b64encode(jpeg).decode()],
         "stream": False,
         "options": {"num_predict": 120},
+        # il container Ollama ha OLLAMA_KEEP_ALIVE=24h globale (bene per il
+        # modello di chat, usato spesso) — moondream invece serve solo qui,
+        # una volta ogni SCENE_INTERVAL (15min di default): tenerlo caldo
+        # 24h è RAM sprecata per la maggior parte del tempo. Override per
+        # richiesta: scarica il modello ~1min dopo l'uso.
+        "keep_alive": "1m",
     }).encode()
     req = urllib.request.Request(f"{OLLAMA_URL}/api/generate", data=body,
                                  headers={"Content-Type": "application/json"})
