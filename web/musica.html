@@ -176,7 +176,11 @@ function renderNowPlaying(){
   el.innerHTML = rooms.map(room=>{
     const p = _rooms[room] || {};
     const st = p.state || 'stopped';
-    const q = p.queue ? ` · ${p.queue.index+1}/${p.queue.total} (${p.queue.mode==='shuffle'?'shuffle':'ordinata'})` : '';
+    // mode mostrato è quello scelto in pagina (_mode), non quello del backend:
+    // lo shuffle ora si decide qui una volta sola e si manda già mescolato
+    // come "sequential" a tutte le stanze — il backend riporterebbe sempre
+    // "sequential" anche quando l'utente ha scelto shuffle.
+    const q = p.queue ? ` · ${p.queue.index+1}/${p.queue.total} (${_mode==='shuffle'?'shuffle':'ordinata'})` : '';
     const icon = st === 'playing' ? '▶️' : st === 'paused' ? '⏸' : '⏹';
     return `<div class="now-card ${st}">
       <div class="now-room"><span>${escHtml(room)}</span><span>${icon}</span></div>
@@ -266,17 +270,41 @@ function renderTracklist(){
     (_filtered.length > MAX ? `<div class="empty-hint" style="padding:10px 14px">…e altri ${_filtered.length-MAX} (affina la ricerca per vederli)</div>` : '');
 }
 
+// Lo shuffle si decide UNA VOLTA SOLA qui (non lo lasciamo scegliere a ogni
+// stanza per conto suo, altrimenti — come notato dall'utente — ogni stanza
+// pesca un ordine diverso e divergono subito). L'ordine risultante è fisso:
+// lo mandiamo a tutte le stanze selezionate identico, in modalità
+// "sequential" (il player lo segue e basta, non ripesca più a caso).
+function shuffleArray(arr){
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 function playFrom(index){
   if (!_selected.size){ alert('Seleziona almeno una stanza.'); return; }
-  const urls = _filtered.map(t=>t.url);
-  sendToSelected({ action:'queue', urls, mode:_mode, start_index:index });
+  let tracks = _filtered;
+  if (_mode === 'shuffle'){
+    // il brano cliccato resta primo, il resto si mescola intorno a lui —
+    // stesso ordine per tutte le stanze selezionate
+    const clicked = tracks[index];
+    const rest = shuffleArray(tracks.filter((_, i) => i !== index));
+    tracks = [clicked, ...rest];
+  }
+  const urls = tracks.map(t=>t.url);
+  sendToSelected({ action:'queue', urls, mode:'sequential' });
 }
 
 function playLibrary(){
   if (!_selected.size){ alert('Seleziona almeno una stanza.'); return; }
-  const urls = (_filtered.length ? _filtered : _library.tracks).map(t=>t.url);
+  let tracks = _filtered.length ? _filtered : _library.tracks;
+  if (_mode === 'shuffle') tracks = shuffleArray(tracks);
+  const urls = tracks.map(t=>t.url);
   if (!urls.length){ alert('Nessun brano nella libreria.'); return; }
-  sendToSelected({ action:'queue', urls, mode:_mode });
+  sendToSelected({ action:'queue', urls, mode:'sequential' });
 }
 
 function setMode(m){
