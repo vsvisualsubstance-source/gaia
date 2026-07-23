@@ -2,11 +2,20 @@
 """
 GAIA Herbarium — le piante suonano (docs/pi-moduli-futuri.md §1).
 
-Catena (v2, 2026-07-20): sensore MIDI (piante o il simulatore, in attesa
-della scheda) → OSSERVATO (non collegato direttamente a Carla) → il nostro
-motore musicale (music_engine.py: aggancio a scala + accordo dal preset
-scelto) → bus MIDI virtuale dedicato → Carla headless (patch.carxp:
-Quantization → 3× Yoshimi) → ALSA out.
+Catena (v2, 2026-07-20; motore a 4 livelli v2.3 2026-07-22): sensore MIDI
+(piante o il simulatore/mediapipe) → OSSERVATO (non collegato direttamente
+a Carla) → il nostro motore musicale (music_engine.py: melodia sempre +
+accordo a volte + percussioni + tappeto, ognuno col proprio canale MIDI,
+dal preset scelto) → bus MIDI virtuale dedicato → Carla headless
+(patch.carxp: Enforce Scale → Quantization → un solo synth SF2 General
+MIDI multi-timbrico, default-GM.sf2, che ha sostituito i 2× Yoshimi usati
+in v2.1/v2.2) → ALSA out. Canale 1 = melodia+accordo, canale 2 = tappeto
+(patch "Pad", davvero sostenuto — niente più il pizzicato/eco di Yoshimi),
+canale 10 = percussioni GM standard, con ritmo proprio (_drum_loop). Il
+tappeto (_pad_loop) tiene un accordo lungo a orologio proprio (non un
+tremolo: su un synth con sostegno vero ribattere in fretta suona come un
+ticchettio, non come un fondo continuo), indipendente dagli eventi del
+sensore.
 
 Perché non più diretto: i sensori mandano numeri A CASO — la musicalità
 (scale, accordi, "il tipo di musica") la decide il nostro engine, non un
@@ -201,6 +210,7 @@ def _sync_wiring():
         if ok:
             _wired = True
             _engine_out_path = path
+            _init_drum_bank()
 
     # sensori: qualsiasi kernel client TRANNE il bus motore stesso (altrimenti
     # l'engine sentirebbe le proprie note e andrebbe in loop)
@@ -250,38 +260,93 @@ def _dump_reader(proc):
 
 
 def _play_notes(raw_note: int, raw_velocity: int):
-    """Nota grezza del sensore -> music_engine (scala/accordo dal preset) ->
-    suonata sul bus verso Carla. Ogni tono ha il suo delay (per l'arpeggio)
-    e il suo timer di note-off (durata fissa dal preset, non quella reale del
-    sensore: input casuale, meglio una durata prevedibile e musicale)."""
+    """Nota grezza del sensore -> music_engine (melodia sempre + accordo a
+    volte, con accento percussivo quando scatta) -> suonata sul bus verso
+    Carla. Ogni evento porta già il proprio canale MIDI (music_engine
+    decide l'orchestrazione, qui si scrive soltanto) e il suo delay
+    (micro-strimpellata dell'accordo) e timer di note-off (durata fissa
+    dal preset, non quella reale del sensore: input casuale, meglio una
+    durata prevedibile e musicale)."""
     if not _engine_out_path:
         return
-    for entry in _engine.voice(raw_note, raw_velocity):
+    for entry in _engine.trigger(raw_note, raw_velocity):
         threading.Timer(entry["delay_ms"] / 1000.0, _write_note,
-                        args=(entry["note"], entry["velocity"], entry["length_ms"])).start()
+                        args=(entry["note"], entry["velocity"], entry["length_ms"],
+                              entry.get("channel", 1))).start()
 
 
-def _write_note(note: int, velocity: int, length_ms: int):
+def _pad_loop():
+    """Tappeto: canale 2, patch "Pad" del General MIDI su synth SF2
+    dedicato — davvero sostenuto (v2.3, ha sostituito i 2× Yoshimi). Un
+    vero ACCORDO LUNGO tenuto a orologio proprio (non tremolo: ribattere
+    in fretta su questo synth suona come un ticchettio meccanico, non
+    come un fondo continuo — il tremolo serviva solo a simulare un
+    sostenuto su Yoshimi, che decadeva da solo). Legge il ritmo a ogni
+    giro (si adatta da solo se il preset cambia)."""
+    while _running:
+        if _engine_out_path:
+            for entry in _engine.pad_hold():
+                threading.Timer(entry["delay_ms"] / 1000.0, _write_note,
+                                args=(entry["note"], entry["velocity"], entry["length_ms"],
+                                      entry.get("channel", 2))).start()
+        time.sleep(_engine.pad_hold_s())
+
+
+def _drum_loop():
+    """Percussioni: canale 10, GM standard — orologio proprio, indipendente
+    da quello (ora molto più lento) del tappeto. Un tocco non a ogni giro
+    (drum_prob, music_engine.drum_tick), per restare un ritmo discreto."""
+    while _running:
+        if _engine_out_path:
+            drum = _engine.drum_tick()
+            if drum:
+                _write_note(drum["note"], drum["velocity"], drum["length_ms"], drum.get("channel", 10))
+        time.sleep(_engine.drum_interval_s())
+
+
+def _init_drum_bank():
+    """Il synth SF2 sul canale 10 non passa da solo al banco percussioni GM
+    standard (128) per il solo fatto di essere sul canale 10 — serve un
+    Bank Select esplicito. La selezione fatta a mano nella GUI di Carla si
+    è dimostrata fragile (si rompe cambiando file soundfont: i numeri di
+    banco/program salvati nel progetto non corrispondono più agli stessi
+    strumenti). Lo mandiamo noi via codice a ogni avvio: autoriparante,
+    non dipende da cosa risulta salvato in patch.carxp."""
+    if not _engine_out_path:
+        return
+    try:
+        with open(_engine_out_path, "wb", buffering=0) as f:
+            f.write(bytes([0xB9, 0x00, 1]))   # Bank Select MSB=1 (canale 10)
+            f.write(bytes([0xB9, 0x20, 0]))   # Bank Select LSB=0 -> banco 128
+            f.write(bytes([0xC9, 0]))         # Program Change 0 (Standard Kit)
+        print("[Herbarium] Banco percussioni GM impostato (canale 10)")
+    except OSError as e:
+        print(f"[Herbarium] Impostazione banco percussioni fallita: {e}")
+
+
+def _write_note(note: int, velocity: int, length_ms: int, channel: int = 1):
     path = _engine_out_path
     if not path:
         return
     note = max(0, min(127, int(note)))
     velocity = max(1, min(127, int(velocity)))
+    status = 0x90 | ((channel - 1) & 0x0F)
     with _play_lock:
         try:
             with open(path, "wb", buffering=0) as f:
-                f.write(bytes([0x90, note, velocity]))
+                f.write(bytes([status, note, velocity]))
         except OSError as e:
             print(f"[Herbarium] Scrittura MIDI fallita ({path}): {e}")
             return
-    threading.Timer(length_ms / 1000.0, _write_note_off, args=(path, note)).start()
+    threading.Timer(length_ms / 1000.0, _write_note_off, args=(path, note, channel)).start()
 
 
-def _write_note_off(path: str, note: int):
+def _write_note_off(path: str, note: int, channel: int = 1):
+    status = 0x80 | ((channel - 1) & 0x0F)
     with _play_lock:
         try:
             with open(path, "wb", buffering=0) as f:
-                f.write(bytes([0x80, note, 0]))
+                f.write(bytes([status, note, 0]))
         except OSError:
             pass
 
@@ -353,6 +418,8 @@ def main():
     _mqtt.connect_async(config.MQTT_HOST, config.MQTT_PORT, 60)
     threading.Thread(target=_mqtt.loop_forever,
                      kwargs={"retry_first_connection": True}, daemon=True).start()
+    threading.Thread(target=_pad_loop, daemon=True).start()
+    threading.Thread(target=_drum_loop, daemon=True).start()
 
     last_scan = last_beat = 0.0
     while _running:
