@@ -24,19 +24,24 @@ canvas {
     inset: 0;
 }
 
-/* Link portale, discreto come admin-link della welcome */
-#portal-link {
+/* Mini-nav, discreta come l'ex link portale solo — niente barra pesante,
+   la pagina resta un'immersione, non un'app con chrome */
+#mini-nav {
     position: fixed;
     top: 16px;
     left: 20px;
+    z-index: 10;
+    display: flex;
+    gap: 10px;
+}
+#mini-nav a {
     color: #101828;
     font-size: 1rem;
     text-decoration: none;
-    z-index: 10;
-    padding: 4px 8px;
+    padding: 4px 6px;
     transition: color .25s;
 }
-#portal-link:hover { color: #6b7a99; }
+#mini-nav a:hover { color: #6b7a99; }
 
 /* Stato connessione — stesso pattern ws-dot di dashboard/welcome */
 #ws-dot {
