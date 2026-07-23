@@ -5405,5 +5405,102 @@
         "x": 670,
         "y": 1500,
         "wires": []
+    },
+    {
+        "id": "music_library_http",
+        "type": "http in",
+        "z": "tab_media",
+        "name": "GET /gaia/music/library",
+        "url": "/gaia/music/library",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 160,
+        "y": 1540,
+        "wires": [
+            [
+                "music_library_fn"
+            ]
+        ]
+    },
+    {
+        "id": "music_library_fn",
+        "type": "function",
+        "z": "tab_media",
+        "name": "MusicLibrary",
+        "func": "// GET /gaia/music/library -> scansione ricorsiva della libreria locale.\n// Filtra i file spazzatura macOS (\"._nome.mp3\", AppleDouble da copie via\n// Finder/SMB) e tutto ciò che non e' un vero mp3. Titolo ripulito dal\n// prefisso numerico (convenzione Beatport/DJ pool: \"12345678_Titolo_(Remix).mp3\").\nconst ROOT = '/media/core/D/musica';\n\nfunction cleanTitle(base) {\n    let t = base.replace(/\\.mp3$/i, '');\n    t = t.replace(/^\\d+_/, '');\n    t = t.replace(/_/g, ' ');\n    return t.trim();\n}\n\nconst tracks = [];\nconst folders = [];\ntry {\n    for (const folder of fs.readdirSync(ROOT, { withFileTypes: true })) {\n        if (!folder.isDirectory()) continue;\n        const dir = path.join(ROOT, folder.name);\n        let files;\n        try { files = fs.readdirSync(dir); } catch (e) { continue; }\n        let any = false;\n        for (const f of files) {\n            if (!f.toLowerCase().endsWith('.mp3') || f.startsWith('._') || f.startsWith('.')) continue;\n            any = true;\n            const rel = `${folder.name}/${f}`;\n            tracks.push({\n                id: rel,\n                folder: folder.name,\n                title: cleanTitle(f),\n                url: `/gaia/music/file/${encodeURIComponent(folder.name)}/${encodeURIComponent(f)}`,\n            });\n        }\n        if (any) folders.push(folder.name);\n    }\n} catch (e) {\n    node.warn(`[Music] Scansione libreria fallita: ${e.message}`);\n}\ntracks.sort((a, b) => a.title.localeCompare(b.title, 'it'));\nfolders.sort();\n\nmsg.payload = { tracks, folders, count: tracks.length, ts: Date.now() };\nmsg.headers = { 'Access-Control-Allow-Origin': '*' };\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [
+            {
+                "var": "fs",
+                "module": "fs"
+            },
+            {
+                "var": "path",
+                "module": "path"
+            }
+        ],
+        "x": 380,
+        "y": 1540,
+        "wires": [
+            [
+                "music_library_resp"
+            ]
+        ]
+    },
+    {
+        "id": "music_library_resp",
+        "type": "http response",
+        "z": "tab_media",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 590,
+        "y": 1540,
+        "wires": []
+    },
+    {
+        "id": "music_file_http",
+        "type": "http in",
+        "z": "tab_media",
+        "name": "GET /gaia/music/file/:folder/:filename",
+        "url": "/gaia/music/file/:folder/:filename",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 200,
+        "y": 1600,
+        "wires": [
+            [
+                "music_file_fn"
+            ]
+        ]
+    },
+    {
+        "id": "music_file_fn",
+        "type": "function",
+        "z": "tab_media",
+        "name": "MusicFileServe",
+        "func": "// GET /gaia/music/file/:folder/:filename -> serve il file audio (con\n// supporto Range per il seek, via res.sendFile — Express lo fa da solo).\n// Validazione path rigorosa: SOLO dentro ROOT, SOLO .mp3, niente traversal.\nconst ROOT = '/media/core/D/musica';\n\nconst folder = decodeURIComponent(msg.req.params.folder || '');\nconst filename = decodeURIComponent(msg.req.params.filename || '');\nconst abs = path.normalize(path.join(ROOT, folder, filename));\n\nif (!abs.startsWith(ROOT + path.sep) || !abs.toLowerCase().endsWith('.mp3') || filename.startsWith('.')) {\n    msg.res.status(403).send('Forbidden');\n    return null;\n}\n\nmsg.res.sendFile(abs, (err) => {\n    if (err && !msg.res.headersSent) {\n        node.warn(`[Music] sendFile fallito (${abs}): ${err.message}`);\n    }\n});\nreturn null;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [
+            {
+                "var": "path",
+                "module": "path"
+            }
+        ],
+        "x": 460,
+        "y": 1600,
+        "wires": [
+            []
+        ]
     }
 ]

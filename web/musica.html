@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GAIA — Musica</title>
+<style>
+:root{--bg:#050810;--card:#0e1221;--border:#1e2840;--accent:#00ffcc;--blue:#58a6ff;--yellow:#e3b341;--red:#f85149;--green:#3fb950;--text:#c9d1d9;--muted:#6b7a99}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;padding:16px;min-height:100vh}
+
+.nav{display:flex;gap:12px;margin-bottom:18px;align-items:center;border-bottom:1px solid var(--border);padding-bottom:12px;flex-wrap:wrap}
+.nav a{color:var(--muted);text-decoration:none;font-size:.8rem;padding:4px 10px;border-radius:6px;transition:all .15s}
+.nav a:hover{color:var(--text);background:var(--card)}
+.nav a.active{color:var(--accent);background:#001a12}
+.nav-title{font-size:1.1rem;font-weight:700;color:var(--accent);margin-right:8px;display:flex;align-items:center;gap:8px}
+.ws-dot{width:8px;height:8px;border-radius:50%;background:var(--muted);display:inline-block;transition:background .3s;flex-shrink:0}
+.ws-dot.ok{background:var(--green);box-shadow:0 0 6px var(--green)}
+.ws-dot.err{background:var(--red)}
+
+h2{font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:18px 0 10px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px}
+
+/* Stanze */
+.rooms{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px}
+.room-chip{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:7px 16px;
+  font-size:.82rem;cursor:pointer;transition:all .15s;user-select:none;display:flex;align-items:center;gap:6px}
+.room-chip:hover{border-color:var(--muted)}
+.room-chip.on{background:#001a12;border-color:var(--accent);color:var(--accent)}
+.room-chip .st{width:6px;height:6px;border-radius:50%;background:var(--muted)}
+.room-chip.playing .st{background:var(--green);box-shadow:0 0 5px var(--green)}
+.room-chip.paused .st{background:var(--yellow)}
+.room-all{font-weight:700}
+
+/* Ora in riproduzione */
+.now-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-bottom:6px}
+.now-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px}
+.now-card.playing{border-color:#1a3a2c}
+.now-room{font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:4px;display:flex;justify-content:space-between}
+.now-title{font-size:.86rem;font-weight:600;min-height:1.2em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.now-sub{font-size:.72rem;color:var(--muted);margin-top:2px}
+.now-controls{display:flex;align-items:center;gap:8px;margin-top:8px}
+.now-controls button{background:none;border:1px solid var(--border);color:var(--text);border-radius:6px;
+  padding:3px 8px;cursor:pointer;font-size:.8rem}
+.now-controls button:hover{border-color:var(--accent);color:var(--accent)}
+.now-controls input[type=range]{flex:1;accent-color:var(--accent)}
+.empty-hint{color:var(--muted);font-size:.82rem;padding:10px 0}
+
+/* Transport globale */
+.transport{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:6px}
+.btn{background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;
+  padding:9px 16px;cursor:pointer;font-size:.85rem;font-weight:600;transition:all .15s}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:#001a12;border-color:var(--accent);color:var(--accent)}
+.mode-toggle{display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.mode-toggle button{background:var(--card);border:none;color:var(--muted);padding:9px 14px;cursor:pointer;font-size:.82rem}
+.mode-toggle button.on{background:var(--accent);color:#001a12;font-weight:700}
+
+/* Libreria */
+.lib-tools{display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.lib-tools input[type=text]{background:#0a0e1c;border:1px solid var(--border);color:var(--text);
+  border-radius:8px;padding:8px 12px;font-size:.85rem;flex:1;min-width:180px}
+.lib-tools select{background:#0a0e1c;border:1px solid var(--border);color:var(--text);
+  border-radius:8px;padding:8px 12px;font-size:.85rem}
+.lib-count{color:var(--muted);font-size:.78rem;align-self:center;margin-left:auto}
+.tracklist{max-height:52vh;overflow-y:auto;border:1px solid var(--border);border-radius:12px}
+.track{display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid #131a2c;
+  cursor:pointer;transition:background .1s}
+.track:last-child{border-bottom:none}
+.track:hover{background:#111528}
+.track .play-ic{color:var(--muted);font-size:.9rem;width:16px;flex-shrink:0}
+.track:hover .play-ic{color:var(--accent)}
+.track .t-title{flex:1;font-size:.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.track .t-folder{font-size:.7rem;color:var(--muted);flex-shrink:0}
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <div class="nav-title"><div class="ws-dot" id="wsdot"></div>GAIA · Musica</div>
+  <a href="portal.html">⌂</a>
+  <a href="dashboard.html">Dashboard</a>
+  <a href="admin.html">Admin</a>
+  <a href="welcome.html">Welcome</a>
+  <a href="cameras.html">Camere</a>
+  <a href="game.html">Gioco</a>
+  <a href="musica.html" class="active">Musica</a>
+  <a href="gaia-art/index.html">Arte</a>
+</div>
+
+<h2>Stanze</h2>
+<div class="rooms" id="rooms"><span class="empty-hint">Carico i player disponibili…</span></div>
+
+<h2>In riproduzione</h2>
+<div class="now-grid" id="nowGrid"><span class="empty-hint">—</span></div>
+
+<h2>Autoplay</h2>
+<div class="transport">
+  <button class="btn primary" id="btnPlayLib">▶ Avvia libreria</button>
+  <div class="mode-toggle">
+    <button id="modeShuffle" class="on">🔀 Shuffle</button>
+    <button id="modeSeq">➡ Ordinata</button>
+  </div>
+  <button class="btn" id="btnPrev">⏮ Prec.</button>
+  <button class="btn" id="btnPause">⏸ Pausa</button>
+  <button class="btn" id="btnResume">▶ Riprendi</button>
+  <button class="btn" id="btnNext">⏭ Succ.</button>
+  <button class="btn" id="btnStop">⏹ Stop</button>
+</div>
+
+<h2>Libreria (<span id="libTotal">…</span> brani)</h2>
+<div class="lib-tools">
+  <input type="text" id="search" placeholder="Cerca titolo…">
+  <select id="folderSel"><option value="">Tutte le cartelle</option></select>
+  <span class="lib-count" id="filterCount"></span>
+</div>
+<div class="tracklist" id="tracklist"><div class="empty-hint" style="padding:14px">Carico la libreria…</div></div>
+
+<script>
+let _client = null;
+const _rooms = {};             // stanza -> {device, service, state, title, volume, queue, ...}
+let _selected = new Set(JSON.parse(localStorage.getItem('gaiaMusicRooms') || '[]'));
+let _library = { tracks: [], folders: [] };
+let _filtered = [];
+let _mode = 'shuffle';
+
+function escHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function saveSelection(){ localStorage.setItem('gaiaMusicRooms', JSON.stringify([..._selected])); }
+
+// ── Stanze ───────────────────────────────────────────────────────────────
+async function loadRooms(){
+  try{
+    const r = await fetch('/gaia/media/state').then(x=>x.json());
+    for (const [room, p] of Object.entries(r.players||{})){
+      _rooms[room] = { ...(_rooms[room]||{}), ...p };
+    }
+    if (!_selected.size) for (const room of Object.keys(_rooms)) _selected.add(room);
+  } catch(e){}
+  renderRooms();
+  renderNowPlaying();
+}
+
+function toggleRoom(room){
+  if (_selected.has(room)) _selected.delete(room); else _selected.add(room);
+  saveSelection();
+  renderRooms();
+}
+
+function renderRooms(){
+  const rooms = Object.keys(_rooms);
+  const el = document.getElementById('rooms');
+  if (!rooms.length){ el.innerHTML = '<span class="empty-hint">Nessun player attivo — accendi "mediaplayer" da Pi Manager/Telegram.</span>'; return; }
+  const allOn = rooms.every(r => _selected.has(r));
+  let html = `<div class="room-chip room-all ${allOn?'on':''}" onclick="toggleAll()">Tutte</div>`;
+  html += rooms.map(room=>{
+    const st = (_rooms[room]||{}).state || 'stopped';
+    return `<div class="room-chip ${_selected.has(room)?'on':''} ${st}" onclick="toggleRoom('${room}')">
+      <span class="st"></span>${escHtml(room)}</div>`;
+  }).join('');
+  el.innerHTML = html;
+}
+
+function toggleAll(){
+  const rooms = Object.keys(_rooms);
+  const allOn = rooms.every(r => _selected.has(r));
+  _selected = new Set(allOn ? [] : rooms);
+  saveSelection();
+  renderRooms();
+}
+
+// ── Ora in riproduzione ────────────────────────────────────────────────────
+function renderNowPlaying(){
+  const rooms = Object.keys(_rooms);
+  const el = document.getElementById('nowGrid');
+  if (!rooms.length){ el.innerHTML = '<span class="empty-hint">—</span>'; return; }
+  el.innerHTML = rooms.map(room=>{
+    const p = _rooms[room] || {};
+    const st = p.state || 'stopped';
+    const q = p.queue ? ` · ${p.queue.index+1}/${p.queue.total} (${p.queue.mode==='shuffle'?'shuffle':'ordinata'})` : '';
+    const icon = st === 'playing' ? '▶️' : st === 'paused' ? '⏸' : '⏹';
+    return `<div class="now-card ${st}">
+      <div class="now-room"><span>${escHtml(room)}</span><span>${icon}</span></div>
+      <div class="now-title">${escHtml(p.title || (st==='stopped'?'silenzio':'—'))}</div>
+      <div class="now-sub">${st}${q}</div>
+      <div class="now-controls">
+        <button onclick="send('${room}',{action:'stop'})">⏹</button>
+        <button onclick="send('${room}',{action:'pause'})">⏸</button>
+        <button onclick="send('${room}',{action:'resume'})">▶</button>
+        <input type="range" min="0" max="100" value="${p.volume ?? 60}"
+               onchange="send('${room}',{action:'volume',value:+this.value})">
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function send(room, payload){
+  if (_client && _client.connected) _client.publish(`gaia/media/${room}/command`, JSON.stringify(payload));
+}
+function sendToSelected(payload){
+  for (const room of _selected) send(room, payload);
+}
+
+// ── MQTT (stato live) ──────────────────────────────────────────────────────
+function connectMqtt(){
+  const dot = document.getElementById('wsdot');
+  const url = `ws://${location.hostname}:9001`;
+  function start(){
+    _client = mqtt.connect(url);
+    _client.on('connect', ()=>{ dot.className='ws-dot ok'; _client.subscribe('gaia/media/+/status'); });
+    _client.on('close',   ()=> dot.className='ws-dot err');
+    _client.on('error',   ()=> dot.className='ws-dot err');
+    _client.on('message', (topic, raw)=>{
+      const room = topic.split('/')[2];
+      if (!raw || !raw.length){ delete _rooms[room]; renderRooms(); renderNowPlaying(); return; }
+      try{
+        const st = JSON.parse(raw.toString());
+        const isNew = !_rooms[room];
+        _rooms[room] = { ...(_rooms[room]||{}), ...st };
+        if (isNew) renderRooms();
+        renderNowPlaying();
+      } catch(e){}
+    });
+  }
+  if (typeof mqtt !== 'undefined') start();
+  else {
+    const s = document.createElement('script');
+    s.src = 'https://unpkg.com/mqtt/dist/mqtt.min.js';
+    s.onload = start;
+    document.head.appendChild(s);
+  }
+}
+
+// ── Libreria ─────────────────────────────────────────────────────────────
+async function loadLibrary(){
+  try{
+    _library = await fetch('/gaia/music/library').then(x=>x.json());
+  } catch(e){ _library = { tracks: [], folders: [] }; }
+  document.getElementById('libTotal').textContent = _library.count ?? _library.tracks.length;
+  const sel = document.getElementById('folderSel');
+  sel.innerHTML = '<option value="">Tutte le cartelle</option>' +
+    _library.folders.map(f=>`<option value="${escHtml(f)}">${escHtml(f)}</option>`).join('');
+  applyFilter();
+}
+
+function applyFilter(){
+  const q = document.getElementById('search').value.trim().toLowerCase();
+  const folder = document.getElementById('folderSel').value;
+  _filtered = _library.tracks.filter(t =>
+    (!folder || t.folder === folder) && (!q || t.title.toLowerCase().includes(q)));
+  renderTracklist();
+}
+
+function renderTracklist(){
+  document.getElementById('filterCount').textContent = `${_filtered.length} visualizzati`;
+  const el = document.getElementById('tracklist');
+  if (!_filtered.length){ el.innerHTML = '<div class="empty-hint" style="padding:14px">Nessun brano corrisponde.</div>'; return; }
+  // limite di render per non appesantire il DOM con centinaia di righe insieme
+  const MAX = 300;
+  const shown = _filtered.slice(0, MAX);
+  el.innerHTML = shown.map((t,i)=>`
+    <div class="track" onclick="playFrom(${i})" title="${escHtml(t.folder)}">
+      <span class="play-ic">▶</span>
+      <span class="t-title">${escHtml(t.title)}</span>
+      <span class="t-folder">${escHtml(t.folder)}</span>
+    </div>`).join('') +
+    (_filtered.length > MAX ? `<div class="empty-hint" style="padding:10px 14px">…e altri ${_filtered.length-MAX} (affina la ricerca per vederli)</div>` : '');
+}
+
+function playFrom(index){
+  if (!_selected.size){ alert('Seleziona almeno una stanza.'); return; }
+  const urls = _filtered.map(t=>t.url);
+  sendToSelected({ action:'queue', urls, mode:_mode, start_index:index });
+}
+
+function playLibrary(){
+  if (!_selected.size){ alert('Seleziona almeno una stanza.'); return; }
+  const urls = (_filtered.length ? _filtered : _library.tracks).map(t=>t.url);
+  if (!urls.length){ alert('Nessun brano nella libreria.'); return; }
+  sendToSelected({ action:'queue', urls, mode:_mode });
+}
+
+function setMode(m){
+  _mode = m;
+  document.getElementById('modeShuffle').classList.toggle('on', m==='shuffle');
+  document.getElementById('modeSeq').classList.toggle('on', m==='sequential');
+}
+
+// ── Eventi UI ────────────────────────────────────────────────────────────
+document.getElementById('btnPlayLib').onclick = playLibrary;
+document.getElementById('modeShuffle').onclick = ()=>setMode('shuffle');
+document.getElementById('modeSeq').onclick = ()=>setMode('sequential');
+document.getElementById('btnPrev').onclick   = ()=>sendToSelected({action:'prev'});
+document.getElementById('btnNext').onclick   = ()=>sendToSelected({action:'next'});
+document.getElementById('btnPause').onclick  = ()=>sendToSelected({action:'pause'});
+document.getElementById('btnResume').onclick = ()=>sendToSelected({action:'resume'});
+document.getElementById('btnStop').onclick   = ()=>sendToSelected({action:'stop'});
+document.getElementById('search').addEventListener('input', applyFilter);
+document.getElementById('folderSel').addEventListener('change', applyFilter);
+
+connectMqtt();
+loadRooms();
+loadLibrary();
+setInterval(loadRooms, 15000);   // riallinea se un player si accende/spegne
+</script>
+</body>
+</html>

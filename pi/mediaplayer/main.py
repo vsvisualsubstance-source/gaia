@@ -5,15 +5,27 @@ GAIA Mediaplayer — musica/radio per stanza (docs/core-distribuito.md).
 mpv in modalità IPC (--input-ipc-server) pilotato via MQTT:
   gaia/media/{stanza}/command  ← {"action": "play", "url": "..."} | pause |
                                   resume | stop | {"action":"volume","value":0-100}
-  gaia/media/{stanza}/status   → retained {state, title, volume, url, ts}
+                                  {"action":"queue","urls":[...],"mode":"shuffle"|"sequential"}
+                                  next | prev
+  gaia/media/{stanza}/status   → retained {state, title, volume, url, ts, queue?}
 
 La stanza segue il Device Registry (gaia/devices/{id}/config, retained) come
 fa voice: spostando il device i topic si rimappano da soli.
 Ogni stanza è indipendente (design mpv+MQTT; Snapcast per il multi-room
 sincronizzato è un'evoluzione futura, non questo modulo).
+
+Coda/autoplay (2026-07-23): "queue" carica una playlist di URL (in genere
+la libreria locale servita via HTTP da Node-RED, ma qualsiasi lista di URL
+funziona) e la fa avanzare da sola — il loop principale osserva la
+transizione "stava suonando" → "idle" di mpv (fine naturale del brano, non
+uno stop esplicito) e carica il prossimo. "shuffle" pesca a caso (evita
+l'immediata ripetizione), "sequential" segue l'ordine e ricomincia in loop.
+Un comando "play"/"stop" esplicito azzera la coda: l'autoplay non deve
+"rubare" il controllo quando l'utente vuole ascoltare una cosa sola.
 """
 import json
 import os
+import random
 import signal
 import socket
 import subprocess
@@ -28,6 +40,13 @@ _running = True
 _current_room = config.ROOM
 _mpv: subprocess.Popen | None = None
 _last_url = None
+
+# ── Coda/autoplay ─────────────────────────────────────────────────────────────
+_queue: list[str] = []
+_queue_mode: str | None = None     # None | "shuffle" | "sequential"
+_queue_pos: int = -1
+_queue_recent: list[int] = []      # ultimi indici scelti in shuffle, per non ripetere subito
+_was_playing = False               # per rilevare la transizione playing→idle (fine naturale)
 
 
 def _shutdown(sig, frame):
@@ -140,11 +159,49 @@ def _publish_status():
         "stanza": _current_room,
         "ts":     int(time.time() * 1000),
     }
+    if _queue_mode:
+        payload["queue"] = {"mode": _queue_mode, "index": _queue_pos, "total": len(_queue)}
     _mqtt.publish(_topic_status(), json.dumps(payload), retain=True)
 
 
+def _clear_queue():
+    global _queue, _queue_mode, _queue_pos, _queue_recent
+    _queue, _queue_mode, _queue_pos, _queue_recent = [], None, -1, []
+
+
+def _pick_next_index() -> int | None:
+    """Prossimo indice in coda secondo la modalità corrente. None se la coda è vuota."""
+    if not _queue:
+        return None
+    if _queue_mode == "sequential":
+        return (_queue_pos + 1) % len(_queue)
+    # shuffle: pesca a caso evitando gli ultimi scelti (se la coda è abbastanza lunga)
+    avoid = set(_queue_recent[-min(len(_queue) - 1, 5):]) if len(_queue) > 1 else set()
+    choices = [i for i in range(len(_queue)) if i not in avoid] or list(range(len(_queue)))
+    return random.choice(choices)
+
+
+def _load_queue_index(idx: int):
+    global _last_url, _queue_pos
+    _queue_pos = idx
+    _queue_recent.append(idx)
+    del _queue_recent[:-8]
+    _last_url = _queue[idx]
+    _ipc(["loadfile", _last_url, "replace"])
+    _ipc(["set_property", "pause", False])
+
+
+def _advance_queue():
+    """Chiamata quando mpv passa da 'playing' a 'idle' da solo (brano finito) —
+    non per uno stop esplicito (quello azzera la coda in _handle_command)."""
+    idx = _pick_next_index()
+    if idx is not None:
+        print(f"[Media] Autoplay: avanzo a {idx + 1}/{len(_queue)}")
+        _load_queue_index(idx)
+
+
 def _handle_command(payload: bytes):
-    global _last_url
+    global _last_url, _queue, _queue_mode
     try:
         cmd = json.loads(payload)
     except ValueError:
@@ -153,14 +210,32 @@ def _handle_command(payload: bytes):
     action = (cmd.get("action") or "").lower()
     print(f"[Media] Comando: {action} {cmd.get('url') or cmd.get('value') or ''}")
     if action == "play" and cmd.get("url"):
+        _clear_queue()
         _last_url = cmd["url"]
         _ipc(["loadfile", cmd["url"], "replace"])
         _ipc(["set_property", "pause", False])
+    elif action == "queue" and cmd.get("urls"):
+        _clear_queue()
+        _queue = list(cmd["urls"])
+        _queue_mode = "sequential" if cmd.get("mode") == "sequential" else "shuffle"
+        start = cmd.get("start_index")
+        idx = start if isinstance(start, int) and 0 <= start < len(_queue) else _pick_next_index()
+        if idx is not None:
+            _load_queue_index(idx)
+    elif action == "next":
+        if _queue:
+            _advance_queue()
+    elif action == "prev":
+        if _queue and _queue_mode == "sequential":
+            _load_queue_index((_queue_pos - 1) % len(_queue))
+        elif _queue:
+            _advance_queue()   # in shuffle "indietro" non ha un vero senso: un'altra pesca
     elif action == "pause":
         _ipc(["set_property", "pause", True])
     elif action == "resume":
         _ipc(["set_property", "pause", False])
     elif action == "stop":
+        _clear_queue()
         _ipc(["stop"])
     elif action == "volume":
         try:
@@ -208,6 +283,7 @@ _mqtt.on_message = _on_message
 
 
 def main():
+    global _was_playing
     _mpv_start()
     print(f"[Media] mpv avviato (socket {config.MPV_SOCK}, vol {config.DEFAULT_VOLUME})")
     _mqtt.connect_async(config.MQTT_HOST, config.MQTT_PORT, 60)
@@ -226,6 +302,19 @@ def main():
             except Exception as e:
                 print(f"[Media] riavvio mpv fallito: {e}")
                 time.sleep(5)
+        # Autoplay: rilevata la transizione playing→idle (brano finito da solo,
+        # non uno stop esplicito — quello passa da _handle_command e azzera
+        # _queue_mode prima che questo controllo scatti). Controllato ogni giro
+        # (0.5s), non solo a ogni STATUS_EVERY_S: altrimenti fino a qualche
+        # secondo di silenzio tra un brano e l'altro.
+        try:
+            idle = bool(_prop("idle-active"))
+            if _was_playing and idle and _queue_mode:
+                _advance_queue()
+            _was_playing = not idle
+        except Exception as e:
+            print(f"[Media] autoplay-check errore: {e}")
+
         if time.time() - last_status >= config.STATUS_EVERY_S:
             last_status = time.time()
             try:
