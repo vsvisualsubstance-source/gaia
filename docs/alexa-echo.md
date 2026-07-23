@@ -25,6 +25,17 @@ stanza**. Collegato a:
   con retained `{"enabled":false}` su `gaia/config/echoannounce`.
 - **Vessillo** (Tap tasto 3): oltre a Telegram, parla in soggiorno.
 
+**Voce dedicata a Gaia (2026-07-23)**: il canale `textToSpeech` del binding
+supporta SSML (documentato nel binding stesso, verificato dal vivo che
+`<voice name="...">` cambia voce davvero, non solo nelle skill Alexa
+native). EchoSay avvolge ogni testo in
+`<speak><voice name="Carla">...</voice></speak>` prima di mandarlo (a meno
+che sia già SSML, riconosciuto dal prefisso `<speak`) — così un annuncio
+di Gaia si sente subito diverso dalla voce nativa di Alexa (quella resta
+quella di default del dispositivo, impostazione dell'app Alexa — non
+controllabile da qui). Voci italiane disponibili testate: Giorgio
+(maschile), Carla e Bianca (femminili).
+
 ## Orecchie — `LastVoice → brain` — ⚠️ BLOCCATE DA AMAZON (2026-07-19)
 
 **Stato reale**: tutta la catena a valle è pronta e testata, ma il canale
