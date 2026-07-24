@@ -32,13 +32,20 @@ def cmd_sub(args):
         if args.count and len(seen) >= args.count:
             client.disconnect()
 
+    def on_connect(client, userdata, flags, rc, properties=None):
+        client.subscribe(args.topic)
+
     try:
         client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
     except AttributeError:
         client = mqtt.Client()
+    client.on_connect = on_connect
     client.on_message = on_message
     client.connect(args.host, 1883, 60)
-    client.subscribe(args.topic)
+    # sottoscrivere in on_connect (non subito dopo connect()) e SOLO dopo
+    # loop_start() e' importante: prima del fix, subscribe() chiamato prima
+    # che il loop di rete stia girando restava in coda e non veniva mai
+    # trasmesso in modo affidabile -- falsi negativi silenziosi nei test.
     client.loop_start()
     time.sleep(args.seconds)
     client.loop_stop()
