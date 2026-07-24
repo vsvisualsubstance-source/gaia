@@ -338,7 +338,7 @@
         "type": "mqtt out",
         "z": "082363fa8be6eb11",
         "name": "TTS OUT",
-        "topic": "casa/tts/play",
+        "topic": "",
         "qos": "1",
         "retain": "false",
         "broker": "29b6d5926d1a95ec",
