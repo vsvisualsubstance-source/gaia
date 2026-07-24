@@ -67,3 +67,60 @@ Arduino framework (C++, più familiare, più esempi per sensori economici) vs Mi
 (prototipazione più rapida, meno performante) vs ESP-IDF nativo (più controllo, più lavoro).
 Non decidere ora — rivalutare quando il primo caso d'uso reale (quale sensore, quale stanza)
 è chiaro, e aggiornare questo documento con la scelta e il perché.
+
+## Primo caso d'uso reale trovato: il "mattone intelligente" (2026-07-24)
+
+GAIA fa parte di un progetto più ampio, **Casa Zero** (casa stampata in 3D,
+repo separato `github.com/vsvisualsubstance-source/casazero` — sito
+crowdfunding + laboratorio open source). Il mattone/muro/pavimento stampato
+può nascere specializzato in fase di stampa con una cartuccia elettronica
+estraibile (variante `B-G` = "nodo Gaia", tra le altre — vedi
+`mattone.html`/`CLAUDE.md` del repo casazero): è esattamente il primo caso
+d'uso reale che questo documento aspettava.
+
+Prima di scrivere firmware vero, costruito un **prototipo software** in
+`esp/sim/brick_node.py` — stesso approccio di `pi/herbarium/plant_simulator.py`
+(finge l'hardware al confine del protocollo). Parla il protocollo MQTT reale
+di GAIA (discovery/announce/profilo/comandi, invariato) ed è stato esteso
+con due concetti nuovi introdotti dal "DNA Costruttivo" di casazero
+(`dna.html`), pensati per elementi edilizi passivi e non ancora presenti nel
+profilo semantico GAIA:
+
+- `interfaces` (power/data/mesh) — quali canali fisici il nodo usa.
+- `position.neighbors` (nord/sud/est/ovest/sopra/sotto) — topologia locale
+  senza mappa centrale.
+
+Entrambi additivi, verificato dal vivo che non rompono nulla (un mattone
+simulato appare in `GET /gaia/devices/profiles` esattamente come un
+Pi/OPS, `suggested_modules` resta correttamente vuoto perché le sue
+capability non matchano `CAP_MODULES`, pensato per hardware Pi/OPS).
+Dettagli d'uso: `esp/README.md`.
+
+**Ancora aperto**: la scelta Arduino/MicroPython/ESP-IDF resta da fare — il
+prototipo Python serve a capire QUALI capability/servizi/topologia servono
+davvero prima di impegnarsi in un linguaggio, non a sostituire la decisione.
+
+## Normalizzatore sensori→brain (2026-07-24)
+
+Prima lacuna reale trovata: i dati sensore del mattone (`gaia/brick/{id}/sensor`)
+arrivavano ma nessuno li leggeva — non finivano nel `brain`, quindi non
+comparivano né in dashboard né erano disponibili per automazioni. Aggiunto,
+stesso pattern di `PlantNorm`/`HueNorm` (tab Normalyzer): `Brick Sensor`
+(mqtt-in) → `BrickNorm` (spacca un messaggio multi-campo in un
+`msg.event` per categoria, temperature/humidity/vibration/air_quality) →
+stesso link-out condiviso → `GAIA Brain` (nuovo branch
+`e.source === "brick"`, scrive in `brain.sensors[device_id]` come qualsiasi
+altro sensore fisico). Esposto anche nel payload WS (`ThreeViewEngineGAME`,
+campi nuovi in `sensors[]`).
+
+Verificato dal vivo: mattone simulato → dati visibili nel payload WS
+dashboard, catena completa. **Bug trovato e sistemato nello stesso giro**:
+`POST /gaia/device/forget` non ripuliva `brain.sensors[device_id]` — un
+device dimenticato lasciava un sensore fantasma per sempre nella dashboard
+(scoperto testando proprio questo normalizzatore). Ora pulisce anche
+`brain.sensors`/`brain.plants` per lo stesso `device_id`.
+
+**Prossimo passo esplicitamente rimandato dall'utente**: una card o pagina
+dedicata in admin.html/dashboard per i mattoni (oggi si vedono solo come
+righe generiche nell'array `sensors`, senza mostrare `interfaces`/
+`position.neighbors`/`brick_variant`).
