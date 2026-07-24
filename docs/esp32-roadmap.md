@@ -124,3 +124,32 @@ device dimenticato lasciava un sensore fantasma per sempre nella dashboard
 dedicata in admin.html/dashboard per i mattoni (oggi si vedono solo come
 righe generiche nell'array `sensors`, senza mostrare `interfaces`/
 `position.neighbors`/`brick_variant`).
+
+## Pagina dedicata `web/mattoni.html` (2026-07-24)
+
+Scelta tra card veloce in admin.html e pagina con mappa: l'utente ha scelto
+la mappa. `mattoni.html` calcola il layout in modo emergente — BFS dalle
+relazioni `position.neighbors` (nord/sud/est/ovest/sopra/sotto) dichiarate
+da ogni mattone, NESSUNA coordinata assoluta/centrale, coerente col
+principio del DNA Costruttivo di casazero ("le cellule conoscono i
+vicini"). Multi-piano: `sopra`/`sotto` cambiano lo z, selettore piano
+mostrato solo se >1 livello rilevato. Mattoni senza vicini dichiarati
+finiscono in un vassoio "non ancora collegati" a parte.
+
+Dati: poll di `GET /gaia/devices/profiles` ogni 5s (topologia/registry) +
+WS `ws://:1880/gaia` per le letture sensore live (stesso array `sensors[]`
+già esposto per la dashboard). Nav aggiornata su tutte le pagine + card in
+portal.html.
+
+**Nota di sicurezza applicata**: i profili device arrivano da MQTT non
+autenticato (vedi `docs/audit-2026-07-23.md`) — a differenza di
+`dashboard.html`/`cameras.html` (XSS trovato nell'audit, non ancora
+corretto lì), questa pagina costruisce il DOM con `createElement`/
+`textContent`, mai `innerHTML` con stringhe interpolate: un device_id o
+nome stanza malevolo non può iniettare HTML/JS.
+
+Verificato dal vivo: due mattoni simulati con vicinato reciproco
+(`est`/`ovest`) → dati confermati via `/gaia/devices/profiles` nella forma
+esatta attesa dal codice. **Non verificato**: la resa visiva reale nel
+browser — nessun browser headless disponibile in questo ambiente per
+uno screenshot. Da controllare aprendo `mattoni.html` di persona.

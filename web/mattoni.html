@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GAIA · Mattoni</title>
+<style>
+:root{--bg:#050810;--card:#0e1221;--border:#1e2840;--accent:#00ffcc;--blue:#58a6ff;--yellow:#e3b341;--red:#f85149;--green:#3fb950;--purple:#c678dd;--text:#c9d1d9;--muted:#6b7a99}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;padding:16px;min-height:100vh}
+
+.nav{display:flex;gap:12px;margin-bottom:18px;align-items:center;border-bottom:1px solid var(--border);padding-bottom:12px;flex-wrap:wrap}
+.nav a{color:var(--muted);text-decoration:none;font-size:.8rem;padding:4px 10px;border-radius:6px;transition:all .15s}
+.nav a:hover{color:var(--text);background:var(--card)}
+.nav a.active{color:var(--accent);background:#001a12}
+.nav-title{font-size:1.1rem;font-weight:700;color:var(--accent);margin-right:8px;display:flex;align-items:center;gap:8px}
+.ws-dot{width:8px;height:8px;border-radius:50%;background:var(--muted);display:inline-block;transition:background .3s;flex-shrink:0}
+.ws-dot.ok{background:var(--green);box-shadow:0 0 6px var(--green)}
+.ws-dot.err{background:var(--red)}
+
+.hero{margin-bottom:16px}
+.hero h1{font-size:1.3rem;font-weight:700;color:var(--text)}
+.hero p{font-size:.85rem;color:var(--muted);margin-top:4px;max-width:640px;line-height:1.5}
+
+.layout{display:grid;grid-template-columns:1fr 300px;gap:16px;align-items:start}
+@media (max-width:860px){.layout{grid-template-columns:1fr}}
+
+.map-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;min-height:420px;position:relative;overflow:hidden}
+.map-toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px;flex-wrap:wrap}
+.map-toolbar .card-title{font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.floor-btns{display:flex;gap:4px}
+.floor-btn{background:var(--bg);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:4px 10px;font-size:.75rem;cursor:pointer}
+.floor-btn.active{color:var(--accent);border-color:var(--accent)}
+#graph{width:100%;height:420px;display:block}
+.empty-state{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--muted);text-align:center;padding:24px}
+.empty-state.show{display:flex}
+.empty-state code{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:.75rem;color:var(--blue)}
+
+.side{display:flex;flex-direction:column;gap:12px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px}
+.card-title{font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:10px}
+.tray-list{display:flex;flex-direction:column;gap:6px}
+.tray-item{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:.78rem;cursor:pointer;display:flex;justify-content:space-between;gap:8px}
+.tray-item:hover{border-color:var(--blue)}
+
+.detail-row{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);font-size:.8rem;gap:8px}
+.detail-row:last-child{border:none}
+.detail-row span:first-child{color:var(--muted)}
+.detail-val{color:var(--accent);font-weight:600;text-align:right}
+.chip-row{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.chip{background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:2px 9px;font-size:.7rem;color:var(--blue)}
+.chip.iface{color:var(--yellow)}
+.chip.svc{color:var(--green)}
+.neigh-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-top:6px;font-size:.72rem;text-align:center}
+.neigh-cell{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:4px;color:var(--muted)}
+.neigh-cell.set{color:var(--text)}
+
+.footer{margin-top:16px;text-align:center;font-size:.7rem;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <div class="nav-title"><div class="ws-dot" id="wsdot"></div>GAIA</div>
+  <a href="portal.html">⌂</a>
+  <a href="dashboard.html">Dashboard</a>
+  <a href="admin.html">Admin</a>
+  <a href="welcome.html">Welcome</a>
+  <a href="cameras.html">Camere</a>
+  <a href="game.html">Gioco</a>
+  <a href="musica.html">Musica</a>
+  <a href="gaia-art/index.html">Arte</a>
+  <a href="mattoni.html" class="active">Mattoni</a>
+</div>
+
+<div class="hero">
+  <h1>🧱 Mattoni</h1>
+  <p>Ogni mattone conosce solo i propri vicini (nord/sud/est/ovest/sopra/sotto) — la mappa qui
+     sotto non viene da un piano centrale, è calcolata dalle relazioni locali che ogni nodo
+     dichiara. Stesso principio del "DNA Costruttivo" di Casa Zero.</p>
+</div>
+
+<div class="layout">
+  <div class="map-card">
+    <div class="map-toolbar">
+      <div class="card-title" id="brickCount">0 mattoni</div>
+      <div class="floor-btns" id="floorBtns"></div>
+    </div>
+    <svg id="graph" viewBox="0 0 600 420"></svg>
+    <div class="empty-state" id="emptyState">
+      <div style="font-size:2rem">🧱</div>
+      <div>Nessun mattone rilevato.</div>
+      <code>python3 esp/sim/brick_node.py --variant B-G --room ingresso</code>
+    </div>
+  </div>
+
+  <div class="side">
+    <div class="card">
+      <div class="card-title">Dettaglio</div>
+      <div id="detailBody" style="color:var(--muted);font-size:.82rem">Seleziona un mattone dalla mappa.</div>
+    </div>
+    <div class="card" id="unconnectedCard" hidden>
+      <div class="card-title">Non ancora collegati</div>
+      <div class="tray-list" id="unconnectedList"></div>
+    </div>
+  </div>
+</div>
+
+<div class="footer">GAIA · Mattoni — mappa emergente, nessuna posizione assoluta</div>
+
+<script>
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const DIR_DELTA = { nord:[0,-1,0], sud:[0,1,0], est:[1,0,0], ovest:[-1,0,0], sopra:[0,0,1], sotto:[0,0,-1] };
+const VARIANT_META = {
+  'B-D': { icon:'💾', color:'var(--blue)',   label:'Dati/sensori' },
+  'B-S': { icon:'🌡️', color:'var(--accent)', label:'Sensore' },
+  'B-G': { icon:'🧠', color:'var(--purple)', label:'Nodo Gaia' },
+  'B-I': { icon:'🔍', color:'var(--yellow)', label:'Ispezionabile' },
+  'B-J': { icon:'🔗', color:'var(--muted)',  label:'Giunzione' },
+  'B-C': { icon:'📐', color:'var(--muted)',  label:'Angolo' },
+};
+const CELL = 90; // px tra un mattone e il vicino nella griglia emergente
+
+let _bricks = [];       // profili grezzi filtrati (role === 'brick')
+let _sensors = {};      // id -> ultima lettura sensore (dal payload WS)
+let _selected = null;
+let _floor = 0;
+
+function metaFor(variant) {
+  return VARIANT_META[variant] || { icon:'❔', color:'var(--muted)', label: variant || '?' };
+}
+
+// ── Layout emergente: BFS dalle relazioni nord/sud/est/ovest/sopra/sotto ────
+// Nessuna mappa centrale: le coordinate nascono dai vicini dichiarati.
+function layoutBricks(bricks) {
+  const byId = new Map(bricks.map(b => [b.device_id, b]));
+  const pos = new Map();
+  const visited = new Set();
+  for (const b of bricks) {
+    if (visited.has(b.device_id)) continue;
+    pos.set(b.device_id, { x: 0, y: 0, z: 0 });
+    visited.add(b.device_id);
+    const queue = [b.device_id];
+    while (queue.length) {
+      const curId = queue.shift();
+      const cur = byId.get(curId);
+      const curPos = pos.get(curId);
+      const neighbors = (cur.position && cur.position.neighbors) || {};
+      for (const [dir, neighborId] of Object.entries(neighbors)) {
+        if (!neighborId || !byId.has(neighborId) || visited.has(neighborId)) continue;
+        const d = DIR_DELTA[dir] || [0, 0, 0];
+        pos.set(neighborId, { x: curPos.x + d[0], y: curPos.y + d[1], z: curPos.z + d[2] });
+        visited.add(neighborId);
+        queue.push(neighborId);
+      }
+    }
+  }
+  return pos;
+}
+
+function hasAnyNeighbor(b) {
+  const n = (b.position && b.position.neighbors) || {};
+  return Object.values(n).some(Boolean);
+}
+
+function svgEl(tag, attrs) {
+  const el = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs || {})) el.setAttribute(k, v);
+  return el;
+}
+
+function renderGraph() {
+  const graph = document.getElementById('graph');
+  graph.innerHTML = '';
+  const connected = _bricks.filter(hasAnyNeighbor);
+  const unconnected = _bricks.filter(b => !hasAnyNeighbor(b));
+
+  document.getElementById('brickCount').textContent =
+    _bricks.length === 1 ? '1 mattone' : `${_bricks.length} mattoni`;
+  document.getElementById('emptyState').classList.toggle('show', _bricks.length === 0);
+
+  // vassoio "non collegati"
+  const unCard = document.getElementById('unconnectedCard');
+  const unList = document.getElementById('unconnectedList');
+  unList.innerHTML = '';
+  unCard.hidden = unconnected.length === 0;
+  unconnected.forEach(b => {
+    const item = document.createElement('div');
+    item.className = 'tray-item';
+    const left = document.createElement('span');
+    left.textContent = `${metaFor(b.brick_variant).icon} ${b.room || '?'}`;
+    const right = document.createElement('span');
+    right.style.color = 'var(--muted)';
+    right.textContent = b.device_id;
+    item.append(left, right);
+    item.onclick = () => selectBrick(b.device_id);
+    unList.appendChild(item);
+  });
+
+  if (!connected.length) {
+    document.getElementById('floorBtns').innerHTML = '';
+    return;
+  }
+
+  const pos = layoutBricks(connected);
+  const floors = [...new Set([...pos.values()].map(p => p.z))].sort((a, b) => a - b);
+  if (!floors.includes(_floor)) _floor = floors[0];
+
+  // selettore piano (solo se ne esiste più di uno)
+  const floorBtns = document.getElementById('floorBtns');
+  floorBtns.innerHTML = '';
+  if (floors.length > 1) {
+    floors.forEach(z => {
+      const btn = document.createElement('button');
+      btn.className = 'floor-btn' + (z === _floor ? ' active' : '');
+      btn.textContent = z === 0 ? 'Piano 0' : (z > 0 ? `+${z}` : `${z}`);
+      btn.onclick = () => { _floor = z; renderGraph(); };
+      floorBtns.appendChild(btn);
+    });
+  }
+
+  const onFloor = connected.filter(b => pos.get(b.device_id).z === _floor);
+  const xs = onFloor.map(b => pos.get(b.device_id).x);
+  const ys = onFloor.map(b => pos.get(b.device_id).y);
+  const minX = Math.min(0, ...xs), maxX = Math.max(0, ...xs);
+  const minY = Math.min(0, ...ys), maxY = Math.max(0, ...ys);
+  const w = Math.max(600, (maxX - minX + 2) * CELL);
+  const h = Math.max(420, (maxY - minY + 2) * CELL);
+  graph.setAttribute('viewBox', `0 0 ${w} ${h}`);
+
+  const px = b => (pos.get(b.device_id).x - minX + 1) * CELL;
+  const py = b => (pos.get(b.device_id).y - minY + 1) * CELL;
+
+  // archi verso i vicini sullo STESSO piano
+  onFloor.forEach(b => {
+    const neighbors = (b.position && b.position.neighbors) || {};
+    for (const [dir, neighborId] of Object.entries(neighbors)) {
+      if (!neighborId) continue;
+      const other = onFloor.find(o => o.device_id === neighborId);
+      if (!other) continue;
+      if (b.device_id > other.device_id) continue; // disegna una sola volta per coppia
+      graph.appendChild(svgEl('line', {
+        x1: px(b), y1: py(b), x2: px(other), y2: py(other),
+        stroke: 'var(--border)', 'stroke-width': 2,
+      }));
+    }
+  });
+
+  // nodi
+  onFloor.forEach(b => {
+    const meta = metaFor(b.brick_variant);
+    const g = svgEl('g', { style: 'cursor:pointer' });
+    g.onclick = () => selectBrick(b.device_id);
+
+    const circle = svgEl('circle', {
+      cx: px(b), cy: py(b), r: 26,
+      fill: '#0a0e1a', stroke: meta.color, 'stroke-width': b.device_id === _selected ? 3 : 1.5,
+    });
+    const icon = svgEl('text', {
+      x: px(b), y: py(b) + 6, 'text-anchor': 'middle', 'font-size': 20,
+    });
+    icon.textContent = meta.icon;
+    const label = svgEl('text', {
+      x: px(b), y: py(b) + 42, 'text-anchor': 'middle', 'font-size': 11, fill: 'var(--muted)',
+    });
+    label.textContent = b.room || b.device_id;
+
+    // indicatore vicini fuori piano (sopra/sotto)
+    const n = (b.position && b.position.neighbors) || {};
+    let vBadge = '';
+    if (n.sopra) vBadge += '↑';
+    if (n.sotto) vBadge += '↓';
+    g.append(circle, icon, label);
+    if (vBadge) {
+      const badge = svgEl('text', {
+        x: px(b) + 20, y: py(b) - 18, 'text-anchor': 'middle', 'font-size': 12, fill: 'var(--yellow)',
+      });
+      badge.textContent = vBadge;
+      g.appendChild(badge);
+    }
+    graph.appendChild(g);
+  });
+}
+
+function selectBrick(deviceId) {
+  _selected = deviceId;
+  renderGraph();
+  renderDetail();
+}
+
+function renderDetail() {
+  const el = document.getElementById('detailBody');
+  el.innerHTML = '';
+  const b = _bricks.find(x => x.device_id === _selected);
+  if (!b) {
+    el.textContent = 'Seleziona un mattone dalla mappa.';
+    return;
+  }
+  const meta = metaFor(b.brick_variant);
+
+  const rows = [
+    ['Variante', `${meta.icon} ${meta.label} (${b.brick_variant || '?'})`],
+    ['Stanza', b.room || '—'],
+    ['ID', b.device_id],
+  ];
+  rows.forEach(([k, v]) => {
+    const row = document.createElement('div');
+    row.className = 'detail-row';
+    const kEl = document.createElement('span'); kEl.textContent = k;
+    const vEl = document.createElement('span'); vEl.className = 'detail-val'; vEl.textContent = v;
+    row.append(kEl, vEl);
+    el.appendChild(row);
+  });
+
+  const reading = _sensors[b.device_id];
+  if (reading) {
+    const readRows = [
+      ['temperature', '🌡️', '°C'], ['humidity', '💧', '%'],
+      ['vibration', '📳', ''], ['air_quality', '🌬️', ''],
+    ];
+    readRows.forEach(([key, icon, unit]) => {
+      if (reading[key] == null) return;
+      const row = document.createElement('div');
+      row.className = 'detail-row';
+      const kEl = document.createElement('span'); kEl.textContent = `${icon} live`;
+      const vEl = document.createElement('span'); vEl.className = 'detail-val';
+      vEl.textContent = `${reading[key]}${unit}`;
+      row.append(kEl, vEl);
+      el.appendChild(row);
+    });
+  }
+
+  const caps = Object.entries(b.capabilities || {}).filter(([, v]) => v).map(([k]) => k);
+  if (caps.length) {
+    const label = document.createElement('div');
+    label.style.cssText = 'margin-top:8px;font-size:.72rem;color:var(--muted)';
+    label.textContent = 'Capacità';
+    el.appendChild(label);
+    const row = document.createElement('div'); row.className = 'chip-row';
+    caps.forEach(c => { const chip = document.createElement('span'); chip.className = 'chip'; chip.textContent = c; row.appendChild(chip); });
+    el.appendChild(row);
+  }
+
+  if ((b.interfaces || []).length) {
+    const label = document.createElement('div');
+    label.style.cssText = 'margin-top:8px;font-size:.72rem;color:var(--muted)';
+    label.textContent = 'Interfacce';
+    el.appendChild(label);
+    const row = document.createElement('div'); row.className = 'chip-row';
+    b.interfaces.forEach(c => { const chip = document.createElement('span'); chip.className = 'chip iface'; chip.textContent = c; row.appendChild(chip); });
+    el.appendChild(row);
+  }
+
+  const svcNames = Object.keys(b.services || {});
+  if (svcNames.length) {
+    const label = document.createElement('div');
+    label.style.cssText = 'margin-top:8px;font-size:.72rem;color:var(--muted)';
+    label.textContent = 'Servizi';
+    el.appendChild(label);
+    const row = document.createElement('div'); row.className = 'chip-row';
+    svcNames.forEach(c => { const chip = document.createElement('span'); chip.className = 'chip svc'; chip.textContent = c; row.appendChild(chip); });
+    el.appendChild(row);
+  }
+
+  const neighbors = (b.position && b.position.neighbors) || {};
+  const label = document.createElement('div');
+  label.style.cssText = 'margin-top:8px;font-size:.72rem;color:var(--muted)';
+  label.textContent = 'Vicini dichiarati';
+  el.appendChild(label);
+  const grid = document.createElement('div'); grid.className = 'neigh-grid';
+  ['nord', 'sud', 'est', 'ovest', 'sopra', 'sotto'].forEach(dir => {
+    const cell = document.createElement('div');
+    cell.className = 'neigh-cell' + (neighbors[dir] ? ' set' : '');
+    cell.textContent = `${dir}${neighbors[dir] ? ': ' + neighbors[dir] : ''}`;
+    grid.appendChild(cell);
+  });
+  el.appendChild(grid);
+}
+
+// ── Dati: profili device (poll) + letture sensore live (WS) ────────────────
+async function refreshProfiles() {
+  try {
+    const r = await fetch(`http://${location.hostname}:1880/gaia/devices/profiles`, { signal: AbortSignal.timeout(4000) });
+    const profiles = await r.json();
+    _bricks = Object.values(profiles).filter(p => p.role === 'brick');
+    renderGraph();
+    if (_selected) renderDetail();
+  } catch (e) {
+    // silenzioso: riprova al giro successivo
+  }
+}
+refreshProfiles();
+setInterval(refreshProfiles, 5000);
+
+function connectWS() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const ws = new WebSocket(`${proto}//${location.hostname}:1880/gaia`);
+  ws.onopen = () => document.getElementById('wsdot').className = 'ws-dot ok';
+  ws.onerror = () => document.getElementById('wsdot').className = 'ws-dot err';
+  ws.onclose = () => { document.getElementById('wsdot').className = 'ws-dot err'; setTimeout(connectWS, 3000); };
+  ws.onmessage = e => {
+    try {
+      const d = JSON.parse(e.data);
+      (d.sensors || []).forEach(s => { _sensors[s.id] = s; });
+      if (_selected) renderDetail();
+    } catch (ex) {}
+  };
+}
+connectWS();
+</script>
+</body>
+</html>
