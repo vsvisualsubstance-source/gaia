@@ -62,6 +62,46 @@ def _flatten(prefix, value, out):
     # altri tipi (non attesi nel payload Gaia) vengono ignorati silenziosamente
 
 
+def _cleared_value(value):
+    """Valore "svuotato" dello stesso tipo di `value` — per azzerare un
+    canale invece di lasciarlo bloccato sull'ultimo valore per sempre."""
+    if isinstance(value, str):
+        return ""
+    return 0
+
+
+class OscAddressTracker:
+    """Ricorda gli indirizzi mandati nel giro precedente e azzera quelli
+    che spariscono nel giro corrente (persona/oggetto non più presente).
+
+    Gotcha OSC/TD: non esiste un messaggio "elimina questo canale" — un
+    OSC In CHOP tiene l'ultimo valore ricevuto per sempre. Se Gaia smette
+    di mandare /gaia/people/Mauro/confidence perché Mauro è uscito, senza
+    questo tracker quel canale resta bloccato al suo ultimo valore (es.
+    0.77) anche ore dopo — visto dal vivo: "Ospiti" fittizi e persone
+    uscite da tempo ancora "presenti" secondo TD, con la WS di Gaia già
+    correttamente vuota. Ogni feed continuo (non gli eventi one-shot, che
+    sono bang per natura) deve avere il proprio tracker indipendente."""
+
+    def __init__(self, osc_client):
+        self._osc = osc_client
+        self._prev = {}
+
+    def send(self, pairs):
+        current = dict(pairs)
+        for address, value in current.items():
+            try:
+                self._osc.send_message(address, value)
+            except OSError:
+                pass  # TouchDesigner non in ascolto — non bloccare il resto
+        for address in (self._prev.keys() - current.keys()):
+            try:
+                self._osc.send_message(address, _cleared_value(self._prev[address]))
+            except OSError:
+                pass
+        self._prev = current
+
+
 class GaiaToTouchDesigner:
     """WS client → OSC out.
 
@@ -78,6 +118,7 @@ class GaiaToTouchDesigner:
         self._stop = False
         self._lock = threading.Lock()
         self._latest_payload = None
+        self._tracker = OscAddressTracker(self._osc)
 
     def _on_message(self, _ws, message):
         try:
@@ -97,11 +138,7 @@ class GaiaToTouchDesigner:
                 continue
             pairs = []
             _flatten("/gaia", payload, pairs)
-            for address, value in pairs:
-                try:
-                    self._osc.send_message(address, value)
-                except OSError:
-                    pass  # TouchDesigner non in ascolto — non bloccare il resto
+            self._tracker.send(pairs)
 
     def run(self):
         threading.Thread(target=self._sender_loop, daemon=True).start()
@@ -160,6 +197,10 @@ class GaiaCanvasToTouchDesigner:
 
     def __init__(self, osc_client):
         self._osc = osc_client
+        # Solo il tick continuo passa dal tracker (azzera stanze/oggetti/
+        # persone spariti) — gli eventi one-shot sono bang per natura, non
+        # hanno un "prima" con cui confrontarsi né vanno azzerati.
+        self._tracker = OscAddressTracker(osc_client)
         self._mqtt = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
                                   client_id="gaia-td-canvas-bridge")
         self._mqtt.on_connect = self._on_connect
@@ -182,15 +223,17 @@ class GaiaCanvasToTouchDesigner:
         if msg.topic.startswith("gaia/td/canvas/event/"):
             event_name = _sanitize(msg.topic.rsplit('/', 1)[-1])
             prefix = f"/gaia/canvas/event/{event_name}"
-        else:
-            prefix = "/gaia/canvas"
+            pairs = []
+            _flatten(prefix, payload, pairs)
+            for address, value in pairs:
+                try:
+                    self._osc.send_message(address, value)
+                except OSError:
+                    pass  # TouchDesigner non in ascolto — non bloccare il resto
+            return
         pairs = []
-        _flatten(prefix, payload, pairs)
-        for address, value in pairs:
-            try:
-                self._osc.send_message(address, value)
-            except OSError:
-                pass  # TouchDesigner non in ascolto — non bloccare il resto
+        _flatten("/gaia/canvas", payload, pairs)
+        self._tracker.send(pairs)
 
 
 class TouchDesignerToGaia:

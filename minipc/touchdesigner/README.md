@@ -124,6 +124,27 @@ Eventi one-shot (non nel tick continuo, mandati subito all'arrivo):
 — stesso meccanismo, da aggiungere quando serve (basta un mqtt-in in più
 sul topic giusto, nessuna modifica al bridge).
 
+## Gotcha: canali fantasma (persone/oggetti spariti restano "presenti" in TD)
+
+OSC non ha un messaggio "elimina questo canale" — un OSC In CHOP tiene
+l'ultimo valore ricevuto per sempre. Se Gaia smette di mandare
+`/gaia/people/Mauro/confidence` perché Mauro è uscito, quel canale resta
+bloccato al suo ultimo valore (es. `0.77`) in TD, anche ore dopo, pur con
+la WS di Gaia già correttamente vuota — visto dal vivo (2026-07-25):
+"Ospiti" fittizi e persone uscite da tempo ancora "presenti" secondo TD.
+
+Fix: `OscAddressTracker` in `osc_bridge.py` ricorda gli indirizzi mandati
+nel giro precedente e, per quelli che spariscono, manda esplicitamente un
+valore azzerato (0 per numeri, stringa vuota per testo) invece di lasciarli
+bloccati. Applicato al feed grezzo `/gaia/...` e al tick continuo di
+`/gaia/canvas/...` (non agli eventi one-shot, che sono bang per natura).
+
+**Limite noto**: il tracker parte vuoto ad ogni riavvio del servizio, quindi
+non "ricorda" canali lasciati fantasma da PRIMA del riavvio/fix — quelli
+restano bloccati in TD finché non li azzeri manualmente lì (reset/re-cook
+dell'OSC In CHOP), oppure finché la stessa persona/oggetto non ricompare e
+sparisce di nuovo (a quel punto si azzera correttamente da solo).
+
 ## Roadmap
 
 - **Primo consumatore naturale**: `gaia-art/` (Arte Visiva, vedi `docs/web-sections.md`) genera
