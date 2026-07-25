@@ -29,3 +29,13 @@ HEADLESS=1
 
 # Topic MQTT (non cambiare salvo necessità)
 TOPIC=gaia/mediapipe/pose
+
+# ── Mocap grezzo diretto a TouchDesigner via OSC (opzionale) ────────────────
+# Manda viso/mani/pose PUNTO PER PUNTO direttamente a TD via UDP, bypassando
+# MQTT/Node-RED — pensato per macchine con CPU/banda da spendere (OPS), non
+# per i Pi. Di default spento: OSC_LANDMARKS=0 non cambia nulla rispetto a
+# prima. Richiede `pip install python-osc` nel venv di questo servizio.
+OSC_LANDMARKS=0
+OSC_HOST=127.0.0.1
+OSC_PORT=7000
+OSC_INTERVAL=0.08

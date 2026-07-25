@@ -50,6 +50,10 @@ cd ~/gaia/mediapipe && bash install.sh
 | `MULTI_PERSON` | `0` | `1` = usa la Tasks API (`PoseLandmarker`, multi-persona) invece della Pose legacy (single-persona per costruzione) |
 | `MAX_POSES` | `2` | Persone in posa rilevate in contemporanea, usato solo se `MULTI_PERSON=1` |
 | `POSE_MODEL_PATH` | *(vuoto)* | Path al bundle `.task` di PoseLandmarker, obbligatorio se `MULTI_PERSON=1` (vedi sotto) |
+| `OSC_LANDMARKS` | `0` | `1` = manda anche i landmark grezzi (viso/mani/pose) via OSC diretto a TouchDesigner — vedi sezione dedicata sotto |
+| `OSC_HOST` | `127.0.0.1` | IP di TouchDesigner, solo se `OSC_LANDMARKS=1` |
+| `OSC_PORT` | `7000` | Porta OSC di TouchDesigner |
+| `OSC_INTERVAL` | `0.08` | Secondi tra un invio mocap e l'altro (~12Hz), indipendente da `PUBLISH_INTERVAL` |
 
 Le variabili d'ambiente hanno priorità sul file di configurazione. **Tutti i default
 sopra riproducono esattamente il comportamento pre-2026-07-04** (1 persona, Pose
@@ -127,6 +131,60 @@ best-effort per vicinanza orizzontale (`x` del volto o del busto), non un vero
 multi-object-tracking. Affidabile quando le persone sono separate lateralmente
 (inquadratura fissa tipica di una stanza), non garantita se si sovrappongono o si
 scambiano di posto rapidamente frame-per-frame.
+
+---
+
+## Mocap grezzo → TouchDesigner via OSC (`OSC_LANDMARKS=1`)
+
+Il payload MQTT sopra manda solo i campi **derivati** (emotion/pose/gesture) — i punti
+grezzi di viso/mani/scheletro esistono già in memoria ad ogni frame (MediaPipe li calcola
+comunque) ma normalmente vengono scartati subito dopo. Con `OSC_LANDMARKS=1` vengono
+anche mandati via OSC/UDP **direttamente** a TouchDesigner, bypassando MQTT/Node-RED —
+è motion capture ad alta frequenza (centinaia di punti, ~12Hz), non un evento
+"semantico" per il brain: instradarlo nella pipeline dei pensieri/presenze la
+rallenterebbe inutilmente per nulla.
+
+Richiede `pip install python-osc` nel venv del servizio (non è nei requirements.txt di
+default: è opzionale, solo per chi accende questo flag — tipicamente OPS, non i Pi).
+
+### Schema indirizzi — un device, un tipo
+
+```
+/gaia/mocap/{device_id}/meta/room           stringa, stanza corrente
+/gaia/mocap/{device_id}/meta/faces          intero, quanti volti in questo frame
+/gaia/mocap/{device_id}/meta/hands          intero, quante mani
+/gaia/mocap/{device_id}/meta/poses          intero, quante persone in posa
+
+/gaia/mocap/{device_id}/face/{i}            478 punti × (x,y,z) in UN messaggio,
+                                             i = indice volto (0, 1, ... se MAX_FACES>1)
+
+/gaia/mocap/{device_id}/hand/left/{i}       21 punti × (x,y,z) in UN messaggio
+/gaia/mocap/{device_id}/hand/right/{i}      idem, mano destra
+
+/gaia/mocap/{device_id}/pose/{i}            33 punti × (x,y,z,visibility) in UN messaggio
+```
+
+**Un messaggio per volto/mano/posa, non un messaggio per coordinata**: 478 punti del
+viso viaggiano in un solo pacchetto UDP (lista di 1434 float), non 478 pacchetti — il
+costo di rete resta basso anche con più persone in scena. Lato TouchDesigner, un OSC In
+DAT (non CHOP: qui il valore per indirizzo è una lista, non uno scalare) o uno Script
+CHOP che spacca l'array è il modo naturale di consumarlo.
+
+Coordinate normalizzate 0-1 rispetto al frame camera (convenzione MediaPipe standard),
+`z` è profondità relativa (negativo = più vicino alla camera). `visibility` della posa
+è una confidenza 0-1 sul singolo punto (utile per nascondere arti occlusi invece di
+disegnarli comunque).
+
+Namespace separato (`/gaia/mocap/...`) da quello della dashboard (`/gaia/...`, vedi
+`minipc/touchdesigner/README.md`) e dal feed curato (`/gaia/canvas/...`) — tre feed
+indipendenti sulla stessa porta OSC, TD li distingue per prefisso indirizzo.
+
+**Verificato dal vivo (2026-07-25)** da OPS reale verso questa rete: formato indirizzi
+e conteggi confermati esatti (`face/0` → 1434 float = 478×3, `hand/left/0` → 63 =
+21×3, `pose/0` → 132 = 33×4). **Non verificata** la cattura dal vivo con
+camera+MediaPipe reali su OPS — al momento del test la shared memory di
+`gaia-camera` non era raggiungibile per una seconda istanza del servizio (vedi
+gotcha sotto, non legato a questa feature).
 
 ---
 

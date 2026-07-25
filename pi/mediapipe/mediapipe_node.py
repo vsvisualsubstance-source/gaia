@@ -61,6 +61,14 @@ _defaults = {
     'MULTI_PERSON':     '0',   # 1 = usa Tasks API PoseLandmarker (multi-persona)
     'MAX_POSES':        '2',   # usato solo se MULTI_PERSON=1
     'POSE_MODEL_PATH':  '',    # bundle .task richiesto se MULTI_PERSON=1
+    # Mocap grezzo diretto a TouchDesigner via OSC (bypassa MQTT/Node-RED —
+    # è motion capture ad alta frequenza, non un evento "semantico" per il
+    # brain). Di default OFF: comportamento identico a prima ovunque finché
+    # non viene acceso esplicitamente (pensato per OPS, non per i Pi).
+    'OSC_LANDMARKS':    '0',
+    'OSC_HOST':         '127.0.0.1',
+    'OSC_PORT':         '7000',
+    'OSC_INTERVAL':     '0.08',   # ~12Hz, indipendente da PUBLISH_INTERVAL (quello è per MQTT)
 }
 
 _file_cfg = _load_conf('/etc/gaia/mediapipe.conf')
@@ -81,6 +89,10 @@ POSE_COMPLEXITY  = int(_cfg['POSE_COMPLEXITY'])
 MULTI_PERSON     = _cfg['MULTI_PERSON'] == '1'
 MAX_POSES        = int(_cfg['MAX_POSES'])
 POSE_MODEL_PATH  = _cfg['POSE_MODEL_PATH']
+OSC_LANDMARKS    = _cfg['OSC_LANDMARKS'] == '1'
+OSC_HOST         = _cfg['OSC_HOST']
+OSC_PORT         = int(_cfg['OSC_PORT'])
+OSC_INTERVAL     = float(_cfg['OSC_INTERVAL'])
 CONFIG_TOPIC     = f'gaia/devices/{DEVICE_ID}/config'
 ANNOUNCE_TOPIC   = f'gaia/devices/{DEVICE_ID}/announce'
 
@@ -99,6 +111,19 @@ logging.basicConfig(
 )
 log = logging.getLogger(DEVICE_ID)
 log.info(f"device_id={DEVICE_ID} room_claim={_state['room']} broker={MQTT_HOST}:{MQTT_PORT}")
+
+# Import lazy: python-osc non è (e non deve essere) una dipendenza dei Pi,
+# solo delle macchine che accendono esplicitamente OSC_LANDMARKS=1.
+_osc = None
+if OSC_LANDMARKS:
+    try:
+        from pythonosc.udp_client import SimpleUDPClient
+        _osc = SimpleUDPClient(OSC_HOST, OSC_PORT)
+        log.info(f"Mocap OSC attivo → {OSC_HOST}:{OSC_PORT}/gaia/mocap/{DEVICE_ID}/... "
+                 f"ogni {OSC_INTERVAL * 1000:.0f}ms")
+    except ImportError:
+        log.error("OSC_LANDMARKS=1 ma python-osc non installato (pip install python-osc) — mocap disattivato")
+        OSC_LANDMARKS = False
 
 # ── MQTT ──────────────────────────────────────────────────────────────────────
 
@@ -234,6 +259,43 @@ if not MULTI_PERSON:
 
 _GESTURE_MAP = {0: 'fist', 1: 'point', 2: 'victory', 3: 'three', 4: 'open_hand'}
 
+# Landmark grezzi dell'ultimo frame analizzato — popolati da _analyze() SOLO
+# se OSC_LANDMARKS è attivo (altrimenti restano vuoti, zero costo extra) e
+# letti da _publish_landmarks_osc() nel loop principale, a un ritmo proprio
+# (OSC_INTERVAL) indipendente da PUBLISH_INTERVAL/MQTT.
+_last_raw = {'faces': [], 'hands': [], 'poses': []}
+
+
+def _publish_landmarks_osc(room):
+    """Manda viso/mani/pose grezzi direttamente a TouchDesigner via OSC,
+    bypassando MQTT/Node-RED: è mocap ad alta frequenza (centinaia di punti
+    a ~12Hz), non un evento "semantico" per il brain — instradarlo nella
+    stessa pipeline dei pensieri/presenze la rallenterebbe inutilmente.
+
+    Un indirizzo per device_id e per tipo (nord stella di questo progetto:
+    "diviso bene per device e per tipo" — così un domani un altro device
+    può accendere lo stesso flag senza calpestare gli indirizzi di questo),
+    UN messaggio per volto/mano/posa con tutte le coordinate come lista
+    invece di centinaia di messaggi singoli — 478 punti volto in un solo
+    pacchetto UDP, non 478."""
+    if not _osc:
+        return
+    base = f"/gaia/mocap/{DEVICE_ID}"
+    try:
+        _osc.send_message(f"{base}/meta/room", room)
+        _osc.send_message(f"{base}/meta/faces", len(_last_raw['faces']))
+        _osc.send_message(f"{base}/meta/hands", len(_last_raw['hands']))
+        _osc.send_message(f"{base}/meta/poses", len(_last_raw['poses']))
+        for i, pts in enumerate(_last_raw['faces']):
+            _osc.send_message(f"{base}/face/{i}", [c for p in pts for c in p])
+        for i, hd in enumerate(_last_raw['hands']):
+            side = 'left' if hd['handedness'].lower().startswith('l') else 'right'
+            _osc.send_message(f"{base}/hand/{side}/{i}", [c for p in hd['points'] for c in p])
+        for i, pts in enumerate(_last_raw['poses']):
+            _osc.send_message(f"{base}/pose/{i}", [c for p in pts for c in p])
+    except OSError:
+        pass  # TouchDesigner non in ascolto — non bloccare il resto del loop
+
 
 def _face_to_dict(lm, w, h):
     """Estrae i campi derivati per UN volto (lista landmark FaceMesh)."""
@@ -282,10 +344,15 @@ def _analyze(frame):
     faces = []
     hands = []
     poses = []
+    raw_faces = []  # solo se OSC_LANDMARKS: [[(x,y,z), ...478], ...] un elemento per volto
+    raw_hands = []  # [{'handedness':'Left'|'Right', 'points':[(x,y,z), ...21]}, ...]
+    raw_poses = []  # [[(x,y,z,visibility), ...33], ...]
 
     fr = _face_mesh.process(rgb)
     for face_lm in (fr.multi_face_landmarks or []):
         faces.append(_face_to_dict(face_lm.landmark, w, h))
+        if OSC_LANDMARKS:
+            raw_faces.append([(p.x, p.y, p.z) for p in face_lm.landmark])
 
     hr = _hands.process(rgb)
     if hr.multi_hand_landmarks:
@@ -294,21 +361,33 @@ def _analyze(frame):
             lm = hand_lm.landmark
             fingers = sum([lm[8].y < lm[6].y, lm[12].y < lm[10].y,
                            lm[16].y < lm[14].y, lm[20].y < lm[18].y])
+            label = handed.classification[0].label if handed else 'unknown'
             hands.append({
                 'x': lm[0].x,
                 'gesture': _GESTURE_MAP.get(fingers, 'open_hand'),
-                'handedness': handed.classification[0].label if handed else 'unknown',
+                'handedness': label,
             })
+            if OSC_LANDMARKS:
+                raw_hands.append({'handedness': label, 'points': [(p.x, p.y, p.z) for p in lm]})
 
     if MULTI_PERSON:
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
         pr = _pose_landmarker.detect_for_video(mp_image, int(time.time() * 1000))
         for pose_lm in (pr.pose_landmarks or []):
             poses.append(_pose_to_dict(pose_lm))
+            if OSC_LANDMARKS:
+                raw_poses.append([(p.x, p.y, p.z, getattr(p, 'visibility', 1.0)) for p in pose_lm])
     else:
         pr = _pose_legacy.process(rgb)
         if pr.pose_landmarks:
             poses.append(_pose_to_dict(pr.pose_landmarks.landmark))
+            if OSC_LANDMARKS:
+                raw_poses.append([(p.x, p.y, p.z, p.visibility) for p in pr.pose_landmarks.landmark])
+
+    if OSC_LANDMARKS:
+        _last_raw['faces'] = raw_faces
+        _last_raw['hands'] = raw_hands
+        _last_raw['poses'] = raw_poses
 
     # Associazione best-effort persona-per-persona: nessuna delle tre pipeline
     # (FaceMesh/Hands/Pose) condivide un tracking-id tra loro, quindi si
@@ -381,6 +460,7 @@ def _open_camera():
 
 cap = _open_camera()
 last_publish = 0.0
+last_osc = 0.0
 frame_id = 0
 state = {
     'person_detected': False, 'emotion': None, 'smile_score': 0,
@@ -426,6 +506,10 @@ while _running:
         state = _analyze(frame)
 
     now = time.time()
+    if OSC_LANDMARKS and now - last_osc >= OSC_INTERVAL:
+        _publish_landmarks_osc(_state['room'])
+        last_osc = now
+
     if now - last_publish >= PUBLISH_INTERVAL:
         payload = {
             'camera':    _state['room'],
