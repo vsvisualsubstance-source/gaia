@@ -60,6 +60,19 @@ let lastLevel = 1;
 let lastClass = "Neutro";
 
 // =====================================================
+// SEQUENZA SOGNO — quando arriva un sogno notturno nuovo (lastDreamTs),
+// la scena scivola verso il viola (stesso colore "curiosity"/sogno usato
+// su welcome.html e pi/screen) invece dei colori guidati dal mood/archetipo
+// del momento: è la casa che dorme e rielabora, non lo stato presente.
+// =====================================================
+let lastDreamTs = 0;
+let dreamText = "";
+let dreamActiveUntil = 0;
+let dreamIntensity = 0; // 0..1, lerp verso 1 mentre attivo, torna a 0 quando finisce
+const DREAM_HOLD_MS = 40000;
+const DREAM_COLOR = new THREE.Color(0xbe87ff);
+
+// =====================================================
 // ASSET GRAFICI RPG SBLOCCABILI DINAMICAMENTE
 // =====================================================
 const rpgAssetsGroup = new THREE.Group();
@@ -577,8 +590,12 @@ function updateHUD() {
     hudCtx.fillStyle = '#8888aa'; hudCtx.font = '11px monospace';
     hudCtx.fillText(`STANZE: ${activeRooms}  |  PRESENTI: ${activeP}  |  LUCI: ${(state.lights || []).length}  |  SENSORI: ${realSensors}`, 25, 100);
     
-    if (state.thought) {
-        hudCtx.fillStyle = '#94b3fd'; 
+    if (performance.now() < dreamActiveUntil && dreamText) {
+        hudCtx.fillStyle = `rgba(190,135,255,${Math.min(1, dreamIntensity + 0.3)})`;
+        hudCtx.font = 'Italic 13px Georgia';
+        hudCtx.fillText(`💭 Sogno di stanotte: "${dreamText}"`, 25, 118);
+    } else if (state.thought) {
+        hudCtx.fillStyle = '#94b3fd';
         hudCtx.font = 'Italic 13px Georgia';
         hudCtx.fillText(`Pensiero corrente: "${state.thought}"`, 25, 118);
     }
@@ -619,6 +636,18 @@ function connectWebSocket() {
                 else if (state.progression?.activeClass === "Druido") sonarMat.color.setHex(0x33ff88);
                 else sonarMat.color.setHex(0x94b3fd);
                 lastThought = state.thought;
+            }
+
+            // Sogno notturno nuovo — la scena scivola verso il viola invece
+            // di lampeggiare come un pensiero qualsiasi: dura più a lungo,
+            // è un evento raro e diverso, non un aggiornamento di stato.
+            if (state.lastDreamTs && state.lastDreamTs !== lastDreamTs) {
+                lastDreamTs = state.lastDreamTs;
+                dreamText = state.lastDream || "";
+                dreamActiveUntil = performance.now() + DREAM_HOLD_MS;
+                sonarActive = true;
+                sonarScale = 1.0;
+                sonarMat.color.setHex(0xbe87ff);
             }
 
             // Lampo su eventi istantanei
@@ -686,12 +715,21 @@ function animate() {
 
     const currentClass = state.progression?.activeClass || "Neutro";
 
+    // Intensità del sogno: sale mentre attivo, torna a 0 da sola dopo
+    // DREAM_HOLD_MS — lerp lento apposta, la scena deve scivolare dentro e
+    // fuori dal sogno, non scattare.
+    const dreaming = performance.now() < dreamActiveUntil;
+    dreamIntensity = THREE.MathUtils.lerp(dreamIntensity, dreaming ? 1 : 0, 0.01);
+
     // 0. AGGIORNAMENTO DINAMICO AMBIENTE (Meteo Sensoriale + Archetipo RPG)
     // Se GAIA è un "Druido" forziamo lo sfondo verso tonalità biologiche foresta, se è "Mago" verso il blu profondo cyber
     let classBaseColor = new THREE.Color().setHSL(envWeather.ambientHue, 0.4, 0.02);
     if (currentClass === "Druido") classBaseColor.lerp(new THREE.Color(0x011a08), 0.4);
     else if (currentClass === "Mago") classBaseColor.lerp(new THREE.Color(0x00061a), 0.4);
     else if (currentClass === "Guerriero") classBaseColor.lerp(new THREE.Color(0x1a0202), 0.4);
+    // Il sogno prevale su tutto il resto: la casa dorme, non importa che
+    // archetipo fosse attivo prima di addormentarsi.
+    if (dreamIntensity > 0.01) classBaseColor.lerp(DREAM_COLOR.clone().multiplyScalar(0.12), dreamIntensity * 0.85);
 
     scene.background.lerp(classBaseColor, lFactor);
     fogEffect.color.copy(scene.background);
@@ -711,13 +749,16 @@ function animate() {
     else if (currentClass === "Mago") targetHeartColor.lerp(new THREE.Color(0x00ffff), 0.5);
     else if (currentClass === "Guerriero") targetHeartColor.lerp(new THREE.Color(0xff2222), 0.5);
     else if (currentClass === "Bardo") targetHeartColor.lerp(new THREE.Color(0xff00ff), 0.5);
+    if (dreamIntensity > 0.01) targetHeartColor.lerp(DREAM_COLOR, dreamIntensity * 0.7);
 
     heartMat.color.lerp(targetHeartColor, lFactor);
     heartMat.emissive.lerp(targetHeartColor.clone().multiplyScalar(0.3), lFactor);
     heartMat.emissiveIntensity = THREE.MathUtils.lerp(heartMat.emissiveIntensity, 0.3 + life / 80, lFactor);
     
-    // Il Guerriero fa pulsare il cuore molto più rapidamente / violentemente
-    const speedMult = currentClass === "Guerriero" ? 2.5 : 1.0;
+    // Il Guerriero fa pulsare il cuore molto più rapidamente / violentemente,
+    // ma il sogno rallenta tutto verso un respiro lento (i due si oppongono:
+    // il sogno vince, la casa dorme davvero, non "sogna agitato")
+    const speedMult = (currentClass === "Guerriero" ? 2.5 : 1.0) / (1 + dreamIntensity * 1.6);
     const pulseScale = 0.85 + (life / 220) + Math.sin(elapsedTime * (1.5 + life*0.04) * speedMult) * 0.06;
     heart.scale.setScalar(pulseScale);
     
@@ -823,6 +864,10 @@ function animate() {
     camera.position.x = Math.sin(elapsedTime * 0.06) * 1.8;
     camera.position.z = 7.0 + Math.cos(elapsedTime * 0.04) * 0.8;
     camera.lookAt(0, 0.6, 0);
+
+    // HUD ogni frame (non solo ai messaggi WS) — serve per la dissolvenza
+    // morbida tra pensiero e sogno guidata da dreamIntensity
+    updateHUD();
 
     renderer.render(scene, camera);
 }

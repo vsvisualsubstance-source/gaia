@@ -84,23 +84,36 @@ const S = {
 };
 let people = [];          // [{name, emotion}]
 let thoughtTarget = '';   // ultimo pensiero ricevuto
-let activeClass = 'Neutro';
+let lastLevel = null;
+let lastDreamTs = 0;
+
+// Stesso algoritmo FNV-1a del vocabolario asemico (web/asemic.js) e del
+// feed TouchDesigner (/gaia/canvas/.../seed) — "sedia" produce sempre lo
+// stesso segno qui, sul Pi, e in TD: e' questo che rende Gaia coerente
+// come identita' visiva invece che tre generativi scollegati.
+function fnv1a(str) {
+    let h = 2166136261 >>> 0;
+    for (const ch of String(str).toLowerCase()) {
+        h ^= ch.codePointAt(0);
+        h = Math.imul(h, 16777619) >>> 0;
+    }
+    return h >>> 0;
+}
 
 function lerp(a, b, f) { return a + (b - a) * f; }
 
 // ── WebSocket ─────────────────────────────────────────────────────────────────
+// Nessuna scritta a schermo (mood/presenze/luci) — l'opera deve leggersi da
+// sola, per intero visiva. Resta solo il puntino di stato connessione.
 const dotEl = document.getElementById('ws-dot');
-const statusEl = document.getElementById('status');
-const moodEl = document.getElementById('moodLabel');
 
 function connectWS() {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${proto}//${location.hostname}:1880/gaia`);
-    ws.onopen = () => { dotEl.className = 'ok'; statusEl.textContent = 'anima presente'; };
+    ws.onopen = () => { dotEl.className = 'ok'; };
     ws.onerror = () => { dotEl.className = 'err'; };
     ws.onclose = () => {
         dotEl.className = 'err';
-        statusEl.textContent = 'assente · riconnessione';
         setTimeout(connectWS, 3000);
     };
     ws.onmessage = e => {
@@ -119,19 +132,23 @@ function connectWS() {
             S.lightsTarget = lights.filter(l => l.power).length;
             people = (Array.isArray(d.people) ? d.people : [])
                 .filter(p => p.present !== false)
-                .map(p => ({ name: p.name || '…', emotion: p.emotion || 'neutral' }));
+                .map(p => ({ name: p.name || '…', emotion: p.emotion || 'neutral', room: p.room || 'unknown' }));
             if (d.thought) thoughtTarget = d.thought;
-            activeClass = d.progression?.activeClass || 'Neutro';
-            updateChip();
+
+            // Sogno nuovo → sequenza dedicata (velo viola + testo in alto)
+            if (d.lastDreamTs && d.lastDreamTs !== lastDreamTs) {
+                lastDreamTs = d.lastDreamTs;
+                triggerDream(d.lastDream || '');
+            }
+
+            // Livello RPG salito → burst dorato dal nucleo
+            const lvl = d.progression?.level;
+            if (lastLevel !== null && lvl != null && lvl > lastLevel) triggerLevelBurst();
+            if (lvl != null) lastLevel = lvl;
+
+            stepObjectSources(d);
         } catch (_) {}
     };
-}
-
-function updateChip() {
-    const cls = activeClass !== 'Neutro' ? ` · ${activeClass}` : '';
-    const n = people.length;
-    moodEl.textContent =
-        `${(S.moodTarget || S.mood)}${cls} · ${n === 1 ? '1 presenza' : n + ' presenze'} · ${Math.round(S.lightsTarget ?? S.lightsOn)} luci`;
 }
 
 // ── Flow field ────────────────────────────────────────────────────────────────
@@ -208,6 +225,131 @@ function drawThought(t) {
     ctx.restore();
 }
 
+// ── Sogno (sequenza dedicata, più lenta e più lunga del pensiero) ────────────
+// Stesso viola "curiosity"/sogno usato su welcome.html e pi/screen — un
+// sogno non è un pensiero come gli altri, merita un momento diverso.
+const DREAM_HOLD_MS = 42000;
+const dream = { text: '', alpha: 0, activeUntil: 0 };
+
+function triggerDream(text) {
+    if (!text) return;
+    dream.text = text;
+    dream.activeUntil = performance.now() + DREAM_HOLD_MS;
+}
+
+function stepDream(nowMs) {
+    if (nowMs < dream.activeUntil) dream.alpha = Math.min(1, dream.alpha + 0.01);
+    else if (dream.alpha > 0) dream.alpha = Math.max(0, dream.alpha - 0.006);
+}
+
+function drawDream(t) {
+    if (dream.alpha <= 0 || !dream.text) return;
+    // velo viola su tutta la scena mentre il sogno è attivo — la notte cala
+    ctx.save();
+    ctx.globalAlpha = dream.alpha * 0.10;
+    ctx.fillStyle = 'rgb(190,135,255)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+
+    const breath = 0.7 + 0.12 * Math.sin(t * 0.35);
+    ctx.save();
+    ctx.globalAlpha = dream.alpha * breath * 0.75;
+    const size = Math.max(14, Math.min(21, W / 50));
+    ctx.font = `italic ${size}px Georgia, 'Times New Roman', serif`;
+    ctx.fillStyle = 'rgb(190,135,255)';
+    ctx.textAlign = 'center';
+
+    const maxW = W * 0.66;
+    const words = `💭 "${dream.text}"`.split(' ');
+    const lines = [''];
+    for (const w of words) {
+        const probe = lines[lines.length - 1] ? lines[lines.length - 1] + ' ' + w : w;
+        if (ctx.measureText(probe).width > maxW && lines[lines.length - 1]) {
+            if (lines.length === 3) { lines[2] += '…'; break; }
+            lines.push(w);
+        } else lines[lines.length - 1] = probe;
+    }
+    const y0 = H * 0.13 - (lines.length - 1) * (size * 1.3) / 2;
+    lines.forEach((ln, i) => ctx.fillText(ln, W / 2, y0 + i * size * 1.3));
+    ctx.restore();
+}
+
+// ── Oggetti rilevati (YOLO/mediapipe) — motes seedate deterministiche ───────
+// Stesso principio delle persone (seed→posizione) ma per gli oggetti visti
+// nelle stanze: appena una classe compare in una stanza nasce un puntino,
+// sempre nella stessa tonalità per quella parola, che si dissolve quando
+// l'oggetto non è più visto invece di sparire di scatto.
+const MAX_MOTES = 14;
+const objectMotes = new Map(); // "stanza:classe" -> {seed, hueF, count, alpha, dying, angleOff}
+
+function stepObjectSources(d) {
+    const wanted = new Set();
+    (Array.isArray(d.rooms) ? d.rooms : []).forEach(r => {
+        const room = r.id || r.name || 'unknown';
+        Object.entries(r.objects || {}).forEach(([cls, count]) => {
+            if (!count) return;
+            const key = `${room}:${cls}`;
+            wanted.add(key);
+            let m = objectMotes.get(key);
+            if (!m) {
+                if (objectMotes.size >= MAX_MOTES) return; // limite, niente affollamento
+                const seed = fnv1a(cls);
+                m = {
+                    room, seed, hueF: (seed % 10000) / 10000, count, alpha: 0, dying: false,
+                    angleOff: ((seed >>> 8) % 10000) / 10000 * Math.PI * 2,
+                };
+                objectMotes.set(key, m);
+            }
+            m.count = count;
+            m.dying = false;
+        });
+    });
+    objectMotes.forEach((m, key) => { if (!wanted.has(key)) m.dying = true; });
+}
+
+function drawObjectMotes(t, core) {
+    objectMotes.forEach((m, key) => {
+        m.alpha += m.dying ? -0.012 : (m.alpha < 1 ? 0.01 : 0);
+        if (m.dying && m.alpha <= 0) { objectMotes.delete(key); return; }
+        m.alpha = Math.max(0, Math.min(1, m.alpha));
+        if (m.alpha <= 0) return;
+
+        // stessa ancora di stanza delle persone: gli oggetti orbitano vicino
+        // a chi/cosa li ha visti, non al centro condiviso della scena
+        const anchor = roomAnchor(m.room, core);
+        const ang = t * 0.045 + m.angleOff;
+        const R = core.bR * (1.6 + (m.seed % 997) / 997 * 1.1);
+        const x = anchor.x + Math.cos(ang) * R;
+        const y = anchor.y + Math.sin(ang) * R * 0.6;
+
+        const [h0, h1] = cur.hue;
+        const hue = h0 + (h1 - h0) * m.hueF;
+        const size = 3 + Math.min(3, Math.log2(1 + m.count)) * 2;
+        ctx.beginPath();
+        ctx.arc(x, y, size, 0, Math.PI * 2);
+        ctx.fillStyle = `hsla(${hue}, 60%, 62%, ${m.alpha * 0.5})`;
+        ctx.fill();
+    });
+}
+
+// ── Burst dorato al level-up (stesso oro delle rune asemiche) ───────────────
+const levelBurst = { active: false, t0: 0 };
+function triggerLevelBurst() { levelBurst.active = true; levelBurst.t0 = performance.now(); }
+
+function drawLevelBurst(nowMs, core) {
+    if (!levelBurst.active) return;
+    const age = (nowMs - levelBurst.t0) / 1000;
+    if (age > 1.6) { levelBurst.active = false; return; }
+    const p = age / 1.6;
+    const r = core.bR * (1 + p * 6);
+    const alpha = (1 - p) * 0.5;
+    ctx.beginPath();
+    ctx.arc(core.cx, core.cy, r, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(255,214,90,${alpha})`;
+    ctx.lineWidth = 3 * (1 - p) + 0.5;
+    ctx.stroke();
+}
+
 // ── Nucleo respirante ─────────────────────────────────────────────────────────
 // Stessi colori-stato della welcome (identità visiva condivisa):
 // idle=accento palette · listening=verde acido · processing=azzurro
@@ -243,7 +385,20 @@ function drawCore(t) {
     return { cx, cy, bR };
 }
 
-// ── Orbi presenza (una per persona, col nome) ────────────────────────────────
+// ── Ancoraggio per stanza — deterministico dal nome (stesso principio del
+// seed asemico): due stanze diverse finiscono SEMPRE in punti diversi e
+// stabili della scena, non a caso. Persone e oggetti si posizionano
+// intorno all'ancora della loro stanza invece di orbitare un unico centro
+// condiviso — così "Mauro in salotto" ed "Eli in ingresso" si vedono
+// davvero in due posti diversi, non in due punti a caso dello stesso posto.
+function roomAnchor(room, core) {
+    const seed = fnv1a(room || 'unknown');
+    const angle = (seed % 100000) / 100000 * Math.PI * 2;
+    const R = Math.min(core.bR * 5.5, Math.min(W, H) * 0.34);
+    return { x: core.cx + Math.cos(angle) * R, y: core.cy + Math.sin(angle) * R * 0.62 };
+}
+
+// ── Orbi presenza (una per persona, col nome, raggruppate per stanza) ───────
 function personSeed(name) {
     let h = 0;
     for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffff;
@@ -251,38 +406,48 @@ function personSeed(name) {
 }
 
 function drawPeople(t, core) {
-    const n = people.length;
-    if (!n) return;
-    people.forEach((p, i) => {
-        const seed = personSeed(p.name);
-        const ang = t * 0.10 + seed * Math.PI * 2 + (i * Math.PI * 2) / n;
-        const R1 = core.bR * (2.6 + seed * 0.8);
-        const R2 = R1 * 0.62;
-        const x = core.cx + Math.cos(ang) * R1;
-        const y = core.cy + Math.sin(ang * 0.83 + seed * 5) * R2;
-
-        const happy = p.emotion === 'happy';
-        const warm = happy ? [255, 214, 130] : cur.accent;
-        const pulse = happy ? 1 + 0.12 * Math.sin(t * 3 + seed * 9) : 1;
-
-        const g = ctx.createRadialGradient(x, y, 0, x, y, 26 * pulse);
-        g.addColorStop(0, `rgba(${warm[0]|0},${warm[1]|0},${warm[2]|0},0.50)`);
-        g.addColorStop(1, `rgba(${warm[0]|0},${warm[1]|0},${warm[2]|0},0)`);
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.arc(x, y, 26 * pulse, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.fillStyle = 'rgba(240,246,255,0.92)';
-        ctx.beginPath();
-        ctx.arc(x, y, 4.5, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.font = '600 11px "Segoe UI", system-ui, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillStyle = 'rgba(201,209,217,0.55)';
-        ctx.fillText(p.name.toUpperCase(), x, y + 24);
+    if (!people.length) return;
+    const byRoom = new Map();
+    people.forEach(p => {
+        if (!byRoom.has(p.room)) byRoom.set(p.room, []);
+        byRoom.get(p.room).push(p);
     });
+
+    byRoom.forEach((group, room) => {
+        const anchor = roomAnchor(room, core);
+        group.forEach((p, i) => drawOnePerson(p, i, group.length, anchor, t, core));
+    });
+}
+
+function drawOnePerson(p, i, groupSize, anchor, t, core) {
+    const seed = personSeed(p.name);
+    const localAng = seed * Math.PI * 2 + (i * Math.PI * 2) / groupSize;
+    const localR = core.bR * (0.85 + (i % 3) * 0.45);
+    const bob = Math.sin(t * 0.6 + seed * 9) * core.bR * 0.12;
+    const x = anchor.x + Math.cos(localAng) * localR;
+    const y = anchor.y + Math.sin(localAng) * localR * 0.7 + bob;
+
+    const happy = p.emotion === 'happy';
+    const warm = happy ? [255, 214, 130] : cur.accent;
+    const pulse = happy ? 1 + 0.12 * Math.sin(t * 3 + seed * 9) : 1;
+
+    const g = ctx.createRadialGradient(x, y, 0, x, y, 26 * pulse);
+    g.addColorStop(0, `rgba(${warm[0]|0},${warm[1]|0},${warm[2]|0},0.50)`);
+    g.addColorStop(1, `rgba(${warm[0]|0},${warm[1]|0},${warm[2]|0},0)`);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, 26 * pulse, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(240,246,255,0.92)';
+    ctx.beginPath();
+    ctx.arc(x, y, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.font = '600 11px "Segoe UI", system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(201,209,217,0.55)';
+    ctx.fillText(p.name.toUpperCase(), x, y + 24);
 }
 
 // ── Braci (luci accese) ───────────────────────────────────────────────────────
@@ -409,15 +574,19 @@ function frame(ts) {
     }
     ctx.globalCompositeOperation = 'source-over';
 
-    // ── braci · nucleo · persone · pensiero ──
+    // ── braci · nucleo · oggetti · persone · pensiero · sogno · burst ──
     stepEmbers();
     ctx.globalCompositeOperation = 'lighter';
     drawEmbers(t);
     const core = drawCore(t);
+    drawLevelBurst(nowMs, core);
     ctx.globalCompositeOperation = 'source-over';
+    drawObjectMotes(t, core);
     drawPeople(t, core);
     stepThought();
     drawThought(t);
+    stepDream(nowMs);
+    drawDream(t);
 
     // ── vignettatura + grana ──
     if (vignetteCv) ctx.drawImage(vignetteCv, 0, 0);
