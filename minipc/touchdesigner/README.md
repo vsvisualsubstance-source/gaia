@@ -84,12 +84,51 @@ Da Node-RED, sottoscrivere `gaia/touchdesigner/#` per reagire ai parametri gener
 `docs/maggiordomo.md`) — nessuna modifica al bridge necessaria per aggiungere nuovi parametri,
 basta iniziare a mandarli da TD.
 
+## Gaia → TouchDesigner: feed curato `/gaia/canvas/...` (2026-07-25)
+
+Il flatten grezzo sopra manda **tutto** il payload dashboard (~1900 indirizzi
+misurati — utile come firehose/debug, ma non pensato per pilotare
+immagini/DMX/effetti: mescola log storici, sensori Hue mal-nominati, ecc.).
+Per quello esiste un secondo feed, molto più piccolo e **strutturato apposta
+per TD**, costruito in Node-RED ("Build TD Canvas", tab Gaia Engine, tick
+ogni 2s) e pubblicato su MQTT `gaia/td/canvas` — il bridge lo ascolta e lo
+manda sotto `/gaia/canvas/...`:
+
+```
+/gaia/canvas/soul/mood                 "curiosity"
+/gaia/canvas/soul/mood_rgb/r,g,b       190, 135, 255   (stessa palette di web/asemic.js)
+/gaia/canvas/soul/stress,calm,social,curiosity,energy,lifeIndex
+
+/gaia/canvas/rooms/salotto/presence_count, activity, temperature, darkness
+/gaia/canvas/rooms/salotto/emotion, pose, gesture        (da mediapipe)
+/gaia/canvas/rooms/salotto/objects/person/count           1
+/gaia/canvas/rooms/salotto/objects/person/seed             1402450561
+
+/gaia/canvas/lights/{id}/power, brightness, color         (solo luci vere, filtrate)
+/gaia/canvas/bricks/{id}/variant, room, temperature, humidity, vibration
+/gaia/canvas/lexicon/{parola}/count, seed                  (lessico personale di Gaia)
+/gaia/canvas/dream/mood, words/{parola}/seed                (ultimo sogno notturno)
+```
+
+**Il seed è la parte importante**: stesso algoritmo FNV-1a del vocabolario
+asemico (`web/asemic.js`, `pi/screen/asemic_engine.py`) — la stessa parola o
+classe YOLO produce sempre lo stesso numero, ovunque. Un network TD può
+seedare il proprio generatore con quel valore per disegnare "sedia" in modo
+astratto ma **coerente ogni volta**, la stessa identità visiva già usata su
+welcome.html e il display del Pi. È questo che rende Gaia un vero direttore
+artistico invece di una sorgente dati qualsiasi.
+
+Eventi one-shot (non nel tick continuo, mandati subito all'arrivo):
+`/gaia/canvas/event/level_up/...`, `/gaia/canvas/event/dream_new/...`.
+**Non ancora collegati**: citofono, allarme caduta, ingresso di una persona
+— stesso meccanismo, da aggiungere quando serve (basta un mqtt-in in più
+sul topic giusto, nessuna modifica al bridge).
+
 ## Roadmap
 
 - **Primo consumatore naturale**: `gaia-art/` (Arte Visiva, vedi `docs/web-sections.md`) genera
   già una composizione astratta dagli stessi dati in browser — TouchDesigner può fare lo stesso
   con più potenza (particellari, shader, video mapping reale in stanza). Nessun lavoro
   aggiuntivo lato Gaia: i dati sono già gli stessi.
-- Non ancora implementato: filtro/selezione di quali campi mandare (oggi il bridge appiattisce
-  *tutto* il payload) — se il volume di canali OSC diventa un problema lato TD, aggiungere un
-  allow-list in config invece di continuare a mandare tutto.
+- ~~Non ancora implementato: filtro/selezione di quali campi mandare~~ **Fatto (2026-07-25)**:
+  vedi feed curato `/gaia/canvas/...` sopra.

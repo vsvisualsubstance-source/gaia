@@ -143,6 +143,56 @@ class GaiaToTouchDesigner:
         self._stop = True
 
 
+class GaiaCanvasToTouchDesigner:
+    """MQTT (gaia/td/canvas, gaia/td/canvas/event/#) → OSC out, sotto
+    /gaia/canvas/... — feed curato apposta per TD (mood+palette, oggetti
+    YOLO con seed deterministico per il disegno astratto, luci pulite per
+    DMX, mattoni, lessico, sogno), costruito in Node-RED ("Build TD
+    Canvas", tab Gaia Engine) e ben più piccolo del flatten grezzo
+    dell'intero payload dashboard (~1900 indirizzi su /gaia/...).
+
+    A differenza di GaiaToTouchDesigner non serve disaccoppiare rate di
+    arrivo e di invio: il canvas continuo ticka ogni 2s (non migliaia di
+    volte al secondo come la WS grezza), e gli eventi one-shot
+    (level_up, dream_new) vanno mandati subito, non in un batch a
+    intervalli — quindi si invia direttamente da _on_message.
+    """
+
+    def __init__(self, osc_client):
+        self._osc = osc_client
+        self._mqtt = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
+                                  client_id="gaia-td-canvas-bridge")
+        self._mqtt.on_connect = self._on_connect
+        self._mqtt.on_message = self._on_message
+        self._mqtt.reconnect_delay_set(min_delay=2, max_delay=30)
+        self._mqtt.connect(config.MQTT_HOST, config.MQTT_PORT, keepalive=60)
+        self._mqtt.loop_start()
+
+    def _on_connect(self, client, userdata, flags, rc, properties=None):
+        client.subscribe("gaia/td/canvas", qos=0)
+        client.subscribe("gaia/td/canvas/event/#", qos=0)
+        print("[TD-Bridge] Canvas: sottoscritto gaia/td/canvas(+/event/#) "
+              f"→ OSC {config.TD_OSC_HOST}:{config.TD_OSC_PORT}/gaia/canvas/...")
+
+    def _on_message(self, client, userdata, msg):
+        try:
+            payload = json.loads(msg.payload)
+        except (json.JSONDecodeError, TypeError):
+            return
+        if msg.topic.startswith("gaia/td/canvas/event/"):
+            event_name = _sanitize(msg.topic.rsplit('/', 1)[-1])
+            prefix = f"/gaia/canvas/event/{event_name}"
+        else:
+            prefix = "/gaia/canvas"
+        pairs = []
+        _flatten(prefix, payload, pairs)
+        for address, value in pairs:
+            try:
+                self._osc.send_message(address, value)
+            except OSError:
+                pass  # TouchDesigner non in ascolto — non bloccare il resto
+
+
 class TouchDesignerToGaia:
     """Server OSC locale → relay MQTT. Ogni indirizzo /gaia/td/... entrante
     diventa un publish su gaia/touchdesigner/<resto-del-path>."""
@@ -187,6 +237,7 @@ def main():
     server_thread.start()
 
     gaia_to_td = GaiaToTouchDesigner()
+    canvas_to_td = GaiaCanvasToTouchDesigner(gaia_to_td._osc)
     try:
         gaia_to_td.run()
     except KeyboardInterrupt:

@@ -5677,5 +5677,149 @@
                 "bricknorm_fn"
             ]
         ]
+    },
+    {
+        "id": "td_build_canvas_fn",
+        "type": "function",
+        "z": "d3a553c4a24c8d2d",
+        "name": "Build TD Canvas",
+        "func": "// Feed curato per TouchDesigner (direttore artistico Gaia): mood+palette,\n// stanze con oggetti YOLO (+ seed deterministico per il disegno astratto),\n// luci pulite, mattoni, lessico personale, ultimo sogno. Ticka ogni 2s --\n// molto piu' piccolo e STRUTTURATO del flatten grezzo del payload dashboard\n// (~1918 indirizzi oggi su /gaia/...), pensato apposta per pilotare\n// immagini/DMX/effetti, non per rispecchiare una UI web.\nconst brain = global.get('gaiaBrain') || {};\n\n// Stesso algoritmo FNV-1a di web/asemic.js e pi/screen/asemic_engine.py --\n// stessa parola, stesso seed, ovunque (welcome, Pi screen, ora anche TD):\n// e' questo che rende Gaia \"direttore artistico\" invece di una sorgente\n// dati qualsiasi -- la stessa identita' visiva su ogni superficie.\nfunction fnv1a(str) {\n    let h = 2166136261 >>> 0;\n    for (const ch of String(str).toLowerCase()) {\n        h ^= ch.codePointAt(0);\n        h = Math.imul(h, 16777619) >>> 0;\n    }\n    return (h >>> 0) % 2147483647; // resta in int32 con segno per OSC\n}\n\n// Palette mood -- stessi valori di MOOD_INKS in web/asemic.js\nconst MOOD_RGB = {\n    neutra:    [0, 255, 204],\n    calm:      [80, 230, 190],\n    stress:    [255, 115, 85],\n    social:    [255, 195, 100],\n    curiosity: [190, 135, 255],\n};\nconst mood = brain.mood || {};\nconst moodState = mood.state || 'neutra';\nconst [mr, mg, mb] = MOOD_RGB[moodState] || MOOD_RGB.neutra;\n\nconst rooms = {};\nfor (const [room, r] of Object.entries(brain.rooms || {})) {\n    if (room.includes('cam') || room.includes('vision') || room === 'unknown') continue;\n    const objects = {};\n    for (const [cls, count] of Object.entries(r.objects || {})) {\n        objects[cls] = { count, seed: fnv1a(cls) };\n    }\n    rooms[room] = {\n        presence_count: (r.people || []).length,\n        activity: r.activity || 'idle',\n        temperature: r.temperature ?? null,\n        darkness: !!r.darkness,\n        emotion: r.currentEmotion || null,\n        pose: r.currentPose || null,\n        gesture: (r.mediapipe && r.mediapipe.gesture) || null,\n        objects,\n    };\n}\n\n// stesso filtro gia' usato in ThreeViewEngineGAME per separare le luci vere\n// dai sensori Hue mal-nominati (es. \"Luce_Corridoio_Luminosita\" non e' una luce)\nconst lights = {};\nfor (const [id, l] of Object.entries(brain.lights || {})) {\n    if (/(sensore|sensor|movimento|temperature|batteria|illuminazione|oscurita|luce_diurna)/i.test(id)) continue;\n    lights[id] = { power: !!l.power, brightness: l.brightness || 0, color: l.color || '0,0,0' };\n}\n\nconst bricks = {};\nfor (const d of Object.values(brain.devices || {})) {\n    if (d.role !== 'brick') continue;\n    const s = (brain.sensors || {})[d.id] || {};\n    bricks[d.id] = {\n        variant: d.brick_variant || '?',\n        room: d.room || null,\n        interfaces: d.interfaces || [],\n        temperature: s.temperature ?? null,\n        humidity: s.humidity ?? null,\n        vibration: s.vibration ?? null,\n    };\n}\n\nconst lexicon = {};\nObject.entries(brain.lexicon || {})\n    .filter(([, c]) => c >= 3).sort((a, b) => b[1] - a[1]).slice(0, 15)\n    .forEach(([w, c]) => { lexicon[w] = { count: c, seed: fnv1a(w) }; });\n\nconst lastDream = (brain.dreams || []).slice(-1)[0] || null;\n\nconst canvas = {\n    soul: {\n        mood: moodState,\n        mood_rgb: { r: mr, g: mg, b: mb },\n        stress: mood.stress || 0, calm: mood.calm || 0, social: mood.social || 0,\n        curiosity: mood.curiosity || 0, energy: mood.energy || 50,\n        lifeIndex: brain.lifeIndex || 50,\n    },\n    rooms,\n    lights,\n    bricks,\n    lexicon,\n    dream: lastDream ? {\n        mood: lastDream.mood,\n        words: (lastDream.words || []).map(w => ({ name: w, seed: fnv1a(w) })),\n    } : null,\n    ts: Date.now(),\n};\n\nmsg.topic = 'gaia/td/canvas';\nmsg.payload = JSON.stringify(canvas);\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1780,
+        "y": 120,
+        "wires": [
+            [
+                "td_canvas_mqtt_out"
+            ]
+        ]
+    },
+    {
+        "id": "td_canvas_tick",
+        "type": "inject",
+        "z": "d3a553c4a24c8d2d",
+        "name": "TD Canvas Tick (2s)",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "2",
+        "once": true,
+        "onceDelay": "3",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 1580,
+        "y": 120,
+        "wires": [
+            [
+                "td_build_canvas_fn"
+            ]
+        ]
+    },
+    {
+        "id": "td_canvas_mqtt_out",
+        "type": "mqtt out",
+        "z": "d3a553c4a24c8d2d",
+        "name": "→ TD Canvas",
+        "topic": "",
+        "qos": "0",
+        "retain": "false",
+        "broker": "29b6d5926d1a95ec",
+        "x": 1990,
+        "y": 120,
+        "wires": []
+    },
+    {
+        "id": "td_event_levelup_in",
+        "type": "mqtt in",
+        "z": "d3a553c4a24c8d2d",
+        "name": "← rpg/levelup",
+        "topic": "gaia/rpg/levelup",
+        "qos": "0",
+        "datatype": "json",
+        "broker": "29b6d5926d1a95ec",
+        "x": 1580,
+        "y": 180,
+        "wires": [
+            [
+                "td_event_levelup_fn"
+            ]
+        ]
+    },
+    {
+        "id": "td_event_levelup_fn",
+        "type": "function",
+        "z": "d3a553c4a24c8d2d",
+        "name": "TD Event: level_up",
+        "func": "msg.topic = 'gaia/td/canvas/event/level_up';\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1780,
+        "y": 180,
+        "wires": [
+            [
+                "td_event_mqtt_out"
+            ]
+        ]
+    },
+    {
+        "id": "td_event_dream_in",
+        "type": "mqtt in",
+        "z": "d3a553c4a24c8d2d",
+        "name": "← brain/dream",
+        "topic": "gaia/brain/dream",
+        "qos": "0",
+        "datatype": "json",
+        "broker": "29b6d5926d1a95ec",
+        "x": 1580,
+        "y": 220,
+        "wires": [
+            [
+                "td_event_dream_fn"
+            ]
+        ]
+    },
+    {
+        "id": "td_event_dream_fn",
+        "type": "function",
+        "z": "d3a553c4a24c8d2d",
+        "name": "TD Event: dream_new",
+        "func": "msg.topic = 'gaia/td/canvas/event/dream_new';\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1780,
+        "y": 220,
+        "wires": [
+            [
+                "td_event_mqtt_out"
+            ]
+        ]
+    },
+    {
+        "id": "td_event_mqtt_out",
+        "type": "mqtt out",
+        "z": "d3a553c4a24c8d2d",
+        "name": "→ TD Event",
+        "topic": "",
+        "qos": "0",
+        "retain": "false",
+        "broker": "29b6d5926d1a95ec",
+        "x": 1990,
+        "y": 200,
+        "wires": []
     }
 ]
