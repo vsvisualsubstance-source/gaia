@@ -309,6 +309,18 @@ button.small{padding:3px 9px;font-size:.78rem;margin:0}
     <div id="config-msg" class="msg"></div>
   </div>
 
+  <!-- Rete audio Dante -->
+  <div class="card">
+    <h2>Rete audio Dante</h2>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:10px">
+      Core e OPS agganciano il microfono di <b>default di sistema</b> solo all'avvio del
+      servizio — se accendi/spegni l'architettura Dante e il default cambia, i servizi
+      già avviati restano sul device vecchio finché non li riavvii.
+    </p>
+    <button onclick="syncDanteAudio()">🔌 Sincronizza microfono (Dante sì/no)</button>
+    <div id="dante-sync-msg" class="msg"></div>
+  </div>
+
   <!-- Calibrazione -->
   <div class="card">
     <h2>Auto-calibrazione miniPC</h2>
@@ -1399,6 +1411,50 @@ async function coreServiceCtrl(svc, action) {
     if (msgEl) { msgEl.textContent = '✗ Errore connessione'; msgEl.className = 'msg err'; }
   }
   setTimeout(() => { if (msgEl) msgEl.textContent = ''; }, 5000);
+}
+
+// ── Sync mic Dante (Core + OPS riagganciano il default di sistema) ───────────
+async function syncDanteAudio() {
+  setMsg('dante-sync-msg', 'Riavvio gaia-listener (Core) e voce OPS…', 'info');
+  const results = [];
+
+  try {
+    const r = await fetch(`${API}/api/service/listener/restart`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'
+    });
+    const d = await r.json();
+    results.push(d.ok ? '✓ Core' : `✗ Core (${d.error || d.output || 'errore'})`);
+  } catch { results.push('✗ Core (rete)'); }
+
+  const opsRoom = _wwRoom('ops');
+  if (opsRoom) {
+    // Controllo preventivo: /api/pi-service fa fallback su un broadcast a TUTTI
+    // i device se non trova stats recenti per questa stanza — pericoloso qui
+    // (riavvierebbe anche la voce del Pi). Se OPS non è mai stato visto in
+    // questa sessione admin, non chiamare l'endpoint.
+    let opsKnown = false;
+    try {
+      const st = await (await fetch(`${API}/api/status`)).json();
+      opsKnown = !!(st.pi_stats && st.pi_stats[opsRoom]);
+    } catch {}
+    if (opsKnown) {
+      try {
+        const r = await fetch(`${API}/api/pi-service/${opsRoom}/restart`, {
+          method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'
+        });
+        const d = await r.json();
+        results.push(d.ok ? `✓ OPS (${opsRoom})` : `✗ OPS (${d.error || 'errore'})`);
+      } catch { results.push('✗ OPS (rete)'); }
+    } else {
+      results.push(`✗ OPS (${opsRoom} non raggiungibile — nessuna stats recente, salto per non fare broadcast a tutti i device)`);
+    }
+  } else {
+    results.push('✗ OPS (stanza sconosciuta — controlla il profilo device)');
+  }
+
+  const ok = results.every(r => r.startsWith('✓'));
+  setMsg('dante-sync-msg', results.join(' · '), ok ? 'ok' : 'err');
+  setTimeout(() => setMsg('dante-sync-msg', ''), 8000);
 }
 
 // ── Controllo servizi voce ────────────────────────────────────────────────────

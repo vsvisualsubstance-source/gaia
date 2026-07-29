@@ -589,9 +589,12 @@ class AdminHandler(BaseHTTPRequestHandler):
             if action not in ("start", "stop", "restart"):
                 self._json({"ok": False, "error": "azione non valida"}, 400); return
             try:
+                # timeout 25s: gaia-listener.service ha ExecStartPre=sleep 8 (attesa
+                # USB) + tempo di stop del processo precedente — systemctl restart
+                # blocca fino a fine ExecStartPre, 10s andava in timeout quasi sempre.
                 result = subprocess.run(
                     ["sudo", "/usr/bin/systemctl", action, "gaia-listener"],
-                    capture_output=True, timeout=10
+                    capture_output=True, timeout=25
                 )
                 ok  = result.returncode == 0
                 out = (result.stderr or result.stdout).decode(errors="replace")[:200].strip()
