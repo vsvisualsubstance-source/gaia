@@ -46,6 +46,22 @@ _tts_lock = threading.Lock()  # serializza le esecuzioni TTS
 _calibrate_requests: queue.Queue = queue.Queue()
 _record_clip_requests: queue.Queue = queue.Queue()   # campioni wakeword da admin
 
+_DANTE_HINTS = ("gio-usb", "dante")
+
+def _resolve_device_name():
+    """Nome del device audio effettivamente in uso (per capire da Admin se
+    stiamo su Dante o no) — risolto una volta all'avvio, coerente col fatto
+    che sounddevice lega il device di sistema solo all'apertura dello
+    stream (un cambio di default richiede un riavvio per essere ripreso)."""
+    try:
+        idx = config.MIC_DEVICE if config.MIC_DEVICE is not None else sd.default.device[0]
+        name = sd.query_devices(idx)["name"]
+        return "Dante" if any(h in name.lower() for h in _DANTE_HINTS) else name
+    except Exception:
+        return "sconosciuto"
+
+DEVICE_NAME = _resolve_device_name()
+
 
 def _handle_signal(sig, frame):
     global _running
@@ -372,6 +388,7 @@ def _publish_stats(vol: float, state: str, ww_conf: float, gaia_conf: float = 0.
             "gaia_threshold":    round(float(_GAIA_THRESHOLD), 2),
             "silence_threshold": int(config.SILENCE_THRESHOLD),
             "device_id":         config.DEVICE_ID,
+            "device_name":       DEVICE_NAME,
             "room":              _current_room,
             "ts":                int(time.time() * 1000),
         }),

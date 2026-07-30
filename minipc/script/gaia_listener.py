@@ -5,7 +5,7 @@ Wake word "Gaia" → STT → Speaker ID → MQTT
 Admin via gaia/admin/# : config | calibrate | voice_enroll | reload_speakers | remove_speaker
 """
 
-import os, sys, json, time, wave, io, pickle, threading, logging, signal, queue
+import os, sys, json, time, wave, io, pickle, threading, logging, signal, queue, subprocess
 from math import gcd
 import numpy as np
 import pyaudio
@@ -93,6 +93,24 @@ def find_device(pa, hint=""):
 
 def get_device_info(pa, idx):
     return pa.get_device_info_by_index(idx) if idx is not None else pa.get_default_input_device_info()
+
+_DANTE_HINTS = ("xilica", "solaro", "qr1")
+
+def resolve_default_source_label():
+    """PyAudio/ALSA riportano il device di default come la stringa letterale
+    'default' (nome del pseudo-device, non l'hardware reale dietro) — inutile
+    per capire se stiamo su Dante o no. pactl (PipeWire) sa risalire al nome
+    reale del nodo attivo. Fallback su 'default' se pactl non c'è/fallisce
+    (non deve mai bloccare l'avvio)."""
+    try:
+        r = subprocess.run(["pactl", "get-default-source"], capture_output=True, timeout=3, text=True)
+        name = r.stdout.strip()
+        if not name:
+            return "default"
+        label = "Dante (Solaro QR1)" if any(h in name.lower() for h in _DANTE_HINTS) else name
+        return label
+    except Exception:
+        return "default"
 
 # ── Resampling ────────────────────────────────────────────────────────────────
 def make_resampler(src_rate: int):
@@ -389,7 +407,9 @@ class GaiaListener:
         self.device_index = dev
 
         info = get_device_info(self.pa, dev)
-        self.device_name  = info["name"]
+        # PyAudio riporta 'default' come nome quando si usa il device di
+        # sistema — non dice QUALE hardware c'è dietro (Dante o no).
+        self.device_name  = resolve_default_source_label() if dev is None else info["name"]
         self.src_rate     = int(info["defaultSampleRate"])
         self.src_channels = min(int(info["maxInputChannels"]), 2)
         self.native_chunk = int(self.src_rate * FRAME_MS / 1000)
