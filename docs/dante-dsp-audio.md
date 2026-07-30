@@ -77,6 +77,23 @@ come nuovo bridge.
 - Nessun hardware ancora cablato/testato — tutto quanto sopra è design,
   non verificato dal vivo.
 
+## Aggiornamento 2026-07-30 — scenario 6 già in corso, OSC abbandonato
+
+Hardware collegato per davvero (Sennheiser TCCM + Solaro QR1-UC in rete
+Dante, vedi [[project-architettura-core-ops]] per l'integrazione mic). Per
+lo scenario 6 (localizzazione audio) l'utente ha testato dal vivo l'invio
+dati dal Solaro verso Core: **OSC deciso abbandonato** ("non uso OSC visto
+che abbiamo nativo udp e tcp") a favore di **UDP nativo, un canale/porta,
+un valore ASCII per pacchetto** — molto più semplice da debuggare e già
+verificato affidabile. Canali confermati funzionanti: Horizontal/Vertical
+Angle (localizzazione reale dell'array mic, esattamente il dato che
+serviva per questo scenario), Mic Level, Far End Audio, Camera Preset, più
+VISCA-over-IP (porta 52381, binario) per i comandi camera reali già in uso
+dal FollowMe. Dettagli completi (porte, formati, storia dei test) in
+[[project-solaro-dsp]]. Non ancora fatto: nessun consumo di questi dati nel
+brain/Node-RED — finora solo verifica del trasporto lato driver esterno
+dell'utente.
+
 ## Ordine consigliato quando si parte
 
 Stesso principio già seguito per gli altri moduli (vedi
