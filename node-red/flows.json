@@ -4329,7 +4329,7 @@
         "type": "function",
         "z": "tab_media",
         "name": "MediaNorm",
-        "func": "// gaia/media/{room}/status → brain.media[room] (payload vuoto = player via)\nconst room = msg.topic.split('/')[2];\nlet brain = global.get('gaiaBrain') || {};\nbrain.media = brain.media || {};\nlet p = msg.payload;\nif (Buffer.isBuffer(p)) p = p.toString('utf8');\nif (typeof p === 'string') {\n    if (!p.trim()) { delete brain.media[room]; global.set('gaiaBrain', brain); return null; }\n    try { p = JSON.parse(p); } catch (e) { return null; }\n}\nif (!p || typeof p !== 'object') return null;\nbrain.media[room] = { state: p.state, title: p.title, url: p.url,\n                      volume: p.volume, ts: p.ts || Date.now() };\nglobal.set('gaiaBrain', brain);\nreturn null;\n",
+        "func": "// gaia/media/{room}/status → brain.media[room] (payload vuoto = player via)\nconst room = msg.topic.split('/')[2];\nlet brain = global.get('gaiaBrain') || {};\nbrain.media = brain.media || {};\nlet p = msg.payload;\nif (Buffer.isBuffer(p)) p = p.toString('utf8');\nif (typeof p === 'string') {\n    if (!p.trim()) { delete brain.media[room]; global.set('gaiaBrain', brain); return null; }\n    try { p = JSON.parse(p); } catch (e) { return null; }\n}\nif (!p || typeof p !== 'object') return null;\nbrain.media[room] = { state: p.state, title: p.title, url: p.url,\n                      volume: p.volume, ts: p.ts || Date.now(),\n                      audio_output: p.audio_output,\n                      audio_output_dante_available: p.audio_output_dante_available };\nglobal.set('gaiaBrain', brain);\nreturn null;\n",
         "outputs": 0,
         "timeout": 0,
         "noerr": 0,

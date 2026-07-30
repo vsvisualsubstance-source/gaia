@@ -1,0 +1,21 @@
+[Unit]
+Description=GAIA Dante Network Monitor
+After=network.target mosquitto.service
+
+[Service]
+Type=simple
+User=core
+WorkingDirectory=/home/core/core-node-0/minipc/dante
+ExecStart=/home/core/core-node-0/venv/bin/python3 /home/core/core-node-0/minipc/dante/dante_monitor.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+Environment=PYTHONUNBUFFERED=1
+Environment=HOME=/home/core
+# Override in /etc/gaia/dante.conf: DANTE_PORTS, DANTE_TIMEOUT_S,
+# STATUS_INTERVAL_S, MQTT_HOST/MQTT_PORT — vedi config.py per i default
+
+[Install]
+WantedBy=multi-user.target

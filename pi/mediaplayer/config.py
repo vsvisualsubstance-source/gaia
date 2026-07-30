@@ -32,5 +32,9 @@ MPV_BIN        = _get("MPV_BIN", "mpv")
 MPV_SOCK       = _get("MPV_SOCK", r"\\.\pipe\gaia-mpv" if IS_WIN else "/tmp/gaia-mpv.sock")
 # es. "alsa/plughw:CARD=Headphones,DEV=0" per forzare il jack del Pi
 MPV_AUDIO_DEVICE = _get("MPV_AUDIO_DEVICE", "")
+# Uscita verso la rete Dante (Solaro QR1), diversa per macchina — es. su Core
+# "pulse/alsa_output.usb-XILICA_AUDIO_SOLARO_QR1_ASOLARO_QR1-00.analog-stereo"
+# (nome del sink PipeWire). Vuoto = funzione non disponibile su questa macchina.
+MPV_AUDIO_DEVICE_DANTE = _get("MPV_AUDIO_DEVICE_DANTE", "")
 DEFAULT_VOLUME = int(_get("MEDIA_VOLUME", "60"))
 STATUS_EVERY_S = int(_get("MEDIA_STATUS_EVERY_S", "5"))

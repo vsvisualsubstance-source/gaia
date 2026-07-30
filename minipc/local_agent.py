@@ -64,7 +64,12 @@ _SERVICE_DEFS = {
         "cmd": ["/media/core/D/venv/bin/python3",
                 "/home/core/core-node-0/pi/mediaplayer/main.py"],
         "cwd": "/home/core/core-node-0/pi/mediaplayer",
-        "env_extra": {"XDG_RUNTIME_DIR": "/run/user/1000", "CAMERA_NAME": "salotto"},
+        "env_extra": {
+            "XDG_RUNTIME_DIR": "/run/user/1000", "CAMERA_NAME": "salotto",
+            # sink PipeWire del Solaro QR1 (Dante→USB in hardware) — vedi
+            # minipc/dante/README.md e memoria progetto per il resto della rete Dante
+            "MPV_AUDIO_DEVICE_DANTE": "pulse/alsa_output.usb-XILICA_AUDIO_SOLARO_QR1_ASOLARO_QR1-00.analog-stereo",
+        },
     },
     "kiosk": {
         # Welcome sul touchscreen del salotto (il minipc non si sposta,

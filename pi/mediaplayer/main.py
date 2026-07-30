@@ -7,7 +7,9 @@ mpv in modalità IPC (--input-ipc-server) pilotato via MQTT:
                                   resume | stop | {"action":"volume","value":0-100}
                                   {"action":"queue","urls":[...],"mode":"shuffle"|"sequential"}
                                   next | prev
-  gaia/media/{stanza}/status   → retained {state, title, volume, url, ts, queue?}
+                                  {"action":"audio_output","output":"dante"|"local"}
+  gaia/media/{stanza}/status   → retained {state, title, volume, url, ts, queue?,
+                                  audio_output, audio_output_dante_available}
 
 La stanza segue il Device Registry (gaia/devices/{id}/config, retained) come
 fa voice: spostando il device i topic si rimappano da soli.
@@ -40,6 +42,7 @@ _running = True
 _current_room = config.ROOM
 _mpv: subprocess.Popen | None = None
 _last_url = None
+_audio_output = "local"   # "local" | "dante" — instradamento corrente, switch live via IPC
 
 # ── Coda/autoplay ─────────────────────────────────────────────────────────────
 _queue: list[str] = []
@@ -161,6 +164,8 @@ def _publish_status():
     }
     if _queue_mode:
         payload["queue"] = {"mode": _queue_mode, "index": _queue_pos, "total": len(_queue)}
+    payload["audio_output"] = _audio_output
+    payload["audio_output_dante_available"] = bool(config.MPV_AUDIO_DEVICE_DANTE)
     _mqtt.publish(_topic_status(), json.dumps(payload), retain=True)
 
 
@@ -201,7 +206,7 @@ def _advance_queue():
 
 
 def _handle_command(payload: bytes):
-    global _last_url, _queue, _queue_mode
+    global _last_url, _queue, _queue_mode, _audio_output
     try:
         cmd = json.loads(payload)
     except ValueError:
@@ -243,6 +248,17 @@ def _handle_command(payload: bytes):
             _ipc(["set_property", "volume", vol])
         except (TypeError, ValueError):
             pass
+    elif action == "audio_output":
+        # mpv rilega l'uscita audio a caldo (a differenza di PyAudio/sounddevice
+        # per il mic — vedi voce): niente riavvio del processo, solo la property.
+        target = (cmd.get("output") or "local").lower()
+        if target == "dante" and not config.MPV_AUDIO_DEVICE_DANTE:
+            print("[Media] audio_output=dante richiesto ma MPV_AUDIO_DEVICE_DANTE non configurato — ignoro")
+        else:
+            device = config.MPV_AUDIO_DEVICE_DANTE if target == "dante" else (config.MPV_AUDIO_DEVICE or "auto")
+            _ipc(["set_property", "audio-device", device])
+            _audio_output = target
+            print(f"[Media] Uscita audio → {target} ({device})")
     elif action != "status":
         print(f"[Media] Azione sconosciuta: {action}")
     _publish_status()

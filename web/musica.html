@@ -43,6 +43,7 @@ h2{font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:var(--mu
 .now-controls button{background:none;border:1px solid var(--border);color:var(--text);border-radius:6px;
   padding:3px 8px;cursor:pointer;font-size:.8rem}
 .now-controls button:hover{border-color:var(--accent);color:var(--accent)}
+.now-controls button.on{background:#001a12;border-color:var(--accent);color:var(--accent)}
 .now-controls input[type=range]{flex:1;accent-color:var(--accent)}
 .empty-hint{color:var(--muted);font-size:.82rem;padding:10px 0}
 
@@ -124,6 +125,7 @@ let _selected = new Set(JSON.parse(localStorage.getItem('gaiaMusicRooms') || '[]
 let _library = { tracks: [], folders: [] };
 let _filtered = [];
 let _mode = 'shuffle';
+let _danteActive = false;   // rete Dante viva? (gaia/dante/status, indipendente dalla stanza)
 
 function escHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function saveSelection(){ localStorage.setItem('gaiaMusicRooms', JSON.stringify([..._selected])); }
@@ -183,6 +185,16 @@ function renderNowPlaying(){
     // "sequential" anche quando l'utente ha scelto shuffle.
     const q = p.queue ? ` · ${p.queue.index+1}/${p.queue.total} (${_mode==='shuffle'?'shuffle':'ordinata'})` : '';
     const icon = st === 'playing' ? '▶️' : st === 'paused' ? '⏸' : '⏹';
+    const danteAvail = !!p.audio_output_dante_available;
+    const onDante = p.audio_output === 'dante';
+    let danteBtn = '';
+    if (danteAvail){
+      const nextOutput = onDante ? 'local' : 'dante';
+      const warn = (!onDante && !_danteActive) ? ' title="Rete Dante non rilevata attiva al momento"' : '';
+      danteBtn = `<button class="${onDante?'on':''}"${warn}
+        onclick="send('${room}',{action:'audio_output',output:'${nextOutput}'})">
+        ${onDante ? '📡 Dante' : '🔈 Locale'}${(!onDante && !_danteActive) ? ' ⚠' : ''}</button>`;
+    }
     return `<div class="now-card ${st}">
       <div class="now-room"><span>${escHtml(room)}</span><span>${icon}</span></div>
       <div class="now-title">${escHtml(p.title || (st==='stopped'?'silenzio':'—'))}</div>
@@ -193,6 +205,7 @@ function renderNowPlaying(){
         <button onclick="send('${room}',{action:'resume'})">▶</button>
         <input type="range" min="0" max="100" value="${p.volume ?? 60}"
                onchange="send('${room}',{action:'volume',value:+this.value})">
+        ${danteBtn}
       </div>
     </div>`;
   }).join('');
@@ -211,10 +224,19 @@ function connectMqtt(){
   const url = `ws://${location.hostname}:9001`;
   function start(){
     _client = mqtt.connect(url);
-    _client.on('connect', ()=>{ dot.className='ws-dot ok'; _client.subscribe('gaia/media/+/status'); });
+    _client.on('connect', ()=>{
+      dot.className='ws-dot ok';
+      _client.subscribe('gaia/media/+/status');
+      _client.subscribe('gaia/dante/status');
+    });
     _client.on('close',   ()=> dot.className='ws-dot err');
     _client.on('error',   ()=> dot.className='ws-dot err');
     _client.on('message', (topic, raw)=>{
+      if (topic === 'gaia/dante/status'){
+        try{ _danteActive = !!JSON.parse(raw.toString()).active; } catch(e){}
+        renderNowPlaying();
+        return;
+      }
       const room = topic.split('/')[2];
       if (!raw || !raw.length){ delete _rooms[room]; renderRooms(); renderNowPlaying(); return; }
       try{
