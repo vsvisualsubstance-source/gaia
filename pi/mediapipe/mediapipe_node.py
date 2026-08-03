@@ -277,7 +277,16 @@ def _publish_landmarks_osc(room):
     può accendere lo stesso flag senza calpestare gli indirizzi di questo),
     UN messaggio per volto/mano/posa con tutte le coordinate come lista
     invece di centinaia di messaggi singoli — 478 punti volto in un solo
-    pacchetto UDP, non 478."""
+    pacchetto UDP, non 478.
+
+    L'indice nell'indirizzo è il person_id calcolato in _analyze() (stesso
+    id di people[] lato MQTT, per vicinanza orizzontale) — NON l'ordine di
+    rilevamento grezzo di MediaPipe: face/0, hand/left/0 e pose/0 sono
+    garantiti essere la STESSA persona nello stesso frame (best-effort,
+    non un'identità persistente tra frame — vedi commento in _analyze).
+    device_id è nel path (identifica IL device), room resta solo in
+    meta/room perché può cambiare (riassegnazione stanza) senza che
+    device_id cambi — chi consuma correla i due via device_id."""
     if not _osc:
         return
     base = f"/gaia/mocap/{DEVICE_ID}"
@@ -286,13 +295,13 @@ def _publish_landmarks_osc(room):
         _osc.send_message(f"{base}/meta/faces", len(_last_raw['faces']))
         _osc.send_message(f"{base}/meta/hands", len(_last_raw['hands']))
         _osc.send_message(f"{base}/meta/poses", len(_last_raw['poses']))
-        for i, pts in enumerate(_last_raw['faces']):
-            _osc.send_message(f"{base}/face/{i}", [c for p in pts for c in p])
-        for i, hd in enumerate(_last_raw['hands']):
+        for person_id, pts in enumerate(_last_raw['faces']):
+            _osc.send_message(f"{base}/face/{person_id}", [c for p in pts for c in p])
+        for hd in _last_raw['hands']:
             side = 'left' if hd['handedness'].lower().startswith('l') else 'right'
-            _osc.send_message(f"{base}/hand/{side}/{i}", [c for p in hd['points'] for c in p])
-        for i, pts in enumerate(_last_raw['poses']):
-            _osc.send_message(f"{base}/pose/{i}", [c for p in pts for c in p])
+            _osc.send_message(f"{base}/hand/{side}/{hd['person_id']}", [c for p in hd['points'] for c in p])
+        for person_id, pts in enumerate(_last_raw['poses']):
+            _osc.send_message(f"{base}/pose/{person_id}", [c for p in pts for c in p])
     except OSError:
         pass  # TouchDesigner non in ascolto — non bloccare il resto del loop
 
@@ -384,18 +393,20 @@ def _analyze(frame):
             if OSC_LANDMARKS:
                 raw_poses.append([(p.x, p.y, p.z, p.visibility) for p in pr.pose_landmarks.landmark])
 
-    if OSC_LANDMARKS:
-        _last_raw['faces'] = raw_faces
-        _last_raw['hands'] = raw_hands
-        _last_raw['poses'] = raw_poses
-
     # Associazione best-effort persona-per-persona: nessuna delle tre pipeline
     # (FaceMesh/Hands/Pose) condivide un tracking-id tra loro, quindi si
     # appaiano per vicinanza orizzontale (ordinamento per x) — non garantisce
     # identità coerente frame-per-frame, solo un raggruppamento ragionevole
     # quando le persone sono separate lateralmente (tipico inquadratura fissa).
-    faces_sorted = sorted(faces, key=lambda f: f['x'])
-    poses_sorted = sorted(poses, key=lambda p: p['x'])
+    # Ordinamento per INDICE (non sui dict direttamente) così lo stesso ordine
+    # si può riapplicare a raw_faces/raw_poses per l'OSC — prima venivano
+    # spediti nell'ordine di rilevamento di MediaPipe, scorrelato da
+    # faces_sorted/poses_sorted: un volto e una mano con lo stesso indice
+    # OSC potevano appartenere a due persone diverse.
+    face_order = sorted(range(len(faces)), key=lambda idx: faces[idx]['x'])
+    pose_order = sorted(range(len(poses)), key=lambda idx: poses[idx]['x'])
+    faces_sorted = [faces[idx] for idx in face_order]
+    poses_sorted = [poses[idx] for idx in pose_order]
     n_people = max(len(faces_sorted), len(poses_sorted), 1 if hands else 0)
 
     # Ancora (x) di ogni persona: volto se c'è, altrimenti posa, altrimenti None
@@ -407,15 +418,29 @@ def _analyze(frame):
 
     # Ogni mano va alla persona con ancora più vicina; se nessuna persona ha
     # un'ancora nota (solo mani rilevate, niente volto/posa) tutte le mani
-    # finiscono sulla persona 0.
+    # finiscono sulla persona 0. hand_person_ids tiene l'id assegnato per
+    # indice originale (allineato a hands/raw_hands) — serve per taggare
+    # le mani grezze OSC con lo stesso person_id di volto/posa.
     gestures_per_person = [[] for _ in range(n_people)]
+    hand_person_ids = [0] * len(hands)
     known_anchors = [i for i in range(n_people) if anchors[i] is not None]
-    for hnd in hands:
+    for hi, hnd in enumerate(hands):
         if known_anchors:
             nearest = min(known_anchors, key=lambda j: abs(hnd['x'] - anchors[j]))
         else:
             nearest = 0
         gestures_per_person[nearest].append(hnd['gesture'])
+        hand_person_ids[hi] = nearest
+
+    if OSC_LANDMARKS:
+        # Stesso ordine/id persona usato sotto per people[] — un volto, una
+        # posa e una mano con lo stesso person_id sono la stessa persona.
+        _last_raw['faces'] = [raw_faces[idx] for idx in face_order]
+        _last_raw['poses'] = [raw_poses[idx] for idx in pose_order]
+        _last_raw['hands'] = [
+            {**raw_hands[hi], 'person_id': hand_person_ids[hi]}
+            for hi in range(len(raw_hands))
+        ]
 
     people = []
     for i in range(n_people):

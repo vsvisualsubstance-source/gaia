@@ -147,7 +147,7 @@ rallenterebbe inutilmente per nulla.
 Richiede `pip install python-osc` nel venv del servizio (non è nei requirements.txt di
 default: è opzionale, solo per chi accende questo flag — tipicamente OPS, non i Pi).
 
-### Schema indirizzi — un device, un tipo
+### Schema indirizzi — un device, un tipo, un person_id correlato
 
 ```
 /gaia/mocap/{device_id}/meta/room           stringa, stanza corrente
@@ -155,14 +155,25 @@ default: è opzionale, solo per chi accende questo flag — tipicamente OPS, non
 /gaia/mocap/{device_id}/meta/hands          intero, quante mani
 /gaia/mocap/{device_id}/meta/poses          intero, quante persone in posa
 
-/gaia/mocap/{device_id}/face/{i}            478 punti × (x,y,z) in UN messaggio,
-                                             i = indice volto (0, 1, ... se MAX_FACES>1)
-
-/gaia/mocap/{device_id}/hand/left/{i}       21 punti × (x,y,z) in UN messaggio
-/gaia/mocap/{device_id}/hand/right/{i}      idem, mano destra
-
-/gaia/mocap/{device_id}/pose/{i}            33 punti × (x,y,z,visibility) in UN messaggio
+/gaia/mocap/{device_id}/face/{person_id}            478 punti × (x,y,z) in UN messaggio
+/gaia/mocap/{device_id}/hand/left/{person_id}       21 punti × (x,y,z) in UN messaggio
+/gaia/mocap/{device_id}/hand/right/{person_id}      idem, mano destra
+/gaia/mocap/{device_id}/pose/{person_id}            33 punti × (x,y,z,visibility) in UN messaggio
 ```
+
+**`person_id` è lo stesso indice usato da `people[]` lato MQTT** (associazione
+best-effort per vicinanza orizzontale, vedi sopra) — NON l'ordine di rilevamento
+grezzo di MediaPipe. Fix 2026-08-03: prima dell'associazione, `face/0` e
+`hand/left/0` potevano appartenere a due persone fisiche diverse (FaceMesh/Hands/
+Pose non condividono un tracking-id, ognuna enumerava per conto proprio); ora
+`face/{person_id}`, `hand/left|right/{person_id}` e `pose/{person_id}` con lo
+stesso `person_id` nello stesso frame sono **garantiti essere la stessa
+persona**. Resta un'identità solo-per-frame, non persistente nel tempo (una
+persona può cambiare `person_id` da un frame all'altro se cambia l'ordine
+orizzontale — stesso limite già noto di `people[]`). `device_id` nel path
+identifica il device; `room` può cambiare (riassegnazione stanza) senza che
+`device_id` cambi, per questo resta solo in `meta/room` invece che nel path
+di ogni messaggio dati.
 
 **Un messaggio per volto/mano/posa, non un messaggio per coordinata**: 478 punti del
 viso viaggiano in un solo pacchetto UDP (lista di 1434 float), non 478 pacchetti — il
