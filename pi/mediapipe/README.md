@@ -155,11 +155,30 @@ default: è opzionale, solo per chi accende questo flag — tipicamente OPS, non
 /gaia/mocap/{device_id}/meta/hands          intero, quante mani
 /gaia/mocap/{device_id}/meta/poses          intero, quante persone in posa
 
-/gaia/mocap/{device_id}/face/{person_id}            478 punti × (x,y,z) in UN messaggio
+/gaia/mocap/{device_id}/face/{person_id}                    478 punti × (x,y,z) in UN messaggio (mesh completa)
+/gaia/mocap/{device_id}/face/{person_id}/lips               40 punti × (x,y,z) — solo le labbra
+/gaia/mocap/{device_id}/face/{person_id}/eye_left           16 punti × (x,y,z) — solo un occhio
+/gaia/mocap/{device_id}/face/{person_id}/eye_right          16 punti × (x,y,z) — solo l'altro occhio
+/gaia/mocap/{device_id}/face/{person_id}/eyebrow_left       10 punti × (x,y,z)
+/gaia/mocap/{device_id}/face/{person_id}/eyebrow_right      10 punti × (x,y,z)
+/gaia/mocap/{device_id}/face/{person_id}/nose               24 punti × (x,y,z)
+/gaia/mocap/{device_id}/face/{person_id}/oval               36 punti × (x,y,z) — contorno del volto
 /gaia/mocap/{device_id}/hand/left/{person_id}       21 punti × (x,y,z) in UN messaggio
 /gaia/mocap/{device_id}/hand/right/{person_id}      idem, mano destra
 /gaia/mocap/{device_id}/pose/{person_id}            33 punti × (x,y,z,visibility) in UN messaggio
 ```
+
+**I gruppi `face/{person_id}/{regione}` (2026-08-03) sono un'AGGIUNTA, non
+sostituiscono `face/{person_id}`** — stesso dato, stessi 478 punti sorgente,
+solo suddivisi per parte anatomica per chi non vuole/non riesce a ricostruire
+l'intera mesh senza conoscerne la topologia (le mani, con soli 21 punti in
+ordine fisso e ben noto, non ne hanno bisogno). Indici presi VERBATIM dalle
+costanti ufficiali di MediaPipe (`mp.solutions.face_mesh.FACEMESH_LIPS`,
+`FACEMESH_LEFT_EYE`, ecc.), **verificati contro l'installazione mediapipe
+reale in uso su OPS** (non a memoria — vedi `_FACE_REGIONS` in
+`mediapipe_node.py` per gli indici esatti). `left`/`right` sono i nomi delle
+costanti MediaPipe stesse — non verificato se corrispondono a "sinistra/
+destra" reali dal punto di vista dello spettatore o del soggetto.
 
 **`person_id` è lo stesso indice usato da `people[]` lato MQTT** (associazione
 best-effort per vicinanza orizzontale, vedi sopra) — NON l'ordine di rilevamento

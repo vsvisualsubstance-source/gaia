@@ -259,6 +259,24 @@ if not MULTI_PERSON:
 
 _GESTURE_MAP = {0: 'fist', 1: 'point', 2: 'victory', 3: 'three', 4: 'open_hand'}
 
+# Sottoinsiemi "con nome" dei 478 punti del volto, per chi consuma OSC senza
+# voler ricostruire l'intera mesh (478 punti anonimi sono difficili da
+# interpretare senza la topologia — le mani, con soli 21 punti in ordine
+# fisso, sono già gestibili così come sono). Indici presi VERBATIM dalle
+# costanti ufficiali di MediaPipe (mp.solutions.face_mesh.FACEMESH_*,
+# verificati sull'installazione reale usata in produzione, non a memoria) —
+# nomi lasciati identici alle costanti sorgente (left/right = convenzione
+# MediaPipe stessa, non verificata qui rispetto a sinistra/destra reali).
+_FACE_REGIONS = {
+    'lips':          [0, 13, 14, 17, 37, 39, 40, 61, 78, 80, 81, 82, 84, 87, 88, 91, 95, 146, 178, 181, 185, 191, 267, 269, 270, 291, 308, 310, 311, 312, 314, 317, 318, 321, 324, 375, 402, 405, 409, 415],
+    'eye_left':      [249, 263, 362, 373, 374, 380, 381, 382, 384, 385, 386, 387, 388, 390, 398, 466],
+    'eye_right':     [7, 33, 133, 144, 145, 153, 154, 155, 157, 158, 159, 160, 161, 163, 173, 246],
+    'eyebrow_left':  [276, 282, 283, 285, 293, 295, 296, 300, 334, 336],
+    'eyebrow_right': [46, 52, 53, 55, 63, 65, 66, 70, 105, 107],
+    'nose':          [1, 2, 4, 5, 6, 19, 45, 48, 64, 94, 97, 98, 115, 168, 195, 197, 220, 275, 278, 294, 326, 327, 344, 440],
+    'oval':          [10, 21, 54, 58, 67, 93, 103, 109, 127, 132, 136, 148, 149, 150, 152, 162, 172, 176, 234, 251, 284, 288, 297, 323, 332, 338, 356, 361, 365, 377, 378, 379, 389, 397, 400, 454],
+}
+
 # Landmark grezzi dell'ultimo frame analizzato — popolati da _analyze() SOLO
 # se OSC_LANDMARKS è attivo (altrimenti restano vuoti, zero costo extra) e
 # letti da _publish_landmarks_osc() nel loop principale, a un ritmo proprio
@@ -297,6 +315,13 @@ def _publish_landmarks_osc(room):
         _osc.send_message(f"{base}/meta/poses", len(_last_raw['poses']))
         for person_id, pts in enumerate(_last_raw['faces']):
             _osc.send_message(f"{base}/face/{person_id}", [c for p in pts for c in p])
+            # Gruppi con nome (occhi/sopracciglia/labbra/naso/contorno) in
+            # AGGIUNTA alla mesh completa sopra — stesso identico dato, solo
+            # più facile da interpretare senza conoscere la topologia dei
+            # 478 punti. Vedi _FACE_REGIONS per gli indici (verificati).
+            for region, idxs in _FACE_REGIONS.items():
+                region_pts = [pts[i] for i in idxs]
+                _osc.send_message(f"{base}/face/{person_id}/{region}", [c for p in region_pts for c in p])
         for hd in _last_raw['hands']:
             side = 'left' if hd['handedness'].lower().startswith('l') else 'right'
             _osc.send_message(f"{base}/hand/{side}/{hd['person_id']}", [c for p in hd['points'] for c in p])
