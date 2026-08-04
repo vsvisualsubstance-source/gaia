@@ -35,7 +35,24 @@ Due feed sulla **stessa porta 7000**, distinti per prefisso indirizzo:
 
 - **`/gaia/...`** — flatten grezzo di TUTTO il payload dashboard (~1900
   indirizzi). Firehose/debug, non pensato per pilotare effetti — mescola log
-  storici, sensori Hue mal-nominati, ecc.
+  storici, sensori Hue mal-nominati, ecc. Un angolo utile dentro il firehose
+  (il resto va scoperto indirizzo per indirizzo, non è catalogato):
+
+  ```
+  /gaia/vision/rooms/{stanza}/persons_count      quante persone rilevate
+  /gaia/vision/rooms/{stanza}/activity           working/resting/sitting/present/empty/idle
+  /gaia/vision/rooms/{stanza}/objects/...        oggetti YOLO rilevati, conteggio per classe
+  /gaia/vision/rooms/{stanza}/currentEmotion     ultima emozione rilevata (mediapipe)
+  /gaia/vision/rooms/{stanza}/currentPose        ultima posa rilevata
+  /gaia/vision/rooms/{stanza}/gesture            ultimo gesto rilevato
+  /gaia/vision/rooms/{stanza}/temperature|humidity|ambient_light|darkness   sensori ambientali, se presenti
+  /gaia/vision/rooms/{stanza}/yoloActive|mediapipeActive   booleani, quali servizi vision girano davvero lì
+  /gaia/vision/rooms/{stanza}/speaking           nome di chi sta parlando (se rilevato negli ultimi 15s)
+  /gaia/vision/rooms/{stanza}/scene              descrizione scena dal VLM (moondream), se attivo
+  ```
+  Stesso identico dato di `payloadData.rooms` (quello della dashboard web),
+  solo riesposto sotto il namespace `vision` — non è un canale diverso, è
+  un'altra vista sugli stessi dati.
 - **`/gaia/canvas/...`** — feed curato, aggiornato ogni 2s, pensato apposta
   per l'arte generativa:
   ```
