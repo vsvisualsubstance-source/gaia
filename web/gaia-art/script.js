@@ -102,6 +102,12 @@ function fnv1a(str) {
 
 function lerp(a, b, f) { return a + (b - a) * f; }
 
+// Stesso vocabolario solfeggio→glifo di pi/screen/main.py e web/welcome.html
+// (nota MIDI % 12 → parola) — riusato qui per seedare colore/identità delle
+// note dell'AV Herbarium con lo stesso fnv1a di sopra, coerente ovunque.
+const NOTE_WORDS = ['do', 'dodiesis', 're', 'rediesis', 'mi', 'fa', 'fadiesis',
+                     'sol', 'soldiesis', 'la', 'ladiesis', 'si'];
+
 // ── WebSocket ─────────────────────────────────────────────────────────────────
 // Nessuna scritta a schermo (mood/presenze/luci) — l'opera deve leggersi da
 // sola, per intero visiva. Resta solo il puntino di stato connessione.
@@ -147,6 +153,7 @@ function connectWS() {
             if (lvl != null) lastLevel = lvl;
 
             stepObjectSources(d);
+            stepHerbNotes(d);
         } catch (_) {}
     };
 }
@@ -305,6 +312,52 @@ function stepObjectSources(d) {
         });
     });
     objectMotes.forEach((m, key) => { if (!wanted.has(key)) m.dying = true; });
+}
+
+// Note dell'AV Herbarium (piante→MIDI→Carla): a differenza degli oggetti
+// (stato persistente finché visti) una nota è un evento fugace — una
+// scintilla che nasce e si dissolve, non un puntino che resta finché la
+// pianta "c'è ancora". Colore seedato dalla parola del solfeggio (stessa
+// identità visiva di pi/screen e welcome.html), posizione all'ancora della
+// stanza (stesso sistema delle persone/oggetti).
+const MAX_NOTE_SPARKS = 24;   // le note arrivano a raffica coi preset arpeggiati
+let lastHerbTs = 0;
+const noteSparks = [];
+
+function stepHerbNotes(d) {
+    const notes = (d.herbarium && Array.isArray(d.herbarium.notes)) ? d.herbarium.notes : [];
+    let maxTs = lastHerbTs;
+    notes.forEach(n => {
+        if (!n || typeof n.ts !== 'number' || n.ts <= lastHerbTs) return;
+        if (n.ts > maxTs) maxTs = n.ts;
+        if (noteSparks.length >= MAX_NOTE_SPARKS) return;
+        const word = NOTE_WORDS[((n.note % 12) + 12) % 12];
+        const seed = fnv1a(word);
+        noteSparks.push({
+            room: n.room || 'unknown', seed, hueF: (seed % 10000) / 10000,
+            vel: (n.velocity || 64) / 127, t0: performance.now(),
+        });
+    });
+    lastHerbTs = maxTs;
+}
+
+function drawNoteSparks(nowMs, core) {
+    for (let i = noteSparks.length - 1; i >= 0; i--) {
+        const s = noteSparks[i];
+        const age = (nowMs - s.t0) / 1000;
+        if (age > 1.2) { noteSparks.splice(i, 1); continue; }
+        const p = age / 1.2;
+        const anchor = roomAnchor(s.room, core);
+        const r = core.bR * (0.3 + p * (1.4 + s.vel));
+        const alpha = (1 - p) * 0.55 * (0.5 + s.vel * 0.5);
+        const [h0, h1] = cur.hue;
+        const hue = h0 + (h1 - h0) * s.hueF;
+        ctx.beginPath();
+        ctx.arc(anchor.x, anchor.y, r, 0, Math.PI * 2);
+        ctx.strokeStyle = `hsla(${hue}, 70%, 65%, ${alpha})`;
+        ctx.lineWidth = 2 * (1 - p) + 0.4;
+        ctx.stroke();
+    }
 }
 
 function drawObjectMotes(t, core) {
@@ -582,6 +635,7 @@ function frame(ts) {
     drawLevelBurst(nowMs, core);
     ctx.globalCompositeOperation = 'source-over';
     drawObjectMotes(t, core);
+    drawNoteSparks(nowMs, core);
     drawPeople(t, core);
     stepThought();
     drawThought(t);
