@@ -221,9 +221,9 @@ class GaiaCanvasToTouchDesigner:
         client.subscribe("gaia/td/canvas", qos=0)
         client.subscribe("gaia/td/canvas/event/#", qos=0)
         print(f"[TD-Bridge] Canvas: sottoscritto gaia/td/canvas → OSC "
-              f"{config.TD_OSC_HOST}:{config.TD_OSC_PORT}/gaia/canvas/..., "
-              f"eventi (gaia/td/canvas/event/#) → OSC "
-              f"{config.TD_OSC_HOST}:{config.TD_EVENT_OSC_PORT}/gaia/canvas/event/...")
+              f"{config.TD_OSC_HOST}:{config.TD_OSC_PORT}/gaia/canvas/... "
+              f"(soul/rooms/lights/bricks), eventi + lexicon/dream → OSC "
+              f"{config.TD_OSC_HOST}:{config.TD_EVENT_OSC_PORT}/gaia/canvas/...")
 
     def _on_message(self, client, userdata, msg):
         try:
@@ -241,6 +241,23 @@ class GaiaCanvasToTouchDesigner:
                 except OSError:
                     pass  # TouchDesigner non in ascolto — non bloccare il resto
             return
+        # lexicon e dream sono testo (parole, mood come stringa) — stesso
+        # problema di fondo degli eventi sopra, un OSC In CHOP sulla 7000
+        # non li digerisce bene. Escono quindi sulla stessa porta eventi
+        # (7001) invece che nel tick continuo tracciato.
+        payload = dict(payload)
+        text_fields = {}
+        for key in ("lexicon", "dream"):
+            if key in payload:
+                text_fields[key] = payload.pop(key)
+        if text_fields:
+            text_pairs = []
+            _flatten("/gaia/canvas", text_fields, text_pairs)
+            for address, value in text_pairs:
+                try:
+                    self._event_osc.send_message(address, value)
+                except OSError:
+                    pass
         pairs = []
         _flatten("/gaia/canvas", payload, pairs)
         self._tracker.send(pairs)

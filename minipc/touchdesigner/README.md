@@ -126,9 +126,12 @@ manda sotto `/gaia/canvas/...`:
 
 /gaia/canvas/lights/{id}/power, brightness, color         (solo luci vere, filtrate)
 /gaia/canvas/bricks/{id}/variant, room, temperature, humidity, vibration
-/gaia/canvas/lexicon/{parola}/count, seed                  (lessico personale di Gaia)
-/gaia/canvas/dream/mood, words/{parola}/seed                (ultimo sogno notturno)
 ```
+
+`lexicon` e `dream` (lessico personale di Gaia, ultimo sogno notturno) sono
+testo — **non sono più su questa porta** (spostati sulla 7001, vedi sotto,
+2026-08-04): un OSC In CHOP sulla 7000 non li digerisce bene, stesso motivo
+degli eventi.
 
 **Il seed è la parte importante**: stesso algoritmo FNV-1a del vocabolario
 asemico (`web/asemic.js`, `pi/screen/asemic_engine.py`) — la stessa parola o
@@ -140,18 +143,19 @@ artistico invece di una sorgente dati qualsiasi.
 
 Eventi one-shot (non nel tick continuo, mandati subito all'arrivo):
 `/gaia/canvas/event/level_up/...`, `/gaia/canvas/event/dream_new/...`,
-`/gaia/canvas/event/face_enrolled/...`, `/gaia/canvas/event/person_recognized/...`.
+`/gaia/canvas/event/face_enrolled/...`, `/gaia/canvas/event/person_recognized/...`,
+`/gaia/canvas/event/plant_note/...`.
 Stesso meccanismo per aggiungerne altri (citofono, allarme caduta, ecc.):
 basta un mqtt-in in più sul topic giusto, nessuna modifica al bridge.
 
-**Porta separata per gli eventi (2026-08-04)**: gli eventi mischiano
-stringhe (nome, stanza) e numeri (confidenza, timestamp) nello stesso
-messaggio — un OSC In CHOP sulla 7000 (pensato per canali numerici
-continui) non li digerisce bene. Gli eventi escono quindi su
+**Porta separata, 7001 (2026-08-04)**: eventi + `lexicon`/`dream` mischiano
+stringhe (nome, stanza, parole, mood come testo) e numeri (confidenza,
+timestamp, seed) — un OSC In CHOP sulla 7000 (pensato per canali numerici
+continui) non li digerisce bene. Escono quindi tutti su
 `TD_EVENT_OSC_PORT` (default **7001**, configurabile in
-`/etc/gaia/touchdesigner.conf`), separata dal tick continuo del canvas
-(che resta sulla 7000) — su quella porta TD punta un OSC In DAT dedicato
-invece di un CHOP.
+`/etc/gaia/touchdesigner.conf`), separata dal tick continuo del resto del
+canvas (soul/rooms/lights/bricks, che resta sulla 7000) — su quella porta
+TD punta un OSC In DAT dedicato invece di un CHOP.
 
 ## Gotcha: canali fantasma (persone/oggetti spariti restano "presenti" in TD)
 

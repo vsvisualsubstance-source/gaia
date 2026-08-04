@@ -31,9 +31,10 @@ Host Core: `192.168.1.142`. Servizio: `gaia-touchdesigner.service`.
 
 ### Gaia → TD (Core manda, TD ascolta)
 
-Tre feed: due sulla **porta 7000** (distinti per prefisso indirizzo) più gli
-eventi one-shot su una **porta separata, 7001** (vedi sotto — mischiano
-stringhe e numeri, un OSC In CHOP sulla 7000 non li digerisce bene):
+Due feed sulla **porta 7000** (dati numerici continui) più tutto ciò che
+mischia testo e numeri (eventi one-shot, lexicon, dream) su una **porta
+separata, 7001** — vedi sotto, un OSC In CHOP sulla 7000 non digerisce
+bene le stringhe:
 
 - **`/gaia/...`** — flatten grezzo di TUTTO il payload dashboard (~1900
   indirizzi). Firehose/debug, non pensato per pilotare effetti — mescola log
@@ -54,7 +55,7 @@ stringhe e numeri, un OSC In CHOP sulla 7000 non li digerisce bene):
   | `progression` | stato RPG di Gaia: livello, xp, classe attiva, asset sbloccati, statistiche |
   | `thought` | **testo** dell'ultimo pensiero spontaneo di Gaia |
   | `lastMemory` | riassunto dell'ultimo ricordo salvato |
-  | `lastDream` / `lastDreamWords` / `lastDreamTs` | ultimo sogno — stesso dato di `/gaia/canvas/last_dream/...` ma qui grezzo |
+  | `lastDream` / `lastDreamWords` / `lastDreamTs` | ultimo sogno — stesso dato di `/gaia/canvas/dream/...` (porta 7001) ma qui grezzo |
   | `roomGraph` / `roomGraphLearned` | grafo di adiacenza tra le stanze (statico + appreso) |
   | `events` | log degli ultimi eventi del brain |
   | `hourlyStats` | statistiche orarie |
@@ -88,18 +89,33 @@ stringhe e numeri, un OSC In CHOP sulla 7000 non li digerisce bene):
   /gaia/canvas/soul/mood_rgb/r,g,b       190, 135, 255   (stessa palette di web/asemic.js)
   /gaia/canvas/rooms/{stanza}/...        oggetti YOLO con seed FNV-1a deterministico
   /gaia/canvas/lights/...                luci pulite per DMX
-  /gaia/canvas/lexicon/...               lessico personale di Gaia
-  /gaia/canvas/last_dream/...            ultimo sogno
+  /gaia/canvas/bricks/{id}/...           variant, room, temperature, humidity, vibration
   ```
+  `lexicon` e `dream` (lessico personale, ultimo sogno) sono testo — **non
+  sono su questa porta**, sono stati spostati sulla 7001 insieme agli
+  eventi (vedi sotto) perché un OSC In CHOP sulla 7000 non li digerisce
+  bene.
 
-### Eventi one-shot — porta separata **7001**
+### Porta separata **7001** — eventi + testo (lexicon/dream)
 
-Non nel tick continuo sopra: mandati subito all'arrivo, su una porta
-**diversa** dalla 7000 (`TD_EVENT_OSC_PORT`, default 7001, configurabile in
-`/etc/gaia/touchdesigner.conf`). Motivo: mischiano stringhe (nome, stanza)
-e numeri (confidenza, timestamp) nello stesso messaggio — un OSC In CHOP
-sulla 7000 (pensato per canali numerici continui) non li digerisce bene.
-Su questa porta TD punta un **OSC In DAT** dedicato invece di un CHOP.
+Motivo: mischiano stringhe (nome, stanza, parole, mood come testo) e numeri
+(confidenza, timestamp, seed) nello stesso messaggio — un OSC In CHOP sulla
+7000 (pensato per canali numerici continui) non li digerisce bene. Porta
+configurabile via `TD_EVENT_OSC_PORT` in `/etc/gaia/touchdesigner.conf`
+(default 7001). Su questa porta TD punta un **OSC In DAT** dedicato invece
+di un CHOP.
+
+```
+/gaia/canvas/lexicon/{parola}/count    quante volte Gaia ha usato quella parola
+/gaia/canvas/lexicon/{parola}/seed     seed FNV-1a della parola (stesso algoritmo ovunque in Gaia)
+/gaia/canvas/dream/mood                mood dell'ultimo sogno notturno (stringa)
+/gaia/canvas/dream/words/{parola}/seed parole del sogno, stesso seed FNV-1a
+```
+Aggiornati nel tick continuo del canvas ma instradati qui (non sulla 7000)
+per il motivo di cui sopra — non sono eventi one-shot in senso stretto,
+ma condividono lo stesso problema testo+numeri.
+
+Eventi one-shot veri e propri (mandati subito all'arrivo, non nel tick):
 
 ```
 /gaia/canvas/event/level_up            evento one-shot
