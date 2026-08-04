@@ -84,6 +84,26 @@ Da Node-RED, sottoscrivere `gaia/touchdesigner/#` per reagire ai parametri gener
 `docs/maggiordomo.md`) — nessuna modifica al bridge necessaria per aggiungere nuovi parametri,
 basta iniziare a mandarli da TD.
 
+### Consumer già collegati (Node-RED)
+
+Due canali reali già cablati su questa convenzione, entrambi **spenti di default**
+(vanno accesi in Admin → Automazioni prima di usarli):
+
+- **Luci** (`touchdesignerLighting`): `/gaia/td/lighting/<ItemOpenHAB>/<campo>` —
+  campo in `Potenza`/`Luminosita`/`Colore`/`Color_Temperature`, valore scritto
+  direttamente sull'item OpenHAB reale (nessuna mappa stanza→item, l'item va
+  indicato per nome esatto lato TD).
+- **Mood** (`touchdesignerMood`, 2026-08-04): `/gaia/td/mood/<dimensione>` con
+  UN float come argomento = **delta** da sommare (non un valore assoluto — il
+  mood ha già un decadimento naturale nel tempo, un delta è coerente con tutte
+  le altre sorgenti). `dimensione` ∈ `stress`/`calm`/`social`/`curiosity`
+  (clamp 0-1) o `energy` (clamp 0-100). Esempio: `/gaia/td/mood/curiosity 0.1`
+  aggiunge 0.1 a `brain.mood.curiosity`. **Chiude il loop**: il nuovo mood
+  torna a TD al giro successivo del feed `/gaia/canvas/...` sotto (mood +
+  palette), senza bisogno di altro — TD vede i propri effetti tornare indietro
+  come nuovi colori. Testato dal vivo 2026-08-04 (nudge reale su `calm`,
+  0.02→0.32 confermato).
+
 ## Gaia → TouchDesigner: feed curato `/gaia/canvas/...` (2026-07-25)
 
 Il flatten grezzo sopra manda **tutto** il payload dashboard (~1900 indirizzi
