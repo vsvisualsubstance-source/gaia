@@ -15,8 +15,8 @@ hanno poco a che fare tra loro. Confonderli è l'errore più facile da fare:
 
 | Canale | Chi parla | Porta | Cosa porta |
 |---|---|---|---|
-| **1. Bridge Gaia↔TD** | Core (miniPC) ↔ TD | 7000 out / 9008 in | Stato della casa: mood, stanze, luci, persone, lessico |
-| **2. Mocap diretto** | OPS → TD | 7000 (stessa porta del bridge, indirizzi diversi) | Landmark grezzi viso/mani/pose in tempo reale |
+| **1. Bridge Gaia↔TD** | Core (miniPC) ↔ TD | 7000 (flatten grezzo) + 7001 (canvas curato + eventi) out / 9008 in | Stato della casa: mood, stanze, luci, persone, lessico |
+| **2. Mocap diretto** | OPS → TD | 7000 (stessa porta del flatten grezzo, indirizzi diversi) | Landmark grezzi viso/mani/pose in tempo reale |
 | **3. Driver Solaro DSP** | Solaro QR1 ↔ driver esterno utente | 4554-4558, 52381, ecc. | Angoli mic array, livelli audio, preset camera — **NIENTE a che fare con Gaia**, sistema audio a parte |
 
 Il canale 3 non è documentato qui: è un progetto separato dell'utente, non
@@ -31,10 +31,9 @@ Host Core: `192.168.1.142`. Servizio: `gaia-touchdesigner.service`.
 
 ### Gaia → TD (Core manda, TD ascolta)
 
-Due feed sulla **porta 7000** (dati numerici continui) più tutto ciò che
-mischia testo e numeri (eventi one-shot, lexicon, dream) su una **porta
-separata, 7001** — vedi sotto, un OSC In CHOP sulla 7000 non digerisce
-bene le stringhe:
+Il flatten grezzo (sotto) resta sulla **porta 7000**. **Tutto il resto**
+(feed curato canvas, tick continuo E eventi one-shot) va sulla **porta
+7001** — vedi la sezione dedicata più sotto per il perché.
 
 - **`/gaia/...`** — flatten grezzo di TUTTO il payload dashboard (~1900
   indirizzi). Firehose/debug, non pensato per pilotare effetti — mescola log
@@ -82,40 +81,37 @@ bene le stringhe:
   scoperto indirizzo per indirizzo se serve — questa tabella copre il primo
   livello e i campi più probabilmente utili per l'arte generativa
   (`people`, `lights`, `plants`, `sensors`, `thought`), non ogni sotto-campo.
-- **`/gaia/canvas/...`** — feed curato, aggiornato ogni 2s, pensato apposta
-  per l'arte generativa:
-  ```
-  /gaia/canvas/soul/mood                 "curiosity"
-  /gaia/canvas/soul/mood_rgb/r,g,b       190, 135, 255   (stessa palette di web/asemic.js)
-  /gaia/canvas/rooms/{stanza}/...        oggetti YOLO con seed FNV-1a deterministico
-  /gaia/canvas/lights/...                luci pulite per DMX
-  /gaia/canvas/bricks/{id}/...           variant, room, temperature, humidity, vibration
-  ```
-  `lexicon` e `dream` (lessico personale, ultimo sogno) sono testo — **non
-  sono su questa porta**, sono stati spostati sulla 7001 insieme agli
-  eventi (vedi sotto) perché un OSC In CHOP sulla 7000 non li digerisce
-  bene.
 
-### Porta separata **7001** — eventi + testo (lexicon/dream)
+### Porta **7001** — feed curato canvas (tick continuo + eventi)
 
-Motivo: mischiano stringhe (nome, stanza, parole, mood come testo) e numeri
-(confidenza, timestamp, seed) nello stesso messaggio — un OSC In CHOP sulla
-7000 (pensato per canali numerici continui) non li digerisce bene. Porta
-configurabile via `TD_EVENT_OSC_PORT` in `/etc/gaia/touchdesigner.conf`
-(default 7001). Su questa porta TD punta un **OSC In DAT** dedicato invece
-di un CHOP.
+Costruito in Node-RED ("Build TD Canvas", tab Gaia Engine, tick ogni 2s),
+pubblicato su MQTT `gaia/td/canvas` — il bridge lo ascolta e lo manda sotto
+`/gaia/canvas/...`, **tutto su questa porta, non sulla 7000**.
 
+**Perché non sulla 7000 (2026-08-04)**: prima si era provato a spostare
+solo `lexicon`/`dream` (testo) qui e lasciare `soul`/`rooms`/`lights`/
+`bricks` sulla 7000 (pensata per un OSC In CHOP, canali numerici continui)
+— ma verificato campo per campo che **ogni** categoria ha almeno un valore
+testuale mischiato ai numeri: `soul.mood`, `rooms.activity/emotion/pose/
+gesture`, `lights.color`, `bricks.variant/room/interfaces`. Non aveva senso
+separare "i numeri" dal resto quando quasi tutto ha del testo dentro —
+tutto il canvas va quindi sulla stessa porta `TD_EVENT_OSC_PORT` (default
+**7001**, configurabile in `/etc/gaia/touchdesigner.conf`). Su questa porta
+TD punta un **OSC In DAT** dedicato invece di un CHOP. La 7000 resta libera
+per il solo flatten grezzo sopra.
+
+Tick continuo:
 ```
-/gaia/canvas/lexicon/{parola}/count    quante volte Gaia ha usato quella parola
-/gaia/canvas/lexicon/{parola}/seed     seed FNV-1a della parola (stesso algoritmo ovunque in Gaia)
-/gaia/canvas/dream/mood                mood dell'ultimo sogno notturno (stringa)
-/gaia/canvas/dream/words/{parola}/seed parole del sogno, stesso seed FNV-1a
+/gaia/canvas/soul/mood                 "curiosity"
+/gaia/canvas/soul/mood_rgb/r,g,b       190, 135, 255   (stessa palette di web/asemic.js)
+/gaia/canvas/rooms/{stanza}/...        oggetti YOLO con seed FNV-1a deterministico
+/gaia/canvas/lights/...                luci pulite per DMX
+/gaia/canvas/bricks/{id}/...           variant, room, temperature, humidity, vibration
+/gaia/canvas/lexicon/{parola}/count, seed    lessico personale di Gaia
+/gaia/canvas/dream/mood, words/{parola}/seed ultimo sogno notturno
 ```
-Aggiornati nel tick continuo del canvas ma instradati qui (non sulla 7000)
-per il motivo di cui sopra — non sono eventi one-shot in senso stretto,
-ma condividono lo stesso problema testo+numeri.
 
-Eventi one-shot veri e propri (mandati subito all'arrivo, non nel tick):
+Eventi one-shot (non nel tick, mandati subito all'arrivo):
 
 ```
 /gaia/canvas/event/level_up            evento one-shot

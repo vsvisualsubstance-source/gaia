@@ -195,20 +195,24 @@ class GaiaCanvasToTouchDesigner:
     mandati subito, non in un batch a intervalli — quindi si invia
     direttamente da _on_message.
 
-    Gli eventi vanno su una porta SEPARATA (event_osc_client, di norma
-    TD_EVENT_OSC_PORT) dal tick continuo (osc_client, TD_OSC_PORT):
-    mischiano stringhe e numeri nello stesso messaggio, un OSC In CHOP
-    pensato per canali numerici continui non li gestisce bene — su una
-    porta a parte TD può puntarci un OSC In DAT dedicato.
+    TUTTO questo feed (tick continuo + eventi) va su event_osc_client
+    (di norma TD_EVENT_OSC_PORT) — verificato campo per campo il 2026-08-04:
+    ogni categoria del canvas (soul.mood, rooms.activity/emotion/pose/
+    gesture, lights.color, bricks.variant/room/interfaces) ha almeno un
+    valore testuale mischiato ai numeri, quindi non ha senso provare a
+    separare "i numeri" dal resto — un OSC In CHOP (pensato per canali
+    numerici continui) non digerisce bene nessuna di queste categorie.
+    osc_client (TD_OSC_PORT/7000) NON è più usato da questa classe: resta
+    riservato al flatten grezzo di GaiaToTouchDesigner, tenuto per
+    compatibilità del costruttore ma non più necessario di per sé.
     """
 
     def __init__(self, osc_client, event_osc_client=None):
-        self._osc = osc_client
         self._event_osc = event_osc_client or osc_client
-        # Solo il tick continuo passa dal tracker (azzera stanze/oggetti/
-        # persone spariti) — gli eventi one-shot sono bang per natura, non
-        # hanno un "prima" con cui confrontarsi né vanno azzerati.
-        self._tracker = OscAddressTracker(osc_client)
+        # Tutto il feed passa dal tracker (azzera stanze/oggetti/persone/
+        # lexicon spariti) tranne gli eventi one-shot, bang per natura —
+        # non hanno un "prima" con cui confrontarsi né vanno azzerati.
+        self._tracker = OscAddressTracker(self._event_osc)
         self._mqtt = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
                                   client_id="gaia-td-canvas-bridge")
         self._mqtt.on_connect = self._on_connect
@@ -220,9 +224,7 @@ class GaiaCanvasToTouchDesigner:
     def _on_connect(self, client, userdata, flags, rc, properties=None):
         client.subscribe("gaia/td/canvas", qos=0)
         client.subscribe("gaia/td/canvas/event/#", qos=0)
-        print(f"[TD-Bridge] Canvas: sottoscritto gaia/td/canvas → OSC "
-              f"{config.TD_OSC_HOST}:{config.TD_OSC_PORT}/gaia/canvas/... "
-              f"(soul/rooms/lights/bricks), eventi + lexicon/dream → OSC "
+        print(f"[TD-Bridge] Canvas (tick + eventi, tutto testo+numeri) → OSC "
               f"{config.TD_OSC_HOST}:{config.TD_EVENT_OSC_PORT}/gaia/canvas/...")
 
     def _on_message(self, client, userdata, msg):
@@ -241,23 +243,6 @@ class GaiaCanvasToTouchDesigner:
                 except OSError:
                     pass  # TouchDesigner non in ascolto — non bloccare il resto
             return
-        # lexicon e dream sono testo (parole, mood come stringa) — stesso
-        # problema di fondo degli eventi sopra, un OSC In CHOP sulla 7000
-        # non li digerisce bene. Escono quindi sulla stessa porta eventi
-        # (7001) invece che nel tick continuo tracciato.
-        payload = dict(payload)
-        text_fields = {}
-        for key in ("lexicon", "dream"):
-            if key in payload:
-                text_fields[key] = payload.pop(key)
-        if text_fields:
-            text_pairs = []
-            _flatten("/gaia/canvas", text_fields, text_pairs)
-            for address, value in text_pairs:
-                try:
-                    self._event_osc.send_message(address, value)
-                except OSError:
-                    pass
         pairs = []
         _flatten("/gaia/canvas", payload, pairs)
         self._tracker.send(pairs)

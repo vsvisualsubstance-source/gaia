@@ -112,7 +112,8 @@ immagini/DMX/effetti: mescola log storici, sensori Hue mal-nominati, ecc.).
 Per quello esiste un secondo feed, molto più piccolo e **strutturato apposta
 per TD**, costruito in Node-RED ("Build TD Canvas", tab Gaia Engine, tick
 ogni 2s) e pubblicato su MQTT `gaia/td/canvas` — il bridge lo ascolta e lo
-manda sotto `/gaia/canvas/...`:
+manda sotto `/gaia/canvas/...`, **sulla porta 7001** (`TD_EVENT_OSC_PORT`,
+non sulla 7000 della WS grezza — vedi il box subito sotto per il perché):
 
 ```
 /gaia/canvas/soul/mood                 "curiosity"
@@ -126,12 +127,9 @@ manda sotto `/gaia/canvas/...`:
 
 /gaia/canvas/lights/{id}/power, brightness, color         (solo luci vere, filtrate)
 /gaia/canvas/bricks/{id}/variant, room, temperature, humidity, vibration
+/gaia/canvas/lexicon/{parola}/count, seed                  (lessico personale di Gaia)
+/gaia/canvas/dream/mood, words/{parola}/seed                (ultimo sogno notturno)
 ```
-
-`lexicon` e `dream` (lessico personale di Gaia, ultimo sogno notturno) sono
-testo — **non sono più su questa porta** (spostati sulla 7001, vedi sotto,
-2026-08-04): un OSC In CHOP sulla 7000 non li digerisce bene, stesso motivo
-degli eventi.
 
 **Il seed è la parte importante**: stesso algoritmo FNV-1a del vocabolario
 asemico (`web/asemic.js`, `pi/screen/asemic_engine.py`) — la stessa parola o
@@ -141,21 +139,25 @@ astratto ma **coerente ogni volta**, la stessa identità visiva già usata su
 welcome.html e il display del Pi. È questo che rende Gaia un vero direttore
 artistico invece di una sorgente dati qualsiasi.
 
-Eventi one-shot (non nel tick continuo, mandati subito all'arrivo):
-`/gaia/canvas/event/level_up/...`, `/gaia/canvas/event/dream_new/...`,
-`/gaia/canvas/event/face_enrolled/...`, `/gaia/canvas/event/person_recognized/...`,
-`/gaia/canvas/event/plant_note/...`.
+Eventi one-shot (non nel tick continuo, mandati subito all'arrivo, stessa
+porta 7001): `/gaia/canvas/event/level_up/...`,
+`/gaia/canvas/event/dream_new/...`, `/gaia/canvas/event/face_enrolled/...`,
+`/gaia/canvas/event/person_recognized/...`, `/gaia/canvas/event/plant_note/...`.
 Stesso meccanismo per aggiungerne altri (citofono, allarme caduta, ecc.):
 basta un mqtt-in in più sul topic giusto, nessuna modifica al bridge.
 
-**Porta separata, 7001 (2026-08-04)**: eventi + `lexicon`/`dream` mischiano
-stringhe (nome, stanza, parole, mood come testo) e numeri (confidenza,
-timestamp, seed) — un OSC In CHOP sulla 7000 (pensato per canali numerici
-continui) non li digerisce bene. Escono quindi tutti su
-`TD_EVENT_OSC_PORT` (default **7001**, configurabile in
-`/etc/gaia/touchdesigner.conf`), separata dal tick continuo del resto del
-canvas (soul/rooms/lights/bricks, che resta sulla 7000) — su quella porta
-TD punta un OSC In DAT dedicato invece di un CHOP.
+**Perché tutto il canvas è sulla 7001, non sulla 7000 (2026-08-04)**: prima
+si era provato a spostare solo `lexicon`/`dream` (testo) sulla 7001 e
+lasciare `soul`/`rooms`/`lights`/`bricks` sulla 7000 (pensata per un OSC In
+CHOP, canali numerici continui) — ma verificato campo per campo che
+**ogni** categoria ha almeno un valore testuale mischiato ai numeri
+(`soul.mood`, `rooms.activity/emotion/pose/gesture`, `lights.color`,
+`bricks.variant/room/interfaces`). Non aveva senso separare "i numeri" dal
+resto quando quasi tutto ha del testo dentro — l'intero canvas (tick +
+eventi) va quindi sulla stessa porta `TD_EVENT_OSC_PORT` (default **7001**,
+configurabile in `/etc/gaia/touchdesigner.conf`), e su quella porta TD
+punta un **OSC In DAT** dedicato invece di un CHOP. La 7000 resta libera
+per il solo flatten grezzo sopra.
 
 ## Gotcha: canali fantasma (persone/oggetti spariti restano "presenti" in TD)
 
