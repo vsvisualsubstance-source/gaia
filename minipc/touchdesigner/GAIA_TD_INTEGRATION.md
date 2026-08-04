@@ -111,6 +111,26 @@ Tick continuo:
 /gaia/canvas/dream/mood, words/{parola}/seed ultimo sogno notturno
 ```
 
+**"Le frasi che Gaia dice e mostra" (2026-08-04)** — tutto ciò che prima
+esisteva solo internamente in Node-RED (mai esposto), più i campi già nel
+flatten grezzo ma qui riesposti sul canale testo-friendly:
+```
+/gaia/canvas/thought                     ultimo pensiero spontaneo (stringa)
+/gaia/canvas/thoughts/{i}/text, ts        ultimi 20 pensieri
+/gaia/canvas/tts                          ultimo testo pronunciato ad alta voce
+/gaia/canvas/lastMemory                   riassunto dell'ultimo ricordo
+/gaia/canvas/memories/{i}/summary, ts     ultimi 20 ricordi
+/gaia/canvas/diary/{i}/source, category, value, person, ts   ultime 20 voci del diario interno
+/gaia/canvas/voiceCommands/{i}/text, ts, stanza, via   ultimi 10 comandi vocali DELLE PERSONE (non risposte di Gaia)
+```
+**`diary` non è testo libero** — sono voci strutturate (source/category/
+value, es. `{"source":"hue","category":"brightness","value":0}`), usate
+internamente per costruire il prompt del sogno notturno. Se cerchi frasi
+leggibili, sono `thought`/`thoughts`/`tts`/`lastMemory`/`memories`, non
+`diary`. Tutte le liste sono capate a una finestra recente (10-20 voci) —
+gli array completi (`brain.diary` fino a 2000 voci, `brain.thoughts` fino
+a 300) non vengono mandati per intero a ogni tick da 2s, sarebbe sprecato.
+
 Eventi one-shot (non nel tick, mandati subito all'arrivo):
 
 ```
