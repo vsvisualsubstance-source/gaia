@@ -146,8 +146,12 @@ while _running:
         if cls_name != 'person':
             # tracker.update() restituisce solo track non scadute (age <= max_age):
             # contale tutte, non solo quelle viste nell'esatto frame corrente,
-            # altrimenti con FRAME_SKIP>1 l'oggetto sparisce e ricompare a ogni ciclo
-            obj_counter[cls_name] = obj_counter.get(cls_name, 0) + 1
+            # altrimenti con FRAME_SKIP>1 l'oggetto sparisce e ricompare a ogni ciclo.
+            # Stessa conferma MIN_CONFIRMED_HITS già usata per 'person' (trovato
+            # 2026-08-04: un singolo frame sbagliato — es. "dog" — bastava a far
+            # scattare automazioni reali come Pet Concierge, senza nessun filtro).
+            if int(t.get('hits', 1)) >= config.MIN_CONFIRMED_HITS:
+                obj_counter[cls_name] = obj_counter.get(cls_name, 0) + 1
             continue
 
         conf  = float(t.get('conf', 0))
