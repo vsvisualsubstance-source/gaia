@@ -191,12 +191,20 @@ class GaiaCanvasToTouchDesigner:
     A differenza di GaiaToTouchDesigner non serve disaccoppiare rate di
     arrivo e di invio: il canvas continuo ticka ogni 2s (non migliaia di
     volte al secondo come la WS grezza), e gli eventi one-shot
-    (level_up, dream_new) vanno mandati subito, non in un batch a
-    intervalli — quindi si invia direttamente da _on_message.
+    (level_up, dream_new, face_enrolled, person_recognized...) vanno
+    mandati subito, non in un batch a intervalli — quindi si invia
+    direttamente da _on_message.
+
+    Gli eventi vanno su una porta SEPARATA (event_osc_client, di norma
+    TD_EVENT_OSC_PORT) dal tick continuo (osc_client, TD_OSC_PORT):
+    mischiano stringhe e numeri nello stesso messaggio, un OSC In CHOP
+    pensato per canali numerici continui non li gestisce bene — su una
+    porta a parte TD può puntarci un OSC In DAT dedicato.
     """
 
-    def __init__(self, osc_client):
+    def __init__(self, osc_client, event_osc_client=None):
         self._osc = osc_client
+        self._event_osc = event_osc_client or osc_client
         # Solo il tick continuo passa dal tracker (azzera stanze/oggetti/
         # persone spariti) — gli eventi one-shot sono bang per natura, non
         # hanno un "prima" con cui confrontarsi né vanno azzerati.
@@ -212,8 +220,10 @@ class GaiaCanvasToTouchDesigner:
     def _on_connect(self, client, userdata, flags, rc, properties=None):
         client.subscribe("gaia/td/canvas", qos=0)
         client.subscribe("gaia/td/canvas/event/#", qos=0)
-        print("[TD-Bridge] Canvas: sottoscritto gaia/td/canvas(+/event/#) "
-              f"→ OSC {config.TD_OSC_HOST}:{config.TD_OSC_PORT}/gaia/canvas/...")
+        print(f"[TD-Bridge] Canvas: sottoscritto gaia/td/canvas → OSC "
+              f"{config.TD_OSC_HOST}:{config.TD_OSC_PORT}/gaia/canvas/..., "
+              f"eventi (gaia/td/canvas/event/#) → OSC "
+              f"{config.TD_OSC_HOST}:{config.TD_EVENT_OSC_PORT}/gaia/canvas/event/...")
 
     def _on_message(self, client, userdata, msg):
         try:
@@ -227,7 +237,7 @@ class GaiaCanvasToTouchDesigner:
             _flatten(prefix, payload, pairs)
             for address, value in pairs:
                 try:
-                    self._osc.send_message(address, value)
+                    self._event_osc.send_message(address, value)
                 except OSError:
                     pass  # TouchDesigner non in ascolto — non bloccare il resto
             return
@@ -280,7 +290,8 @@ def main():
     server_thread.start()
 
     gaia_to_td = GaiaToTouchDesigner()
-    canvas_to_td = GaiaCanvasToTouchDesigner(gaia_to_td._osc)
+    event_osc = SimpleUDPClient(config.TD_OSC_HOST, config.TD_EVENT_OSC_PORT)
+    canvas_to_td = GaiaCanvasToTouchDesigner(gaia_to_td._osc, event_osc)
     try:
         gaia_to_td.run()
     except KeyboardInterrupt:

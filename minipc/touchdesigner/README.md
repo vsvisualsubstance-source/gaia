@@ -139,10 +139,19 @@ welcome.html e il display del Pi. È questo che rende Gaia un vero direttore
 artistico invece di una sorgente dati qualsiasi.
 
 Eventi one-shot (non nel tick continuo, mandati subito all'arrivo):
-`/gaia/canvas/event/level_up/...`, `/gaia/canvas/event/dream_new/...`.
-**Non ancora collegati**: citofono, allarme caduta, ingresso di una persona
-— stesso meccanismo, da aggiungere quando serve (basta un mqtt-in in più
-sul topic giusto, nessuna modifica al bridge).
+`/gaia/canvas/event/level_up/...`, `/gaia/canvas/event/dream_new/...`,
+`/gaia/canvas/event/face_enrolled/...`, `/gaia/canvas/event/person_recognized/...`.
+Stesso meccanismo per aggiungerne altri (citofono, allarme caduta, ecc.):
+basta un mqtt-in in più sul topic giusto, nessuna modifica al bridge.
+
+**Porta separata per gli eventi (2026-08-04)**: gli eventi mischiano
+stringhe (nome, stanza) e numeri (confidenza, timestamp) nello stesso
+messaggio — un OSC In CHOP sulla 7000 (pensato per canali numerici
+continui) non li digerisce bene. Gli eventi escono quindi su
+`TD_EVENT_OSC_PORT` (default **7001**, configurabile in
+`/etc/gaia/touchdesigner.conf`), separata dal tick continuo del canvas
+(che resta sulla 7000) — su quella porta TD punta un OSC In DAT dedicato
+invece di un CHOP.
 
 ## Gotcha: canali fantasma (persone/oggetti spariti restano "presenti" in TD)
 

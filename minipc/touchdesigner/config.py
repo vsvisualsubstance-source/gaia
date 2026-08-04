@@ -24,6 +24,12 @@ _defaults = {
     # Uscita verso TouchDesigner (OSC In CHOP/DAT, di norma in ascolto su 127.0.0.1)
     'TD_OSC_HOST':        '127.0.0.1',
     'TD_OSC_PORT':        '7000',
+    # Porta SEPARATA per gli eventi one-shot (level_up, dream_new,
+    # face_enrolled, person_recognized...): mischiano stringhe (nome,
+    # stanza) e numeri (confidenza, timestamp) nello stesso messaggio, un
+    # OSC In CHOP sulla 7000 (pensato per canali numerici continui) non li
+    # digerisce bene. Su questa porta TD punta un OSC In DAT dedicato.
+    'TD_EVENT_OSC_PORT':  '7001',
     # La WS di Gaia può aggiornarsi molto più spesso di quanto serva a un
     # network generativo (misurato: migliaia di broadcast/sec in certe
     # condizioni, non 1/sec come da documentazione originale) — il bridge
@@ -50,6 +56,7 @@ GAIA_WS_URL  = f"ws://{GAIA_WS_HOST}:{GAIA_WS_PORT}{GAIA_WS_PATH}"
 
 TD_OSC_HOST = _cfg['TD_OSC_HOST']
 TD_OSC_PORT = int(_cfg['TD_OSC_PORT'])
+TD_EVENT_OSC_PORT = int(_cfg['TD_EVENT_OSC_PORT'])
 SEND_INTERVAL_S = int(_cfg['SEND_INTERVAL_MS']) / 1000.0
 
 OSC_IN_PORT = int(_cfg['OSC_IN_PORT'])

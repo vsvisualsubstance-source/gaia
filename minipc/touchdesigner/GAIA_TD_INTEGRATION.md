@@ -31,7 +31,9 @@ Host Core: `192.168.1.142`. Servizio: `gaia-touchdesigner.service`.
 
 ### Gaia → TD (Core manda, TD ascolta)
 
-Due feed sulla **stessa porta 7000**, distinti per prefisso indirizzo:
+Tre feed: due sulla **porta 7000** (distinti per prefisso indirizzo) più gli
+eventi one-shot su una **porta separata, 7001** (vedi sotto — mischiano
+stringhe e numeri, un OSC In CHOP sulla 7000 non li digerisce bene):
 
 - **`/gaia/...`** — flatten grezzo di TUTTO il payload dashboard (~1900
   indirizzi). Firehose/debug, non pensato per pilotare effetti — mescola log
@@ -88,28 +90,40 @@ Due feed sulla **stessa porta 7000**, distinti per prefisso indirizzo:
   /gaia/canvas/lights/...                luci pulite per DMX
   /gaia/canvas/lexicon/...               lessico personale di Gaia
   /gaia/canvas/last_dream/...            ultimo sogno
-  /gaia/canvas/event/level_up            evento one-shot
-  /gaia/canvas/event/dream_new           evento one-shot
-  /gaia/canvas/event/face_enrolled/name         nome della persona appena registrata
-  /gaia/canvas/event/face_enrolled/camera       stanza/camera dove è avvenuto
-  /gaia/canvas/event/face_enrolled/snap_index   indice dello snapshot salvato
-  /gaia/canvas/event/face_enrolled/ts           timestamp
   ```
-  `face_enrolled` (2026-08-04): evento discreto quando un enrollment volto
-  salva davvero uno snapshot (admin.html → "Registra volto"). **Porta solo i
-  metadati, non l'immagine** — OSC non è adatto a spedire pixel. Per la
-  composizione visiva vera, TD legge lo **stream MJPEG live della camera**
-  (`http://<host>:8766/video`, Video Stream In TOP — stesso pattern già
-  usato per la camera in produzione, vedi `ops/CLAUDE.md`): l'evento dice a
-  TD *quando* e *dove* reagire, lo stream gli dà i pixel.
 
-  ```
-  /gaia/canvas/event/person_recognized/person       nome della persona riconosciuta
-  /gaia/canvas/event/person_recognized/camera       stanza/camera dove è avvenuto
-  /gaia/canvas/event/person_recognized/confidence   confidenza del riconoscimento
-  /gaia/canvas/event/person_recognized/track_id     id della traccia YOLO
-  ```
-  `person_recognized` (2026-08-04): evento discreto quando una persona NOTA
+### Eventi one-shot — porta separata **7001**
+
+Non nel tick continuo sopra: mandati subito all'arrivo, su una porta
+**diversa** dalla 7000 (`TD_EVENT_OSC_PORT`, default 7001, configurabile in
+`/etc/gaia/touchdesigner.conf`). Motivo: mischiano stringhe (nome, stanza)
+e numeri (confidenza, timestamp) nello stesso messaggio — un OSC In CHOP
+sulla 7000 (pensato per canali numerici continui) non li digerisce bene.
+Su questa porta TD punta un **OSC In DAT** dedicato invece di un CHOP.
+
+```
+/gaia/canvas/event/level_up            evento one-shot
+/gaia/canvas/event/dream_new           evento one-shot
+/gaia/canvas/event/face_enrolled/name         nome della persona appena registrata
+/gaia/canvas/event/face_enrolled/camera       stanza/camera dove è avvenuto
+/gaia/canvas/event/face_enrolled/snap_index   indice dello snapshot salvato
+/gaia/canvas/event/face_enrolled/ts           timestamp
+```
+`face_enrolled` (2026-08-04): evento discreto quando un enrollment volto
+salva davvero uno snapshot (admin.html → "Registra volto"). **Porta solo i
+metadati, non l'immagine** — OSC non è adatto a spedire pixel. Per la
+composizione visiva vera, TD legge lo **stream MJPEG live della camera**
+(`http://<host>:8766/video`, Video Stream In TOP — stesso pattern già
+usato per la camera in produzione, vedi `ops/CLAUDE.md`): l'evento dice a
+TD *quando* e *dove* reagire, lo stream gli dà i pixel.
+
+```
+/gaia/canvas/event/person_recognized/person       nome della persona riconosciuta
+/gaia/canvas/event/person_recognized/camera       stanza/camera dove è avvenuto
+/gaia/canvas/event/person_recognized/confidence   confidenza del riconoscimento
+/gaia/canvas/event/person_recognized/track_id     id della traccia YOLO
+```
+`person_recognized` (2026-08-04): evento discreto quando una persona NOTA
   (non 'unknown') entra in una stanza o viene identificata — non ogni uscita
   o traccia anonima, filtrato lato Node-RED apposta. Stesso principio di
   `face_enrolled`: solo metadati, i pixel arrivano dallo stream MJPEG.
