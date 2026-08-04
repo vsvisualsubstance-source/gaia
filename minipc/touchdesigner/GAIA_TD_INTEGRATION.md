@@ -117,8 +117,9 @@ flatten grezzo ma qui riesposti sul canale testo-friendly:
 ```
 /gaia/canvas/thought                     ultimo pensiero spontaneo (stringa)
 /gaia/canvas/thoughts/{i}/text, ts        ultimi 20 pensieri
-/gaia/canvas/tts                          ultimo testo pronunciato ad alta voce
+/gaia/canvas/tts                          ultimo testo pronunciato ad alta voce, IN QUALSIASI STANZA
 /gaia/canvas/ttsTs                        timestamp di quel testo
+/gaia/canvas/ttsRoom                      dove è stato detto (null se via Echo "tutte")
 /gaia/canvas/lastMemory                   riassunto dell'ultimo ricordo
 /gaia/canvas/memories/{i}/summary, ts     ultimi 20 ricordi
 /gaia/canvas/diary/{i}/source, category, value, person, ts   ultime 20 voci del diario interno
