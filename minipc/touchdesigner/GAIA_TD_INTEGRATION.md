@@ -131,6 +131,23 @@ TD *quando* e *dove* reagire, lo stream gli dà i pixel.
   — la stessa parola/classe produce sempre lo stesso numero, per disegnare in
   modo astratto ma coerente (stessa identità visiva ovunque in Gaia).
 
+```
+/gaia/canvas/event/plant_note/note       numero nota MIDI (0-127)
+/gaia/canvas/event/plant_note/velocity   velocity MIDI (0-127)
+/gaia/canvas/event/plant_note/channel    canale MIDI
+/gaia/canvas/event/plant_note/room       stanza (es. "ingresso")
+/gaia/canvas/event/plant_note/ts         timestamp
+```
+`plant_note` (2026-08-04): un evento per ogni nota suonata dall'AV Herbarium
+(piante→MIDI→Carla, vedi `docs/pi-moduli-futuri.md`) — più frequente degli
+altri eventi (può arrivare più volte al secondo con preset arpeggiati), ma
+stessa natura "one-shot per bang" degli altri, quindi stessa porta 7001.
+**Gotcha**: l'AV Herbarium ha DUE servizi separati che vanno accesi
+ENTRAMBI — `herbsim`/`herbmp` (sorgente note: simulatore o mediapipe) E
+`herbarium` (motore che le riceve e le fa suonare via Carla). Accendere solo
+la sorgente non produce suono né questo evento — le note vengono scritte su
+un bus MIDI che nessuno ascolta.
+
 ### TD → Gaia (TD manda, Core ascolta sulla 9008)
 
 Convenzione generica: **qualunque** indirizzo `/gaia/td/...` (o `/gaia/...`)

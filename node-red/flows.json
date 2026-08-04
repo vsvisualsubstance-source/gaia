@@ -5932,5 +5932,42 @@
                 "td_event_mqtt_out"
             ]
         ]
+    },
+    {
+        "id": "td_event_plant_in",
+        "type": "mqtt in",
+        "z": "d3a553c4a24c8d2d",
+        "name": "← herbarium/+/note",
+        "topic": "gaia/herbarium/+/note",
+        "qos": "0",
+        "datatype": "json",
+        "broker": "29b6d5926d1a95ec",
+        "x": 1580,
+        "y": 360,
+        "wires": [
+            [
+                "td_event_plant_fn"
+            ]
+        ]
+    },
+    {
+        "id": "td_event_plant_fn",
+        "type": "function",
+        "z": "d3a553c4a24c8d2d",
+        "name": "TD Event: plant_note",
+        "func": "// gaia/herbarium/{stanza}/note -> evento TD, una nota alla volta (non nel\n// tick continuo: arrivano a raffica, ~1/sec o piu', il canvas ticka ogni 2s\n// e ne perderebbe la maggior parte).\nconst room = msg.topic.split('/')[2];\nconst p = msg.payload || {};\nif (typeof p.note !== 'number') return null;\nmsg.payload = { note: p.note, velocity: p.velocity || 0, channel: p.channel || 0, room, ts: p.ts || Date.now() };\nmsg.topic = 'gaia/td/canvas/event/plant_note';\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1780,
+        "y": 360,
+        "wires": [
+            [
+                "td_event_mqtt_out"
+            ]
+        ]
     }
 ]
