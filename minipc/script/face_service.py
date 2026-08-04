@@ -180,7 +180,7 @@ def on_message(client, userdata, msg):
 
             # Cattura per enrollment se richiesta
             if _save_face_name:
-                save_face_snapshot(_save_face_name, frame)
+                save_face_snapshot(_save_face_name, frame, camera_name)
                 _save_face_name = None  # consuma il flag
 
             emb = get_embedding(frame)
@@ -208,7 +208,7 @@ def on_message(client, userdata, msg):
 # =========================
 _save_face_name: str | None = None  # se impostato, il prossimo snapshot viene salvato come training
 
-def save_face_snapshot(name: str, frame) -> bool:
+def save_face_snapshot(name: str, frame, camera: str = "unknown") -> bool:
     """Salva il frame nella cartella faces/<name>/ per espandere il DB."""
     person_dir = os.path.join(FACE_DIR, name)
     os.makedirs(person_dir, exist_ok=True)
@@ -219,6 +219,13 @@ def save_face_snapshot(name: str, frame) -> bool:
     if ok:
         print(f"[ENROLL] Salvato: {path}")
         load_faces_from_disk()  # reload immediato
+        # Evento discreto (non lo stream continuo di TOPIC_OUT) — pensato per
+        # chi vuole reagire al MOMENTO dell'enrollment, es. TD che compone
+        # qualcosa in live leggendo lo stream MJPEG della camera (vedi
+        # minipc/touchdesigner/GAIA_TD_INTEGRATION.md).
+        client.publish("gaia/vision/enrollment", json.dumps({
+            "name": name, "camera": camera, "snap_index": idx, "ts": time.time()
+        }))
     return ok
 
 # =========================

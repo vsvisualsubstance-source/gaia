@@ -64,7 +64,18 @@ Due feed sulla **stessa porta 7000**, distinti per prefisso indirizzo:
   /gaia/canvas/last_dream/...            ultimo sogno
   /gaia/canvas/event/level_up            evento one-shot
   /gaia/canvas/event/dream_new           evento one-shot
+  /gaia/canvas/event/face_enrolled/name         nome della persona appena registrata
+  /gaia/canvas/event/face_enrolled/camera       stanza/camera dove è avvenuto
+  /gaia/canvas/event/face_enrolled/snap_index   indice dello snapshot salvato
+  /gaia/canvas/event/face_enrolled/ts           timestamp
   ```
+  `face_enrolled` (2026-08-04): evento discreto quando un enrollment volto
+  salva davvero uno snapshot (admin.html → "Registra volto"). **Porta solo i
+  metadati, non l'immagine** — OSC non è adatto a spedire pixel. Per la
+  composizione visiva vera, TD legge lo **stream MJPEG live della camera**
+  (`http://<host>:8766/video`, Video Stream In TOP — stesso pattern già
+  usato per la camera in produzione, vedi `ops/CLAUDE.md`): l'evento dice a
+  TD *quando* e *dove* reagire, lo stream gli dà i pixel.
   Seed FNV-1a: stesso algoritmo di `web/asemic.js`/`pi/screen/asemic_engine.py`
   — la stessa parola/classe produce sempre lo stesso numero, per disegnare in
   modo astratto ma coerente (stessa identità visiva ovunque in Gaia).
