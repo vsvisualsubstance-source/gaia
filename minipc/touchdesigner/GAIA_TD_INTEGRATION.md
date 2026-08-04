@@ -76,6 +76,17 @@ Due feed sulla **stessa porta 7000**, distinti per prefisso indirizzo:
   (`http://<host>:8766/video`, Video Stream In TOP — stesso pattern già
   usato per la camera in produzione, vedi `ops/CLAUDE.md`): l'evento dice a
   TD *quando* e *dove* reagire, lo stream gli dà i pixel.
+
+  ```
+  /gaia/canvas/event/person_recognized/person       nome della persona riconosciuta
+  /gaia/canvas/event/person_recognized/camera       stanza/camera dove è avvenuto
+  /gaia/canvas/event/person_recognized/confidence   confidenza del riconoscimento
+  /gaia/canvas/event/person_recognized/track_id     id della traccia YOLO
+  ```
+  `person_recognized` (2026-08-04): evento discreto quando una persona NOTA
+  (non 'unknown') entra in una stanza o viene identificata — non ogni uscita
+  o traccia anonima, filtrato lato Node-RED apposta. Stesso principio di
+  `face_enrolled`: solo metadati, i pixel arrivano dallo stream MJPEG.
   Seed FNV-1a: stesso algoritmo di `web/asemic.js`/`pi/screen/asemic_engine.py`
   — la stessa parola/classe produce sempre lo stesso numero, per disegnare in
   modo astratto ma coerente (stessa identità visiva ovunque in Gaia).
