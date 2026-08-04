@@ -35,24 +35,50 @@ Due feed sulla **stessa porta 7000**, distinti per prefisso indirizzo:
 
 - **`/gaia/...`** — flatten grezzo di TUTTO il payload dashboard (~1900
   indirizzi). Firehose/debug, non pensato per pilotare effetti — mescola log
-  storici, sensori Hue mal-nominati, ecc. Un angolo utile dentro il firehose
-  (il resto va scoperto indirizzo per indirizzo, non è catalogato):
+  storici, sensori Hue mal-nominati, ecc. **Fino al 2026-08-04 solo
+  `vision/rooms` era catalogato**; qui sotto la mappa completa di primo
+  livello (`payloadData`, costruito da `ThreeViewEngineGAME` in Node-RED) —
+  ogni chiave diventa `/gaia/<chiave>/...` nel flatten:
 
+  | Chiave | Cosa contiene |
+  |---|---|
+  | `soul` | mood corrente (stress/calm/social/curiosity/energy + label) — stesso dato di `/gaia/canvas/soul/...` ma qui grezzo |
+  | `people` | lista persone presenti: nome, stanza, emozione, posa, **visits** (quante volte vista), **affinity**, durata sessione corrente, confidenza |
+  | `lights` | luci Hue reali (esclusi sensori mal-nominati): luminosità, colore (hex), temperatura colore, accesa/spenta |
+  | `plants` | piante monitorate: umidità, salute (0-1), stato (`critical`/`warning`/`good`) |
+  | `sensors` | sensori ambientali: temperatura, luce ambiente, buio/luce diurna, movimento, batteria (livello + basso sì/no) |
+  | `rooms` / `vision/rooms` | dato per stanza — vedi tabella dettagliata sotto |
+  | `metrics` | contatori aggregati: persone/luci/sensori-movimento attivi, dispositivi batteria bassa, temperatura media, trend mood/attività |
+  | `progression` | stato RPG di Gaia: livello, xp, classe attiva, asset sbloccati, statistiche |
+  | `thought` | **testo** dell'ultimo pensiero spontaneo di Gaia |
+  | `lastMemory` | riassunto dell'ultimo ricordo salvato |
+  | `lastDream` / `lastDreamWords` / `lastDreamTs` | ultimo sogno — stesso dato di `/gaia/canvas/last_dream/...` ma qui grezzo |
+  | `roomGraph` / `roomGraphLearned` | grafo di adiacenza tra le stanze (statico + appreso) |
+  | `events` | log degli ultimi eventi del brain |
+  | `hourlyStats` | statistiche orarie |
+  | `voiceStatus` / `voiceCommands` / `tts` | stato voce, ultimi comandi, ultimo testo pronunciato |
+  | `herbarium` | note musicali recenti delle piante (se il modulo è attivo) |
+  | `stats` | conteggi totali: persone totali, persone presenti, luci attive |
+
+  **Vision/rooms in dettaglio** (per stanza, sotto `rooms/{stanza}/...` e
+  identico sotto `vision/rooms/{stanza}/...`):
   ```
-  /gaia/vision/rooms/{stanza}/persons_count      quante persone rilevate
-  /gaia/vision/rooms/{stanza}/activity           working/resting/sitting/present/empty/idle
-  /gaia/vision/rooms/{stanza}/objects/...        oggetti YOLO rilevati, conteggio per classe
-  /gaia/vision/rooms/{stanza}/currentEmotion     ultima emozione rilevata (mediapipe)
-  /gaia/vision/rooms/{stanza}/currentPose        ultima posa rilevata
-  /gaia/vision/rooms/{stanza}/gesture            ultimo gesto rilevato
-  /gaia/vision/rooms/{stanza}/temperature|humidity|ambient_light|darkness   sensori ambientali, se presenti
-  /gaia/vision/rooms/{stanza}/yoloActive|mediapipeActive   booleani, quali servizi vision girano davvero lì
-  /gaia/vision/rooms/{stanza}/speaking           nome di chi sta parlando (se rilevato negli ultimi 15s)
-  /gaia/vision/rooms/{stanza}/scene              descrizione scena dal VLM (moondream), se attivo
+  persons_count      quante persone rilevate
+  activity            working/resting/sitting/present/empty/idle
+  objects/...          oggetti YOLO rilevati, conteggio per classe
+  currentEmotion       ultima emozione rilevata (mediapipe)
+  currentPose          ultima posa rilevata
+  gesture              ultimo gesto rilevato
+  temperature|humidity|ambient_light|darkness   sensori ambientali, se presenti
+  yoloActive|mediapipeActive   booleani, quali servizi vision girano davvero lì
+  speaking             nome di chi sta parlando (se rilevato negli ultimi 15s)
+  scene                descrizione scena dal VLM (moondream), se attivo
   ```
-  Stesso identico dato di `payloadData.rooms` (quello della dashboard web),
-  solo riesposto sotto il namespace `vision` — non è un canale diverso, è
-  un'altra vista sugli stessi dati.
+
+  Il resto (dentro `metrics`, `hourlyStats`, `roomGraph`, ecc.) va comunque
+  scoperto indirizzo per indirizzo se serve — questa tabella copre il primo
+  livello e i campi più probabilmente utili per l'arte generativa
+  (`people`, `lights`, `plants`, `sensors`, `thought`), non ogni sotto-campo.
 - **`/gaia/canvas/...`** — feed curato, aggiornato ogni 2s, pensato apposta
   per l'arte generativa:
   ```
