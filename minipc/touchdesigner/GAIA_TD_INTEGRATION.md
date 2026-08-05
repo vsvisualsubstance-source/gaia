@@ -8,20 +8,29 @@ riferimenti restano `minipc/touchdesigner/README.md` e
 `pi/mediapipe/README.md` — questo file è un indice/contratto, non li
 sostituisce.
 
-## Le tre reti OSC — non confonderle
+## I canali tra Gaia e TD — non confonderli
 
-Sulla stessa infrastruttura esistono **tre canali OSC indipendenti** che
-hanno poco a che fare tra loro. Confonderli è l'errore più facile da fare:
+Sulla stessa infrastruttura esistono **tre canali OSC indipendenti** (dati)
+più **un canale MQTT** (presenza/controllo, non dati) che hanno poco a che
+fare tra loro. Confonderli è l'errore più facile da fare:
 
 | Canale | Chi parla | Porta | Cosa porta |
 |---|---|---|---|
 | **1. Bridge Gaia↔TD** | Core (miniPC) ↔ TD | 7000 (flatten grezzo) + 7001 (canvas curato + eventi) out / 9008 in | Stato della casa: mood, stanze, luci, persone, lessico |
 | **2. Mocap diretto** | OPS → TD | 7000 (stessa porta del flatten grezzo, indirizzi diversi) | Landmark grezzi viso/mani/pose in tempo reale |
 | **3. Driver Solaro DSP** | Solaro QR1 ↔ driver esterno utente | 4554-4558, 52381, ecc. | Angoli mic array, livelli audio, preset camera — **NIENTE a che fare con Gaia**, sistema audio a parte |
+| **4. Device agent** | TD (dentro il progetto) ↔ Core | MQTT, non OSC — `gaia/device/{id}/status\|command` | Non dati: presenza/controllo. Fa comparire l'istanza TD in Admin (Pi Manager) con enable/disable/restart |
 
 Il canale 3 non è documentato qui: è un progetto separato dell'utente, non
 passa da Node-RED/MQTT. Se un lavoro riguarda quel driver, il riferimento è
 altrove (memoria di progetto lato Core, non in questo repo).
+
+Il canale 4 non è OSC (per questo non ha una porta nella tabella nel senso
+degli altri) ed è l'unico dei quattro in cui TD *scrive* verso Gaia invece
+di limitarsi a leggere — vive interamente dentro il `.toe`
+(`td_internal_agent.py`), non serve a scambiare dati ma a far sapere ad
+Admin che quell'istanza esiste ed è controllabile. Setup e dettagli:
+`minipc/touchdesigner/README.md`, sezione "Device agent".
 
 ---
 
