@@ -12,9 +12,17 @@ html,body{width:100%;height:100%;overflow:hidden;user-select:none;-webkit-user-s
 #asemic-canvas{position:absolute;inset:0;z-index:0;pointer-events:none}
 
 /* ── Ambient layer ────────────────────────────────────────────────── */
-#ambient{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;z-index:1}
+/* Ancorata in ALTO (justify-content:flex-start, non più center) dentro una
+   banda alta 74vh (il restante 26% è la banda saluto di #presence, sotto)
+   — prima lo stack avatar+clock+pensiero+sogno era centrato sull'intero
+   schermo e finiva a cavallo delle bande dove asemic.js scrive
+   'rune'/'herb'/'dream' (0.40–0.50H, commento in asemic.js) invece di
+   restarne sopra. overflow:hidden come rete di sicurezza sugli schermi
+   più bassi (es. 800×480, dove l'avatar-canvas va comunque limitato — vedi
+   sizeCanvas() più sotto). */
+#ambient{position:absolute;top:0;left:0;right:0;height:74vh;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:14px;z-index:1;padding:4vh 5vw 0;overflow:hidden;background:radial-gradient(ellipse 65% 60% at 50% 30%,rgba(5,8,16,.5),transparent 72%)}
 #avatar-canvas{display:block}
-#clock{font-size:clamp(2.2rem,6vw,4rem);font-weight:200;color:#c9d1d9;letter-spacing:.1em;font-variant-numeric:tabular-nums}
+#clock{font-size:clamp(1.6rem,min(6vw,7vh),4rem);font-weight:200;color:#c9d1d9;letter-spacing:.1em;font-variant-numeric:tabular-nums}
 #thought{font-size:clamp(.85rem,2.2vw,1.2rem);font-style:italic;color:#3a4870;max-width:55vw;text-align:center;line-height:1.5;min-height:1.6em;transition:color .5s}
 #thought.visible{color:#6b7a99}
 
@@ -28,9 +36,15 @@ html,body{width:100%;height:100%;overflow:hidden;user-select:none;-webkit-user-s
 #dream-tell:disabled{opacity:.4;cursor:default}
 
 /* ── Presence overlay ─────────────────────────────────────────────── */
-#presence{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding-bottom:10vh;gap:18px;z-index:3;pointer-events:none;transition:opacity .4s}
+/* Ancorata dall'ALTO (top:75vh, non più bottom+padding): il saluto cresce
+   verso il basso da un punto fisso invece di spingersi verso l'alto quando
+   va a capo — è quel comportamento a farlo salire fin dentro la banda
+   'in' di asemic.js (0.63H) quando il nome era lungo. 75vh combacia col
+   confine già documentato nel commento di asemic.js ("sopra la zona
+   saluto ~0.75+"). overflow:hidden come rete di sicurezza. */
+#presence{position:absolute;top:75vh;left:0;right:0;bottom:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:2vh;gap:14px;z-index:3;pointer-events:none;transition:opacity .4s;overflow:hidden;background:radial-gradient(ellipse 72% 65% at 50% 24%,rgba(5,8,16,.55),transparent 70%)}
 #presence.hidden{opacity:0;pointer-events:none}
-#p-greeting{font-size:clamp(2.2rem,7vw,4.5rem);font-weight:700;color:#00ffcc;text-align:center;text-shadow:0 0 50px #00ffcc33;line-height:1.1}
+#p-greeting{font-size:clamp(1.8rem,min(7vw,7vh),4.5rem);font-weight:700;color:#00ffcc;text-align:center;text-shadow:0 0 50px #00ffcc33;line-height:1.1}
 #p-sub{font-size:clamp(.9rem,2.5vw,1.4rem);color:#6b7a99;text-align:center}
 #btn-present{pointer-events:all;background:#001a12;border:2px solid #00ffcc;color:#00ffcc;font-size:clamp(1rem,2.8vw,1.4rem);font-weight:600;padding:22px 52px;border-radius:60px;cursor:pointer;min-height:80px;min-width:280px;transition:all .2s;box-shadow:0 0 20px #00ffcc22;letter-spacing:.03em}
 #btn-present:hover,#btn-present:active{background:#003020;box-shadow:0 0 35px #00ffcc44;transform:scale(1.03)}
@@ -358,7 +372,12 @@ const _cx  = _cv.getContext('2d');
 let   _dpr = window.devicePixelRatio || 1;
 
 function sizeCanvas() {
-  const s = Math.min(window.innerWidth * .40, 360);
+  // Limitato anche dall'ALTEZZA (non solo dalla larghezza): su uno schermo
+  // basso e largo come il DSI 800x480 del Pi, .40*larghezza da solo dava un
+  // avatar da 320px che da solo saturava quasi tutta la banda #ambient
+  // (74vh = 355px su quello schermo), lasciando zero spazio a clock e
+  // pensiero prima di sconfinare nella banda del saluto.
+  const s = Math.min(window.innerWidth * .40, window.innerHeight * .30, 360);
   _cv.width  = s * _dpr;
   _cv.height = s * _dpr;
   _cv.style.width  = s + 'px';
