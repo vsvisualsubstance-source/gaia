@@ -11,6 +11,17 @@ html,body{width:100%;height:100%;overflow:hidden;user-select:none;-webkit-user-s
 /* ── Vocabolario asemico (sfondo, dietro tutto) ───────────────────── */
 #asemic-canvas{position:absolute;inset:0;z-index:0;pointer-events:none}
 
+/* ── HUD in alto a sinistra (orologio + stanza + temperatura) ───────── */
+/* L'orologio grande e centrato copriva a volte le scritte verdi
+   dell'herbarium (banda 0.44H in asemic.js) — spostato in un angolo fisso,
+   fuori da qualsiasi banda generativa. Sostituisce anche la vecchia
+   etichetta stanza creata a parte via JS (_rl). */
+#hud{position:absolute;top:50px;left:22px;z-index:10;display:flex;flex-direction:column;gap:3px;pointer-events:none}
+#hud-clock{font-size:1.35rem;font-weight:200;color:#c9d1d9;letter-spacing:.08em;font-variant-numeric:tabular-nums}
+#hud-room{font-size:.72rem;color:#5a6684;letter-spacing:.12em;text-transform:uppercase;margin-top:2px}
+#hud-temp{font-size:.72rem;color:#3a4870;letter-spacing:.04em}
+#hud-temp .v{color:#5a6684}
+
 /* ── Ambient layer ────────────────────────────────────────────────── */
 /* Ancorata in ALTO (justify-content:flex-start, non più center) dentro una
    banda alta 74vh (il restante 26% è la banda saluto di #presence, sotto)
@@ -22,7 +33,6 @@ html,body{width:100%;height:100%;overflow:hidden;user-select:none;-webkit-user-s
    sizeCanvas() più sotto). */
 #ambient{position:absolute;top:0;left:0;right:0;height:74vh;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:14px;z-index:1;padding:4vh 5vw 0;overflow:hidden;background:radial-gradient(ellipse 65% 60% at 50% 30%,rgba(5,8,16,.5),transparent 72%)}
 #avatar-canvas{display:block}
-#clock{font-size:clamp(1.6rem,min(6vw,7vh),4rem);font-weight:200;color:#c9d1d9;letter-spacing:.1em;font-variant-numeric:tabular-nums}
 #thought{font-size:clamp(.85rem,2.2vw,1.2rem);font-style:italic;color:#3a4870;max-width:55vw;text-align:center;line-height:1.5;min-height:1.6em;transition:color .5s}
 #thought.visible{color:#6b7a99}
 
@@ -134,13 +144,19 @@ html,body{width:100%;height:100%;overflow:hidden;user-select:none;-webkit-user-s
 <a id="admin-link" href="admin.html">admin</a>
 <div id="ws-dot"></div>
 
+<!-- ── HUD: orologio, stanza, temperatura media di casa ── -->
+<div id="hud">
+  <div id="hud-clock"></div>
+  <div id="hud-room"></div>
+  <div id="hud-temp"></div>
+</div>
+
 <!-- ── Vocabolario asemico: Gaia "scrive" ciò che dice/sente ── -->
 <canvas id="asemic-canvas"></canvas>
 
 <!-- ── Ambient ── -->
 <div id="ambient">
   <canvas id="avatar-canvas"></canvas>
-  <div id="clock"></div>
   <div id="thought"></div>
   <div id="dream-wrap">
     <div id="dream-label">💭 il sogno di stanotte</div>
@@ -236,13 +252,11 @@ const CAM_HOST = _params.get('cam')  || location.hostname;
 const ROOM     = _params.get('room') || null;
 const API    = `http://${location.hostname}:8765`;   // admin resta sul Core
 const MJPEG  = `http://${CAM_HOST}:8766/video`;
-// Etichetta discreta della stanza sul kiosk (solo se ?room= impostato)
+// Etichetta stanza nell'HUD (solo se ?room= impostato) — prima era un div
+// creato a parte via JS, ora fa parte dello stesso blocco dell'orologio.
 if (ROOM) {
   document.title = `GAIA · ${ROOM}`;
-  const _rl = document.createElement('div');
-  _rl.textContent = ROOM;
-  _rl.style.cssText = 'position:absolute;top:18px;left:74px;color:#1e2840;font-size:.72rem;z-index:10;letter-spacing:.12em;text-transform:uppercase;padding:4px 0';
-  document.body.appendChild(_rl);
+  document.getElementById('hud-room').textContent = ROOM;
 }
 
 const EMOTION_ICON = {happy:'😊',neutral:'😐',sad:'😔',surprised:'😲',angry:'😠'};
@@ -359,12 +373,20 @@ function feedAsemic(d) {
   feedRunes(d.progression);
 }
 
-// ── Clock ─────────────────────────────────────────────────────────────────────
+// ── Clock (HUD, alto a sinistra) ────────────────────────────────────────────
 function tickClock() {
-  document.getElementById('clock').textContent =
+  document.getElementById('hud-clock').textContent =
     new Date().toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'});
 }
 tickClock(); setInterval(tickClock, 1000);
+
+// Temperatura media di casa — stesso campo già calcolato da ThreeViewEngineGAME
+// per dashboard/gioco (metrics.averageTemperature), qui solo letto e mostrato.
+function updateHudTemp(metrics) {
+  const t = metrics?.averageTemperature;
+  const el = document.getElementById('hud-temp');
+  el.innerHTML = (t && t > 0) ? `casa <span class="v">${t.toFixed(1)}°C</span>` : '';
+}
 
 // ── Avatar canvas ─────────────────────────────────────────────────────────────
 const _cv  = document.getElementById('avatar-canvas');
@@ -483,6 +505,7 @@ function connectWS() {
       _brain = d;
 
       feedAsemic(d);
+      updateHudTemp(d.metrics);
 
       // Aggiorna thought
       const th = d.thought || '';
