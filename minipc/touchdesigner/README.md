@@ -42,35 +42,40 @@ altri componenti, vedi `config.py`):
 
 ## Device agent — vedere un'istanza TD in Admin (Pi Manager)
 
-`td_device_agent.py` è un componente separato dal bridge OSC: non tocca i
-dati, fa comparire l'istanza TD come una card in Admin (`web/admin.html`,
-tab Pi Manager) con un servizio `project` avviabile/fermabile/riavviabile —
-stesso protocollo MQTT (`gaia/device/{id}/status|command`) degli agent
-Pi/OPS, vedi `pi/agent/agent.py` e `ops/agent/agent.py` per il pattern
-originale (qui semplificato: un solo "servizio", il processo TD stesso).
+`td_internal_agent.py` **gira dentro il progetto TD stesso** (Text DAT +
+Execute DAT, Python embedded di TD) — non è un processo di sistema esterno,
+non tocca `TouchDesigner.exe`, non ha un manifest con path sul filesystem.
+Configurazione via parametri di un COMP, salvata nel `.toe`: portabile da
+una macchina all'altra senza toccare nulla fuori dal progetto (ogni
+macchina può avere TD installato in modo diverso).
 
-```bash
-# Sulla macchina dove gira TouchDesigner (di norma OPS/silvermini2, Windows)
-pip install paho-mqtt
+Stesso protocollo MQTT degli agent Pi/OPS (`gaia/device/{id}/status|command`,
+vedi `pi/agent/agent.py`/`ops/agent/agent.py`), ma qui i "servizi" sono
+azioni interne al network TD (es. "riscollega l'OSC In"), non l'intero
+processo — riavviare l'intera istanza TD da dentro se stessa non è
+possibile né sensato.
 
-# Copia il manifest d'esempio e adatta i path a questa macchina/progetto
-copy td_instance.json.example td_instance.json
-notepad td_instance.json      # device_id, td_exe, project (.toe)
+**Setup** (istruzioni complete e commentate nella docstring in cima al
+file):
+1. COMP contenitore (es. `gaia_agent`) con Custom Page: `Deviceid`,
+   `Stanza`, `Name`, `Mqtthost`, `Mqttport` (tutti opzionali, default
+   sensati se assenti).
+2. Text DAT `gaia_device_agent` dentro quel COMP, File = path di
+   `td_internal_agent.py` (Sync to OS ON per ricaricare le modifiche fatte
+   fuori da TD).
+3. Execute DAT nello stesso COMP: `onStart` chiama
+   `op('gaia_device_agent').module.start()`, `onExit` chiama `.stop()`.
+4. (Facoltativo) dal tuo script di progetto, `register_service(nome,
+   start=, stop=, status=)` per collegare un controllo vero — senza
+   nessuna registrazione l'agent compare comunque in Admin (presenza +
+   heartbeat), i comandi restano no-op loggati finché non colleghi
+   qualcosa.
 
-python td_device_agent.py
-```
-
-Un file `td_instance.json` = una istanza = una card in Admin (`device_id`
-la identifica). Per più progetti TD sulla stessa macchina: manifest diversi
-puntati via `TD_AGENT_MANIFEST=percorso\altro_instance.json`, ognuno con il
-proprio `device_id`. Avvio automatico: Task Scheduler di Windows, stesso
-schema di `ops/agent` (vedi `ops/CLAUDE.md`, Missione 4).
-
-**GOTCHA**: TD non autosalva — `disable`/`restart` da Admin terminano il
-processo (come un Alt+F4), non salvano prima. Lo stato "active"/"inactive"
-riflette solo ciò che *questo agent* ha avviato: un TD lanciato a mano prima
-di partire l'agent non risulta "active" finché non lo si riavvia passando
-da qui.
+Verificato offline (logica pura + un vero round-trip enable via MQTT contro
+il broker reale, con `me`/`op`/`run` di TD simulati): il dispatch dei
+comandi e il marshalling sul thread principale via `run()` funzionano come
+previsto. **Non ancora collaudato dentro una vera istanza TD** — la firma
+esatta di `run()` va confermata alla prima prova reale.
 
 ## Gaia → TouchDesigner: schema indirizzi OSC
 

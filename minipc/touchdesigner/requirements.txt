@@ -2,10 +2,6 @@
 # Installa con:
 #   source ~/core-node-0/venv/bin/activate
 #   pip install -r requirements.txt
-#
-# td_device_agent.py (girato sulla macchina TD, tipicamente OPS Windows) usa
-# solo paho-mqtt — non serve questo intero file la', basta
-# "pip install paho-mqtt" nel venv di quella macchina (es. C:\gaia\venv).
 
 python-osc
 websocket-client

@@ -54,11 +54,6 @@ ops/agent/agent.lock
 ops/agent/agent_config.json
 ops/agent/agent.log
 
-# TD device agent runtime + manifest (path .exe/.toe personali alla macchina)
-minipc/touchdesigner/td_instance*.json
-minipc/touchdesigner/td_agent_*.lock
-minipc/touchdesigner/td_agent_state_*.json
-
 # ── Shared ────────────────────────────────────────────────────────────────────
 # Configurazioni locali con IP/credenziali
 /etc/gaia/
