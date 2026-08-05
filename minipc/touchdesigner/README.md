@@ -40,6 +40,38 @@ altri componenti, vedi `config.py`):
 | `MQTT_HOST` / `MQTT_PORT` | `192.168.1.142` / `1883` | dove pubblicare i dati che arrivano da TouchDesigner |
 | `MQTT_TD_TOPIC_BASE` | `gaia/touchdesigner` | prefisso topic per il relay TD→MQTT |
 
+## Device agent — vedere un'istanza TD in Admin (Pi Manager)
+
+`td_device_agent.py` è un componente separato dal bridge OSC: non tocca i
+dati, fa comparire l'istanza TD come una card in Admin (`web/admin.html`,
+tab Pi Manager) con un servizio `project` avviabile/fermabile/riavviabile —
+stesso protocollo MQTT (`gaia/device/{id}/status|command`) degli agent
+Pi/OPS, vedi `pi/agent/agent.py` e `ops/agent/agent.py` per il pattern
+originale (qui semplificato: un solo "servizio", il processo TD stesso).
+
+```bash
+# Sulla macchina dove gira TouchDesigner (di norma OPS/silvermini2, Windows)
+pip install paho-mqtt
+
+# Copia il manifest d'esempio e adatta i path a questa macchina/progetto
+copy td_instance.json.example td_instance.json
+notepad td_instance.json      # device_id, td_exe, project (.toe)
+
+python td_device_agent.py
+```
+
+Un file `td_instance.json` = una istanza = una card in Admin (`device_id`
+la identifica). Per più progetti TD sulla stessa macchina: manifest diversi
+puntati via `TD_AGENT_MANIFEST=percorso\altro_instance.json`, ognuno con il
+proprio `device_id`. Avvio automatico: Task Scheduler di Windows, stesso
+schema di `ops/agent` (vedi `ops/CLAUDE.md`, Missione 4).
+
+**GOTCHA**: TD non autosalva — `disable`/`restart` da Admin terminano il
+processo (come un Alt+F4), non salvano prima. Lo stato "active"/"inactive"
+riflette solo ciò che *questo agent* ha avviato: un TD lanciato a mano prima
+di partire l'agent non risulta "active" finché non lo si riavvia passando
+da qui.
+
 ## Gaia → TouchDesigner: schema indirizzi OSC
 
 Un indirizzo OSC per ogni valore scalare del payload WS (stesso payload documentato nella
