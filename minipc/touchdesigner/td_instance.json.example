@@ -1,9 +1,0 @@
-{
-  "_nota": "Copia in td_instance.json (stesso path, gitignored) e adatta i path a questa macchina. Un file = una istanza TD = una card in Admin. Per piu' istanze sulla stessa macchina: cartelle/copie separate dello script con TD_AGENT_MANIFEST diverso, oppure piu' file td_instance_X.json puntati via env.",
-  "device_id": "td-herbarium",
-  "name": "AV Herbarium",
-  "stanza": "salotto",
-  "td_exe": "C:\\Program Files\\Derivative\\TouchDesigner\\bin\\TouchDesigner.exe",
-  "project": "C:\\TouchDesigner\\piante\\AV.toe",
-  "args": []
-}
