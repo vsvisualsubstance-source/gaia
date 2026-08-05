@@ -40,7 +40,18 @@ altri componenti, vedi `config.py`):
 | `MQTT_HOST` / `MQTT_PORT` | `192.168.1.142` / `1883` | dove pubblicare i dati che arrivano da TouchDesigner |
 | `MQTT_TD_TOPIC_BASE` | `gaia/touchdesigner` | prefisso topic per il relay TD→MQTT |
 
-## Device agent — vedere un'istanza TD in Admin (Pi Manager)
+## Controllo dispositivi da dentro TD — due moduli complementari
+
+- **`td_internal_agent.py`** — fa comparire QUESTA istanza TD come UN
+  device controllabile in Admin (Pi Manager la vede, può inviarle comandi).
+- **`td_service_control.py`** — il contrario: TD come CONTROLLORE, ascolta
+  lo stato di TUTTI i device (Pi, OPS, Core) e può avviarne/fermarne i
+  servizi (play/stop/restart), stessa cosa che fa Pi Manager nel browser.
+
+Coesistono nello stesso progetto senza conflitti (moduli indipendenti,
+stesso broker).
+
+### `td_internal_agent.py` — vedere un'istanza TD in Admin (Pi Manager)
 
 `td_internal_agent.py` **gira dentro il progetto TD stesso** (Text DAT +
 Execute DAT, Python embedded di TD) — non è un processo di sistema esterno,
@@ -76,6 +87,42 @@ il broker reale, con `me`/`op`/`run` di TD simulati): il dispatch dei
 comandi e il marshalling sul thread principale via `run()` funzionano come
 previsto. **Non ancora collaudato dentro una vera istanza TD** — la firma
 esatta di `run()` va confermata alla prima prova reale.
+
+### `td_service_control.py` — play/stop/restart dei servizi da TD
+
+Ascolta `gaia/device/+/status` (TUTTI i device, non serve sapere gli id in
+anticipo) e mantiene una **Table DAT** `devices_table` con una riga per
+ogni coppia device+servizio (`device_id, name, stanza, role, service,
+state, offline`) — bind diretto per un List COMP: è il modo più naturale
+in TD per una UI a righe con bottoni play/stop, senza che questo script
+debba sapere nulla di come la disegni.
+
+**Setup**:
+1. COMP contenitore (es. `gaia_control`), Custom Page opzionale
+   (`Mqtthost`/`Mqttport`, default 192.168.1.142:1883 se assenti).
+2. Table DAT vuota `devices_table` nello stesso COMP — la riscrive questo
+   script, non editarla a mano.
+3. Text DAT `td_service_control` con questo file come sorgente esterna.
+4. Execute DAT: `onStart` → `.start()`, `onExit` → `.stop()`.
+5. Dai tuoi bottoni (Button COMP, List COMP onClick...):
+   ```python
+   op('gaia_control/td_service_control').module.send_command(
+       device_id, service_name, 'enable')    # play
+   # oppure 'disable' (stop) / 'restart'
+   ```
+   `send_command()` è sicura da un callback UI diretto — gira già sul
+   thread principale, nessun `run()` necessario lì (solo la *ricezione*
+   degli status, che arriva dal thread di rete MQTT, passa da `run()`
+   prima di toccare la Table DAT).
+
+Device offline (nessuno status da >90s, stesso timeout di Pi Manager):
+colonna `offline` a `"True"` nella tabella, filtrabile lato TD.
+
+Verificato offline (logica pura: stati/servizio-solo-in-config/offline
+tutti coperti da test) più un round-trip reale contro il broker MQTT
+(connessione, subscribe, un status reale ricevuto senza errori). Stessa
+nota degli altri moduli: `run()`/Table DAT non ancora provati dentro una
+vera istanza TD.
 
 ## Gaia → TouchDesigner: schema indirizzi OSC
 
