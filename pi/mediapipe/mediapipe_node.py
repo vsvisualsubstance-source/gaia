@@ -114,13 +114,21 @@ log.info(f"device_id={DEVICE_ID} room_claim={_state['room']} broker={MQTT_HOST}:
 
 # Import lazy: python-osc non è (e non deve essere) una dipendenza dei Pi,
 # solo delle macchine che accendono esplicitamente OSC_LANDMARKS=1.
+# _osc_host è un PUNTO DI PARTENZA (OSC_HOST resta utile per un test locale
+# senza TD ancora acceso), non la destinazione definitiva: appena arriva
+# l'heartbeat di un device 'touchdesigner' su MQTT (_handle_td_status,
+# sotto), _osc viene ricreato verso il suo IP reale — mai più un valore
+# scritto una volta in config e mai aggiornato (causa di un IP stantio
+# trovato in produzione il 2026-08-05: puntava a una macchina che non era
+# più TD, il mocap non arrivava e nessun errore lo segnalava).
 _osc = None
+_osc_host = OSC_HOST
 if OSC_LANDMARKS:
     try:
         from pythonosc.udp_client import SimpleUDPClient
-        _osc = SimpleUDPClient(OSC_HOST, OSC_PORT)
-        log.info(f"Mocap OSC attivo → {OSC_HOST}:{OSC_PORT}/gaia/mocap/{DEVICE_ID}/... "
-                 f"ogni {OSC_INTERVAL * 1000:.0f}ms")
+        _osc = SimpleUDPClient(_osc_host, OSC_PORT)
+        log.info(f"Mocap OSC attivo (default) → {_osc_host}:{OSC_PORT}/gaia/mocap/{DEVICE_ID}/... "
+                 f"ogni {OSC_INTERVAL * 1000:.0f}ms — verrà ridiretto al vero IP di TD non appena annuncia")
     except ImportError:
         log.error("OSC_LANDMARKS=1 ma python-osc non installato (pip install python-osc) — mocap disattivato")
         OSC_LANDMARKS = False
@@ -139,6 +147,15 @@ def _on_connect(client, userdata, flags, rc, properties=None):
     for t in _ota.topics():
         client.subscribe(t, qos=1)
     log.info(f"Subscribed a config + OTA ({_ota.topics()})")
+
+    # Mocap diretto (bypassa il Core): la destinazione OSC di TD non è più
+    # un IP fisso in config (trovato stantio in produzione il 2026-08-05,
+    # puntava a una macchina che non era più TD) — si scopre da sola
+    # ascoltando l'heartbeat del device agent di TD, stesso schema del
+    # Device Registry (la config segue chi è davvero acceso).
+    if OSC_LANDMARKS:
+        client.subscribe('gaia/device/+/status', qos=0)
+        log.info("Subscribed a gaia/device/+/status (scoperta IP TD per il mocap)")
 
     # Announce: il registry risponde con config retained
     # gethostbyname(gethostname()) risolve spesso a 127.0.1.1 (voce /etc/hosts su
@@ -169,13 +186,56 @@ _ota = OtaHandler(
 )
 
 
+_MY_HOSTNAME = socket.gethostname().lower()
+
+
+def _handle_td_status(payload):
+    """Mocap diretto (bypassa il Core): aggiorna la destinazione OSC quando
+    un device con role 'touchdesigner' pubblica il proprio heartbeat —
+    sostituisce l'IP fisso in config (vedi commento in _on_connect).
+
+    Match sull'HOSTNAME, non solo su role=='touchdesigner': il mocap
+    diretto è pensato per un TD sulla STESSA macchina (per questo bypassa
+    il Core), e in produzione possono esistere più istanze TD contemporanee
+    (osservato dal vivo il 2026-08-05: un'istanza vecchia rimasta accesa su
+    un Mac, oltre a quella reale su questa macchina) — un match solo sul
+    role manderebbe il mocap alla prima che risponde, non necessariamente
+    quella giusta. TD deriva il proprio device_id dall'hostname macchina
+    (td-{hostname}, vedi TD4Gaia/gaia_device_agent.py) — stesso confronto
+    qui, sull'hostname di QUESTA macchina."""
+    global _osc, _osc_host
+    try:
+        d = json.loads(payload.decode())
+    except Exception:
+        return
+    if d.get('role') != 'touchdesigner':
+        return
+    td_id = d.get('device_id', '')
+    if td_id != f'td-{_MY_HOSTNAME}':
+        return
+    ip = d.get('ip')
+    if not ip or ip == _osc_host:
+        return
+    from pythonosc.udp_client import SimpleUDPClient
+    _osc_host = ip
+    _osc = SimpleUDPClient(_osc_host, OSC_PORT)
+    log.info(f"Mocap OSC ridiretto verso TD ({d.get('device_id')}, "
+             f"stanza={d.get('stanza')}) → {_osc_host}:{OSC_PORT}")
+
+
 def _on_message(client, userdata, msg):
-    """Riceve config dal Device Registry (room) o comandi OTA."""
+    """Riceve config dal Device Registry (room), comandi OTA, o l'heartbeat
+    di un device TD (per il mocap diretto, vedi _handle_td_status)."""
     topic = msg.topic
 
     # OTA
     if topic in _ota.topics():
         _ota.handle(topic, msg.payload)
+        return
+
+    # Mocap: IP di TD scoperto dal vivo, non da un valore fisso in config
+    if OSC_LANDMARKS and topic.startswith('gaia/device/') and topic.endswith('/status'):
+        _handle_td_status(msg.payload)
         return
 
     # Config room
