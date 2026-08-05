@@ -249,14 +249,38 @@ html,body{width:100%;height:100%;overflow:hidden;user-select:none;-webkit-user-s
 //   welcome.html                                  ← default: camera del Core
 const _params  = new URLSearchParams(location.search);
 const CAM_HOST = _params.get('cam')  || location.hostname;
-const ROOM     = _params.get('room') || null;
+let   ROOM     = _params.get('room') || null;   // let: può arrivare in ritardo dal fallback sotto
 const API    = `http://${location.hostname}:8765`;   // admin resta sul Core
 const MJPEG  = `http://${CAM_HOST}:8766/video`;
-// Etichetta stanza nell'HUD (solo se ?room= impostato) — prima era un div
-// creato a parte via JS, ora fa parte dello stesso blocco dell'orologio.
+
+function showRoom(room) {
+  ROOM = room;
+  document.title = `GAIA · ${room}`;
+  document.getElementById('hud-room').textContent = room;
+}
+
 if (ROOM) {
-  document.title = `GAIA · ${ROOM}`;
-  document.getElementById('hud-room').textContent = ROOM;
+  // Ogni kiosk reale (Pi, OPS, Core) lancia già l'URL con ?room= — vedi
+  // pi/kiosk/gaia-kiosk.service, ops/agent/services.json, local_agent.py.
+  showRoom(ROOM);
+} else {
+  // Nessun ?room= (es. pagina aperta a mano, senza passare dal kiosk):
+  // chiedi al Device Registry di Node-RED quale device ha questo stesso
+  // IP (CAM_HOST, di norma = questo host) e usa la sua stanza reale — dato
+  // già esistente (lo stesso che usa admin.html), nessuna chiamata esterna.
+  fetch(`http://${location.hostname}:1880/gaia/devices/profiles`)
+    .then(r => r.json())
+    .then(profiles => {
+      const list = Object.values(profiles || {});
+      // Match per IP; se si naviga come "localhost"/"127.0.0.1" (niente
+      // ?cam= sulla stessa macchina che serve Node-RED) l'IP non combacia
+      // mai con nessun device — in quel caso può essere solo il Core
+      // stesso a rispondere su quell'hostname, quindi si prende quello.
+      const dev = list.find(d => d.ip === CAM_HOST)
+               || (['localhost','127.0.0.1'].includes(CAM_HOST) && list.find(d => d.role === 'core'));
+      if (dev && dev.room) showRoom(dev.room);
+    })
+    .catch(() => {});
 }
 
 const EMOTION_ICON = {happy:'😊',neutral:'😐',sad:'😔',surprised:'😲',angry:'😠'};
