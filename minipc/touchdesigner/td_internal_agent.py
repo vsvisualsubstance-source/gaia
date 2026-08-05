@@ -26,6 +26,17 @@ SETUP IN TD
            op('gaia_device_agent').module.stop()
            return
 
+GOTCHA con Embody (esternalizzazione TD in git, verificato dal vivo
+2026-08-05 in un progetto reale): un Execute DAT creato DENTRO un
+sottoalbero gestito da Embody ma MAI esternalizzato viene cancellato dal
+ciclo strip/restore al riavvio di TD e non viene ricreato — l'Execute DAT
+del punto 3 sparisce e l'agent non si avvia più. Fix verificato: sposta il
+trigger onStart/onExit FUORI dall'albero gestito da Embody (es. alla
+radice del progetto, come .tox indipendente a sé stante), non dentro il
+COMP `gaia_agent`. `start()`/`stop()` sono idempotenti (guardia su
+`_running`), quindi chiamarli anche da un trigger esterno oltre a un
+eventuale onCreate interno è sicuro.
+
 ESPORRE UN SERVIZIO REALE (facoltativo)
 Senza fare nient'altro l'agent compare gia' in Admin (presenza + heartbeat,
 "services" vuoto, i comandi restano no-op loggati). Per collegare un

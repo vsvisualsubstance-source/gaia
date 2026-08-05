@@ -26,6 +26,17 @@ SETUP IN TD
        def onExit():
            op('td_service_control').module.stop()
            return
+
+GOTCHA con Embody (esternalizzazione TD in git, verificato dal vivo
+2026-08-05 in un progetto reale, stesso problema riscontrato per
+td_internal_agent.py): un Execute DAT creato DENTRO un sottoalbero gestito
+da Embody ma MAI esternalizzato viene cancellato dal ciclo strip/restore
+al riavvio di TD — l'Execute DAT del punto 4 sparisce e l'agent non parte
+più. Fix verificato: trigger onStart/onExit fuori dall'albero gestito da
+Embody (es. alla radice del progetto, .tox indipendente), non dentro il
+COMP `gaia_control`. `start()`/`stop()` sono idempotenti, sicuro chiamarli
+anche da lì oltre a un eventuale onCreate interno.
+
 5. Per i bottoni play/stop/restart (Button COMP, List COMP onClick, ecc.),
    chiama semplicemente:
        op('gaia_control/td_service_control').module.send_command(

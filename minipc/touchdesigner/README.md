@@ -51,6 +51,17 @@ altri componenti, vedi `config.py`):
 Coesistono nello stesso progetto senza conflitti (moduli indipendenti,
 stesso broker).
 
+**GOTCHA con Embody** (esternalizzazione TD in git — se il progetto usa
+[Embody](https://github.com/vsvisualsubstance-source/TD4Gaia), verificato
+dal vivo 2026-08-05): l'Execute DAT `onStart`/`onExit` di entrambi i moduli
+NON deve vivere dentro il sottoalbero gestito da Embody (es. dentro il COMP
+`gaia_agent`/`gaia_control`) a meno di esternalizzarlo esplicitamente —
+altrimenti il ciclo strip/restore di Embody lo cancella al riavvio di TD e
+l'agent smette di partire. Metterlo alla radice del progetto come `.tox`
+indipendente (fuori dall'albero gestito) risolve. `start()`/`stop()` di
+entrambi i moduli sono idempotenti, quindi è sicuro chiamarli anche da un
+trigger esterno oltre a un eventuale `onCreate` interno al COMP.
+
 ### `td_internal_agent.py` — vedere un'istanza TD in Admin (Pi Manager)
 
 `td_internal_agent.py` **gira dentro il progetto TD stesso** (Text DAT +
