@@ -105,11 +105,23 @@ Tick continuo:
 /gaia/canvas/soul/mood                 "curiosity"
 /gaia/canvas/soul/mood_rgb/r,g,b       190, 135, 255   (stessa palette di web/asemic.js)
 /gaia/canvas/rooms/{stanza}/...        oggetti YOLO con seed FNV-1a deterministico
-/gaia/canvas/lights/...                luci pulite per DMX
+/gaia/canvas/lights/{itemId}/power, brightness, color   luci pulite per DMX
+/gaia/canvas/lights/{itemId}/colorTemp        0-100% (item Hue *_Color_Temperature, 0=2000K caldo, 100=6500K freddo)
+/gaia/canvas/lights/{itemId}/colorTempKelvin  Kelvin assoluto — usa la lettura reale (*_Color_Temperature_Abs)
+                                               se sana, altrimenti derivato dalla % (aggiunto 2026-08-05)
 /gaia/canvas/bricks/{id}/...           variant, room, temperature, humidity, vibration
 /gaia/canvas/lexicon/{parola}/count, seed    lessico personale di Gaia
 /gaia/canvas/dream/mood, words/{parola}/seed ultimo sogno notturno
 ```
+
+**GOTCHA `{itemId}` in `lights/`**: `brain.lights` ha una entry per ogni
+*item* OpenHAB, non una per lampadina fisica — `Sala_Potenza`,
+`Sala_Luminosita`, `Sala_Colore` e `Sala_Color_Temperature` sono quattro
+indirizzi OSC separati, ognuno con solo il proprio campo valorizzato (gli
+altri restano ai default). Per ricostruire una lampadina in TD, raggruppa
+gli `{itemId}` per prefisso comune (`Sala`, `Soggiorno`, `luce_Ingresso`,
+`Zona_Notte_Zone`, `Area_TV_Zone`, `Luce_Salotto`, `Luce_Corridoio` —
+stessa mappa di [docs interne] `ROOM_ITEM_PREFIX`).
 
 **"Le frasi che Gaia dice e mostra" (2026-08-04)** — tutto ciò che prima
 esisteva solo internamente in Node-RED (mai esposto), più i campi già nel
