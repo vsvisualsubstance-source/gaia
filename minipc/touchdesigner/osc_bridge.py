@@ -100,6 +100,7 @@ class TDDeviceRegistry:
     def __init__(self):
         self._targets = {}   # device_id -> {"ip","name","stanza","last_seen","paused"}
         self._lock = threading.Lock()
+        self._alerted_offline = set()   # device_id già segnalati offline — evita spam ripetuto
         self._mqtt = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
                                   client_id="gaia-td-discovery")
         self._mqtt.on_connect = self._on_connect
@@ -107,6 +108,41 @@ class TDDeviceRegistry:
         self._mqtt.reconnect_delay_set(min_delay=2, max_delay=30)
         self._mqtt.connect(config.MQTT_HOST, config.MQTT_PORT, keepalive=60)
         self._mqtt.loop_start()
+        # Watchdog SEPARATO dal cook di TD apposta (2026-08-06, su richiesta
+        # dopo che l'agent dentro TD si è bloccato due volte in produzione —
+        # heartbeat fermo, nessun errore visibile finché qualcuno non se ne
+        # accorge da solo): un self-check dentro TD condividerebbe lo stesso
+        # destino di ciò che deve controllare (se il cook si blocca, si
+        # blocca anche lui). Questo gira sul Core, guarda solo MQTT dal di
+        # fuori — non può bloccarsi insieme a TD.
+        threading.Thread(target=self._watchdog_loop, daemon=True).start()
+
+    def _watchdog_loop(self):
+        while True:
+            time.sleep(30)
+            self._check_offline_transitions()
+
+    def _check_offline_transitions(self):
+        now = time.time()
+        with self._lock:
+            snapshot = {k: dict(v) for k, v in self._targets.items()}
+        for device_id, t in snapshot.items():
+            is_offline = (now - t["last_seen"]) > self.OFFLINE_AFTER_S
+            was_alerted = device_id in self._alerted_offline
+            name = t.get("name") or device_id
+            if is_offline and not was_alerted:
+                self._alerted_offline.add(device_id)
+                self._notify(f"⚠️ TouchDesigner \"{name}\" ({device_id}) non risponde da oltre "
+                             f"{self.OFFLINE_AFTER_S}s — probabile blocco interno (l'agent dentro "
+                             f"TD si è impallato, non la macchina).")
+                print(f"[TD-Bridge] ALERT: {device_id} offline")
+            elif not is_offline and was_alerted:
+                self._alerted_offline.discard(device_id)
+                self._notify(f"✅ TouchDesigner \"{name}\" ({device_id}) di nuovo attiva.")
+                print(f"[TD-Bridge] RECOVERY: {device_id} online")
+
+    def _notify(self, text):
+        self._mqtt.publish("gaia/notify/telegram", json.dumps({"text": text}))
 
     def _on_connect(self, client, userdata, flags, rc, properties=None):
         client.subscribe("gaia/device/+/status", qos=0)
@@ -125,12 +161,21 @@ class TDDeviceRegistry:
         ip, device_id = d.get("ip"), d.get("device_id")
         if not ip or not device_id:
             return
+        # Timestamp del MESSAGGIO (embedded, in ms), non l'orario di
+        # ricezione locale: un riavvio di questo servizio fa consegnare
+        # subito l'ultimo messaggio RETAINED di ogni device (anche se
+        # vecchio di ore) come se fosse appena arrivato — con time.time()
+        # qui, un device gia' morto risulterebbe "appena visto" al riavvio
+        # del bridge, vanificando il watchdog per i primi OFFLINE_AFTER_S
+        # secondi dopo ogni restart.
+        raw_ts = d.get("ts")
+        last_seen = raw_ts / 1000 if isinstance(raw_ts, (int, float)) and raw_ts > 0 else time.time()
         with self._lock:
             is_new = device_id not in self._targets
             paused = self._targets.get(device_id, {}).get("paused", False)
             self._targets[device_id] = {
                 "ip": ip, "name": d.get("name") or device_id,
-                "stanza": d.get("stanza"), "last_seen": time.time(),
+                "stanza": d.get("stanza"), "last_seen": last_seen,
                 "paused": paused,
             }
         if is_new:

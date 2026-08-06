@@ -154,9 +154,16 @@ class _MocapTargetRegistry:
         enabled = (prev or {}).get('enabled', is_new and self._is_same_host(td_id))
         if prev and prev.get('ip') != ip:
             self._clients.pop(td_id, None)   # ip cambiato, ricrea il client
+        # Timestamp del MESSAGGIO (ts, ms), non l'orario di ricezione locale
+        # — stesso motivo del fix in osc_bridge.py/TDDeviceRegistry: un
+        # riavvio di mediapipe fa consegnare subito l'ultimo status
+        # RETAINED anche se vecchio, con time.time() qui un target già
+        # morto risulterebbe "appena visto" appena mediapipe riparte.
+        raw_ts = d.get('ts')
+        last_seen = raw_ts / 1000 if isinstance(raw_ts, (int, float)) and raw_ts > 0 else time.time()
         self._targets[td_id] = {
             'ip': ip, 'name': d.get('name') or td_id, 'stanza': d.get('stanza'),
-            'enabled': enabled, 'last_seen': time.time(),
+            'enabled': enabled, 'last_seen': last_seen,
         }
         return is_new
 
