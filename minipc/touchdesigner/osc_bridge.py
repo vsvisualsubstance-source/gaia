@@ -82,12 +82,23 @@ class TDDeviceRegistry:
     una seconda istanza TD su un'altra macchina, solo la prima (quella
     scritta in config) riceveva il feed — l'altra restava muta senza nessun
     errore visibile. Stesso identico bug del mocap diretto, sistemato il
-    giorno prima con lo stesso pattern."""
+    giorno prima con lo stesso pattern.
+
+    Pausa/ripresa per istanza (aggiunto lo stesso giorno, su richiesta):
+    Pi Manager (web/admin.html) pubblica su gaia/td-bridge/command per
+    sospendere il feed verso UNA istanza specifica senza fermare il bridge
+    per le altre — utile per silenziare temporaneamente un'installazione
+    mentre resta collegata (annunciarsi ancora, solo senza ricevere dati).
+    Lo stato (compresi i target in pausa, altrimenti invisibili una volta
+    esclusi da live_ips()) va su gaia/td-bridge/status, retained — quel
+    che consuma Pi Manager per disegnare la sezione con i pulsanti."""
 
     OFFLINE_AFTER_S = 90
+    STATUS_TOPIC  = "gaia/td-bridge/status"
+    COMMAND_TOPIC = "gaia/td-bridge/command"
 
     def __init__(self):
-        self._targets = {}   # device_id -> {"ip": ..., "last_seen": float}
+        self._targets = {}   # device_id -> {"ip","name","stanza","last_seen","paused"}
         self._lock = threading.Lock()
         self._mqtt = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
                                   client_id="gaia-td-discovery")
@@ -99,8 +110,12 @@ class TDDeviceRegistry:
 
     def _on_connect(self, client, userdata, flags, rc, properties=None):
         client.subscribe("gaia/device/+/status", qos=0)
+        client.subscribe(self.COMMAND_TOPIC, qos=0)
 
     def _on_message(self, client, userdata, msg):
+        if msg.topic == self.COMMAND_TOPIC:
+            self._handle_command(msg.payload)
+            return
         try:
             d = json.loads(msg.payload)
         except (json.JSONDecodeError, TypeError):
@@ -112,15 +127,49 @@ class TDDeviceRegistry:
             return
         with self._lock:
             is_new = device_id not in self._targets
-            self._targets[device_id] = {"ip": ip, "last_seen": time.time()}
+            paused = self._targets.get(device_id, {}).get("paused", False)
+            self._targets[device_id] = {
+                "ip": ip, "name": d.get("name") or device_id,
+                "stanza": d.get("stanza"), "last_seen": time.time(),
+                "paused": paused,
+            }
         if is_new:
             print(f"[TD-Bridge] Nuova istanza TD scoperta: {device_id} → {ip}")
+        self._publish_status()
+
+    def _handle_command(self, payload):
+        try:
+            cmd = json.loads(payload)
+        except (json.JSONDecodeError, TypeError):
+            return
+        device_id, action = cmd.get("device_id"), cmd.get("action")
+        if not device_id or action not in ("pause", "resume"):
+            return
+        with self._lock:
+            if device_id not in self._targets:
+                return
+            self._targets[device_id]["paused"] = (action == "pause")
+        print(f"[TD-Bridge] {device_id}: {'in pausa' if action == 'pause' else 'ripreso'}")
+        self._publish_status()
+
+    def _publish_status(self):
+        now = time.time()
+        with self._lock:
+            targets = {
+                device_id: {
+                    "ip": t["ip"], "name": t["name"], "stanza": t["stanza"],
+                    "paused": t["paused"],
+                    "offline": (now - t["last_seen"]) > self.OFFLINE_AFTER_S,
+                }
+                for device_id, t in self._targets.items()
+            }
+        self._mqtt.publish(self.STATUS_TOPIC, json.dumps({"targets": targets}), retain=True)
 
     def live_ips(self):
         now = time.time()
         with self._lock:
             return sorted({t["ip"] for t in self._targets.values()
-                            if now - t["last_seen"] < self.OFFLINE_AFTER_S})
+                            if not t["paused"] and now - t["last_seen"] < self.OFFLINE_AFTER_S})
 
 
 class TDFanoutClient:

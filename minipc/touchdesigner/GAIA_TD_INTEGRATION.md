@@ -48,7 +48,9 @@ Host Core: `192.168.1.142`. Servizio: `gaia-touchdesigner.service`.
 istanze TD vive contemporaneamente — le scopre da sé via MQTT
 (`gaia/device/+/status`, `role=="touchdesigner"`), nessun IP fisso in
 config. Basta che l'istanza TD esponga il proprio `ip` nello status
-(canale 4, sotto) perché il bridge inizi a mandarle il feed.
+(canale 4, sotto) perché il bridge inizi a mandarle il feed. Da Admin
+(Pi Devices → "🌉 TouchDesigner — Flussi OSC") si può mettere in pausa il
+feed verso UNA istanza specifica senza toccare le altre — vedi README.md.
 
 ### Gaia → TD (Core manda, TD ascolta)
 

@@ -21,6 +21,12 @@ su un'altra macchina e riceve i dati senza toccare nessuna config. Un'istanza ch
 mandare heartbeat per >90s esce da sola dalla lista. Richiede che quell'istanza TD esponga
 il proprio `ip` nello status (vedi `td_internal_agent.py`/l'agent nativo in TD4Gaia).
 
+**Pausa/ripresa per istanza**: `web/admin.html` → Pi Devices → sezione "🌉 TouchDesigner —
+Flussi OSC" mostra ogni istanza scoperta con un pulsante Pausa/Riprendi — pubblica su
+`gaia/td-bridge/command` (`{"device_id":..., "action":"pause"|"resume"}`), il bridge
+smette/riprende a mandarle il feed senza toccare le altre istanze né riavviare il servizio.
+Stato (compresi i target in pausa) su `gaia/td-bridge/status`, retained.
+
 ## Setup
 
 ```bash

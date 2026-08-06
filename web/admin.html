@@ -698,6 +698,16 @@ button.small{padding:3px 9px;font-size:.78rem;margin:0}
     Nessun Pi connesso — in attesa di heartbeat…
   </div>
   <div class="pm-grid" id="pm-devices-grid" style="display:none"></div>
+
+  <!-- ── TouchDesigner — pausa/ripresa dei flussi OSC per istanza ────── -->
+  <div style="margin-top:24px">
+    <h3 style="margin-bottom:8px">🌉 TouchDesigner — Flussi OSC</h3>
+    <div id="pm-td-no-targets" style="text-align:center;padding:20px;color:var(--muted);font-size:.85rem">
+      Nessuna istanza TD conosciuta dal bridge.
+    </div>
+    <div id="pm-td-targets" style="display:none"></div>
+  </div>
+
   <div class="pm-log-wrap">
     <h3>Log MQTT</h3>
     <div id="pm-log-lines"></div>
@@ -2063,6 +2073,7 @@ function initPiManager() {
       pmSetConn(true);
       _pmClient.subscribe('gaia/device/+/status');
       _pmClient.subscribe('gaia/herbarium/+/state');
+      _pmClient.subscribe('gaia/td-bridge/status');
       pmLog('in', `Connesso a ${mqttUrl}`);
     });
     _pmClient.on('error',   e  => { pmSetConn(false); pmLog('err', e.message || 'Errore MQTT'); });
@@ -2070,6 +2081,11 @@ function initPiManager() {
     _pmClient.on('reconnect', () => pmLog('err', 'Riconnessione…'));
     _pmClient.on('message', (topic, raw) => {
       if (!raw || !raw.length) return;
+      if (topic === 'gaia/td-bridge/status') {
+        try { pmTdRender(JSON.parse(raw.toString()).targets || {}); }
+        catch(e) { pmLog('err', 'Parse td-bridge: ' + e.message); }
+        return;
+      }
       if (topic.startsWith('gaia/herbarium/') && topic.endsWith('/state')) {
         try {
           const st = JSON.parse(raw.toString());
@@ -2125,6 +2141,34 @@ function pmSetConn(ok) {
 
 function pmEsc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function pmFmtUp(sec) { if(!sec)return''; const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60); return h?`${h}h ${m}m`:`${m}m`; }
+
+// ── TouchDesigner — pausa/ripresa flussi OSC (gaia/td-bridge/status|command) ──
+function pmTdRender(targets) {
+  const wrap  = document.getElementById('pm-td-targets');
+  const empty = document.getElementById('pm-td-no-targets');
+  const entries = Object.entries(targets || {});
+  if (!entries.length) { empty.style.display = ''; wrap.style.display = 'none'; return; }
+  empty.style.display = 'none';
+  wrap.style.display = '';
+  wrap.innerHTML = entries.map(([id, t]) => `
+    <div class="pi-card" style="display:flex;align-items:center;gap:12px;padding:12px 16px;margin-bottom:8px;${t.offline?'opacity:.5':''}">
+      <div style="flex:1;min-width:0">
+        <div class="pi-display-name">${pmEsc(t.name || id)}</div>
+        <div class="pi-device-id">${pmEsc(id)} · ${pmEsc(t.ip||'?')}${t.stanza?' · '+pmEsc(t.stanza):''}${t.offline?' · offline':''}</div>
+      </div>
+      <span class="pm-badge ${t.paused ? '' : 'cap'}">${t.paused ? '⏸ in pausa' : '▶ attivo'}</span>
+      <button class="pm-btn ${t.paused ? 'green' : 'gray'}" onclick="pmTdToggle('${id}','${t.paused ? 'resume' : 'pause'}')">
+        ${t.paused ? 'Riprendi' : 'Pausa'}
+      </button>
+    </div>
+  `).join('');
+}
+
+function pmTdToggle(deviceId, action) {
+  if (!_pmClient || !_pmClient.connected) { pmLog('err', 'MQTT non connesso'); return; }
+  _pmClient.publish('gaia/td-bridge/command', JSON.stringify({ device_id: deviceId, action }));
+  pmLog('out', `td-bridge ${deviceId}: ${action}`);
+}
 
 function pmSvcKeys(d) {
   return [...new Set([...Object.keys(d.services||{}), ...Object.keys(d.config||{})])];
