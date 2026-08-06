@@ -255,9 +255,22 @@ modifica al bridge — il trasporto è già generico.
 
 Chi manda: **OPS** (non i Pi — flag acceso solo lì), direttamente all'IP di
 TD sulla porta 7000 (stessa porta del canale 1, indirizzi però nel namespace
-`/gaia/mocap/...` — TD li distingue per prefisso). Bypassa completamente
-Core/Node-RED/MQTT: è mocap ad alta frequenza (~12Hz), non un evento
-semantico per il brain.
+`/gaia/mocap/...` — TD li distingue per prefisso). I DATI bypassano
+Core/Node-RED (è mocap ad alta frequenza, ~12Hz, non un evento semantico
+per il brain) — la SCOPERTA/abilitazione delle destinazioni invece passa
+da MQTT (vedi sotto), come tutto il resto del Device Registry.
+
+**Multi-istanza, opt-in (2026-08-06)**: a differenza del canale 1 (che ora
+va a TUTTE le istanze TD automaticamente), il mocap NON fa fan-out
+automatico — è pesante (centinaia di punti a ~12Hz), mandarlo a ogni TD
+scoperta sarebbe uno spreco per chi non lo usa. Default che preserva il
+comportamento di sempre: **solo l'istanza TD sulla STESSA macchina** del
+sender si autoabilita. Ogni altra istanza (es. mandare a un Mac il mocap
+generato su OPS) va abilitata esplicitamente da Admin (Pi Devices →
+"🎭 Mocap diretto") o via MQTT: `gaia/mocap-bridge/{sender_device_id}/command`
+`{"device_id":"<td-id>","action":"enable"|"disable"}`, stato su
+`gaia/mocap-bridge/{sender_device_id}/status` (retained) — `{sender}` è il
+`device_id` di chi genera il mocap (es. `ops-silvermini2`), non della TD.
 
 ```
 /gaia/mocap/{device_id}/meta/room                      stanza corrente

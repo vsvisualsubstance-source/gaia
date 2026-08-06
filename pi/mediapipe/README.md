@@ -51,7 +51,7 @@ cd ~/gaia/mediapipe && bash install.sh
 | `MAX_POSES` | `2` | Persone in posa rilevate in contemporanea, usato solo se `MULTI_PERSON=1` |
 | `POSE_MODEL_PATH` | *(vuoto)* | Path al bundle `.task` di PoseLandmarker, obbligatorio se `MULTI_PERSON=1` (vedi sotto) |
 | `OSC_LANDMARKS` | `0` | `1` = manda anche i landmark grezzi (viso/mani/pose) via OSC diretto a TouchDesigner — vedi sezione dedicata sotto |
-| `OSC_HOST` | `127.0.0.1` | IP di TouchDesigner, solo se `OSC_LANDMARKS=1` |
+| `OSC_HOST` | `127.0.0.1` | **Non più l'IP effettivo** (rimosso 2026-08-06) — le destinazioni si scoprono via MQTT, vedi sotto. Ininfluente, tenuto solo per compatibilità del layer di config. |
 | `OSC_PORT` | `7000` | Porta OSC di TouchDesigner |
 | `OSC_INTERVAL` | `0.08` | Secondi tra un invio mocap e l'altro (~12Hz), indipendente da `PUBLISH_INTERVAL` |
 
@@ -146,6 +146,19 @@ rallenterebbe inutilmente per nulla.
 
 Richiede `pip install python-osc` nel venv del servizio (non è nei requirements.txt di
 default: è opzionale, solo per chi accende questo flag — tipicamente OPS, non i Pi).
+
+**Destinazioni: scoperte via MQTT, non fisse in config (2026-08-06).** Nessun IP da
+scrivere a mano — il servizio ascolta `gaia/device/+/status` e trova da solo le istanze
+TD vive. Per default **si abilita SOLO l'istanza TD sulla STESSA macchina** (comportamento
+di sempre, zero config) — il mocap è pesante (centinaia di punti a ~12Hz), quindi non fa
+fan-out automatico a ogni TD scoperta come il feed principale del bridge. Per mandarlo
+anche a un'altra istanza (es. una TD su un'altra macchina): Admin → Pi Devices → "🎭 Mocap
+diretto", oppure MQTT diretto:
+```
+gaia/mocap-bridge/{device_id}/command   {"device_id": "<td-device-id>", "action": "enable"|"disable"}
+gaia/mocap-bridge/{device_id}/status    (retained) — stato di tutte le istanze TD note e abilitate
+```
+`{device_id}` nel topic è **questo** device (il mittente, es. `ops-silvermini2`), non la TD.
 
 ### Schema indirizzi — un device, un tipo, un person_id correlato
 

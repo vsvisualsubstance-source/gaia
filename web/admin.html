@@ -708,6 +708,15 @@ button.small{padding:3px 9px;font-size:.78rem;margin:0}
     <div id="pm-td-targets" style="display:none"></div>
   </div>
 
+  <!-- ── Mocap diretto (mani/viso/posa) — abilitazione per istanza, opt-in ── -->
+  <div style="margin-top:24px">
+    <h3 style="margin-bottom:8px">🎭 Mocap diretto (mani / viso / posa)</h3>
+    <div id="pm-mocap-no-targets" style="text-align:center;padding:20px;color:var(--muted);font-size:.85rem">
+      Nessuna sorgente mocap attiva.
+    </div>
+    <div id="pm-mocap-targets" style="display:none"></div>
+  </div>
+
   <div class="pm-log-wrap">
     <h3>Log MQTT</h3>
     <div id="pm-log-lines"></div>
@@ -2074,6 +2083,7 @@ function initPiManager() {
       _pmClient.subscribe('gaia/device/+/status');
       _pmClient.subscribe('gaia/herbarium/+/state');
       _pmClient.subscribe('gaia/td-bridge/status');
+      _pmClient.subscribe('gaia/mocap-bridge/+/status');
       pmLog('in', `Connesso a ${mqttUrl}`);
     });
     _pmClient.on('error',   e  => { pmSetConn(false); pmLog('err', e.message || 'Errore MQTT'); });
@@ -2084,6 +2094,12 @@ function initPiManager() {
       if (topic === 'gaia/td-bridge/status') {
         try { pmTdRender(JSON.parse(raw.toString()).targets || {}); }
         catch(e) { pmLog('err', 'Parse td-bridge: ' + e.message); }
+        return;
+      }
+      if (topic.startsWith('gaia/mocap-bridge/') && topic.endsWith('/status')) {
+        const sender = topic.split('/')[2];
+        try { _pmMocapBySender[sender] = JSON.parse(raw.toString()).targets || {}; pmMocapRender(); }
+        catch(e) { pmLog('err', 'Parse mocap-bridge: ' + e.message); }
         return;
       }
       if (topic.startsWith('gaia/herbarium/') && topic.endsWith('/state')) {
@@ -2168,6 +2184,39 @@ function pmTdToggle(deviceId, action) {
   if (!_pmClient || !_pmClient.connected) { pmLog('err', 'MQTT non connesso'); return; }
   _pmClient.publish('gaia/td-bridge/command', JSON.stringify({ device_id: deviceId, action }));
   pmLog('out', `td-bridge ${deviceId}: ${action}`);
+}
+
+// ── Mocap diretto — abilitazione per istanza, opt-in (gaia/mocap-bridge/{sender}/status|command) ──
+const _pmMocapBySender = {};   // sender_device_id -> {td_device_id: {ip,name,stanza,enabled,offline}}
+
+function pmMocapRender() {
+  const wrap  = document.getElementById('pm-mocap-targets');
+  const empty = document.getElementById('pm-mocap-no-targets');
+  const rows = [];
+  for (const [sender, targets] of Object.entries(_pmMocapBySender)) {
+    for (const [id, t] of Object.entries(targets || {})) rows.push({ sender, id, ...t });
+  }
+  if (!rows.length) { empty.style.display = ''; wrap.style.display = 'none'; return; }
+  empty.style.display = 'none';
+  wrap.style.display = '';
+  wrap.innerHTML = rows.map(t => `
+    <div class="pi-card" style="display:flex;align-items:center;gap:12px;padding:12px 16px;margin-bottom:8px;${t.offline?'opacity:.5':''}">
+      <div style="flex:1;min-width:0">
+        <div class="pi-display-name">${pmEsc(t.name || t.id)}</div>
+        <div class="pi-device-id">da ${pmEsc(t.sender)} → ${pmEsc(t.id)} · ${pmEsc(t.ip||'?')}${t.stanza?' · '+pmEsc(t.stanza):''}${t.offline?' · offline':''}</div>
+      </div>
+      <span class="pm-badge ${t.enabled ? 'cap' : ''}">${t.enabled ? '🎭 ricevuto' : '— non abilitato'}</span>
+      <button class="pm-btn ${t.enabled ? 'gray' : 'green'}" onclick="pmMocapToggle('${t.sender}','${t.id}','${t.enabled ? 'disable' : 'enable'}')">
+        ${t.enabled ? 'Disabilita' : 'Abilita'}
+      </button>
+    </div>
+  `).join('');
+}
+
+function pmMocapToggle(sender, deviceId, action) {
+  if (!_pmClient || !_pmClient.connected) { pmLog('err', 'MQTT non connesso'); return; }
+  _pmClient.publish(`gaia/mocap-bridge/${sender}/command`, JSON.stringify({ device_id: deviceId, action }));
+  pmLog('out', `mocap ${sender}→${deviceId}: ${action}`);
 }
 
 function pmSvcKeys(d) {

@@ -112,23 +112,98 @@ logging.basicConfig(
 log = logging.getLogger(DEVICE_ID)
 log.info(f"device_id={DEVICE_ID} room_claim={_state['room']} broker={MQTT_HOST}:{MQTT_PORT}")
 
+_MY_HOSTNAME = socket.gethostname().lower()
+
+
+class _MocapTargetRegistry:
+    """Istanze TD note per il mocap diretto E quali di queste lo ricevono
+    davvero (aggiunto 2026-08-06, su richiesta esplicita, dopo aver dato al
+    Bridge — osc_bridge.py, canale 1 — il fan-out automatico a TUTTE le
+    istanze TD vive). Il mocap NON fa lo stesso: è ad alta frequenza/pesante
+    (centinaia di punti a ~12Hz, un pacchetto per volto/mano/posa) — mandarlo
+    automaticamente a ogni TD scoperta sarebbe uno spreco se quella TD non
+    fa nulla col mocap. Default che preserva il comportamento di sempre,
+    zero config: SOLO l'istanza sulla STESSA macchina si autoabilita
+    (bypassa apposta il Core per la bassa latenza). Ogni altra istanza va
+    abilitata esplicitamente da Admin, opt-in via
+    gaia/mocap-bridge/{DEVICE_ID}/command."""
+
+    OFFLINE_AFTER_S = 90
+
+    def __init__(self, sender_device_id, my_hostname, port):
+        self._sender_id = sender_device_id
+        self._my_hostname = my_hostname
+        self._port = port
+        self._targets = {}   # td_id -> {ip,name,stanza,enabled,last_seen}
+        self._clients = {}   # td_id -> SimpleUDPClient
+        self.status_topic  = f'gaia/mocap-bridge/{sender_device_id}/status'
+        self.command_topic = f'gaia/mocap-bridge/{sender_device_id}/command'
+
+    def _is_same_host(self, td_id):
+        return td_id == f'td-{self._my_hostname}'
+
+    def on_td_status(self, d):
+        ip, td_id = d.get('ip'), d.get('device_id')
+        if not ip or not td_id:
+            return False
+        prev = self._targets.get(td_id)
+        is_new = prev is None
+        # autoabilitata solo la prima volta che la vediamo E solo se è la
+        # stessa macchina — se l'utente l'ha poi disabilitata a mano, i
+        # heartbeat successivi non la riaccendono da soli.
+        enabled = (prev or {}).get('enabled', is_new and self._is_same_host(td_id))
+        if prev and prev.get('ip') != ip:
+            self._clients.pop(td_id, None)   # ip cambiato, ricrea il client
+        self._targets[td_id] = {
+            'ip': ip, 'name': d.get('name') or td_id, 'stanza': d.get('stanza'),
+            'enabled': enabled, 'last_seen': time.time(),
+        }
+        return is_new
+
+    def on_command(self, payload):
+        try:
+            cmd = json.loads(payload.decode())
+        except Exception:
+            return False
+        td_id, action = cmd.get('device_id'), cmd.get('action')
+        if td_id not in self._targets or action not in ('enable', 'disable'):
+            return False
+        self._targets[td_id]['enabled'] = (action == 'enable')
+        return True
+
+    def enabled_clients(self):
+        from pythonosc.udp_client import SimpleUDPClient
+        out = []
+        for td_id, t in self._targets.items():
+            if not t['enabled']:
+                continue
+            client = self._clients.get(td_id)
+            if client is None:
+                client = SimpleUDPClient(t['ip'], self._port)
+                self._clients[td_id] = client
+            out.append(client)
+        return out
+
+    def status_payload(self):
+        now = time.time()
+        return {'targets': {
+            td_id: {'ip': t['ip'], 'name': t['name'], 'stanza': t['stanza'],
+                    'enabled': t['enabled'],
+                    'offline': (now - t['last_seen']) > self.OFFLINE_AFTER_S}
+            for td_id, t in self._targets.items()
+        }}
+
+
 # Import lazy: python-osc non è (e non deve essere) una dipendenza dei Pi,
 # solo delle macchine che accendono esplicitamente OSC_LANDMARKS=1.
-# _osc_host è un PUNTO DI PARTENZA (OSC_HOST resta utile per un test locale
-# senza TD ancora acceso), non la destinazione definitiva: appena arriva
-# l'heartbeat di un device 'touchdesigner' su MQTT (_handle_td_status,
-# sotto), _osc viene ricreato verso il suo IP reale — mai più un valore
-# scritto una volta in config e mai aggiornato (causa di un IP stantio
-# trovato in produzione il 2026-08-05: puntava a una macchina che non era
-# più TD, il mocap non arrivava e nessun errore lo segnalava).
-_osc = None
-_osc_host = OSC_HOST
+_mocap = None
 if OSC_LANDMARKS:
     try:
-        from pythonosc.udp_client import SimpleUDPClient
-        _osc = SimpleUDPClient(_osc_host, OSC_PORT)
-        log.info(f"Mocap OSC attivo (default) → {_osc_host}:{OSC_PORT}/gaia/mocap/{DEVICE_ID}/... "
-                 f"ogni {OSC_INTERVAL * 1000:.0f}ms — verrà ridiretto al vero IP di TD non appena annuncia")
+        import pythonosc.udp_client  # noqa: F401 — solo per fallire subito se manca
+        _mocap = _MocapTargetRegistry(DEVICE_ID, _MY_HOSTNAME, OSC_PORT)
+        log.info(f"Mocap OSC pronto — /gaia/mocap/{DEVICE_ID}/... ogni {OSC_INTERVAL * 1000:.0f}ms, "
+                 f"si abilita da sola verso TD sulla stessa macchina (td-{_MY_HOSTNAME}) appena annuncia; "
+                 f"altre istanze via {_mocap.command_topic}")
     except ImportError:
         log.error("OSC_LANDMARKS=1 ma python-osc non installato (pip install python-osc) — mocap disattivato")
         OSC_LANDMARKS = False
@@ -155,7 +230,8 @@ def _on_connect(client, userdata, flags, rc, properties=None):
     # Device Registry (la config segue chi è davvero acceso).
     if OSC_LANDMARKS:
         client.subscribe('gaia/device/+/status', qos=0)
-        log.info("Subscribed a gaia/device/+/status (scoperta IP TD per il mocap)")
+        client.subscribe(_mocap.command_topic, qos=0)
+        log.info(f"Subscribed a gaia/device/+/status + {_mocap.command_topic} (scoperta/abilitazione TD per il mocap)")
 
     # Announce: il registry risponde con config retained
     # gethostbyname(gethostname()) risolve spesso a 127.0.1.1 (voce /etc/hosts su
@@ -186,46 +262,34 @@ _ota = OtaHandler(
 )
 
 
-_MY_HOSTNAME = socket.gethostname().lower()
-
-
 def _handle_td_status(payload):
-    """Mocap diretto (bypassa il Core): aggiorna la destinazione OSC quando
-    un device con role 'touchdesigner' pubblica il proprio heartbeat —
-    sostituisce l'IP fisso in config (vedi commento in _on_connect).
-
-    Match sull'HOSTNAME, non solo su role=='touchdesigner': il mocap
-    diretto è pensato per un TD sulla STESSA macchina (per questo bypassa
-    il Core), e in produzione possono esistere più istanze TD contemporanee
-    (osservato dal vivo il 2026-08-05: un'istanza vecchia rimasta accesa su
-    un Mac, oltre a quella reale su questa macchina) — un match solo sul
-    role manderebbe il mocap alla prima che risponde, non necessariamente
-    quella giusta. TD deriva il proprio device_id dall'hostname macchina
-    (td-{hostname}, vedi TD4Gaia/gaia_device_agent.py) — stesso confronto
-    qui, sull'hostname di QUESTA macchina."""
-    global _osc, _osc_host
+    """Mocap diretto: registra/aggiorna l'istanza TD nel _MocapTargetRegistry
+    (auto-abilitata solo se sulla STESSA macchina, vedi classe sopra) e
+    ripubblica lo stato per Admin."""
     try:
         d = json.loads(payload.decode())
     except Exception:
         return
     if d.get('role') != 'touchdesigner':
         return
-    td_id = d.get('device_id', '')
-    if td_id != f'td-{_MY_HOSTNAME}':
-        return
-    ip = d.get('ip')
-    if not ip or ip == _osc_host:
-        return
-    from pythonosc.udp_client import SimpleUDPClient
-    _osc_host = ip
-    _osc = SimpleUDPClient(_osc_host, OSC_PORT)
-    log.info(f"Mocap OSC ridiretto verso TD ({d.get('device_id')}, "
-             f"stanza={d.get('stanza')}) → {_osc_host}:{OSC_PORT}")
+    is_new = _mocap.on_td_status(d)
+    if is_new:
+        auto_on = _mocap._targets[d['device_id']]['enabled']
+        log.info(f"Mocap: nuova istanza TD vista ({d.get('device_id')}, stanza={d.get('stanza')}) → "
+                 f"{'auto-abilitata (stessa macchina)' if auto_on else 'in attesa di abilitazione da Admin'}")
+    _mqtt.publish(_mocap.status_topic, json.dumps(_mocap.status_payload()), retain=True)
+
+
+def _handle_mocap_command(payload):
+    if _mocap.on_command(payload):
+        _mqtt.publish(_mocap.status_topic, json.dumps(_mocap.status_payload()), retain=True)
+        log.info(f"Mocap: comando applicato, target ora → {_mocap.status_payload()['targets']}")
 
 
 def _on_message(client, userdata, msg):
-    """Riceve config dal Device Registry (room), comandi OTA, o l'heartbeat
-    di un device TD (per il mocap diretto, vedi _handle_td_status)."""
+    """Riceve config dal Device Registry (room), comandi OTA, l'heartbeat di
+    un device TD, o un comando di abilitazione mocap per una specifica
+    istanza (vedi _handle_td_status / _handle_mocap_command)."""
     topic = msg.topic
 
     # OTA
@@ -233,10 +297,14 @@ def _on_message(client, userdata, msg):
         _ota.handle(topic, msg.payload)
         return
 
-    # Mocap: IP di TD scoperto dal vivo, non da un valore fisso in config
-    if OSC_LANDMARKS and topic.startswith('gaia/device/') and topic.endswith('/status'):
-        _handle_td_status(msg.payload)
-        return
+    if OSC_LANDMARKS:
+        if topic == _mocap.command_topic:
+            _handle_mocap_command(msg.payload)
+            return
+        # Mocap: IP di TD scoperto dal vivo, non da un valore fisso in config
+        if topic.startswith('gaia/device/') and topic.endswith('/status'):
+            _handle_td_status(msg.payload)
+            return
 
     # Config room
     if topic != CONFIG_TOPIC:
@@ -365,30 +433,36 @@ def _publish_landmarks_osc(room):
     device_id è nel path (identifica IL device), room resta solo in
     meta/room perché può cambiare (riassegnazione stanza) senza che
     device_id cambi — chi consuma correla i due via device_id."""
-    if not _osc:
+    clients = _mocap.enabled_clients() if _mocap else []
+    if not clients:
         return
+
+    def _send(address, value):
+        for client in clients:
+            try:
+                client.send_message(address, value)
+            except OSError:
+                pass  # quella specifica istanza non risponde — non bloccare le altre
+
     base = f"/gaia/mocap/{DEVICE_ID}"
-    try:
-        _osc.send_message(f"{base}/meta/room", room)
-        _osc.send_message(f"{base}/meta/faces", len(_last_raw['faces']))
-        _osc.send_message(f"{base}/meta/hands", len(_last_raw['hands']))
-        _osc.send_message(f"{base}/meta/poses", len(_last_raw['poses']))
-        for person_id, pts in enumerate(_last_raw['faces']):
-            _osc.send_message(f"{base}/face/{person_id}", [c for p in pts for c in p])
-            # Gruppi con nome (occhi/sopracciglia/labbra/naso/contorno) in
-            # AGGIUNTA alla mesh completa sopra — stesso identico dato, solo
-            # più facile da interpretare senza conoscere la topologia dei
-            # 478 punti. Vedi _FACE_REGIONS per gli indici (verificati).
-            for region, idxs in _FACE_REGIONS.items():
-                region_pts = [pts[i] for i in idxs]
-                _osc.send_message(f"{base}/face/{person_id}/{region}", [c for p in region_pts for c in p])
-        for hd in _last_raw['hands']:
-            side = 'left' if hd['handedness'].lower().startswith('l') else 'right'
-            _osc.send_message(f"{base}/hand/{side}/{hd['person_id']}", [c for p in hd['points'] for c in p])
-        for person_id, pts in enumerate(_last_raw['poses']):
-            _osc.send_message(f"{base}/pose/{person_id}", [c for p in pts for c in p])
-    except OSError:
-        pass  # TouchDesigner non in ascolto — non bloccare il resto del loop
+    _send(f"{base}/meta/room", room)
+    _send(f"{base}/meta/faces", len(_last_raw['faces']))
+    _send(f"{base}/meta/hands", len(_last_raw['hands']))
+    _send(f"{base}/meta/poses", len(_last_raw['poses']))
+    for person_id, pts in enumerate(_last_raw['faces']):
+        _send(f"{base}/face/{person_id}", [c for p in pts for c in p])
+        # Gruppi con nome (occhi/sopracciglia/labbra/naso/contorno) in
+        # AGGIUNTA alla mesh completa sopra — stesso identico dato, solo
+        # più facile da interpretare senza conoscere la topologia dei
+        # 478 punti. Vedi _FACE_REGIONS per gli indici (verificati).
+        for region, idxs in _FACE_REGIONS.items():
+            region_pts = [pts[i] for i in idxs]
+            _send(f"{base}/face/{person_id}/{region}", [c for p in region_pts for c in p])
+    for hd in _last_raw['hands']:
+        side = 'left' if hd['handedness'].lower().startswith('l') else 'right'
+        _send(f"{base}/hand/{side}/{hd['person_id']}", [c for p in hd['points'] for c in p])
+    for person_id, pts in enumerate(_last_raw['poses']):
+        _send(f"{base}/pose/{person_id}", [c for p in pts for c in p])
 
 
 def _face_to_dict(lm, w, h):
