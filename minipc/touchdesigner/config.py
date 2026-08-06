@@ -21,8 +21,13 @@ _defaults = {
     'GAIA_WS_PORT':      '1880',
     'GAIA_WS_PATH':      '/gaia',
 
-    # Uscita verso TouchDesigner (OSC In CHOP/DAT, di norma in ascolto su 127.0.0.1)
-    'TD_OSC_HOST':        '127.0.0.1',
+    # Uscita verso TouchDesigner (OSC In CHOP/DAT). NIENTE PIU' TD_OSC_HOST
+    # (rimosso 2026-08-06): un IP fisso qui è andato stantio due volte in
+    # produzione (mocap direttto e poi questo stesso bridge, entrambi
+    # puntati a una macchina sbagliata/vecchia) — le destinazioni si
+    # scoprono ora dal vivo via MQTT (TDDeviceRegistry in osc_bridge.py,
+    # gaia/device/+/status, role=="touchdesigner"), una o più istanze
+    # contemporaneamente, senza nessun valore da tenere aggiornato a mano.
     'TD_OSC_PORT':        '7000',
     # Porta SEPARATA per gli eventi one-shot (level_up, dream_new,
     # face_enrolled, person_recognized...): mischiano stringhe (nome,
@@ -54,7 +59,6 @@ GAIA_WS_PORT = int(_cfg['GAIA_WS_PORT'])
 GAIA_WS_PATH = _cfg['GAIA_WS_PATH']
 GAIA_WS_URL  = f"ws://{GAIA_WS_HOST}:{GAIA_WS_PORT}{GAIA_WS_PATH}"
 
-TD_OSC_HOST = _cfg['TD_OSC_HOST']
 TD_OSC_PORT = int(_cfg['TD_OSC_PORT'])
 TD_EVENT_OSC_PORT = int(_cfg['TD_EVENT_OSC_PORT'])
 SEND_INTERVAL_S = int(_cfg['SEND_INTERVAL_MS']) / 1000.0

@@ -13,6 +13,14 @@ TouchDesigner ──OSC/UDP──▶ osc_bridge.py ──MQTT (gaia/touchdesigne
 Servizio indipendente: se TouchDesigner è spento il bridge continua a girare (riprova la
 connessione), e se il bridge è giù nessun altro componente Gaia ne risente.
 
+**Multi-istanza (2026-08-06)**: nessun IP di TouchDesigner fisso in config — il bridge
+scopre da solo TUTTE le istanze TD vive via MQTT (`TDDeviceRegistry` in `osc_bridge.py`,
+ascolta `gaia/device/+/status`, `role=="touchdesigner"`, stesso Device Registry già usato
+da Pi/OPS/Core) e manda lo stesso feed a ognuna in parallelo — apri una seconda istanza TD
+su un'altra macchina e riceve i dati senza toccare nessuna config. Un'istanza che smette di
+mandare heartbeat per >90s esce da sola dalla lista. Richiede che quell'istanza TD esponga
+il proprio `ip` nello status (vedi `td_internal_agent.py`/l'agent nativo in TD4Gaia).
+
 ## Setup
 
 ```bash
@@ -34,7 +42,7 @@ altri componenti, vedi `config.py`):
 | Chiave | Default | Note |
 |---|---|---|
 | `GAIA_WS_HOST` / `GAIA_WS_PORT` / `GAIA_WS_PATH` | `localhost` / `1880` / `/gaia` | sorgente dati (stessa WS di dashboard/arte visiva) |
-| `TD_OSC_HOST` / `TD_OSC_PORT` | `127.0.0.1` / `7000` | dove gira TouchDesigner (di norma sulla stessa macchina) |
+| `TD_OSC_PORT` / `TD_EVENT_OSC_PORT` | `7000` / `7001` | porte su cui OGNI istanza TD ascolta, sulla propria macchina — non un host, le destinazioni si scoprono via MQTT (vedi sopra) |
 | `OSC_IN_PORT` | `9008` | porta su cui il bridge ascolta i messaggi da TouchDesigner |
 | `SEND_INTERVAL_MS` | `100` | ogni quanto inviare lo snapshot Gaia→TD (10Hz) — **non abbassare senza motivo**: la WS di Gaia è stata misurata a migliaia di broadcast/sec in certe condizioni, molto più di quanto documentato altrove; il bridge disaccoppia deliberatamente il rate di arrivo da quello di invio |
 | `MQTT_HOST` / `MQTT_PORT` | `192.168.1.142` / `1883` | dove pubblicare i dati che arrivano da TouchDesigner |

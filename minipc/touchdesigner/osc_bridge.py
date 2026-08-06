@@ -70,6 +70,82 @@ def _cleared_value(value):
     return 0
 
 
+class TDDeviceRegistry:
+    """Scopre le istanze TD vive via lo stesso Device Registry MQTT usato
+    dal mocap diretto (pi/mediapipe/mediapipe_node.py, canale 2) — nessun
+    IP fisso in config: ogni TD che si annuncia (gaia/device/+/status,
+    role=="touchdesigner") entra nella lista dei destinatari; una che
+    smette di mandare heartbeat (OFFLINE_AFTER_S) ne esce da sola, stesso
+    timeout usato da Pi Manager per marcare un device offline.
+
+    Trovato dal vivo il 2026-08-06: con TD_OSC_HOST fisso in config, aperta
+    una seconda istanza TD su un'altra macchina, solo la prima (quella
+    scritta in config) riceveva il feed — l'altra restava muta senza nessun
+    errore visibile. Stesso identico bug del mocap diretto, sistemato il
+    giorno prima con lo stesso pattern."""
+
+    OFFLINE_AFTER_S = 90
+
+    def __init__(self):
+        self._targets = {}   # device_id -> {"ip": ..., "last_seen": float}
+        self._lock = threading.Lock()
+        self._mqtt = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
+                                  client_id="gaia-td-discovery")
+        self._mqtt.on_connect = self._on_connect
+        self._mqtt.on_message = self._on_message
+        self._mqtt.reconnect_delay_set(min_delay=2, max_delay=30)
+        self._mqtt.connect(config.MQTT_HOST, config.MQTT_PORT, keepalive=60)
+        self._mqtt.loop_start()
+
+    def _on_connect(self, client, userdata, flags, rc, properties=None):
+        client.subscribe("gaia/device/+/status", qos=0)
+
+    def _on_message(self, client, userdata, msg):
+        try:
+            d = json.loads(msg.payload)
+        except (json.JSONDecodeError, TypeError):
+            return
+        if d.get("role") != "touchdesigner":
+            return
+        ip, device_id = d.get("ip"), d.get("device_id")
+        if not ip or not device_id:
+            return
+        with self._lock:
+            is_new = device_id not in self._targets
+            self._targets[device_id] = {"ip": ip, "last_seen": time.time()}
+        if is_new:
+            print(f"[TD-Bridge] Nuova istanza TD scoperta: {device_id} → {ip}")
+
+    def live_ips(self):
+        now = time.time()
+        with self._lock:
+            return sorted({t["ip"] for t in self._targets.values()
+                            if now - t["last_seen"] < self.OFFLINE_AFTER_S})
+
+
+class TDFanoutClient:
+    """Sostituto drop-in di un singolo SimpleUDPClient (stessa interfaccia
+    send_message usata da OscAddressTracker): manda ogni messaggio a TUTTE
+    le istanze TD vive secondo TDDeviceRegistry, stessa porta per tutte
+    (ognuna sulla propria macchina — nessun conflitto)."""
+
+    def __init__(self, registry, port):
+        self._registry = registry
+        self._port = port
+        self._clients = {}   # ip -> SimpleUDPClient
+
+    def send_message(self, address, value):
+        for ip in self._registry.live_ips():
+            client = self._clients.get(ip)
+            if client is None:
+                client = SimpleUDPClient(ip, self._port)
+                self._clients[ip] = client
+            try:
+                client.send_message(address, value)
+            except OSError:
+                pass  # quella specifica istanza non risponde — non bloccare le altre
+
+
 class OscAddressTracker:
     """Ricorda gli indirizzi mandati nel giro precedente e azzera quelli
     che spariscono nel giro corrente (persona/oggetto non più presente).
@@ -113,8 +189,8 @@ class GaiaToTouchDesigner:
     di invio. Riconnessione WS automatica con backoff.
     """
 
-    def __init__(self):
-        self._osc = SimpleUDPClient(config.TD_OSC_HOST, config.TD_OSC_PORT)
+    def __init__(self, registry):
+        self._osc = TDFanoutClient(registry, config.TD_OSC_PORT)
         self._stop = False
         self._lock = threading.Lock()
         self._latest_payload = None
@@ -150,7 +226,7 @@ class GaiaToTouchDesigner:
                 nonlocal connected_at
                 connected_at = time.time()
                 print(f"[TD-Bridge] Connesso a {config.GAIA_WS_URL} → OSC "
-                      f"{config.TD_OSC_HOST}:{config.TD_OSC_PORT} "
+                      f"porta {config.TD_OSC_PORT} verso tutte le istanze TD vive "
                       f"(ogni {config.SEND_INTERVAL_S * 1000:.0f}ms)")
 
             try:
@@ -195,20 +271,18 @@ class GaiaCanvasToTouchDesigner:
     mandati subito, non in un batch a intervalli — quindi si invia
     direttamente da _on_message.
 
-    TUTTO questo feed (tick continuo + eventi) va su event_osc_client
-    (di norma TD_EVENT_OSC_PORT) — verificato campo per campo il 2026-08-04:
+    TUTTO questo feed (tick continuo + eventi) va sulla porta
+    TD_EVENT_OSC_PORT, verso TUTTE le istanze TD vive (TDFanoutClient, non
+    più un unico host fisso) — verificato campo per campo il 2026-08-04:
     ogni categoria del canvas (soul.mood, rooms.activity/emotion/pose/
     gesture, lights.color, bricks.variant/room/interfaces) ha almeno un
     valore testuale mischiato ai numeri, quindi non ha senso provare a
     separare "i numeri" dal resto — un OSC In CHOP (pensato per canali
     numerici continui) non digerisce bene nessuna di queste categorie.
-    osc_client (TD_OSC_PORT/7000) NON è più usato da questa classe: resta
-    riservato al flatten grezzo di GaiaToTouchDesigner, tenuto per
-    compatibilità del costruttore ma non più necessario di per sé.
     """
 
-    def __init__(self, osc_client, event_osc_client=None):
-        self._event_osc = event_osc_client or osc_client
+    def __init__(self, registry):
+        self._event_osc = TDFanoutClient(registry, config.TD_EVENT_OSC_PORT)
         # Tutto il feed passa dal tracker (azzera stanze/oggetti/persone/
         # lexicon spariti) tranne gli eventi one-shot, bang per natura —
         # non hanno un "prima" con cui confrontarsi né vanno azzerati.
@@ -225,7 +299,8 @@ class GaiaCanvasToTouchDesigner:
         client.subscribe("gaia/td/canvas", qos=0)
         client.subscribe("gaia/td/canvas/event/#", qos=0)
         print(f"[TD-Bridge] Canvas (tick + eventi, tutto testo+numeri) → OSC "
-              f"{config.TD_OSC_HOST}:{config.TD_EVENT_OSC_PORT}/gaia/canvas/...")
+              f"porta {config.TD_EVENT_OSC_PORT} verso tutte le istanze TD vive, "
+              f"/gaia/canvas/...")
 
     def _on_message(self, client, userdata, msg):
         try:
@@ -291,9 +366,12 @@ def main():
     server_thread = threading.Thread(target=server.serve_forever, daemon=True)
     server_thread.start()
 
-    gaia_to_td = GaiaToTouchDesigner()
-    event_osc = SimpleUDPClient(config.TD_OSC_HOST, config.TD_EVENT_OSC_PORT)
-    canvas_to_td = GaiaCanvasToTouchDesigner(gaia_to_td._osc, event_osc)
+    # Un solo registro condiviso (una sola subscribe a gaia/device/+/status)
+    # — sia il flatten grezzo che il canvas mandano lo stesso feed a tutte
+    # le istanze TD vive, ognuna sulla propria porta (7000/7001).
+    td_registry = TDDeviceRegistry()
+    gaia_to_td = GaiaToTouchDesigner(td_registry)
+    canvas_to_td = GaiaCanvasToTouchDesigner(td_registry)
     try:
         gaia_to_td.run()
     except KeyboardInterrupt:

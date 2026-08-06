@@ -44,6 +44,12 @@ Setup e dettagli di entrambi: `minipc/touchdesigner/README.md`, sezione
 
 Host Core: `192.168.1.142`. Servizio: `gaia-touchdesigner.service`.
 
+**Multi-istanza (2026-08-06)**: il bridge manda lo stesso feed a TUTTE le
+istanze TD vive contemporaneamente — le scopre da sé via MQTT
+(`gaia/device/+/status`, `role=="touchdesigner"`), nessun IP fisso in
+config. Basta che l'istanza TD esponga il proprio `ip` nello status
+(canale 4, sotto) perché il bridge inizi a mandarle il feed.
+
 ### Gaia → TD (Core manda, TD ascolta)
 
 Il flatten grezzo (sotto) resta sulla **porta 7000**. **Tutto il resto**
