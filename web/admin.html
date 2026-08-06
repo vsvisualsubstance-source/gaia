@@ -129,6 +129,9 @@ button.small{padding:3px 9px;font-size:.78rem;margin:0}
 .pi-device-id{font-size:.7rem;color:var(--muted);font-family:monospace}
 .pi-uptime{font-size:.72rem;color:var(--muted);white-space:nowrap}
 .pi-card-body{padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.pm-td-perf{display:flex;gap:10px;flex-wrap:wrap;font-size:.72rem}
+.pm-perf-fps{color:var(--muted);font-family:monospace}
+.pm-perf-err{color:var(--red);background:#2a1216;border:1px solid #4a1f26;border-radius:5px;padding:2px 8px}
 .pm-badge{font-size:.72rem;padding:2px 8px;border-radius:4px;background:var(--card);border:1px solid var(--border);color:var(--muted);display:flex;align-items:center;gap:5px}
 .pm-badge.active{color:var(--green);border-color:#1e4030;background:#0d1f18}
 .pm-badge.cap{color:var(--accent);border-color:#1a2e50;background:#0c1428}
@@ -2237,6 +2240,13 @@ function pmSvcBtnHtml(key, d) {
     </div>
   </div>`;
 }
+function pmPerfHtml(d) {
+  const parts = [];
+  if (d.fps != null) parts.push(`<span class="pm-perf-fps">${Number(d.fps).toFixed(1)}/${d.target_fps ?? '?'} fps${d.dropped_frames ? ` · ${d.dropped_frames} drop` : ''}</span>`);
+  if (d.last_error) parts.push(`<span class="pm-perf-err">⚠️ ${pmEsc(d.last_error)}</span>`);
+  return parts.join('');
+}
+
 function pmCapBadges(d) {
   const caps = d.capabilities||{};
   const b = [caps.camera?`<span class="pm-badge cap">📷 Camera</span>`:'', caps.mic?`<span class="pm-badge cap">🎤 Mic</span>`:''].filter(Boolean).join('');
@@ -2265,6 +2275,7 @@ function pmBuildCard(id, d) {
     <div class="pi-uptime">${pmFmtUp(d.uptime)}</div>
   </div>
   <div class="pi-card-body">
+    <div class="pm-td-perf" id="pm-perf-${id}" style="${pmPerfHtml(d)?'':'display:none'}">${pmPerfHtml(d)}</div>
     ${pmCapBadges(d)}
     <div>
       <div class="pm-section-label">Stanza / Nome display</div>
@@ -2310,6 +2321,12 @@ function pmPatchCard(id, d) {
   if (ip) ip.textContent = d.ip||'?';
   const ut = card.querySelector('.pi-uptime');
   if (ut) ut.textContent = pmFmtUp(d.uptime);
+  const perf = card.querySelector('.pm-td-perf');
+  if (perf) {
+    const html = pmPerfHtml(d);
+    perf.innerHTML = html;
+    perf.style.display = html ? '' : 'none';
+  }
   const presetSel = card.querySelector('.pm-inp-herbpreset');
   if (presetSel && d.stanza) presetSel.dataset.stanza = d.stanza;
   const services = d.services||{};
