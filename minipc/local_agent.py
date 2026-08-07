@@ -130,6 +130,17 @@ _SERVICE_DEFS = {
         "env_extra": {"SCENE_INTERVAL": "900"},
         "ota_dir": "/home/core/core-node-0/minipc/script",
     },
+    # ── Servizi "core" in Docker (2026-08-07) — stesso contratto MQTT/Pi
+    # Manager di tutto il resto, ma start/stop/restart vanno a `docker`
+    # invece che a un subprocess Python. Nessuno di questi viene toccato
+    # da apply_initial_config() finche' non e' esplicitamente abilitato
+    # da qui (i container restano gestiti dalla loro policy Docker propria
+    # per riavvii host/crash — questo agent li ESPONE al contratto, non ne
+    # diventa l'unico proprietario del ciclo di vita). Vedi docs/core-distribuito.md.
+    "mosquitto": {"type": "docker", "container": "mosquitto"},
+    "qdrant":    {"type": "docker", "container": "qdrant"},
+    "ollama":    {"type": "docker", "container": "ollama"},
+    "openhab":   {"type": "docker", "container": "openhab"},
 }
 
 # ── Stato globale ─────────────────────────────────────────────────────
@@ -229,7 +240,41 @@ def _build_env(extra: dict) -> dict:
     return env
 
 
+def _docker_is_running(container: str) -> bool:
+    try:
+        r = subprocess.run(["docker", "inspect", "-f", "{{.State.Running}}", container],
+                            capture_output=True, text=True, timeout=5)
+        return r.returncode == 0 and r.stdout.strip() == "true"
+    except Exception:
+        return False
+
+
+def _docker_start(container: str) -> bool:
+    try:
+        r = subprocess.run(["docker", "start", container], capture_output=True, text=True, timeout=15)
+        ok = r.returncode == 0
+        print(f"[Agent] docker start {container} -> {'ok' if ok else r.stderr.strip()}")
+        return ok
+    except Exception as e:
+        print(f"[Agent] docker start {container} errore: {e}")
+        return False
+
+
+def _docker_stop(container: str) -> bool:
+    try:
+        r = subprocess.run(["docker", "stop", container], capture_output=True, text=True, timeout=15)
+        ok = r.returncode == 0
+        print(f"[Agent] docker stop {container} -> {'ok' if ok else r.stderr.strip()}")
+        return ok
+    except Exception as e:
+        print(f"[Agent] docker stop {container} errore: {e}")
+        return False
+
+
 def _is_running(key: str) -> bool:
+    defn = _SERVICE_DEFS.get(key)
+    if defn and defn.get("type") == "docker":
+        return _docker_is_running(defn["container"])
     with _procs_lock:
         p = _procs.get(key)
         return p is not None and p.poll() is None
@@ -242,12 +287,14 @@ def _svc_status(key: str) -> str:
 
 
 def _start_service(key: str) -> bool:
-    if _is_running(key):
-        return True
     defn = _SERVICE_DEFS.get(key)
     if not defn:
         print(f"[Agent] Servizio sconosciuto: {key}")
         return False
+    if defn.get("type") == "docker":
+        return _docker_start(defn["container"])
+    if _is_running(key):
+        return True
     env  = _build_env(defn.get("env_extra", {}))
     cwd  = defn.get("cwd")
     cmd  = defn["cmd"]
@@ -273,6 +320,9 @@ def _start_service(key: str) -> bool:
 
 
 def _stop_service(key: str) -> bool:
+    defn = _SERVICE_DEFS.get(key)
+    if defn and defn.get("type") == "docker":
+        return _docker_stop(defn["container"])
     with _procs_lock:
         p = _procs.get(key)
         if p is None or p.poll() is not None:
@@ -289,6 +339,17 @@ def _stop_service(key: str) -> bool:
 
 
 def _restart_service(key: str) -> bool:
+    defn = _SERVICE_DEFS.get(key)
+    if defn and defn.get("type") == "docker":
+        try:
+            r = subprocess.run(["docker", "restart", defn["container"]],
+                                capture_output=True, text=True, timeout=30)
+            ok = r.returncode == 0
+            print(f"[Agent] docker restart {defn['container']} -> {'ok' if ok else r.stderr.strip()}")
+            return ok
+        except Exception as e:
+            print(f"[Agent] docker restart errore: {e}")
+            return False
     _stop_service(key)
     time.sleep(0.5)
     return _start_service(key)
@@ -511,8 +572,12 @@ def _get_uptime() -> int:
 def _handle_signal(sig, frame):
     global _running
     _running = False
-    print("\n[Agent] Shutdown — fermo i servizi...")
+    print("\n[Agent] Shutdown — fermo i subprocess (i container Docker restano vivi,"
+          " non sono nel ciclo di vita di questo agent)...")
     for key in list(_SERVICE_DEFS.keys()):
+        defn = _SERVICE_DEFS.get(key)
+        if defn and defn.get("type") == "docker":
+            continue
         if _is_running(key):
             _stop_service(key)
 
