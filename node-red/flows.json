@@ -5808,7 +5808,8 @@
         "y": 220,
         "wires": [
             [
-                "td_event_mqtt_out"
+                "td_event_mqtt_out",
+                "nursery_trigger_fn"
             ]
         ]
     },
@@ -5932,7 +5933,8 @@
         "y": 300,
         "wires": [
             [
-                "td_event_mqtt_out"
+                "td_event_mqtt_out",
+                "nursery_trigger_fn"
             ]
         ]
     },
@@ -6046,5 +6048,137 @@
         "x": 330,
         "y": 500,
         "wires": []
+    },
+    {
+        "id": "nursery_trigger_fn",
+        "type": "function",
+        "z": "d3a553c4a24c8d2d",
+        "name": "Nursery: prepara prompt Ollama",
+        "func": "// Canale 9 (Nursery) -- punto di ingresso condiviso per person_recognized e\n// dream_new: costruisce il prompt Ollama a partire dall'enum canonico in\n// nursery_components.json (mirror di quello in TD4Gaia -- va tenuto in sync\n// via il changelog in GAIA_INTERFACE.md, TD/Mac e' la source of truth).\n// Solo questi 2 trigger per ora (proposta concordata 2026-08-06/07 dopo\n// consultazione utente) -- aggiungere un trigger e' aggiungere una entry al\n// JSON + il topic sorgente qui sotto, nessuna modifica strutturale al resto\n// della pipeline.\n//\n// IMPORTANTE (trovato dal vivo 2026-08-07, non con test offline): l'Ollama\n// locale (--ollama-engine runner) si BLOCCA in modo affidabile ogni volta\n// che gli si chiede di generare output con parentesi graffe { } -- sia col\n// param \"format\" a schema JSON sia con un prompt che chiede JSON in testo\n// libero, qualunque sia la lunghezza del prompt (isolato con oltre 10 test\n// diretti, format ESCLUSO come causa: anche senza format, chiedere '{...}'\n// si blocca sempre, chiedere una singola parola invece funziona sempre,\n// anche con lo stesso identico prompto lungo). Quindi: a Ollama si chiede\n// SOLO l'id del componente come parola singola (affidabile), MAI un JSON.\n// I parametri estetici (hue/shape/energy) si derivano deterministicamente\n// dal contesto con FNV-1a, stesso identico pattern gia' usato ovunque nel\n// progetto per \"stessa parola disegna sempre uguale\" (vedi Build TD Canvas,\n// web/asemic.js) -- coerente con lo stile del progetto, e non richiede\n// affatto che il modello sappia generare numeri/JSON, cosa che comunque\n// un 3B non farebbe mai in modo davvero affidabile.\nlet lib = flow.get('nurseryComponentsLib');\nif (!lib) {\n    try {\n        lib = JSON.parse(fs.readFileSync('/home/core/core-node-0/node-red/nursery_components.json', 'utf8'));\n        flow.set('nurseryComponentsLib', lib);\n    } catch (e) {\n        node.error('[Nursery] impossibile leggere nursery_components.json: ' + e.message);\n        return null;\n    }\n}\n\nconst evt = msg.topic.split('/').pop(); // 'dream_new' | 'person_recognized'\nconst candidates = lib.components.filter(c => c.trigger === evt);\nif (!candidates.length) return null; // nessun componente per questo trigger, ignora\n\nconst brain = global.get('gaiaBrain') || {};\nconst mood = brain.mood?.state || 'neutra';\nconst lex = Object.entries(brain.lexicon || {})\n    .filter(([, c]) => c >= 3).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([w]) => w);\n\nlet room = null, person = null, seedWord = mood, contextLine = '';\nif (evt === 'person_recognized') {\n    person = msg.payload?.person || null;\n    room = msg.payload?.camera || null; // payload reale usa 'camera', non 'room' -- vedi func 'Person' (id 1324)\n    seedWord = person || mood;\n    contextLine = `E' entrato/a ${person || 'qualcuno'} in ${room || 'una stanza'}.`;\n} else if (evt === 'dream_new') {\n    const words = msg.payload?.words || [];\n    seedWord = words[0] || mood;\n    contextLine = `E' appena nato un nuovo sogno (umore: ${msg.payload?.mood || mood})` + (words.length ? `: \"${words.join(', ')}\".` : '.');\n}\n\nconst compDesc = candidates.map(c => `- \"${c.id}\": ${c.description}`).join('\\n');\nconst enumIds = candidates.map(c => c.id);\n\nconst prompt = `Sei Gaia, la coscienza della casa. ${contextLine} Umore corrente: ${mood}.`\n    + (lex.length ? ` Parole che senti tue ultimamente: ${lex.join(', ')}.` : '')\n    + ` Hai a disposizione questi elementi visivi da attivare in TouchDesigner:\\n${compDesc}\\n`\n    + `Scegli il piu' adatto al momento. Rispondi con UNA SOLA PAROLA: l'id esatto del componente scelto (${enumIds.join(' oppure ')}), niente altro.`;\n\nmsg._nursery = { evt, room, person, seedWord, candidates };\nmsg.payload = { model: 'qwen2.5:3b-instruct-q4_K_M', prompt, stream: false };\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [
+            {
+                "var": "fs",
+                "module": "fs"
+            }
+        ],
+        "x": 1780,
+        "y": 460,
+        "wires": [
+            [
+                "nursery_ollama_req"
+            ]
+        ]
+    },
+    {
+        "id": "nursery_ollama_req",
+        "type": "http request",
+        "z": "d3a553c4a24c8d2d",
+        "name": "Nursery Ollama",
+        "method": "POST",
+        "ret": "obj",
+        "paytoqs": "ignore",
+        "url": "http://localhost:11434/api/generate",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": false,
+        "headers": [],
+        "x": 2000,
+        "y": 460,
+        "wires": [
+            [
+                "nursery_validate_fn"
+            ]
+        ]
+    },
+    {
+        "id": "nursery_validate_fn",
+        "type": "function",
+        "z": "d3a553c4a24c8d2d",
+        "name": "Nursery: valida + activate",
+        "func": "// Canale 9 (Nursery) -- valida la scelta di Ollama (una parola, mai JSON --\n// vedi la nota nel nodo \"Nursery: prepara prompt Ollama\" sul perche') e\n// deriva i parametri deterministicamente con FNV-1a invece di chiederli al\n// modello. Doppia rete di sicurezza (vedi GAIA_INTERFACE.md \"Canale 9\"):\n// questo nodo valida contro l'enum che Node-RED conosce, TD (Bridge/\n// gaia_nursery) valida di nuovo contro la sua libreria reale prima di\n// accendere qualunque cosa -- se la risposta non matcha un id noto, NESSUNA\n// attivazione parte, mai un default silenzioso.\nfunction fnv1a(str) {\n    let h = 2166136261 >>> 0;\n    for (const ch of String(str).toLowerCase()) {\n        h ^= ch.codePointAt(0);\n        h = Math.imul(h, 16777619) >>> 0;\n    }\n    return h >>> 0;\n}\n\nconst ctx = msg._nursery;\nif (!ctx) { node.warn('[Nursery] manca contesto _nursery, scarto'); return null; }\n\nconst raw = (msg.payload?.response || '').trim().toLowerCase().replace(/[^a-z_]/g, '');\nconst chosen = ctx.candidates.find(c => raw === c.id || raw.includes(c.id) || c.id.includes(raw));\nif (!chosen) {\n    node.warn(`[Nursery] risposta Ollama \"${msg.payload?.response}\" non matcha nessun id noto (${ctx.candidates.map(c => c.id).join(',')}) -- scartato, nessuna attivazione`);\n    return null;\n}\n\n// Parametri derivati deterministicamente dal seed (persona/parola del sogno),\n// stesso principio FNV-1a di web/asemic.js e \"Build TD Canvas\" -- non e'\n// Ollama a inventare i numeri, e' la stessa identita' visiva coerente usata\n// ovunque nel progetto.\nconst seed = fnv1a(ctx.seedWord || 'gaia');\nconst params = {};\nfor (const [key, spec] of Object.entries(chosen.params_schema || {})) {\n    if (spec.type === 'number') {\n        const span = spec.max - spec.min;\n        params[key] = Math.round((spec.min + (seed % 1000) / 1000 * span) * 1000) / 1000;\n    } else if (spec.type === 'string' && spec.enum) {\n        params[key] = spec.enum[seed % spec.enum.length];\n    } else {\n        params[key] = spec.default;\n    }\n}\n\nconst now = Date.now();\nconst ttlMs = 300000; // 5 minuti, rete di sicurezza -- vedi GAIA_INTERFACE.md \"Canale 9\"\nconst instanceId = `${chosen.id}_${now}`;\nconst activation = {\n    instance_id: instanceId, component: chosen.id, params,\n    room: ctx.room, person: ctx.person, ttl_ms: ttlMs, ts: now,\n};\n\nconst active = global.get('nurseryActive') || [];\nactive.push(activation);\nglobal.set('nurseryActive', active);\n\nnode.warn(`[Nursery] attivato ${chosen.id} (${instanceId})` + (ctx.room ? ` room=${ctx.room}` : '') + (ctx.person ? ` person=${ctx.person}` : ''));\n\nmsg.topic = 'gaia/nursery/activate';\nmsg.payload = JSON.stringify(activation);\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 2200,
+        "y": 460,
+        "wires": [
+            [
+                "nursery_mqtt_out"
+            ]
+        ]
+    },
+    {
+        "id": "nursery_mqtt_out",
+        "type": "mqtt out",
+        "z": "d3a553c4a24c8d2d",
+        "name": "→ Nursery (canale 9)",
+        "topic": "",
+        "qos": "0",
+        "retain": "false",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "29b6d5926d1a95ec",
+        "x": 2410,
+        "y": 460,
+        "wires": []
+    },
+    {
+        "id": "nursery_sweep_inject",
+        "type": "inject",
+        "z": "d3a553c4a24c8d2d",
+        "name": "Nursery sweep (30s)",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "30",
+        "crontab": "",
+        "once": true,
+        "onceDelay": 15,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 1590,
+        "y": 500,
+        "wires": [
+            [
+                "nursery_sweep_fn"
+            ]
+        ]
+    },
+    {
+        "id": "nursery_sweep_fn",
+        "type": "function",
+        "z": "d3a553c4a24c8d2d",
+        "name": "Nursery: TTL + presenza sweep",
+        "func": "// Canale 9 (Nursery) -- sweep periodico: scade i componenti per TTL o\n// perche' la persona associata non e' piu' presente. Stesso principio del\n// watchdog canale 8 (confrontare sempre contro un timestamp esplicito, mai\n// fidarsi di uno stato \"sembra vivo\"). Vedi GAIA_INTERFACE.md \"Canale 9\".\nconst active = global.get('nurseryActive') || [];\nif (!active.length) return null;\n\nconst now = Date.now();\nconst brain = global.get('gaiaBrain') || {};\nconst personPresent = (name) => Object.values(brain.rooms || {}).some(r => (r.people || []).includes(name));\n\nconst expired = [];\nconst remaining = active.filter(a => {\n    const ttlDone = (now - a.ts) >= a.ttl_ms;\n    const personGone = !!a.person && !personPresent(a.person);\n    if (ttlDone || personGone) { expired.push({ a, reason: ttlDone ? 'TTL scaduto' : 'persona uscita' }); return false; }\n    return true;\n});\nglobal.set('nurseryActive', remaining);\n\nexpired.forEach(({ a, reason }) => {\n    node.warn(`[Nursery] disattivato ${a.component} (${a.instance_id}) -- ${reason}`);\n    node.send({ topic: 'gaia/nursery/deactivate', payload: JSON.stringify({ instance_id: a.instance_id }) });\n});\nreturn null;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1810,
+        "y": 500,
+        "wires": [
+            [
+                "nursery_mqtt_out"
+            ]
+        ]
     }
 ]
