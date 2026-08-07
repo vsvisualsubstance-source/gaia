@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "_comment": "Canonical Nursery component library, synced between Gaia/Core (Node-RED + Ollama) and TD/Mac (Bridge/gaia_nursery, whitelist source of truth). See GAIA_INTERFACE.md 'Canale 9' for the message schema and lifecycle. Any change here must be logged in GAIA_INTERFACE.md's changelog so the other session notices it.",
+  "components": [
+    {
+      "id": "person_sigil",
+      "trigger": "person_recognized",
+      "description": "A small orbiting sigil that appears near the recognized person's marker in the soul scene, colored and shaped to represent them.",
+      "params_schema": {
+        "hue": {
+          "type": "number",
+          "min": 0.0,
+          "max": 1.0,
+          "default": 0.5,
+          "description": "Color hue (0-1) chosen to represent the person or the moment."
+        },
+        "shape": {
+          "type": "string",
+          "enum": ["ring", "spiral", "cluster"],
+          "default": "ring",
+          "description": "Point arrangement: ring (steady orbit), spiral (winding outward), cluster (loose grouping)."
+        },
+        "energy": {
+          "type": "number",
+          "min": 0.0,
+          "max": 1.0,
+          "default": 0.5,
+          "description": "Motion intensity/speed (0=still, 1=lively)."
+        }
+      }
+    },
+    {
+      "id": "dream_fragment",
+      "trigger": "dream_new",
+      "description": "A small visual fragment that appears in the dream scene when a new dream is generated, shaped and colored to represent its content.",
+      "params_schema": {
+        "hue": {
+          "type": "number",
+          "min": 0.0,
+          "max": 1.0,
+          "default": 0.6,
+          "description": "Color hue (0-1) chosen to represent the dream's mood or content."
+        },
+        "shape": {
+          "type": "string",
+          "enum": ["ring", "spiral", "cluster"],
+          "default": "spiral",
+          "description": "Point arrangement: ring (steady orbit), spiral (winding outward), cluster (loose grouping)."
+        },
+        "scale": {
+          "type": "number",
+          "min": 0.5,
+          "max": 2.0,
+          "default": 1.0,
+          "description": "Overall size multiplier."
+        }
+      }
+    }
+  ]
+}
