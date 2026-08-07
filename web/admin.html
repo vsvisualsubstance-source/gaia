@@ -720,6 +720,15 @@ button.small{padding:3px 9px;font-size:.78rem;margin:0}
     <div id="pm-mocap-targets" style="display:none"></div>
   </div>
 
+  <!-- ── Piante monitorate — luogo (roomGraph, 13 stanze canoniche) ── -->
+  <div style="margin-top:24px">
+    <h3 style="margin-bottom:8px">🌿 Piante — luogo</h3>
+    <div id="pm-plants-no-items" style="text-align:center;padding:20px;color:var(--muted);font-size:.85rem">
+      Caricamento…
+    </div>
+    <div id="pm-plants-list" style="display:none"></div>
+  </div>
+
   <div class="pm-log-wrap">
     <h3>Log MQTT</h3>
     <div id="pm-log-lines"></div>
@@ -1918,6 +1927,7 @@ function showTab(id, btn) {
   history.replaceState(null, '', '#' + id);   // deep-link condivisibile
   if (id === 'pi' && !_pmClient) initPiManager();
   if (id === 'pi') loadProvision();
+  if (id === 'pi') pmLoadPlants();
 }
 
 // Deep-link: admin.html#pi apre direttamente il tab (usato dal redirect
@@ -2220,6 +2230,58 @@ function pmMocapToggle(sender, deviceId, action) {
   if (!_pmClient || !_pmClient.connected) { pmLog('err', 'MQTT non connesso'); return; }
   _pmClient.publish(`gaia/mocap-bridge/${sender}/command`, JSON.stringify({ device_id: deviceId, action }));
   pmLog('out', `mocap ${sender}→${deviceId}: ${action}`);
+}
+
+// ── Piante — luogo (brain.roomGraph, 13 stanze canoniche, non solo le 5 vive) ──
+let _pmRooms = [];
+
+async function pmLoadPlants() {
+  try {
+    const r = await fetch('/gaia/plants');
+    const data = await r.json();
+    _pmRooms = data.rooms || [];
+    pmPlantsRender(data.plants || []);
+  } catch (e) {
+    pmLog('err', 'Caricamento piante: ' + e.message);
+  }
+}
+
+function pmPlantsRender(plants) {
+  const wrap  = document.getElementById('pm-plants-list');
+  const empty = document.getElementById('pm-plants-no-items');
+  if (!plants.length) { empty.textContent = 'Nessuna pianta monitorata.'; empty.style.display = ''; wrap.style.display = 'none'; return; }
+  empty.style.display = 'none';
+  wrap.style.display = '';
+  wrap.innerHTML = plants.map(p => `
+    <div class="pi-card" style="display:flex;align-items:center;gap:12px;padding:12px 16px;margin-bottom:8px">
+      <div style="flex:1;min-width:0">
+        <div class="pi-display-name">🌱 ${pmEsc(p.id)}</div>
+        <div class="pi-device-id">${p.moisture!=null?`umidità ${p.moisture}%`:'nessun dato'}${p.room?' · '+pmEsc(p.room):' · luogo non assegnato'}</div>
+      </div>
+      <select class="pm-inp-stanza" id="pm-plant-room-${pmEsc(p.id)}" style="width:auto;min-width:140px">
+        <option value="">— scegli —</option>
+        ${_pmRooms.map(r => `<option value="${r}" ${r===p.room?'selected':''}>${r}</option>`).join('')}
+      </select>
+      <button class="pm-btn blue" onclick="pmPlantSaveRoom('${pmEsc(p.id)}')">💾 Salva</button>
+    </div>
+  `).join('');
+}
+
+async function pmPlantSaveRoom(id) {
+  const sel = document.getElementById(`pm-plant-room-${id}`);
+  const room = sel.value;
+  if (!room) { pmLog('err', 'Scegli una stanza prima di salvare'); return; }
+  try {
+    const r = await fetch(`/gaia/plants/${encodeURIComponent(id)}/room`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ room })
+    });
+    const data = await r.json();
+    if (!data.ok) { pmLog('err', `Pianta ${id}: ${data.error}`); return; }
+    pmLog('out', `pianta ${id} -> room=${room}`);
+    pmLoadPlants();
+  } catch (e) {
+    pmLog('err', 'Salvataggio luogo pianta: ' + e.message);
+  }
 }
 
 function pmSvcKeys(d) {
