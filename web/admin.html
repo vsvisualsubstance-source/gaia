@@ -751,8 +751,12 @@ button.small{padding:3px 9px;font-size:.78rem;margin:0}
 </div>
 
 <script>
-const API = `http://${location.hostname}:8765`;
-const MJPEG_URL = `http://${location.hostname}:8766/video`;
+// gaia_admin.py (8765) e gaia-camera (8766) restano su Core anche se
+// Node-RED gira altrove (2026-08-07, migrazione OPS) -- non seguono
+// location.hostname come il resto della pagina (:1880), sono ancorati
+// all'hardware/filesystem di Core (voice_db, faces, camera fisica).
+const API = `http://192.168.1.142:8765`;
+const MJPEG_URL = `http://192.168.1.142:8766/video`;
 let _calSuggested = null;
 let _enrolling      = false;
 let _lastConfig     = {};
