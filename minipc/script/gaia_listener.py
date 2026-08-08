@@ -28,6 +28,16 @@ TOPIC_STATO   = "gaia/voice/status/minipc"
 TOPIC_STATS   = "gaia/voice/stats/minipc"
 TOPIC_TTS     = "gaia/voice/tts/minipc"
 TOPIC_ADMIN   = "gaia/admin/#"
+# 2026-08-08: prima girava via un nodo exec di Node-RED che chiamava
+# say.sh direttamente -- funzionava solo perche' Node-RED girava sulla
+# stessa macchina delle casse. Con Node-RED migrato su OPS (dentro un
+# container Linux, senza piper/aplay ne' accesso all'audio fisico di
+# Core), quell'exec non puo' piu' funzionare da li'. gaia_listener.py
+# gira gia' su Core con una connessione MQTT propria: e' il posto giusto
+# per ascoltare questo canale ed eseguire say.sh in locale, indipendente
+# da dove gira Node-RED da qui in avanti.
+TOPIC_TTS_PLAY = "casa/tts/play"
+SAY_SH         = "/home/core/core-node-0/minipc/say.sh"
 
 # ── Audio ─────────────────────────────────────────────────────────────────────
 TARGET_RATE   = 16000
@@ -424,11 +434,17 @@ class GaiaListener:
         log.info(f"MQTT connesso (rc={rc})")
         c.subscribe(TOPIC_ADMIN)
         c.subscribe(TOPIC_MEDIA)
+        c.subscribe(TOPIC_TTS_PLAY)
 
     def _media_gated(self) -> bool:
         return any(self._media_playing.get(r) for r in MEDIA_GATE_ROOMS)
 
     def _on_admin_msg(self, client, userdata, msg):
+        if msg.topic == TOPIC_TTS_PLAY:
+            text = msg.payload.decode(errors="replace").strip()
+            if text:
+                threading.Thread(target=self._speak_local, args=(text,), daemon=True).start()
+            return
         if msg.topic.startswith("gaia/media/"):
             stanza = msg.topic.split("/")[2]
             try:
@@ -449,6 +465,15 @@ class GaiaListener:
             self._cmd_queue.put({"cmd": leaf, "data": payload})
         except Exception as e:
             log.warning(f"Admin msg error: {e}")
+
+    def _speak_local(self, text: str):
+        """Esegue say.sh (Piper -> aplay) sulle casse fisiche di Core.
+        Chiamato in un thread separato: say.sh e' bloccante (genera + riproduce
+        il wav), non deve mai fermare il loop MQTT."""
+        try:
+            subprocess.run([SAY_SH, text], check=True, timeout=30)
+        except Exception as e:
+            log.warning(f"say.sh fallito: {e}")
 
     # ── Publish helpers ───────────────────────────────────────────────────────
     def _publish_stato(self, stato: str):
