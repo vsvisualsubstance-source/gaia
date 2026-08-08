@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-08T13:48:14.416543+00:00",
+  "views": {
+    "node_red": {
+      "host": "192.168.1.240",
+      "port": 1880,
+      "url": "http://192.168.1.240:1880/",
+      "status": "observed_healthy",
+      "http_status": 200,
+      "evidence": "HTTP 200 on / root path via the Node-RED httpStatic web UI"
+    },
+    "admin_api": {
+      "host": "192.168.1.240",
+      "port": 8765,
+      "path": "/api/status",
+      "url": "http://192.168.1.240:8765/api/status",
+      "status": "observed_unreachable_from_probe",
+      "http_status": null,
+      "evidence": "HTTP GET timed out in the previous runtime observation"
+    },
+    "mqtt_broker": {
+      "host": "192.168.1.240",
+      "port": 1883,
+      "status": "tcp_probe_timeout_from_client_side",
+      "evidence": "TCP socket connect timed out in the probe execution"
+    }
+  },
+  "runtime_policy": {
+    "source_of_truth": "docs/runtime-status.md + scripts/gaia_runtime_probe.py",
+    "contract_follows": "docs/gaia-td-contract.json",
+    "rule": "Runtime docs are not authority over service startup; they are static evidence used for coordination and support."
+  }
+}

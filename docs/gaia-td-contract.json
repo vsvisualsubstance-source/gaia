@@ -1,0 +1,166 @@
+{
+  "schema_version": 1,
+  "project": "GAIA",
+  "external_repository": {
+    "name": "TD4Gaia",
+    "github": "https://github.com/vsvisualsubstance-source/TD4Gaia",
+    "interface_docs": [
+      "GAIA_INTERFACE.md",
+      "ARCHITECTURE.md"
+    ],
+    "contract_alignment_required": true
+  },
+  "runtime": {
+    "observed_ops_node_red": "http://192.168.1.240:1880",
+    "observed_runtime_status": "HTTP 200 at /",
+    "admin_api_probe": "8765/api/status",
+    "notes": [
+      "The Node-RED web UI is reached through HTTP static host and WS. A direct admin API probe remains runtime-dependent and should not be assumed from the documentation alone."
+    ]
+  },
+  "channels": {
+    "osc": [
+      {
+        "name": "gaia-flat-osc-feed",
+        "role": "Gaia -> TouchDesigner",
+        "port": 7000,
+        "kind": "OSCPacket",
+        "topic_namespace": "/gaia",
+        "scope": "filtered by _scope_for_td() in osc_bridge.py",
+        "strictly_mapped_fields": [
+          "people",
+          "rooms.id, objects, persons_count",
+          "vision.rooms.id, mediapipeActive, mediapipe",
+          "metrics.activeLights, activePeople, averageLight",
+          "soul",
+          "lights.id, brightness, power, motion",
+          "stats.totalPeopleCount"
+        ],
+        "source": "osc_bridge.py"
+      },
+      {
+        "name": "gaia-canvas-event-feed",
+        "role": "Gaia -> TouchDesigner",
+        "port": 7001,
+        "kind": "OSCPacket",
+        "topic_namespace": "/gaia/canvas",
+        "scope": "curated TD canvas feed, built by Node-RED and emitted through MQTT to osc_bridge.py",
+        "source": "Node-RED gaia/td/canvas and osc_bridge.py"
+      },
+      {
+        "name": "touchdesigner-echo-feed",
+        "role": "TouchDesigner -> Gaia",
+        "port": 9008,
+        "kind": "OSCPacket",
+        "topic_namespace": "/gaia/td",
+        "mqtt_relay": "gaia/touchdesigner/#",
+        "source": "osc_bridge.py"
+      }
+    ],
+    "mqtt": {
+      "service_plane": {
+        "gaia_device_status": "gaia/device/{id}/status",
+        "gaia_device_command": "gaia/device/{id}/command",
+        "gaia_devices_announce": "gaia/devices/{id}/announce",
+        "gaia_devices_config": "gaia/devices/{id}/config",
+        "gaia_devices_profile": "gaia/devices/{id}/profile",
+        "gaia_td_bridge_status": "gaia/td-bridge/status",
+        "gaia_td_bridge_command": "gaia/td-bridge/command",
+        "gaia_mocap_bridge_status": "gaia/mocap-bridge/{sender_device_id}/status",
+        "gaia_mocap_bridge_command": "gaia/mocap-bridge/{sender_device_id}/command",
+        "gaia_touchdesigner_relay": "gaia/touchdesigner/#",
+        "gaia_td_canvas": "gaia/td/canvas",
+        "gaia_nursery": [
+          "gaia/nursery/activate",
+          "gaia/nursery/deactivate",
+          "gaia/nursery/status"
+        ]
+      }
+    }
+  },
+  "service_contract": {
+    "device_registry": {
+      "source": "TDDeviceRegistry in osc_bridge.py",
+      "observes": [
+        "gaia/device/+/status",
+        "role == touchdesigner"
+      ],
+      "status_topic": "gaia/td-bridge/status",
+      "command_topic": "gaia/td-bridge/command",
+      "pause_resume_actions": [
+        "pause",
+        "resume"
+      ]
+    },
+    "mocap": {
+      "semantic_topic": "gaia/mediapipe/pose",
+      "semantic_payload": [
+        "camera",
+        "node",
+        "device_id",
+        "ts",
+        "emotion",
+        "smile_score",
+        "attention",
+        "gesture",
+        "pose",
+        "mouth_open",
+        "eyes_open",
+        "people_count",
+        "people"
+      ],
+      "raw_osc_enabled_by_flag": "OSC_LANDMARKS=1",
+      "raw_osc_namespace": [
+        "/gaia/mocap/{DEVICE_ID}/meta/room",
+        "/gaia/mocap/{DEVICE_ID}/meta/faces",
+        "/gaia/mocap/{DEVICE_ID}/meta/hands",
+        "/gaia/mocap/{DEVICE_ID}/meta/poses",
+        "/gaia/mocap/{DEVICE_ID}/face/{person_id}",
+        "/gaia/mocap/{DEVICE_ID}/hand/{side}/{person_id}",
+        "/gaia/mocap/{DEVICE_ID}/pose/{person_id}"
+      ],
+      "raw_osc_risk": "High bandwidth and CPU demand at OSC_INTERVAL; enable only for a target TD instance that is registered and explicitly accepted by the bridge/service-plane status."
+    },
+    "nursery": {
+      "status": "design/shared channel, not production-locked",
+      "whitelist_required": "yes",
+      "schema_reference": "docs/gaia-td-contract.json and TD4Gaia GAIA_INTERFACE.md"
+    }
+  },
+  "sync_policy": {
+    "direction": "GAIA is the runtime source; TD4Gaia is the external interface reference.",
+    "required_docs_on_contract_change": [
+      "docs/gaia-td-contract.json",
+      "minipc/touchdesigner/GAIA_TD_INTEGRATION.md",
+      "minipc/touchdesigner/README.md",
+      "README.md",
+      "TD4Gaia/GAIA_INTERFACE.md",
+      "TD4Gaia/ARCHITECTURE.md"
+    ],
+    "contract_change_rule": "A channel rename, port change, or payload shape change must be aligned in both repositories before closing the deployment side."
+  },
+  "runtime_evidence": {
+    "node_red": {
+      "host": "192.168.1.240",
+      "url": "http://192.168.1.240:1880/",
+      "http_status": 200,
+      "observed": true
+    },
+    "admin_api": {
+      "host": "192.168.1.240",
+      "url": "http://192.168.1.240:8765/api/status",
+      "http_status": null,
+      "observed": false,
+      "observed_error": "timeout"
+    },
+    "mqtt_broker_tcp": {
+      "host": "192.168.1.240",
+      "port": 1883,
+      "observed": false,
+      "observed_error": "timeout"
+    }
+  },
+  "notes": [
+    "The contract is documented in both repositories but not enforced as a runtime-generated API contract. This file is an explicit static normalization point. Any protocol rename must remain compatible with retained topics and should be reflected in TD4Gaia and GAIA docs in the same change set."
+  ]
+}

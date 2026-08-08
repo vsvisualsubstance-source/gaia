@@ -1,5 +1,14 @@
 # GAIA ↔ TouchDesigner — contratto di integrazione (riferimento unico)
 
+Questo file è il punto di convergenza del contratto che il repo
+operative/GAIA e il repo satellite pubblico `TD4Gaia` condividono. Il
+riferimento vivo del lato TD (Embody/Envoy) è il repo GitHub
+`vsvisualsubstance-source/TD4Gaia` e in particolare i file
+`ARCHITECTURE.md` e `GAIA_INTERFACE.md`: documentano la topologia TD, i
+canali OSC e il protocollo MQTT lato service plane. Questo file continua
+ad essere il riferimento `gaia` dei parametri e della semantica
+pubblicati a TD e ricevuti da esso.
+
 Documento pensato per chi lavora **lato TouchDesigner** (incluse sessioni
 Claude dedicate a quel lato): riassume in un punto solo tutto ciò che serve
 per parlare con GAIA via OSC, senza dover leggere il codice Node-RED o i
@@ -8,7 +17,29 @@ riferimenti restano `minipc/touchdesigner/README.md` e
 `pi/mediapipe/README.md` — questo file è un indice/contratto, non li
 sostituisce.
 
+Il file canonico di mantenimento del contratto è
+`docs/gaia-td-contract.json`: è un JSON che espone il supporto statico del
+canale OSC/MQTT e i topic essenziali per il sync con TD4Gaia. Nel caso una
+modifica tocchi il confine `GAIA ↔ TD`, questa tabella e il JSON devono
+rimanere allineati.
+
 ## I canali tra Gaia e TD — non confonderli
+
+Questa tabella è l'API di livello alto che il repo TD4Gaia conferma in
+`GAIA_INTERFACE.md` e che il repo GAIA si impegna a mantenere coerente.
+In fase di modifica di un canale (TCP/UDP/MQTT) i due lati devono essere
+aggiornati in parallelo e lo stesso schema va riportato in entrambe le
+convenzioni di naming. In particolare:
+
+- `OSC_IN_PORT` = `9008` per TD → GAIA (la convenzione `gaia/td/...` si
+  esprime come MQTT `gaia/touchdesigner/<path>` dal bridge)
+- `TD_EVENT_OSC_PORT` = `7001` per i feed curati `/gaia/canvas/...`
+- `TD_OSC_PORT` = `7000` per i canali flatten `gaia`/mocap `/gaia/...`
+
+La responsabile di questa interfaccia è la stessa sessione che osserva i
+stream live in TD4Gaia; il commit verso il repo GAIA non può "chiudere"
+una modifica al confine se il file di interface lato TD4Gaia non viene
+portato con la stessa semantica.
 
 Sulla stessa infrastruttura esistono **tre canali OSC indipendenti** (dati)
 più **un canale MQTT** (presenza/controllo, non dati) che hanno poco a che
@@ -37,6 +68,39 @@ indipendenti che possono coesistere:
 
 Setup e dettagli di entrambi: `minipc/touchdesigner/README.md`, sezione
 "Controllo dispositivi da dentro TD".
+
+## Canale 9 — Nursery (`gaia/nursery/*`) — design condiviso, non ancora attivo
+
+Il livello esplicito di interfaccia nel repo TD4Gaia (`GAIA_INTERFACE.md`) aggiunge
+un canale di proposto activation/deactivation verso TouchDesigner:
+
+```
+gaia/nursery/activate
+{"instance_id": "...", "component": "...", "params": {...}, "room": "...", "person": "...", "ttl_ms": 300000, "ts": ...}
+
+gaia/nursery/deactivate
+{"instance_id": "..."}
+
+gaia/nursery/status
+{"active": [{...}]}
+```
+
+Questo non è ancora in produzione sul repo GAIA (i consumatori reali in `node-red/flows.json`
+lo conoscono come nuovo canale di pipeline, ma il payload resta sotto discussione e
+non è ancora una UI stabile/firmata). In qualsiasi modifica futura al Nursery, il
+repo TD4Gaia e il repo Gaia devono condividere:
+
+- la whitelist/enum dei componenti (
+  `node-red/nursery_components.json` in repo Gaia e il JSON parallelo in TD4Gaia
+  `nursery_components.json`)
+- l'evento/trigger di attivazione (`level_up`, `dream_new`, `face_enrolled`,
+  `person_recognized`, `plant_note` o nuovi trigger) e la semantica del TTL
+- il fatto che il messaggio di activate viene validato lato Gaia e il TD
+  esegue un/nuovo whitelist lato runtime
+
+La semantica del canale 9 non deve essere ignorata o duplicata in modo
+ambiguo: resta, per il momento, una proposta con API condivisa e schema
+pubblico, non una tabella fittizia nello stesso file di confine.
 
 ---
 

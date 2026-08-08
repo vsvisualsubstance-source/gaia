@@ -5,6 +5,16 @@ processi, media player, e predisposizione per una seconda macchina core). Estend
 decisione Core/OPS del 2026-07-04 (memory `project-architettura-core-ops`) da "due ruoli
 sulla stessa macchina" a **N macchine con ruoli dichiarati**.
 
+## Runtime da aggiornare
+
+Il Node-RED attualmente raggiungibile in ambiente OPS è su `http://192.168.1.240:1880`.
+Questa voce prende il posto della vecchia convenzione che assorbiva l'intero runtime sul
+miniPC/host Core (`192.168.1.142`), e va usata come riferimento all'atto della verifica
+client-side dei flussi WebSocket/static web. La regola del repository è che la mappatura
+puramente host-level resti un documento di runtime: il JSON di discovery e i servizi Python
+continuano a leggere il broker e l'admin API in modo configurabile, ma l'HTTP statico/Node-RED
+si risolve da qui in produzione.
+
 ## Principio: l'agent è UNO, il manifest è per-macchina
 
 Il pattern esiste già ed è collaudato su due implementazioni:

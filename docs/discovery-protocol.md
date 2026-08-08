@@ -4,6 +4,12 @@ Contratto condiviso tra Gaia Core (miniPC) e tutti i client (Raspberry Pi,
 in futuro ESP32/Arduino). **Non modificare senza incrementare `proto` e
 mantenere la compatibilità all'indietro.**
 
+> Nota runtime: la web/Node-RED attiva in OPS in questo ambiente è stata
+> verificata su `http://192.168.1.240:1880`. I documenti di deploy continuano a
+> riportare esempi legacy del broker e del beacon (`192.168.1.142`), da
+> considerare configurazione storica se il beacon non è stato aggiornato con un
+> nuovo manifest di pubblicazione.
+
 ## Componenti
 
 | Ruolo | Implementazione | Dove |
