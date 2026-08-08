@@ -79,14 +79,35 @@ def _scope_for_td(payload):
     il canale 2 curato (/gaia/canvas/...) resta la via preferita per dati
     nuovi, questo canale 1 è ormai solo compatibilità per i 3 gruppi sopra."""
     metrics = payload.get("metrics") or {}
+    rooms = payload.get("rooms") or []
     return {
         "people": payload.get("people", []),
         "rooms": [
             {"id": r.get("id"), "objects": r.get("objects", {})}
-            for r in (payload.get("rooms") or [])
+            for r in rooms
             if r.get("id")
         ],
         "metrics": {k: metrics[k] for k in _TD_METRICS_USED if k in metrics},
+        # gaia/vision/rooms/*/mediapipe(Active) -- letto da script_mediapipe_agg
+        # in TD per la sfera reattiva al sorriso (uSmile in soul_geo). Mancava
+        # in questa lista, verificato da TD/Mac dal vivo dopo il primo filtro
+        # (GAIA_INTERFACE.md "TD/Mac, 4") -- non era nell'audit originale
+        # "TD/Mac, 2", che aveva verificato solo rooms/*/objects/*. payload.vision
+        # è un mirror di payload.rooms (stessi dati, namespace diverso usato da
+        # questo script specifico), quindi si ricostruisce da `rooms` qui invece
+        # di aggiungere l'intero payload.vision (che ha anche people/emotions/
+        # events/lastUpdate ridondanti con altri campi già mandati altrove).
+        "vision": {
+            "rooms": [
+                {
+                    "id": r.get("id"),
+                    "mediapipeActive": r.get("mediapipeActive", False),
+                    "mediapipe": r.get("mediapipe"),
+                }
+                for r in rooms
+                if r.get("id")
+            ],
+        },
     }
 
 
