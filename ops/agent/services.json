@@ -63,7 +63,7 @@
       "cmd": [
         "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
         "--kiosk",
-        "http://192.168.1.142:1880/welcome.html?cam=localhost&room={STANZA}",
+        "http://192.168.1.240:1880/welcome.html?cam=localhost&room={STANZA}",
         "--edge-kiosk-type=fullscreen",
         "--no-first-run",
         "--user-data-dir=C:\\gaia\\kiosk-profile"
@@ -83,6 +83,19 @@
         "MPV_BIN": "C:\\Program Files\\MPV Player\\mpv.exe"
       },
       "_nota": "musica/radio per stanza — mpv IPC su named pipe (vedi pi/mediaplayer)"
+    },
+    "ollama": {
+      "cmd": [
+        "C:\\Users\\vsvis\\AppData\\Local\\Programs\\Ollama\\ollama.exe",
+        "serve"
+      ],
+      "cwd": "C:\\Users\\vsvis",
+      "check_script": false,
+      "env_extra": {
+        "OLLAMA_HOST": "0.0.0.0:11434",
+        "OLLAMA_MODELS": "C:\\Users\\vsvis\\.ollama\\models"
+      },
+      "_nota": "Ollama nativo Windows (non Docker), installato 2026-08-07 — gia' nel pool 'backend sano' di Node-RED (health-check ogni 20s). Prima gestito fuori dall'agent via Task Scheduler (GAIA-Ollama, SYSTEM) perche' un docker run/pull via SSH ha problemi di sessione non-interattiva su Windows -- 'ollama serve' invece e' un processo semplice, nessun problema ad essere un subprocess figlio dell'agent. Il task GAIA-Ollama va disabilitato quando questo servizio e' abilitato, altrimenti competono sulla porta 11434."
     }
   },
   "camera_consumers": [
