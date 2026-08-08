@@ -80,14 +80,43 @@ def _scope_for_td(payload):
     nuovi, questo canale 1 è ormai solo compatibilità per i 3 gruppi sopra."""
     metrics = payload.get("metrics") or {}
     rooms = payload.get("rooms") or []
+    lights = payload.get("lights") or []
+    stats = payload.get("stats") or {}
     return {
         "people": payload.get("people", []),
         "rooms": [
-            {"id": r.get("id"), "objects": r.get("objects", {})}
+            {
+                "id": r.get("id"),
+                "objects": r.get("objects", {}),
+                "persons_count": r.get("persons_count", 0),
+            }
             for r in rooms
             if r.get("id")
         ],
         "metrics": {k: metrics[k] for k in _TD_METRICS_USED if k in metrics},
+        # gaia/soul/*, gaia/lights/*/{brightness,power,motion}, gaia/stats/
+        # totalPeopleCount, rooms/*/persons_count -- trovati da TD/Mac dopo
+        # "Core, 9" con errori di cook ATTIVI in produzione (non solo un
+        # effetto invisibile): select CHOP referenziano oscin1 via il
+        # parametro `chops` (riferimento a operatore, non testo/espressione),
+        # invisibili alla ricerca testuale usata per l'audit originale
+        # "TD/Mac, 2". Vedi GAIA_INTERFACE.md "TD/Mac, 5" per la lista
+        # completa verificata. Lights: mandiamo tutte (non solo le 22 usate
+        # da TD oggi) per non dipendere da un elenco nomi che può cambiare
+        # lato OpenHAB -- filtriamo solo i 3 campi usati, non l'intero
+        # oggetto luce (colore/colorTemp/alert/lastUpdate scartati).
+        "soul": payload.get("soul"),
+        "stats": {"totalPeopleCount": stats.get("totalPeopleCount", 0)},
+        "lights": [
+            {
+                "id": l.get("id"),
+                "brightness": l.get("brightness"),
+                "power": l.get("power"),
+                "motion": l.get("motion"),
+            }
+            for l in lights
+            if l.get("id")
+        ],
         # gaia/vision/rooms/*/mediapipe(Active) -- letto da script_mediapipe_agg
         # in TD per la sfera reattiva al sorriso (uSmile in soul_geo). Mancava
         # in questa lista, verificato da TD/Mac dal vivo dopo il primo filtro
