@@ -29,7 +29,11 @@ print(f"Patchato: broker/openhab/memory -> 192.168.1.142 ({dst})")
 PYEOF
 
 echo "Deploy su OPS..."
-CODE=$(ssh "vsvis@${OPS_HOST}" "curl -s -o NUL -w '%{http_code}' -X POST http://localhost:1880/flows -H 'Node-RED-Deployment-Type: full' -H 'Content-Type: application/json' --data-binary @-" < "$PATCHED")
+# Niente apici singoli: la sessione SSH su Windows passa per cmd.exe, che
+# non li interpreta come quoting shell (visto dal vivo: '%{http_code}'
+# arrivava letterale a curl, output tripli con apici). Solo apici doppi
+# con escape, stesso stile gia' usato con successo in questa sessione.
+CODE=$(ssh "vsvis@${OPS_HOST}" "curl -s -o NUL -w \"%{http_code}\" -X POST http://localhost:1880/flows -H \"Node-RED-Deployment-Type: full\" -H \"Content-Type: application/json\" --data-binary @-" < "$PATCHED")
 echo "HTTP $CODE"
 if [ "$CODE" != "204" ]; then
     echo "ERRORE: deploy non riuscito (atteso 204)" >&2
