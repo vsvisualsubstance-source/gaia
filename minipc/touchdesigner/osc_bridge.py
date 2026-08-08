@@ -62,6 +62,34 @@ def _flatten(prefix, value, out):
     # altri tipi (non attesi nel payload Gaia) vengono ignorati silenziosamente
 
 
+_TD_METRICS_USED = ("activeLights", "activePeople", "averageLight")
+
+
+def _scope_for_td(payload):
+    """Filtra il payload WS grezzo (canale 1, ~1900+ indirizzi appiattiti,
+    9474 canali live lato TD secondo la verifica di TD/Mac 2026-08-08,
+    GAIA_INTERFACE.md 'Core, 8'/'TD/Mac, 2') a ciò che TD legge davvero:
+    people/* (legenda persone), rooms/*/objects/* (legenda oggetti YOLO per
+    stanza), 3 valori in metrics/* (glow ambientale della sfera). Verificato
+    da TD cercando OGNI riferimento a oscin1 nel progetto, non a occhio —
+    tutto il resto del flatten grezzo non ha nessun consumer. Riduce il
+    lavoro di serializzazione qui E l'ingest lato TD (Time Sliced su
+    migliaia di canali dinamici per una manciata usati). Se in futuro TD
+    inizia a leggere altri campi del flatten grezzo, aggiungerli qui --
+    il canale 2 curato (/gaia/canvas/...) resta la via preferita per dati
+    nuovi, questo canale 1 è ormai solo compatibilità per i 3 gruppi sopra."""
+    metrics = payload.get("metrics") or {}
+    return {
+        "people": payload.get("people", []),
+        "rooms": [
+            {"id": r.get("id"), "objects": r.get("objects", {})}
+            for r in (payload.get("rooms") or [])
+            if r.get("id")
+        ],
+        "metrics": {k: metrics[k] for k in _TD_METRICS_USED if k in metrics},
+    }
+
+
 def _cleared_value(value):
     """Valore "svuotato" dello stesso tipo di `value` — per azzerare un
     canale invece di lasciarlo bloccato sull'ultimo valore per sempre."""
@@ -307,7 +335,7 @@ class GaiaToTouchDesigner:
             if payload is None:
                 continue
             pairs = []
-            _flatten("/gaia", payload, pairs)
+            _flatten("/gaia", _scope_for_td(payload), pairs)
             self._tracker.send(pairs)
 
     def run(self):
