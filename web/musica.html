@@ -221,7 +221,8 @@ function sendToSelected(payload){
 // ── MQTT (stato live) ──────────────────────────────────────────────────────
 function connectMqtt(){
   const dot = document.getElementById('wsdot');
-  const url = `ws://${location.hostname}:9001`;
+  // mosquitto resta su Core anche se Node-RED gira altrove (2026-08-08)
+  const url = `ws://192.168.1.142:9001`;
   function start(){
     _client = mqtt.connect(url);
     _client.on('connect', ()=>{

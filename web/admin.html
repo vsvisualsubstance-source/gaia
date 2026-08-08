@@ -2092,7 +2092,10 @@ async function pmCleanRooms() {
 }
 
 function initPiManager() {
-  const host = location.hostname;
+  // mosquitto resta su Core anche se Node-RED gira altrove (2026-08-08,
+  // migrazione OPS) -- stesso principio di API/MJPEG_URL sopra, il broker
+  // non segue location.hostname.
+  const host = '192.168.1.142';
   document.getElementById('pm-broker-label').textContent = host;
   const mqttUrl = `ws://${host}:9001`;
 
