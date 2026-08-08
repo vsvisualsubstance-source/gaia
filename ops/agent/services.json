@@ -85,17 +85,9 @@
       "_nota": "musica/radio per stanza — mpv IPC su named pipe (vedi pi/mediaplayer)"
     },
     "ollama": {
-      "cmd": [
-        "C:\\Users\\vsvis\\AppData\\Local\\Programs\\Ollama\\ollama.exe",
-        "serve"
-      ],
-      "cwd": "C:\\Users\\vsvis",
-      "check_script": false,
-      "env_extra": {
-        "OLLAMA_HOST": "0.0.0.0:11434",
-        "OLLAMA_MODELS": "C:\\Users\\vsvis\\.ollama\\models"
-      },
-      "_nota": "Ollama nativo Windows (non Docker), installato 2026-08-07 — gia' nel pool 'backend sano' di Node-RED (health-check ogni 20s). Prima gestito fuori dall'agent via Task Scheduler (GAIA-Ollama, SYSTEM) perche' un docker run/pull via SSH ha problemi di sessione non-interattiva su Windows -- 'ollama serve' invece e' un processo semplice, nessun problema ad essere un subprocess figlio dell'agent. Il task GAIA-Ollama va disabilitato quando questo servizio e' abilitato, altrimenti competono sulla porta 11434."
+      "type": "http_check",
+      "check_url": "http://localhost:11434/api/tags",
+      "_nota": "Ollama nativo Windows (non Docker), installato 2026-08-07 — gia' nel pool 'backend sano' di Node-RED (health-check ogni 20s). NON gestito come subprocess dall'agent: Ollama per Windows ha un proprio 'ollama app.exe' che si auto-riavvia in autonomia (scoperto 2026-08-08, killandolo per errore e vedendolo ripartire da solo) -- spawnare 'ollama serve' anche da qui competerebbe sulla porta 11434. Questa entry serve solo a farlo comparire correttamente in Pi Manager (era invisibile: Core lo vede perche' local_agent.py lo gestisce come container Docker, OPS non aveva alcuna voce per lui). Start/stop da Pi Manager non hanno effetto qui (per design, vedi agent.py _start_service/_stop_service), solo lo stato e' letto dal vivo via /api/tags."
     }
   },
   "camera_consumers": [

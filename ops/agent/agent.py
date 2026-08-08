@@ -173,7 +173,18 @@ def _build_env(extra: dict) -> dict:
     return env
 
 
+def _http_check(url: str, timeout: float = 3.0) -> bool:
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as r:
+            return 200 <= r.status < 300
+    except Exception:
+        return False
+
+
 def _is_running(key: str) -> bool:
+    defn = _SERVICE_DEFS.get(key)
+    if defn and defn.get("type") == "http_check":
+        return _http_check(defn["check_url"])
     with _procs_lock:
         p = _procs.get(key)
         return p is not None and p.poll() is None
@@ -186,12 +197,21 @@ def _svc_status(key: str) -> str:
 
 
 def _start_service(key: str) -> bool:
-    if _is_running(key):
-        return True
     defn = _SERVICE_DEFS.get(key)
     if not defn:
         print(f"[Agent] Servizio sconosciuto: {key}")
         return False
+    if defn.get("type") == "http_check":
+        # Servizio gestito fuori dall'agent (es. Ollama ha un proprio
+        # ollama app.exe che si auto-riavvia in autonomia su Windows --
+        # spawnare un secondo processo qui competerebbe sulla stessa
+        # porta). L'agent lo espone in sola lettura al contratto Pi
+        # Manager, non ne possiede il ciclo di vita.
+        ok = _is_running(key)
+        print(f"[Agent] {key} e' gestito esternamente, non avviabile da qui (attivo={ok})")
+        return ok
+    if _is_running(key):
+        return True
     env = _build_env(defn.get("env_extra", {}))
     cwd = defn.get("cwd")
     # {STANZA} negli argomenti → stanza corrente (es. URL del kiosk che segue
@@ -227,6 +247,10 @@ def _start_service(key: str) -> bool:
 
 
 def _stop_service(key: str) -> bool:
+    defn = _SERVICE_DEFS.get(key)
+    if defn and defn.get("type") == "http_check":
+        print(f"[Agent] {key} e' gestito esternamente, non fermabile da qui")
+        return False
     with _procs_lock:
         p = _procs.get(key)
         if p is None or p.poll() is not None:
