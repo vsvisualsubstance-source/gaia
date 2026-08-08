@@ -54,56 +54,44 @@ feed verso UNA istanza specifica senza toccare le altre — vedi README.md.
 
 ### Gaia → TD (Core manda, TD ascolta)
 
-Il flatten grezzo (sotto) resta sulla **porta 7000**. **Tutto il resto**
+Il flatten filtrato (sotto) resta sulla **porta 7000**. **Tutto il resto**
 (feed curato canvas, tick continuo E eventi one-shot) va sulla **porta
 7001** — vedi la sezione dedicata più sotto per il perché.
 
-- **`/gaia/...`** — flatten grezzo di TUTTO il payload dashboard (~1900
-  indirizzi). Firehose/debug, non pensato per pilotare effetti — mescola log
-  storici, sensori Hue mal-nominati, ecc. **Fino al 2026-08-04 solo
-  `vision/rooms` era catalogato**; qui sotto la mappa completa di primo
-  livello (`payloadData`, costruito da `ThreeViewEngineGAME` in Node-RED) —
-  ogni chiave diventa `/gaia/<chiave>/...` nel flatten:
+- **`/gaia/...`** — **FILTRATO dal 2026-08-08** (`_scope_for_td()` in
+  `osc_bridge.py`), non più il flatten grezzo di tutto il payload
+  dashboard. Fino ad allora mandava tutto (~1900 indirizzi misurati,
+  arrivati a **9474 canali live** lato TD — ogni sotto-campo, es. mocap
+  x/y/z, contava a parte) come firehose/debug — TD/Mac ha verificato
+  ogni consumer reale (2 round di audit: prima solo testo DAT/espressioni,
+  poi anche il valore RAW `par.val` dei parametri `chops` dei select
+  CHOP — il primo round aveva perso 4 categorie intere, causando errori
+  di cook attivi in produzione prima di essere corretto; vedi
+  `GAIA_INTERFACE.md` "TD/Mac, 2" e "TD/Mac, 5" per il dettaglio) e ora
+  **solo questi campi vengono mandati**:
 
-  | Chiave | Cosa contiene |
-  |---|---|
-  | `soul` | mood corrente (stress/calm/social/curiosity/energy + label) — stesso dato di `/gaia/canvas/soul/...` ma qui grezzo |
-  | `people` | lista persone presenti: nome, stanza, emozione, posa, **visits** (quante volte vista), **affinity**, durata sessione corrente, confidenza |
-  | `lights` | luci Hue reali (esclusi sensori mal-nominati): luminosità, colore (hex), temperatura colore, accesa/spenta |
-  | `plants` | piante monitorate: umidità, salute (0-1), stato (`critical`/`warning`/`good`) |
-  | `sensors` | sensori ambientali: temperatura, luce ambiente, buio/luce diurna, movimento, batteria (livello + basso sì/no) |
-  | `rooms` / `vision/rooms` | dato per stanza — vedi tabella dettagliata sotto |
-  | `metrics` | contatori aggregati: persone/luci/sensori-movimento attivi, dispositivi batteria bassa, temperatura media, trend mood/attività |
-  | `progression` | stato RPG di Gaia: livello, xp, classe attiva, asset sbloccati, statistiche |
-  | `thought` | **testo** dell'ultimo pensiero spontaneo di Gaia |
-  | `lastMemory` | riassunto dell'ultimo ricordo salvato |
-  | `lastDream` / `lastDreamWords` / `lastDreamTs` | ultimo sogno — stesso dato di `/gaia/canvas/dream/...` (porta 7001) ma qui grezzo |
-  | `roomGraph` / `roomGraphLearned` | grafo di adiacenza tra le stanze (statico + appreso) |
-  | `events` | log degli ultimi eventi del brain |
-  | `hourlyStats` | statistiche orarie |
-  | `voiceStatus` / `voiceCommands` / `tts` | stato voce, ultimi comandi, ultimo testo pronunciato |
-  | `herbarium` | note musicali recenti delle piante (se il modulo è attivo) |
-  | `stats` | conteggi totali: persone totali, persone presenti, luci attive |
+  | Chiave | Cosa contiene | Filtrato a |
+  |---|---|---|
+  | `people` | lista persone presenti | tutto (name/stanza/emozione/affinity/visits/confidenza/...) |
+  | `rooms` | dato per stanza | solo `id`, `objects` (oggetti YOLO), `persons_count` |
+  | `vision/rooms` | mirror di `rooms`, namespace separato | solo `id`, `mediapipeActive`, `mediapipe` (usato da `script_mediapipe_agg` per la sfera reattiva al sorriso) |
+  | `metrics` | contatori aggregati | solo `activeLights`, `activePeople`, `averageLight` |
+  | `soul` | mood corrente | tutto (mood/lifeIndex/stress/calm/social/curiosity/energy) |
+  | `lights` | luci Hue reali | solo `id`, `brightness`, `power`, `motion` (per tutte le luci, non solo quelle usate oggi — niente elenco nomi hardcoded) |
+  | `stats` | conteggi totali | solo `totalPeopleCount` |
 
-  **Vision/rooms in dettaglio** (per stanza, sotto `rooms/{stanza}/...` e
-  identico sotto `vision/rooms/{stanza}/...`):
-  ```
-  persons_count      quante persone rilevate
-  activity            working/resting/sitting/present/empty/idle
-  objects/...          oggetti YOLO rilevati, conteggio per classe
-  currentEmotion       ultima emozione rilevata (mediapipe)
-  currentPose          ultima posa rilevata
-  gesture              ultimo gesto rilevato
-  temperature|humidity|ambient_light|darkness   sensori ambientali, se presenti
-  yoloActive|mediapipeActive   booleani, quali servizi vision girano davvero lì
-  speaking             nome di chi sta parlando (se rilevato negli ultimi 15s)
-  scene                descrizione scena dal VLM (moondream), se attivo
-  ```
-
-  Il resto (dentro `metrics`, `hourlyStats`, `roomGraph`, ecc.) va comunque
-  scoperto indirizzo per indirizzo se serve — questa tabella copre il primo
-  livello e i campi più probabilmente utili per l'arte generativa
-  (`people`, `lights`, `plants`, `sensors`, `thought`), non ogni sotto-campo.
+  **Tutto il resto del payload dashboard NON viene più mandato su questo
+  canale**: `plants`, `sensors`, `progression`, `thought`, `lastMemory`,
+  `lastDream`/`lastDreamWords`/`lastDreamTs`, `roomGraph`/
+  `roomGraphLearned`, `events`, `hourlyStats`, `voiceStatus`/
+  `voiceCommands`/`tts`, `herbarium`, e i campi di `rooms`/`lights` non
+  elencati sopra (`temperature`, `color`, `colorTemp`, `activity`,
+  `currentEmotion`, `scene`, ecc.). Nessuno di questi aveva un consumer
+  verificato in TD al momento del filtro. **Se in futuro TD inizia a
+  leggere un campo qui sotto, aggiungerlo a `_scope_for_td()`** — il
+  canale 2 curato (porta 7001, sotto) resta comunque la via preferita
+  per dati nuovi, mai aggiungere qui senza verificare prima se ha senso
+  spostarlo lì invece.
 
 ### Porta **7001** — feed curato canvas (tick continuo + eventi)
 

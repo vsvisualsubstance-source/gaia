@@ -151,8 +151,10 @@ vera istanza TD.
 
 ## Gaia → TouchDesigner: schema indirizzi OSC
 
-Un indirizzo OSC per ogni valore scalare del payload WS (stesso payload documentato nella
-memory `project-gaia-web` — vedi lì per lo schema completo campo per campo). Esempi:
+Un indirizzo OSC per ogni valore scalare del payload WS, **ma filtrato** —
+non l'intero payload dashboard (vedi il box sotto per la lista esatta dei
+campi mandati e perché). Stesso payload sorgente documentato nella memory
+`project-gaia-web` per lo schema completo campo per campo. Esempi:
 
 ```
 /gaia/soul/mood            "calm"
@@ -213,16 +215,46 @@ Due canali reali già cablati su questa convenzione, entrambi **spenti di defaul
   come nuovi colori. Testato dal vivo 2026-08-04 (nudge reale su `calm`,
   0.02→0.32 confermato).
 
+## Canale 1 (porta 7000) — filtrato, non più il flatten grezzo completo (2026-08-08)
+
+Fino al 2026-08-08 questo canale mandava **tutto** il payload dashboard
+appiattito (~1900 indirizzi misurati lato Gaia, arrivati a **9474 canali
+live** in TD — ogni sotto-campo, es. mocap x/y/z, conta a parte). TD/Mac
+ha verificato ogni consumer reale in TD (audit in 2 round: prima solo
+testo DAT/espressioni, poi anche il valore RAW `par.val` dei parametri
+`chops` dei select CHOP — il primo round aveva perso 4 categorie intere,
+causando errori di cook attivi in produzione, vedi `GAIA_INTERFACE.md`
+nel repo TD4Gaia "TD/Mac, 2" e "TD/Mac, 5"). `_scope_for_td()` in
+`osc_bridge.py` filtra ora il payload a SOLO questi campi prima di
+appiattirlo:
+
+- `people[]` (intero, presence/confidence/affinity/emotion/...)
+- `rooms[].{id, objects, persons_count}`
+- `vision.rooms[].{id, mediapipeActive, mediapipe}` (namespace separato
+  da `rooms[]`, mirror degli stessi dati — usato da `script_mediapipe_agg`
+  per la sfera reattiva al sorriso)
+- `metrics.{activeLights, activePeople, averageLight}`
+- `soul` (intero: mood/lifeIndex/stress/calm/social/curiosity/energy)
+- `lights[].{id, brightness, power, motion}` (tutte le luci, non solo
+  quelle referenziate oggi dai select CHOP — niente elenco nomi
+  hardcoded, si romperebbe se cambia lato OpenHAB)
+- `stats.totalPeopleCount`
+
+Tutto il resto del payload dashboard (log storici, luci non filtrate
+per campo, sensori, ecc.) **non viene più mandato su questo canale**.
+Se in futuro TD inizia a leggere altri campi, aggiungerli a
+`_scope_for_td()` — il canale 2 curato sotto resta comunque la via
+preferita per dati nuovi, questo canale 1 è ormai solo compatibilità
+per le categorie sopra.
+
 ## Gaia → TouchDesigner: feed curato `/gaia/canvas/...` (2026-07-25)
 
-Il flatten grezzo sopra manda **tutto** il payload dashboard (~1900 indirizzi
-misurati — utile come firehose/debug, ma non pensato per pilotare
-immagini/DMX/effetti: mescola log storici, sensori Hue mal-nominati, ecc.).
-Per quello esiste un secondo feed, molto più piccolo e **strutturato apposta
-per TD**, costruito in Node-RED ("Build TD Canvas", tab Gaia Engine, tick
+Oltre al canale 1 (sopra) esiste un secondo feed, molto più piccolo e
+**strutturato apposta per TD** fin dall'origine (mai stato un flatten
+grezzo), costruito in Node-RED ("Build TD Canvas", tab Gaia Engine, tick
 ogni 2s) e pubblicato su MQTT `gaia/td/canvas` — il bridge lo ascolta e lo
 manda sotto `/gaia/canvas/...`, **sulla porta 7001** (`TD_EVENT_OSC_PORT`,
-non sulla 7000 della WS grezza — vedi il box subito sotto per il perché):
+non sulla 7000 del canale 1 — vedi il box subito sotto per il perché):
 
 ```
 /gaia/canvas/soul/mood                 "curiosity"
