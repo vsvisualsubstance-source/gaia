@@ -3168,7 +3168,7 @@
         "type": "function",
         "z": "tab-gaia-voice",
         "name": "Build TTS payload",
-        "func": "msg.topic   = 'gaia/voice/tts/' + msg.stanza;\nmsg.payload = JSON.stringify({\n    text:   msg.tts_text,\n    stanza: msg.stanza,\n    intent: msg.intent,\n    ts:     Date.now()\n});\nreturn msg;",
+        "func": "msg.topic   = 'gaia/voice/tts/' + msg.stanza;\nmsg.payload = JSON.stringify({\n    text:   msg.tts_text,\n    stanza: msg.stanza,\n    intent: msg.intent,\n    ts:     Date.now()\n});\n\n// 'minipc' (Core) non ha un vero servizio voice che consuma\n// gaia/voice/tts/{stanza} per parlare -- quel topic aggiorna solo il\n// tracker per dashboard/TD (tts_any_extract_fn, gaiaLastTtsAny), non\n// produce mai audio. L'altoparlante reale di Core ascolta casa/tts/play\n// (say.sh -> Piper -> aplay) -- senza questo bridge le risposte dirette\n// a 'minipc' (es. stato_sistema, \"come stai\") restavano mute: testo in\n// dashboard, mai sentite. Bug preesistente (non la migrazione OPS di\n// ieri), trovato il 2026-08-08.\nif (msg.stanza === 'minipc') {\n    node.send({ topic: 'casa/tts/play', payload: msg.tts_text });\n}\n\nreturn msg;",
         "outputs": 1,
         "noerr": 0,
         "x": 1080,
