@@ -1,10 +1,11 @@
 {
-  "schema_version": 1,
-  "_comment": "Canonical Nursery component library, synced between Gaia/Core (Node-RED + Ollama) and TD/Mac (Bridge/gaia_nursery, whitelist source of truth). See GAIA_INTERFACE.md 'Canale 9' for the message schema and lifecycle. Any change here must be logged in GAIA_INTERFACE.md's changelog so the other session notices it.",
+  "schema_version": 2,
+  "_comment": "Canonical Nursery component library, synced between Gaia/Core (Node-RED + Ollama) and TD/Mac (Bridge/gaia_nursery, whitelist source of truth). See GAIA_INTERFACE.md 'Canale 9' for the message schema and lifecycle. Any change here must be logged in GAIA_INTERFACE.md's changelog so the other session notices it. Each component has a 'status': 'live' (Gaia trigger fires + TD operator exists, fully working today), 'visual_pending' (Gaia already fires this trigger elsewhere as a one-shot event, but no TD operator exists yet under this id -- activation will be whitelisted-but-silently-ignored by gaia_nursery_control.py until built), or 'proposed' (neither side has this trigger/operator yet -- needs agreement + Gaia-side event work before it can move to visual_pending).",
   "components": [
     {
       "id": "person_sigil",
       "trigger": "person_recognized",
+      "status": "live",
       "description": "A small orbiting sigil that appears near the recognized person's marker in the soul scene, colored and shaped to represent them.",
       "params_schema": {
         "hue": {
@@ -32,6 +33,7 @@
     {
       "id": "dream_fragment",
       "trigger": "dream_new",
+      "status": "live",
       "description": "A small visual fragment that appears in the dream scene when a new dream is generated, shaped and colored to represent its content.",
       "params_schema": {
         "hue": {
@@ -53,6 +55,208 @@
           "max": 2.0,
           "default": 1.0,
           "description": "Overall size multiplier."
+        }
+      }
+    },
+    {
+      "id": "levelup_burst",
+      "trigger": "level_up",
+      "status": "visual_pending",
+      "description": "One-shot radial burst of points expanding outward from the soul core, marking a level-up moment as a distinct EVENT rather than the ambient wash. Complementary to, not a replacement for, the existing continuous moodwash_ctrl/envelope_levelup burst already in Visuals -- that one stays as the ambient layer, this is a Nursery-triggered foreground flourish on top of it.",
+      "params_schema": {
+        "hue": {
+          "type": "number",
+          "min": 0.0,
+          "max": 1.0,
+          "default": 0.12,
+          "description": "Color hue (0-1) for the burst -- warm gold by default, matching an achievement moment."
+        },
+        "energy": {
+          "type": "number",
+          "min": 0.0,
+          "max": 1.0,
+          "default": 0.8,
+          "description": "Burst force / expansion speed (0=barely moves, 1=explosive)."
+        },
+        "duration": {
+          "type": "number",
+          "min": 0.5,
+          "max": 3.0,
+          "default": 1.5,
+          "description": "Seconds for the burst to fully expand and fade -- independent of the Nursery TTL, which controls when the component is removed, not the animation's own pace."
+        }
+      }
+    },
+    {
+      "id": "face_sigil",
+      "trigger": "face_enrolled",
+      "status": "visual_pending",
+      "description": "A slow point cluster that coalesces from scattered to formed, briefly, inside the soul core when a new face is enrolled into Gaia's memory for the first time -- a 'birth' moment, deliberately distinct from person_sigil (which marks every ROUTINE recognition of an already-known person, an orbit near the core rather than something happening inside it).",
+      "params_schema": {
+        "hue": {
+          "type": "number",
+          "min": 0.0,
+          "max": 1.0,
+          "default": 0.5,
+          "description": "Color hue (0-1) -- ideally the same identity-color hash Gaia/Core already uses elsewhere for this person, so their sigil and their enrollment moment read as the same identity."
+        },
+        "coalesce_time": {
+          "type": "number",
+          "min": 1.0,
+          "max": 5.0,
+          "default": 3.0,
+          "description": "Seconds for the scattered points to converge into the formed sigil shape -- slower than a burst, since enrollment is a rarer and more deliberate moment than routine recognition."
+        },
+        "scale": {
+          "type": "number",
+          "min": 0.5,
+          "max": 2.0,
+          "default": 1.2,
+          "description": "Overall size multiplier."
+        }
+      }
+    },
+    {
+      "id": "plant_bloom",
+      "trigger": "plant_note",
+      "status": "visual_pending",
+      "description": "A larger, longer-lived bloom at the room's position in the zone light ring, for a plant observation Gaia found notable enough to want Ollama's attention on -- distinct from the routine ambient sparks plantnotes_geo already draws for every plant_note (that 16-slot ring buffer stays as the ambient layer; this is a foreground highlight for the ones worth dwelling on).",
+      "params_schema": {
+        "hue": {
+          "type": "number",
+          "min": 0.0,
+          "max": 1.0,
+          "default": 0.3,
+          "description": "Color hue (0-1) -- green by default, matching the plant/growth theme."
+        },
+        "shape": {
+          "type": "string",
+          "enum": ["ring", "spiral", "cluster"],
+          "default": "cluster",
+          "description": "Point arrangement: ring (steady orbit), spiral (winding outward), cluster (loose grouping, reads as a bloom)."
+        },
+        "scale": {
+          "type": "number",
+          "min": 0.5,
+          "max": 2.0,
+          "default": 1.3,
+          "description": "Overall size multiplier."
+        }
+      }
+    },
+    {
+      "id": "room_portal",
+      "trigger": "room_discovered",
+      "status": "visual_pending",
+      "description": "An expanding ring/flash at the newly-discovered room's position in the zone light ring, the first time that room appears in Node-RED's Device Registry -- a 'door opening' moment for a zone that was previously just a dark, unregistered label. NOTE: room_discovered itself does not exist as a Gaia-side event yet either (per GAIA_INTERFACE.md 'Canale 9', 'nessun meccanismo simile esiste ancora') -- Node-RED needs to detect and publish it when brain.devices creates a roomGraph entry never seen before, same as the other 3 visual_pending triggers otherwise already fire elsewhere.",
+      "params_schema": {
+        "hue": {
+          "type": "number",
+          "min": 0.0,
+          "max": 1.0,
+          "default": 0.55,
+          "description": "Color hue (0-1) -- cyan by default, matching the zone ring's own default light color."
+        },
+        "energy": {
+          "type": "number",
+          "min": 0.0,
+          "max": 1.0,
+          "default": 0.7,
+          "description": "Expansion speed/force of the ring (0=slow fade-in, 1=sudden flash)."
+        },
+        "scale": {
+          "type": "number",
+          "min": 0.5,
+          "max": 2.0,
+          "default": 1.0,
+          "description": "Overall size multiplier, relative to one zone slot in the light ring."
+        }
+      }
+    },
+    {
+      "id": "affinity_pulse",
+      "trigger": "affinity_threshold",
+      "status": "proposed",
+      "description": "PROPOSAL, TD/Mac idea -- new trigger, nothing built on either side yet. A slow, warm pulse near a person's recognition marker when Gaia's affinity/bond with them crosses a meaningful threshold (a relationship deepening, not just a visit). Cheap to add TD-side: Visuals/registry's affinity wash (select_affinity / GetAffinityWash) already computes a per-person identity-color hash and a weighted bond intensity every frame -- this component would just need to read that same value rather than invent new plumbing. Needs Gaia-side: a threshold-crossing detector on brain.presence/affinity history (e.g. fire once when a person's cumulative affinity first crosses 0.5/0.75/etc, not on every frame it's already above threshold).",
+      "params_schema": {
+        "hue": {
+          "type": "number",
+          "min": 0.0,
+          "max": 1.0,
+          "default": 0.5,
+          "description": "Color hue (0-1) -- ideally the same identity-color hash used for this person elsewhere."
+        },
+        "energy": {
+          "type": "number",
+          "min": 0.0,
+          "max": 1.0,
+          "default": 0.4,
+          "description": "Pulse strength -- kept gentle by default; a deepening bond is a quiet moment, not a bang."
+        },
+        "scale": {
+          "type": "number",
+          "min": 0.5,
+          "max": 2.0,
+          "default": 1.0,
+          "description": "Overall size multiplier."
+        }
+      }
+    },
+    {
+      "id": "silence_ripple",
+      "trigger": "extended_silence",
+      "status": "proposed",
+      "description": "PROPOSAL, TD/Mac idea -- new trigger, nothing built on either side yet. A sparse, slow ripple across the soul core after an extended period with no detected activity -- the visual opposite of a 'bang': stillness as content, not absence of it. Thematically matches Gaia's existing contemplative text overlays ('Pensiero: sto osservando il silenzio della casa'). Needs Gaia-side: a new silence-duration signal (e.g. no OSC/mocap/YOLO detections across all rooms for N minutes) -- doesn't exist today, would need to be built and tuned so it doesn't fire during normal quiet moments, only genuinely extended ones.",
+      "params_schema": {
+        "hue": {
+          "type": "number",
+          "min": 0.0,
+          "max": 1.0,
+          "default": 0.65,
+          "description": "Color hue (0-1) -- muted blue by default, deliberately cool/withdrawn rather than warm."
+        },
+        "energy": {
+          "type": "number",
+          "min": 0.0,
+          "max": 1.0,
+          "default": 0.15,
+          "description": "Motion intensity -- kept very low by default; this should read as a ripple, never a burst."
+        },
+        "scale": {
+          "type": "number",
+          "min": 0.5,
+          "max": 2.0,
+          "default": 1.5,
+          "description": "Overall size multiplier -- larger and slower than the other one-shots, so it reads as ambient stillness spreading rather than a discrete event."
+        }
+      }
+    },
+    {
+      "id": "lexicon_flare",
+      "trigger": "lexicon_milestone",
+      "status": "proposed",
+      "description": "PROPOSAL, TD/Mac idea -- new trigger, nothing built on either side yet. A distinctive flare in the lexicon sediment layer (Visuals/glsl_sediment_deposit) when a rare or milestone word appears, separate from the routine per-word ink deposit every lexicon word already gets today. Needs Gaia-side: a way to flag a word as 'notable' (e.g. never seen before in the whole project's history, or every Nth new distinct word) rather than every word -- otherwise this would fire constantly and lose all meaning as an event.",
+      "params_schema": {
+        "hue": {
+          "type": "number",
+          "min": 0.0,
+          "max": 1.0,
+          "default": 0.85,
+          "description": "Color hue (0-1) for the flare -- distinct from the sediment layer's usual muted ink tones so a milestone word visibly stands out."
+        },
+        "scale": {
+          "type": "number",
+          "min": 0.5,
+          "max": 2.0,
+          "default": 1.4,
+          "description": "Overall size multiplier for the flare mark."
+        },
+        "duration": {
+          "type": "number",
+          "min": 0.5,
+          "max": 3.0,
+          "default": 2.0,
+          "description": "Seconds the flare stays bright before settling into the sediment layer's normal decay curve."
         }
       }
     }
