@@ -2,6 +2,20 @@
 
 **v1.0.2** — Sistema cognitivo distribuito per domotica intelligente. Discovery/provisioning automatico dei nodi (beacon UDP + captive portal WiFi), welcome kiosk con enrollment. Integra rilevamento visivo (YOLO, MediaPipe), riconoscimento facciale (InsightFace), riconoscimento vocale (Whisper + resemblyzer), automazione (OpenHAB, MQTT), LLM locale (Ollama), memoria vettoriale (Qdrant), notifiche Telegram e interfaccia 3D (Three.js).
 
+## Runtime attuale (verificato)
+
+La web UI/Node-RED dell'OPS è raggiungibile oggi a `http://192.168.1.240:1880`.
+Il probe HTTP eseguito su questo host ha restituito `HTTP 200` al path root (la
+web UI è servita via `httpStatic` da Node-RED). L'API `gaia_admin.py` sullo stesso
+host non ha risposto entro timeout al momento del controllo (`8765/api/status`),
+quindi il runtime web e il backend admin non sono ancora da assumere equivalenti in
+produzione.
+
+In questo repo il nome `Core`/`miniPC` continua a indicare il broker MQTT e la
+configurazione legacy, mentre i casi in produzione che usano l'OPS/Node-RED devono
+riferirsi a `192.168.1.240` come host locale di servizio per le pagine web ed i
+WS.
+
 ---
 
 ## Struttura repository
@@ -42,6 +56,35 @@ core-node-0/
 ├── venv/              Python venv miniPC (symlink: ~/core-node-0/venv → qui)
 └── Citofono Script/   script citofono
 ```
+
+---
+
+## TD4Gaia / TouchDesigner — contratto di integrazione
+
+Il contratto di interfaccia live con TouchDesigner è stato letto anche nel repo
+esterno pubblico `TD4Gaia` (`https://github.com/vsvisualsubstance-source/TD4Gaia`),
+che porta il modello `ARCHITECTURE.md`/`GAIA_INTERFACE.md` per il progetto TD.
+
+Il riferimento canonico *statico* del confine GAIA↔TD4Gaia è ora consolidato
+nel file [docs/gaia-td-contract.json](docs/gaia-td-contract.json): è il file JSON di
+contratto che raccoglie i canali, i topic MQTT e i port OSC in un punto unico,
+così che il sidecar di TD4Gaia e il repo GAIA abbiano un punto di convergenza
+cercabile e facili da tenere in sinc.
+
+I canali che il repo GAIA deve continuare a rispettare sono i seguenti:
+
+- `gaia` → TD su OSC `7000` (`/gaia/...`) e `7001` (`/gaia/canvas/...`): feed
+  dettagli `node-red`/bridge per dashboard e render visivo
+- TD → Gaia su OSC `9008`: `MoodNudge` e altri payload `/gaia/td/...` reimpostati
+  su MQTT come `gaia/touchdesigner/...`
+- MQTT service-plane: `gaia/device/{id}/status|command`,
+  `gaia/devices/{id}/announce|config|profile`, `gaia/td-bridge/status|command`,
+  `gaia/mocap-bridge/{sender_device_id}/status|command`
+
+Questi topic e questi canali costituiscono il contratto di interoperabilità
+che i due repositi condividono. Quando si modifica la semantica del bridge TD,
+non basta cambiare il solo runtime: va annotato qui e nel repo TD4Gaia per
+mantenerli sincronizzati a livello di interfaccia.
 
 ---
 
