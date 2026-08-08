@@ -75,8 +75,10 @@ _SERVICE_DEFS = {
         # Welcome sul touchscreen del salotto (il minipc non si sposta,
         # room hardcoded). Firefox è l'unico browser installato; --kiosk
         # nativo. Sessione grafica dell'utente core (User=core nel unit).
+        # 2026-08-08 (migrazione Node-RED su OPS): non piu' localhost,
+        # Node-RED non gira necessariamente qui -- vedi project-architettura-core-ops
         "cmd": ["/usr/bin/firefox", "--kiosk",
-                "http://localhost:1880/welcome.html?cam=localhost&room=salotto"],
+                "http://192.168.1.240:1880/welcome.html?cam=localhost&room=salotto"],
         "cwd": "/home/core",
         "check_script": False,
         "env_extra": {
