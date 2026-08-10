@@ -75,6 +75,8 @@ sudo nano /etc/gaia/device.conf           # set CAMERA_NAME / room (NODE_ID=ingr
 sudo systemctl start gaia-agent
 ```
 
+Setting up a new Pi from a **cloned SD card** (dd/rpi-clone/Raspberry Pi Imager "use existing image") instead of a fresh OS install: run `bash ~/gaia/reset-clone-identity.sh` once, before connecting it to the home network — it wipes `agent/device.json` (so the clone doesn't announce the same `stanza` as the source Pi), regenerates SSH host keys and `/etc/machine-id` (a clone shares both with the source otherwise), and sets a new hostname. `DEVICE_ID` needs no action, it's derived from the MAC address (`config.py`) so it's already unique on the clone. Room/WiFi assignment is left to `gaia-provision`'s captive portal on first boot, not hand-edited.
+
 Enable a service remotely (agent then starts/manages it):
 ```
 MQTT publish → gaia/device/{device_id}/command
