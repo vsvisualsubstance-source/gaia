@@ -11,10 +11,13 @@ host non ha risposto entro timeout al momento del controllo (`8765/api/status`),
 quindi il runtime web e il backend admin non sono ancora da assumere equivalenti in
 produzione.
 
-In questo repo il nome `Core`/`miniPC` continua a indicare il broker MQTT e la
-configurazione legacy, mentre i casi in produzione che usano l'OPS/Node-RED devono
-riferirsi a `192.168.1.240` come host locale di servizio per le pagine web ed i
-WS.
+`Core`/`miniPC` (`192.168.1.142`) resta l'host fisso di mosquitto (MQTT raw
+`:1883` e WS `:9001`), `gaia_admin.py` (`:8765`) e `gaia-camera` (`:8766`) —
+NON seguire `location.hostname`/l'IP di OPS per questi, sono ancorati a
+dati/hardware locali del Core. Solo Node-RED (HTTP e WS applicativa `/gaia`)
+è dinamico e oggi risolve a OPS, `192.168.1.240`. Vedi
+`docs/core-distribuito.md`, sezione "Runtime attuale", per il dettaglio
+completo del cutover 2026-08-08.
 
 ---
 
