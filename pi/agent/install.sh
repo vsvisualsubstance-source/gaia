@@ -59,7 +59,7 @@ echo "  ✓ /etc/gaia configurato"
 
 # Permessi sudo per systemctl (necessari per start/stop servizi)
 SUDOERS_FILE="/etc/sudoers.d/gaia-agent"
-echo "$(whoami) ALL=(ALL) NOPASSWD: /bin/systemctl start gaia-*, /bin/systemctl stop gaia-*, /bin/systemctl restart gaia-*, /sbin/reboot" \
+echo "$(whoami) ALL=(ALL) NOPASSWD: /bin/systemctl start gaia-*, /bin/systemctl stop gaia-*, /bin/systemctl restart gaia-*, /sbin/reboot, /sbin/poweroff" \
     | sudo tee "$SUDOERS_FILE" > /dev/null
 sudo chmod 440 "$SUDOERS_FILE"
 echo "  ✓ Permessi sudo configurati per $(whoami)"

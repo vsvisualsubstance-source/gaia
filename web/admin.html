@@ -2376,6 +2376,7 @@ function pmBuildCard(id, d) {
     <div class="pm-card-actions">
       <button class="pm-btn gray pm-btn-status">Status</button>
       <button class="pm-btn amber pm-btn-reboot">Reboot</button>
+      <button class="pm-btn red pm-btn-shutdown">⏻ Spegni</button>
       <button class="pm-btn red pm-btn-remove">✕ Rimuovi</button>
     </div>
   </div>`;
@@ -2461,6 +2462,7 @@ function pmAttachEvents(id, card) {
   };
   card.querySelector('.pm-btn-status').onclick  = () => pmSend(id, {action:'status'});
   card.querySelector('.pm-btn-reboot').onclick  = () => { if(confirm(`Riavviare ${id}?`)) pmSend(id, {action:'reboot'}); };
+  card.querySelector('.pm-btn-shutdown').onclick = () => { if(confirm(`Spegnere ${id}? Per riaccenderlo servirà staccare/riattaccare l'alimentazione.`)) pmSend(id, {action:'shutdown'}); };
   card.querySelector('.pm-btn-remove').onclick  = () => {
     if (!confirm(`Rimuovere "${id}" dalla lista?`)) return;
     if (_pmClient) _pmClient.publish(`gaia/device/${id}/status`, '', {retain:true, qos:1});

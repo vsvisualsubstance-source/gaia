@@ -438,6 +438,12 @@ def _handle_command(cmd: dict):
         subprocess.run(["sudo", "reboot"])
         return
 
+    elif action == "shutdown":
+        _publish_status()
+        time.sleep(2)
+        subprocess.run(["sudo", "poweroff"])
+        return
+
     elif action == "ota_update":
         threading.Thread(
             target=_ota_update,
