@@ -3830,7 +3830,7 @@
         "type": "function",
         "z": "7fb45525762d2613",
         "name": "Extract TTS Text (minipc)",
-        "func": "// Le risposte ai comandi vocali dati al minipc arrivano qui come JSON\n// {text, stanza, intent, ts} (da \"Build TTS payload\"/\"Timer\", tab GAIA Voice) --\n// diverso da casa/tts/play (pensieri spontanei, gia' testo semplice) che alimenta\n// la stessa \"Clean Text\" piu' sotto. Prima di questo fix nessuno ascoltava\n// gaia/voice/tts/minipc: le risposte finivano su MQTT e non venivano mai lette\n// ad alta voce sul miniPC (il Pi invece le legge, si iscrive al suo topic\n// gaia/voice/tts/{stanza} in pi/voice/main.py).\nlet text = '';\ntry {\n    const p = typeof msg.payload === 'string' ? JSON.parse(msg.payload) : msg.payload;\n    text = (p && p.text || '').toString().trim();\n} catch (e) {\n    text = (msg.payload || '').toString().trim();\n}\nif (!text) return null;\n// Vocabolario Asemico: espone l'ultimo TTS al payload WS (ThreeViewEngineGAME\n// legge gaiaLastTts) cosi' la welcome puo' \"scrivere\" cio' che Gaia dice.\nglobal.set('gaiaLastTts', { text: text, ts: Date.now() });\nmsg.payload = text;\nreturn msg;",
+        "func": "// Le risposte ai comandi vocali dati al minipc arrivano qui come JSON\n// {text, stanza, intent, ts} (da \"Build TTS payload\"/\"Timer\", tab GAIA Voice).\n// SOLO tracker dashboard/TD (gaiaLastTts) -- l'audio del Core passa da\n// casa/tts/play (say.sh -> Piper -> aplay), inviato a parte da \"Build TTS\n// payload\" quando stanza === 'minipc'. Fino al 2026-08-10 questo nodo era\n// wired anche su \"Clean Text\" -> \"Speak\", causando OGNI risposta diretta al\n// Core detta DUE VOLTE (stesso testo, due percorsi MQTT diversi convergenti\n// sullo stesso exec). Wire rimosso: non ricollegare a Clean Text.\nlet text = '';\ntry {\n    const p = typeof msg.payload === 'string' ? JSON.parse(msg.payload) : msg.payload;\n    text = (p && p.text || '').toString().trim();\n} catch (e) {\n    text = (msg.payload || '').toString().trim();\n}\nif (!text) return null;\n// Vocabolario Asemico: espone l'ultimo TTS al payload WS (ThreeViewEngineGAME\n// legge gaiaLastTts) cosi' la welcome puo' \"scrivere\" cio' che Gaia dice.\nglobal.set('gaiaLastTts', { text: text, ts: Date.now() });\nmsg.payload = text;\nreturn msg;",
         "outputs": 1,
         "timeout": 0,
         "noerr": 0,
@@ -3840,9 +3840,7 @@
         "x": 300,
         "y": 400,
         "wires": [
-            [
-                "84b0e4d448fbbb5d"
-            ]
+            []
         ]
     },
     {
