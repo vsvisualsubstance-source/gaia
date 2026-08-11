@@ -44,3 +44,8 @@ ENGINE_PRESET = _get("HERBARIUM_ENGINE_PRESET", "pentatonica_calma")
 # del Pi. Cambiabile a caldo via MQTT gaia/herbarium/{stanza}/music
 # {"drum_volume": N} (2026-08-11).
 DRUM_VOLUME = int(_get("HERBARIUM_DRUM_VOLUME", "100"))
+
+# Se "1", questo processo non lancia/monitora Carla lui stesso -- si assume
+# già in esecuzione altrove (autostart in sessione VNC persistente). Vedi
+# GOTCHA in main.py::main() (2026-08-11).
+CARLA_EXTERNAL = _get("HERBARIUM_CARLA_EXTERNAL", "0") == "1"

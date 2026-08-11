@@ -186,14 +186,40 @@ def _pw_wire_engine_out(eng_out) -> bool:
                               timeout=5, env=env).stdout.splitlines()
     except (OSError, subprocess.TimeoutExpired):
         return False
-    wired = False
+    target = None
     for out in outs:
         if "Midi-Bridge" in out and eng_out["pw_name"] in out:
-            r = subprocess.run(["pw-link", out.strip(), "Carla:events-in"],
-                               capture_output=True, text=True, timeout=5, env=env)
-            if r.returncode == 0:
-                print(f"[Herbarium] Bus motore collegato (pw) → Carla")
-                wired = True
+            target = out.strip()
+            subprocess.run(["pw-link", target, "Carla:events-in"],
+                           capture_output=True, text=True, timeout=5, env=env)
+    if not target:
+        return False
+    # Verifica lo stato REALE del grafo invece di fidarsi del returncode di
+    # pw-link sopra: se il collegamento esisteva già da un run precedente di
+    # Carla (Carla non è stata riavviata, solo questo processo Python), il
+    # comando fallisce ("File già esistente") anche se il grafo è già
+    # esattamente come vogliamo -- bug trovato dal vivo 2026-08-11: _wired
+    # restava per sempre False, _engine_out_path non veniva mai impostato,
+    # e l'engine non scriveva MAI una nota pur sembrando "collegato".
+    try:
+        graph = subprocess.run(["pw-link", "-l"], capture_output=True, text=True,
+                               timeout=5, env=env).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    wired, in_block = False, False
+    for line in graph.splitlines():
+        if line.strip() == "Carla:events-in":
+            in_block = True
+            continue
+        if in_block:
+            if line.startswith((" ", "\t")):
+                if eng_out["pw_name"] in line:
+                    wired = True
+                    break
+            else:
+                in_block = False
+    if wired:
+        print("[Herbarium] Bus motore collegato (pw) → Carla")
     return wired
 
 
@@ -472,8 +498,20 @@ _mqtt.on_message = _on_message
 
 def main():
     global _carla
-    _carla = subprocess.Popen(shlex.split(config.CARLA_BIN) + ["--no-gui", config.PATCH])
-    print(f"[Herbarium] Carla headless avviato con {config.PATCH}")
+    if config.CARLA_EXTERNAL:
+        # 2026-08-11: su alcuni Pi Carla lanciata da questo processo (system
+        # service, User= senza sessione grafica vera) non riesce a collegarsi
+        # a PipeWire/JACK -- "Failed to create new JACK client" -- mentre la
+        # STESSA identica riga di comando funziona sempre se lanciata da una
+        # sessione interattiva (SSH o desktop/VNC). Causa non isolata. Con
+        # HERBARIUM_CARLA_EXTERNAL=1 questo processo NON lancia/monitora
+        # Carla: si assume che sia già in esecuzione (autostart in una
+        # sessione VNC persistente, vedi docs) e fa solo wiring MIDI/audio +
+        # motore musicale, esattamente come se Carla fosse partita da sola.
+        print("[Herbarium] Carla esterna (HERBARIUM_CARLA_EXTERNAL=1) — non la lancio/monitoro")
+    else:
+        _carla = subprocess.Popen(shlex.split(config.CARLA_BIN) + ["--no-gui", config.PATCH])
+        print(f"[Herbarium] Carla headless avviato con {config.PATCH}")
     _mqtt.connect_async(config.MQTT_HOST, config.MQTT_PORT, 60)
     threading.Thread(target=_mqtt.loop_forever,
                      kwargs={"retry_first_connection": True}, daemon=True).start()
@@ -483,7 +521,7 @@ def main():
     last_scan = last_beat = 0.0
     while _running:
         now = time.time()
-        if _carla.poll() is not None:
+        if not config.CARLA_EXTERNAL and _carla.poll() is not None:
             print(f"[Herbarium] Carla terminato (rc={_carla.returncode}) — riavvio")
             _carla = subprocess.Popen(shlex.split(config.CARLA_BIN) + ["--no-gui", config.PATCH])
             time.sleep(3)
@@ -500,11 +538,12 @@ def main():
 
     if _dump and _dump.poll() is None:
         _dump.terminate()
-    _carla.terminate()
-    try:
-        _carla.wait(timeout=8)
-    except subprocess.TimeoutExpired:
-        _carla.kill()
+    if not config.CARLA_EXTERNAL:
+        _carla.terminate()
+        try:
+            _carla.wait(timeout=8)
+        except subprocess.TimeoutExpired:
+            _carla.kill()
     _mqtt.publish(f"gaia/herbarium/{_current_room}/state", "", retain=True)
     print("[Herbarium] Terminato.")
 
