@@ -354,6 +354,8 @@ PORTAL_HTML = """<!DOCTYPE html>
 </details>
 <button class="ghost" style="width:100%;margin-top:26px"
   onclick="if(confirm('Riavviare Gaia?'))fetch('/reboot',{method:'POST'})">↻ Riavvia Gaia</button>
+<button class="ghost" style="width:100%;margin-top:10px"
+  onclick="if(confirm('Spegnere Gaia? Per riaccenderlo servirà staccare/riattaccare l\'alimentazione.'))fetch('/shutdown',{method:'POST'})">⏻ Spegni Gaia</button>
 <script>
 function send(f){
   document.getElementById('btn').disabled = true;
@@ -510,6 +512,12 @@ class PortalHandler(BaseHTTPRequestHandler):
             log("Riavvio richiesto dal portale")
             self._send_json({"ok": True})
             threading.Timer(2, lambda: subprocess.run(["systemctl", "reboot"])).start()
+            return
+
+        if path == "/shutdown":
+            log("Spegnimento richiesto dal portale")
+            self._send_json({"ok": True})
+            threading.Timer(2, lambda: subprocess.run(["systemctl", "poweroff"])).start()
             return
 
         self.send_response(404); self.end_headers()
