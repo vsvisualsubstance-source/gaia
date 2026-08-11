@@ -330,7 +330,17 @@ class MusicEngine:
         if random.random() > self.cfg.get("drum_prob", 0.0):
             return None
         note = DRUM_NOTES.get(self.cfg.get("drum_voice", "rullante"), 40)
-        return {"note": note, "velocity": 127, "delay_ms": 0, "length_ms": 60, "channel": 10}
+        # Umanizzato (2026-08-11): velocity non più sempre a tavoletta --
+        # piccola variazione per non suonare meccanico colpo dopo colpo.
+        vel = random.randint(100, 127)
+        return {"note": note, "velocity": vel, "delay_ms": 0, "length_ms": 60, "channel": 10}
 
     def drum_interval_s(self) -> float:
-        return self.cfg.get("drum_interval_ms", 500) / 1000.0
+        """±35% di variazione ad ogni chiamata (2026-08-11, richiesto dal
+        vivo: la cassa suonava "sempre a tempo", troppo quantizzata) --
+        _drum_loop in main.py chiama questo ad ogni giro, quindi il
+        risultato è un tempo che respira invece di un metronomo rigido in
+        4/4. La densità media resta quella del preset (drum_interval_ms),
+        cambia solo la regolarità colpo per colpo."""
+        base = self.cfg.get("drum_interval_ms", 500) / 1000.0
+        return base * random.uniform(0.65, 1.35)
