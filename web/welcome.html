@@ -250,7 +250,7 @@ html,body{width:100%;height:100%;overflow:hidden;user-select:none;-webkit-user-s
 const _params  = new URLSearchParams(location.search);
 const CAM_HOST = _params.get('cam')  || location.hostname;
 let   ROOM     = _params.get('room') || null;   // let: può arrivare in ritardo dal fallback sotto
-const API    = `http://${location.hostname}:8765`;   // admin resta sul Core
+const API    = `http://192.168.1.142:8765`;   // admin resta sempre sul Core, mai location.hostname (kiosk OPS -> 404/connection refused, vedi docs/core-distribuito.md)
 const MJPEG  = `http://${CAM_HOST}:8766/video`;
 
 function showRoom(room) {
