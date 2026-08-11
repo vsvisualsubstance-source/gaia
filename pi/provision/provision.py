@@ -30,7 +30,7 @@ allo stesso stato al prossimo boot anche senza rete.
 Gira come root (nmcli + porta 80). Config via env / EnvironmentFile
 /etc/gaia/provision.conf:
   AP_IFACE=wlan0  AP_PASSWORD=gaiasetup  PORTAL_PORT=80
-  CHECK_S=30  OFFLINE_GRACE_S=180  AP_RETRY_S=600  RETRY_WINDOW_S=60
+  CHECK_S=30  OFFLINE_GRACE_S=60  AP_RETRY_S=600  RETRY_WINDOW_S=60
   GAIA_PROVISION_FORCE_AP=1   ← solo test: AP subito, ignora lo stato rete
 """
 import json
@@ -49,7 +49,7 @@ AP_IFACE        = os.getenv("AP_IFACE", "wlan0")
 AP_PASSWORD     = os.getenv("AP_PASSWORD", "gaiasetup")     # WPA2, min 8 char
 PORTAL_PORT     = int(os.getenv("PORTAL_PORT", "80"))
 CHECK_S         = int(os.getenv("CHECK_S", "30"))
-OFFLINE_GRACE_S = int(os.getenv("OFFLINE_GRACE_S", "180"))
+OFFLINE_GRACE_S = int(os.getenv("OFFLINE_GRACE_S", "60"))  # 2026-08-11: era 180
 AP_RETRY_S      = int(os.getenv("AP_RETRY_S", "600"))
 RETRY_WINDOW_S  = int(os.getenv("RETRY_WINDOW_S", "60"))
 FORCE_AP        = os.getenv("GAIA_PROVISION_FORCE_AP", "0") == "1"

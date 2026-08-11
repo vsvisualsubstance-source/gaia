@@ -22,7 +22,7 @@ via Tailscale con eth0 attiva.
 
 ```
 BOOT → online? ──sì──► IDLE (check ogni CHECK_S=30s)
-        │ no per OFFLINE_GRACE_S (180s: lascia lavorare l'autoconnect NM)
+        │ no per OFFLINE_GRACE_S (60s: lascia lavorare l'autoconnect NM)
         ▼
    scan WiFi (PRIMA dell'AP: in AP mode lo scan è inaffidabile)
         ▼
@@ -49,7 +49,7 @@ funzione, il daemon rientra in AP mode dopo il grace period.
 | `AP_PASSWORD` | `gaiasetup` | WPA2, min 8 caratteri — da cambiare per-device in produzione seria |
 | `AP_IFACE` | `wlan0` | |
 | `PORTAL_PORT` | `80` | captive detection assume 80 |
-| `CHECK_S` / `OFFLINE_GRACE_S` | 30 / 180 | |
+| `CHECK_S` / `OFFLINE_GRACE_S` | 30 / 60 | |
 | `AP_RETRY_S` / `RETRY_WINDOW_S` | 600 / 60 | retry reti note |
 | `GAIA_PROVISION_FORCE_AP=1` | — | **solo test**: AP subito anche se online |
 
