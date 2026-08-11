@@ -197,6 +197,63 @@ _SVC_NAMES       = {s[0] for s in GAIA_SERVICES}
 SVC_CONFLICTS    = {"screen": "kiosk", "kiosk": "screen"}  # Conflicts= reciproco nei .service
 CAMERA_CONSUMERS = ("yolo", "mediapipe", "kiosk")          # stessa lista di agent.py
 
+# Preset del motore musicale Herbarium — stessi nomi/etichette di
+# web/admin.html (HERB_PRESETS) e chiavi di herbarium/music_engine.py
+# (PRESETS), duplicati qui per lo stesso motivo di camera_client.py/ota.py
+# (docs/pi/CLAUDE.md): il portale deve restare autonomo, senza dipendere da
+# un file condiviso raggiungibile solo con Core in rete.
+HERB_PRESETS = [
+    ("pentatonica_calma", "Pentatonica calma"),
+    ("accordi_maggiori",  "Accordi maggiori"),
+    ("drone_modale",      "Drone modale"),
+    ("arpeggio_arioso",   "Arpeggio arioso"),
+    ("blues_notturno",    "Blues notturno"),
+    ("cromatico_libero",  "Cromatico libero"),
+    ("ambient_profondo",    "Ambient profondo"),
+    ("ambient_cristallino", "Ambient cristallino"),
+    ("ambient_notturno",    "Ambient notturno"),
+    ("ambient_respiro",     "Ambient respiro"),
+    ("ambient_alba",        "Ambient alba"),
+]
+_HERB_PRESET_NAMES = {k for k, _ in HERB_PRESETS}
+HERBARIUM_CONF = "/etc/gaia/herbarium.conf"
+
+
+def _read_herbarium_conf() -> dict:
+    cfg = {}
+    if os.path.exists(HERBARIUM_CONF):
+        with open(HERBARIUM_CONF) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    cfg[k.strip()] = v.strip()
+    return cfg
+
+
+def get_herb_preset() -> str:
+    return _read_herbarium_conf().get("HERBARIUM_ENGINE_PRESET", "pentatonica_calma")
+
+
+def set_herb_preset(name: str) -> tuple[bool, str]:
+    """Scrive HERBARIUM_ENGINE_PRESET in herbarium.conf (EnvironmentFile del
+    servizio) e riavvia gaia-herbarium se già attivo, per applicarlo subito
+    invece che al prossimo boot — nessuna dipendenza da MQTT/Core."""
+    if name not in _HERB_PRESET_NAMES:
+        return False, "preset non valido"
+    cfg = _read_herbarium_conf()
+    cfg["HERBARIUM_ENGINE_PRESET"] = name
+    try:
+        with open(HERBARIUM_CONF, "w") as f:
+            for k, v in cfg.items():
+                f.write(f"{k}={v}\n")
+    except OSError as e:
+        return False, str(e)
+    log(f"Preset Herbarium impostato: {name}")
+    if _svc_active("herbarium"):
+        _systemctl("restart", "gaia-herbarium")
+    return True, ""
+
 
 def _systemctl(*args) -> subprocess.CompletedProcess:
     return subprocess.run(["systemctl", *args], capture_output=True, text=True, timeout=60)
@@ -288,6 +345,7 @@ def services_state() -> dict:
             for n, ic, lb in GAIA_SERVICES],
         "volume": get_volume(),
         "stanza": cfg.get("stanza"),
+        "herb_preset": get_herb_preset(),
     }
 
 
@@ -337,6 +395,9 @@ PORTAL_HTML = """<!DOCTYPE html>
 %ERROR%
 <h2>Servizi</h2>
 <div id="svcs" style="color:#8b949e;font-size:.9rem">carico…</div>
+<div class="volrow" style="margin-top:6px">🎼<select id="herbpreset" style="flex:1"></select>
+  <button style="width:auto;margin:0;padding:8px 14px;min-height:40px;font-size:.85rem;border-radius:8px"
+    onclick="setPreset(this)">Applica</button></div>
 <div class="volrow">🔊<input type="range" id="vol" min="0" max="100" value="60"
   oninput="document.getElementById('vollab').textContent=this.value+'%'"
   onchange="setVol(this.value)"><span class="pct" id="vollab">—</span></div>
@@ -375,6 +436,13 @@ function svcRow(s){
     '<button class="'+(s.active?'stop':'')+'" onclick="toggle(\\''+s.name+'\\','+s.active+',this)">'+
     (s.active?'Spegni':'Accendi')+'</button></div>';
 }
+var HERB_PRESETS = [["pentatonica_calma","Pentatonica calma"],["accordi_maggiori","Accordi maggiori"],
+  ["drone_modale","Drone modale"],["arpeggio_arioso","Arpeggio arioso"],["blues_notturno","Blues notturno"],
+  ["cromatico_libero","Cromatico libero"],["ambient_profondo","Ambient profondo"],
+  ["ambient_cristallino","Ambient cristallino"],["ambient_notturno","Ambient notturno"],
+  ["ambient_respiro","Ambient respiro"],["ambient_alba","Ambient alba"]];
+document.getElementById('herbpreset').innerHTML =
+  HERB_PRESETS.map(function(p){return '<option value="'+p[0]+'">'+p[1]+'</option>';}).join('');
 function render(d){
   document.getElementById('svcs').innerHTML = d.services.map(svcRow).join('');
   var v = document.getElementById('vol');
@@ -382,8 +450,18 @@ function render(d){
     v.value = d.volume;
     document.getElementById('vollab').textContent = d.volume+'%';
   }
+  var p = document.getElementById('herbpreset');
+  if(d.herb_preset && document.activeElement!==p) p.value = d.herb_preset;
 }
 function loadSvcs(){ fetch('/services').then(r=>r.json()).then(render).catch(()=>{}); }
+function setPreset(btn){
+  var sel = document.getElementById('herbpreset');
+  btn.disabled = true; btn.textContent = '…';
+  fetch('/herbarium/preset',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({preset: sel.value})})
+  .then(r=>r.json()).then(d=>{ btn.disabled=false; btn.textContent='Applica'; if(d.error) alert(d.error); })
+  .catch(()=>{ btn.disabled=false; btn.textContent='Applica'; });
+}
 function toggle(name,active,btn){
   btn.disabled = true; btn.textContent = '…';
   fetch('/service',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -506,6 +584,14 @@ class PortalHandler(BaseHTTPRequestHandler):
                 self._send_json({"ok": False}, 400)
                 return
             self._send_json({"ok": True, "volume": get_volume()})
+            return
+
+        if path == "/herbarium/preset":
+            ok, err = set_herb_preset((body.get("preset") or "").strip())
+            resp = {"ok": ok, "herb_preset": get_herb_preset()}
+            if err:
+                resp["error"] = err
+            self._send_json(resp)
             return
 
         if path == "/reboot":

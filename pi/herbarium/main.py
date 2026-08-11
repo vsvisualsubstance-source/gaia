@@ -9,9 +9,11 @@ accordo a volte + percussioni + tappeto, ognuno col proprio canale MIDI,
 dal preset scelto) → bus MIDI virtuale dedicato → Carla headless
 (patch.carxp: Enforce Scale → Quantization → un solo synth SF2 General
 MIDI multi-timbrico, default-GM.sf2, che ha sostituito i 2× Yoshimi usati
-in v2.1/v2.2) → ALSA out. Canale 1 = melodia+accordo, canale 2 = tappeto
-(patch "Pad", davvero sostenuto — niente più il pizzicato/eco di Yoshimi),
-canale 10 = percussioni GM standard, con ritmo proprio (_drum_loop). Il
+in v2.1/v2.2) → ALSA out. Melodia+accordo e tappeto ruotano tra 6 canali/
+strumenti impostati su Carla (VOICE_CHANNELS in music_engine.py, v2.4
+2026-08-11 — patch "Pad" per il tappeto, davvero sostenuto, niente più il
+pizzicato/eco di Yoshimi), canale 10 = percussioni GM standard, con ritmo
+proprio (_drum_loop). Il
 tappeto (_pad_loop) tiene un accordo lungo a orologio proprio (non un
 tremolo: su un synth con sostegno vero ribattere in fretta suona come un
 ticchettio, non come un fondo continuo), indipendente dagli eventi del
@@ -166,10 +168,14 @@ def _pw_wire_audio(env) -> None:
                 print(f"[Herbarium] Audio collegato: Carla:{ch} → {dst.split(':')[0]}")
 
 
+def _pw_env() -> dict:
+    return {**os.environ, "XDG_RUNTIME_DIR": os.environ.get("XDG_RUNTIME_DIR", "/run/user/1000")}
+
+
 def _pw_wire_engine_out(eng_out) -> bool:
     """Cablaggio MIDI nel grafo PipeWire: il bus verso Carla arriva via
     Midi-Bridge (Carla col driver JACK non ha porte ALSA seq dirette)."""
-    env = {**os.environ, "XDG_RUNTIME_DIR": os.environ.get("XDG_RUNTIME_DIR", "/run/user/1000")}
+    env = _pw_env()
     try:
         ins = subprocess.run(["pw-link", "-i"], capture_output=True, text=True,
                              timeout=5, env=env).stdout.splitlines()
@@ -187,7 +193,6 @@ def _pw_wire_engine_out(eng_out) -> bool:
             if r.returncode == 0:
                 print(f"[Herbarium] Bus motore collegato (pw) → Carla")
                 wired = True
-    _pw_wire_audio(env)
     return wired
 
 
@@ -216,6 +221,18 @@ def _sync_wiring():
             _wired = True
             _engine_out_path = path
             _init_drum_bank()
+
+    if not carla_in:
+        # Cablaggio audio: ricontrollato/ricollegato ad OGNI scan, non solo
+        # alla prima volta (bug trovato dal vivo 2026-08-11) — legato prima
+        # allo stesso gate one-shot del MIDI (_wired), quindi se il primo
+        # tentativo cadeva troppo presto (porte Carla non ancora pronte, più
+        # probabile con patch più complesse) l'audio restava scollegato per
+        # sempre fino al riavvio del servizio, e un cambio di scheda audio a
+        # caldo (USB innestata/rimossa) non veniva mai ripreso. pw-link su
+        # una coppia già collegata è un no-op innocuo, quindi richiamarlo ad
+        # ogni giro è sicuro ed è auto-riparante in entrambi i casi.
+        _pw_wire_audio(_pw_env())
 
     # sensori: qualsiasi kernel client TRANNE il bus motore stesso (altrimenti
     # l'engine sentirebbe le proprie note e andrebbe in loop)
@@ -281,8 +298,9 @@ def _play_notes(raw_note: int, raw_velocity: int):
 
 
 def _pad_loop():
-    """Tappeto: canale 2, patch "Pad" del General MIDI su synth SF2
-    dedicato — davvero sostenuto (v2.3, ha sostituito i 2× Yoshimi). Un
+    """Tappeto: canale a rotazione (VOICE_CHANNELS), patch "Pad" del General
+    MIDI su synth SF2 dedicato — davvero sostenuto (v2.3, ha sostituito i
+    2× Yoshimi). Un
     vero ACCORDO LUNGO tenuto a orologio proprio (non tremolo: ribattere
     in fretta su questo synth suona come un ticchettio meccanico, non
     come un fondo continuo — il tremolo serviva solo a simulare un
@@ -316,14 +334,22 @@ def _init_drum_bank():
     è dimostrata fragile (si rompe cambiando file soundfont: i numeri di
     banco/program salvati nel progetto non corrispondono più agli stessi
     strumenti). Lo mandiamo noi via codice a ogni avvio: autoriparante,
-    non dipende da cosa risulta salvato in patch.carxp."""
+    non dipende da cosa risulta salvato in patch.carxp.
+
+    Kit "La Drum" (129:009, scelto a mano 2026-08-11 — prima era 129:001
+    Standard). GOTCHA: DRUM_NOTES in music_engine.py (clap=39, snare=40,
+    cowbell=56, guiro=73) era stato verificato ad orecchio sul kit
+    Standard — su un kit diverso quelle stesse note possono corrispondere
+    ad altri suoni. Se il ritmo suona sbagliato, riverificare a mano in
+    Carla quali note del kit 009 producono davvero clap/snare/cowbell/guiro
+    e aggiornare DRUM_NOTES di conseguenza."""
     if not _engine_out_path:
         return
     try:
         with open(_engine_out_path, "wb", buffering=0) as f:
             f.write(bytes([0xB9, 0x00, 1]))   # Bank Select MSB=1 (canale 10)
-            f.write(bytes([0xB9, 0x20, 0]))   # Bank Select LSB=0 -> banco 128
-            f.write(bytes([0xC9, 0]))         # Program Change 0 (Standard Kit)
+            f.write(bytes([0xB9, 0x20, 0]))   # Bank Select LSB=0 -> banco 128 (display "129")
+            f.write(bytes([0xC9, 8]))         # Program Change 8 -> "009" La Drum (display 1-indicizzato)
         print("[Herbarium] Banco percussioni GM impostato (canale 10)")
     except OSError as e:
         print(f"[Herbarium] Impostazione banco percussioni fallita: {e}")
