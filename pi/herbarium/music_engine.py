@@ -185,6 +185,28 @@ PRESETS = {
         "note_length_ms": 1300,
         "drum_voice": "tom_basso", "drum_prob": 0.25, "drum_velocity": 0.45, "drum_interval_ms": 1000,
     },
+    # ── Melodico: la melodia in primo piano (passo ampio, velocity alta),
+    # accompagnamento ridotto al minimo per non coprirla -- l'opposto della
+    # famiglia ambient sopra, dove è il tappeto/atmosfera a dominare.
+    "melodico_cantabile": {
+        "root": "sol", "scale": "maggiore",
+        "melody_octave": 0, "melody_step_max": 3, "melody_velocity": 0.90,
+        "pad_octave": -1, "pad_chord": "singola", "pad_velocity": 0.35, "pad_hold_s": 9,
+        "chord_style": "triade", "chord_prob": 0.15, "chord_velocity": 0.45,
+        "note_length_ms": 650,
+        "drum_voice": "rullante", "drum_prob": 0.30, "drum_velocity": 0.50, "drum_interval_ms": 500,
+    },
+    # ── Drone: quasi statico, molto più sostenuto di drone_modale --
+    # melodia che si muove appena, accordi quasi mai, tappeto lunghissimo,
+    # percussioni rarissime e profonde. Un fondo continuo, non una frase.
+    "drone_infinito": {
+        "root": "do", "scale": "minore",
+        "melody_octave": -1, "melody_step_max": 1, "melody_velocity": 0.45,
+        "pad_octave": -2, "pad_chord": "potenza", "pad_velocity": 0.55, "pad_hold_s": 24,
+        "chord_style": "potenza", "chord_prob": 0.05, "chord_velocity": 0.35,
+        "note_length_ms": 3000,
+        "drum_voice": "tom_basso", "drum_prob": 0.08, "drum_velocity": 0.30, "drum_interval_ms": 2200,
+    },
 }
 DEFAULT_PRESET = "pentatonica_calma"   # scala pentatonica: qualsiasi nota
                                        # suona bene con qualsiasi altra — la
