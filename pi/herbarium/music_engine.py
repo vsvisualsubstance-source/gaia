@@ -37,16 +37,19 @@ com'è, tutta l'orchestrazione resta qui.
 import random
 import time
 
-# ── Percussioni GM (canale 10, kit "129-001 Standard" del soundfont
-# FluidR3) — 39 (Hand Clap) e 40 (Electric Snare) verificati DIRETTAMENTE
-# dall'utente nella tastiera virtuale di Carla il 2026-07-22: le note
-# "standard" GM (36 kick, 75 claves, 76/77 woodblock...) non risultavano
-# udibili in questo kit specifico, queste due sì.
+# ── Percussioni GM (canale 10, kit "129-009 La Drum" del soundfont
+# FluidR3, cambiato dal 129-001 Standard usato fino al 2026-08-10) —
+# rimappato dal vivo il 2026-08-11 scandendo nota per nota con l'utente:
+# su QUESTO kit sono udibili solo cassa/rullante/tom (35,36,38,40,41,43),
+# tutto il resto testato è muto (37,39,42,44,46,49,51,54,56 — niente
+# hi-hat/piatti/cowbell/clap/guiro, sembra un kit con solo i pezzi
+# "core"). Se si torna al kit Standard, i vecchi valori (clap=39,
+# cowbell=56, guiro=73) erano quelli verificati allora, non validi qui.
 DRUM_NOTES = {
-    "clap":        39,   # Hand Clap
-    "snare":       40,   # Electric Snare
-    "cowbell":     56,
-    "guiro":       73,
+    "cassa":       36,   # Bass Drum 1 (35 = variante equivalente)
+    "rullante":    40,   # Electric Snare (38 = variante equivalente)
+    "tom":         41,   # Low Floor Tom
+    "tom_basso":   43,   # tom più grave
 }
 
 # ── Scale (offset in semitoni dalla fondamentale, entro l'ottava) ───────────
@@ -96,7 +99,7 @@ PRESETS = {
         "pad_octave": -1, "pad_chord": "potenza", "pad_velocity": 0.60, "pad_hold_s": 10,
         "chord_style": "triade", "chord_prob": 0.15, "chord_velocity": 0.55,
         "note_length_ms": 900,
-        "drum_voice": "clap", "drum_prob": 1.0, "drum_velocity": 0.60, "drum_interval_ms": 550,
+        "drum_voice": "rullante", "drum_prob": 1.0, "drum_velocity": 0.60, "drum_interval_ms": 550,
     },
     "accordi_maggiori": {
         "root": "do", "scale": "maggiore",
@@ -104,7 +107,7 @@ PRESETS = {
         "pad_octave": -1, "pad_chord": "triade", "pad_velocity": 0.62, "pad_hold_s": 8,
         "chord_style": "triade", "chord_prob": 0.25, "chord_velocity": 0.65,
         "note_length_ms": 700,
-        "drum_voice": "snare", "drum_prob": 1.0, "drum_velocity": 0.65, "drum_interval_ms": 450,
+        "drum_voice": "rullante", "drum_prob": 1.0, "drum_velocity": 0.65, "drum_interval_ms": 450,
     },
     "drone_modale": {
         "root": "re", "scale": "dorica",
@@ -112,7 +115,7 @@ PRESETS = {
         "pad_octave": -1, "pad_chord": "potenza", "pad_velocity": 0.70, "pad_hold_s": 11,
         "chord_style": "potenza", "chord_prob": 0.20, "chord_velocity": 0.60,
         "note_length_ms": 1200,
-        "drum_voice": "snare", "drum_prob": 1.0, "drum_velocity": 0.60, "drum_interval_ms": 650,
+        "drum_voice": "rullante", "drum_prob": 1.0, "drum_velocity": 0.60, "drum_interval_ms": 650,
     },
     "arpeggio_arioso": {
         "root": "fa", "scale": "maggiore",
@@ -120,7 +123,7 @@ PRESETS = {
         "pad_octave": -1, "pad_chord": "triade", "pad_velocity": 0.55, "pad_hold_s": 7,
         "chord_style": "triade", "chord_prob": 0.20, "chord_velocity": 0.55,
         "note_length_ms": 500,
-        "drum_voice": "clap", "drum_prob": 1.0, "drum_velocity": 0.62, "drum_interval_ms": 400,
+        "drum_voice": "rullante", "drum_prob": 1.0, "drum_velocity": 0.62, "drum_interval_ms": 400,
     },
     "blues_notturno": {
         "root": "la", "scale": "blues",
@@ -128,7 +131,7 @@ PRESETS = {
         "pad_octave": -1, "pad_chord": "potenza", "pad_velocity": 0.65, "pad_hold_s": 10,
         "chord_style": "triade", "chord_prob": 0.20, "chord_velocity": 0.62,
         "note_length_ms": 850,
-        "drum_voice": "guiro", "drum_prob": 1.0, "drum_velocity": 0.65, "drum_interval_ms": 600,
+        "drum_voice": "tom_basso", "drum_prob": 1.0, "drum_velocity": 0.65, "drum_interval_ms": 600,
     },
     "cromatico_libero": {
         "root": "do", "scale": "cromatica",
@@ -136,7 +139,7 @@ PRESETS = {
         "pad_octave": -1, "pad_chord": "singola", "pad_velocity": 0.50, "pad_hold_s": 9,
         "chord_style": "singola", "chord_prob": 0.0, "chord_velocity": 0.5,
         "note_length_ms": 500,
-        "drum_voice": "cowbell", "drum_prob": 1.0, "drum_velocity": 0.55, "drum_interval_ms": 500,
+        "drum_voice": "tom", "drum_prob": 1.0, "drum_velocity": 0.55, "drum_interval_ms": 500,
     },
     # ── Famiglia "ambient" (2026-08-11): musica da sottofondo/relax — note
     # lunghe, accordi rari, percussioni sparse e morbide. Anche più leggeri
@@ -148,7 +151,7 @@ PRESETS = {
         "pad_octave": -2, "pad_chord": "potenza", "pad_velocity": 0.50, "pad_hold_s": 18,
         "chord_style": "potenza", "chord_prob": 0.10, "chord_velocity": 0.40,
         "note_length_ms": 2200,
-        "drum_voice": "guiro", "drum_prob": 0.20, "drum_velocity": 0.35, "drum_interval_ms": 1400,
+        "drum_voice": "tom_basso", "drum_prob": 0.20, "drum_velocity": 0.35, "drum_interval_ms": 1400,
     },
     "ambient_cristallino": {
         "root": "sol", "scale": "misolidia",
@@ -156,7 +159,7 @@ PRESETS = {
         "pad_octave": -1, "pad_chord": "triade", "pad_velocity": 0.45, "pad_hold_s": 13,
         "chord_style": "triade", "chord_prob": 0.15, "chord_velocity": 0.45,
         "note_length_ms": 1400,
-        "drum_voice": "cowbell", "drum_prob": 0.15, "drum_velocity": 0.40, "drum_interval_ms": 1200,
+        "drum_voice": "tom", "drum_prob": 0.15, "drum_velocity": 0.40, "drum_interval_ms": 1200,
     },
     "ambient_notturno": {
         "root": "la", "scale": "minore",
@@ -164,7 +167,7 @@ PRESETS = {
         "pad_octave": -1, "pad_chord": "potenza", "pad_velocity": 0.48, "pad_hold_s": 16,
         "chord_style": "potenza", "chord_prob": 0.12, "chord_velocity": 0.42,
         "note_length_ms": 1900,
-        "drum_voice": "snare", "drum_prob": 0.15, "drum_velocity": 0.35, "drum_interval_ms": 1500,
+        "drum_voice": "rullante", "drum_prob": 0.15, "drum_velocity": 0.35, "drum_interval_ms": 1500,
     },
     "ambient_respiro": {
         "root": "do", "scale": "pentatonica_min",
@@ -172,7 +175,7 @@ PRESETS = {
         "pad_octave": -1, "pad_chord": "singola", "pad_velocity": 0.45, "pad_hold_s": 20,
         "chord_style": "singola", "chord_prob": 0.08, "chord_velocity": 0.40,
         "note_length_ms": 2500,
-        "drum_voice": "clap", "drum_prob": 0.10, "drum_velocity": 0.30, "drum_interval_ms": 1800,
+        "drum_voice": "rullante", "drum_prob": 0.10, "drum_velocity": 0.30, "drum_interval_ms": 1800,
     },
     "ambient_alba": {
         "root": "mi", "scale": "misolidia",
@@ -180,7 +183,7 @@ PRESETS = {
         "pad_octave": -1, "pad_chord": "triade", "pad_velocity": 0.55, "pad_hold_s": 12,
         "chord_style": "triade", "chord_prob": 0.18, "chord_velocity": 0.50,
         "note_length_ms": 1300,
-        "drum_voice": "guiro", "drum_prob": 0.25, "drum_velocity": 0.45, "drum_interval_ms": 1000,
+        "drum_voice": "tom_basso", "drum_prob": 0.25, "drum_velocity": 0.45, "drum_interval_ms": 1000,
     },
 }
 DEFAULT_PRESET = "pentatonica_calma"   # scala pentatonica: qualsiasi nota
@@ -268,7 +271,7 @@ class MusicEngine:
     # ── Percussioni: un accento quando la melodia si accompagna con un
     # accordo — la stessa punteggiatura armonica, ma sentita anche a ritmo.
     def drum_accent(self) -> dict:
-        note = DRUM_NOTES.get(self.cfg.get("drum_voice", "clap"), 39)
+        note = DRUM_NOTES.get(self.cfg.get("drum_voice", "rullante"), 40)
         return {"note": note, "velocity": 127, "delay_ms": 0, "length_ms": 80, "channel": 10}
 
     def trigger(self, raw_note: int, raw_velocity: int) -> list:
@@ -326,7 +329,7 @@ class MusicEngine:
     def drum_tick(self) -> dict | None:
         if random.random() > self.cfg.get("drum_prob", 0.0):
             return None
-        note = DRUM_NOTES.get(self.cfg.get("drum_voice", "clap"), 39)
+        note = DRUM_NOTES.get(self.cfg.get("drum_voice", "rullante"), 40)
         return {"note": note, "velocity": 127, "delay_ms": 0, "length_ms": 60, "channel": 10}
 
     def drum_interval_s(self) -> float:

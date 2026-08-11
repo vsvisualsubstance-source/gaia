@@ -337,12 +337,12 @@ def _init_drum_bank():
     non dipende da cosa risulta salvato in patch.carxp.
 
     Kit "La Drum" (129:009, scelto a mano 2026-08-11 — prima era 129:001
-    Standard). GOTCHA: DRUM_NOTES in music_engine.py (clap=39, snare=40,
-    cowbell=56, guiro=73) era stato verificato ad orecchio sul kit
-    Standard — su un kit diverso quelle stesse note possono corrispondere
-    ad altri suoni. Se il ritmo suona sbagliato, riverificare a mano in
-    Carla quali note del kit 009 producono davvero clap/snare/cowbell/guiro
-    e aggiornare DRUM_NOTES di conseguenza."""
+    Standard). DRUM_NOTES in music_engine.py è stato riverificato ad
+    orecchio nota per nota su QUESTO kit lo stesso giorno (cassa=36,
+    rullante=40, tom=41, tom_basso=43 — hi-hat/piatti/cowbell/clap/guiro
+    muti su questo kit specifico). Se si cambia di nuovo kit, la mappa va
+    riverificata da capo allo stesso modo: non è detto che le stesse note
+    producano gli stessi suoni su un kit diverso."""
     if not _engine_out_path:
         return
     try:
