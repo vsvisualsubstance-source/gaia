@@ -153,7 +153,12 @@ def _pw_wire_audio(env) -> None:
         return
     sinks = [l.strip() for l in ins if "alsa_output" in l and "playback_F" in l]
     for ch, suffix in (("audio-out1", "playback_FL"), ("audio-out2", "playback_FR")):
-        dst = next((p for p in sinks if p.endswith(suffix)), None)
+        matches = [p for p in sinks if p.endswith(suffix)]
+        # Se c'è una scheda USB collegata, preferiscila sempre al jack onboard
+        # (bug trovato dal vivo 2026-08-11: con due sink presenti veniva preso
+        # il primo della lista di pw-link, quasi sempre l'onboard).
+        dst = next((p for p in matches if "alsa_output.usb-" in p), None) or \
+              (matches[0] if matches else None)
         if dst:
             r = subprocess.run(["pw-link", f"Carla:{ch}", dst],
                                capture_output=True, text=True, timeout=5, env=env)
