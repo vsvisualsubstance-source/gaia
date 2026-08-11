@@ -62,6 +62,12 @@ SCALES = {
     "blues":              [0, 3, 5, 6, 7, 10],
     "dorica":             [0, 2, 3, 5, 7, 9, 10],
     "misolidia":          [0, 2, 4, 5, 7, 9, 10],
+    # Frigia dominante ("Hijaz" nella teoria dei maqam arabi) -- la
+    # seconda minore + terza maggiore ravvicinate danno il carattere
+    # arabeggiante riconoscibile in un sistema a 12 semitoni (i veri maqam
+    # usano microtoni, non rappresentabili in MIDI standard senza pitch
+    # bend; questa è l'approssimazione occidentale standard).
+    "frigia_dominante":   [0, 1, 4, 5, 7, 8, 10],
 }
 
 # Fondamentali — stesse parole del solfeggio già usate per l'Herbarium sullo
@@ -206,6 +212,19 @@ PRESETS = {
         "chord_style": "potenza", "chord_prob": 0.05, "chord_velocity": 0.35,
         "note_length_ms": 3000,
         "drum_voice": "tom_basso", "drum_prob": 0.08, "drum_velocity": 0.30, "drum_interval_ms": 2200,
+    },
+    # ── Arabeggiante: scala frigia dominante, accordi ridotti a quinte
+    # vuote (potenza) invece di triadi -- un'armonizzazione occidentale
+    # piena suonerebbe fuori stile su un modo mediorientale. Percussione
+    # più presente e incalzante (drum_prob/interval), a evocare un
+    # tamburo a cornice piuttosto che un accento occasionale.
+    "arabeggiante": {
+        "root": "re", "scale": "frigia_dominante",
+        "melody_octave": 0, "melody_step_max": 2, "melody_velocity": 0.85,
+        "pad_octave": -1, "pad_chord": "potenza", "pad_velocity": 0.55, "pad_hold_s": 10,
+        "chord_style": "potenza", "chord_prob": 0.20, "chord_velocity": 0.55,
+        "note_length_ms": 550,
+        "drum_voice": "tom", "drum_prob": 0.60, "drum_velocity": 0.60, "drum_interval_ms": 350,
     },
 }
 DEFAULT_PRESET = "pentatonica_calma"   # scala pentatonica: qualsiasi nota

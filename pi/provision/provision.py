@@ -216,6 +216,7 @@ HERB_PRESETS = [
     ("ambient_alba",        "Ambient alba"),
     ("melodico_cantabile",  "Melodico cantabile"),
     ("drone_infinito",      "Drone infinito"),
+    ("arabeggiante",        "Arabeggiante"),
 ]
 _HERB_PRESET_NAMES = {k for k, _ in HERB_PRESETS}
 HERBARIUM_CONF = "/etc/gaia/herbarium.conf"
@@ -472,7 +473,8 @@ var HERB_PRESETS = [["pentatonica_calma","Pentatonica calma"],["accordi_maggiori
   ["cromatico_libero","Cromatico libero"],["ambient_profondo","Ambient profondo"],
   ["ambient_cristallino","Ambient cristallino"],["ambient_notturno","Ambient notturno"],
   ["ambient_respiro","Ambient respiro"],["ambient_alba","Ambient alba"],
-  ["melodico_cantabile","Melodico cantabile"],["drone_infinito","Drone infinito"]];
+  ["melodico_cantabile","Melodico cantabile"],["drone_infinito","Drone infinito"],
+  ["arabeggiante","Arabeggiante"]];
 document.getElementById('herbpreset').innerHTML =
   HERB_PRESETS.map(function(p){return '<option value="'+p[0]+'">'+p[1]+'</option>';}).join('');
 function render(d){
