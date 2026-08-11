@@ -68,6 +68,7 @@ _lock = threading.Lock()
 _wired = False                       # engine_out -> Carla collegato?
 _engine = MusicEngine(config.ENGINE_PRESET)
 _engine_out_path: str | None = None  # /dev/snd/midiC{card}D{dev} del bus verso Carla
+_drum_volume = config.DRUM_VOLUME    # 0-100, CC7 (Channel Volume) sul canale 10
 _play_lock = threading.Lock()        # protegge le scritture concorrenti sul device MIDI
 
 
@@ -353,6 +354,22 @@ def _init_drum_bank():
         print("[Herbarium] Banco percussioni GM impostato (canale 10)")
     except OSError as e:
         print(f"[Herbarium] Impostazione banco percussioni fallita: {e}")
+    _send_drum_volume()
+
+
+def _send_drum_volume():
+    """CC7 (Channel Volume) sul canale 10 -- controllo separato dal volume
+    generale del Pi (quello è l'uscita audio intera, questo solo la
+    batteria). _drum_volume 0-100, scalato a 0-127 per il MIDI."""
+    if not _engine_out_path:
+        return
+    cc_val = round(max(0, min(100, _drum_volume)) * 1.27)
+    try:
+        with open(_engine_out_path, "wb", buffering=0) as f:
+            f.write(bytes([0xB9, 0x07, cc_val]))
+        print(f"[Herbarium] Volume batteria (canale 10) -> {_drum_volume}%")
+    except OSError as e:
+        print(f"[Herbarium] Impostazione volume batteria fallita: {e}")
 
 
 def _write_note(note: int, velocity: int, length_ms: int, channel: int = 1):
@@ -399,6 +416,7 @@ def _publish_state():
     _mqtt.publish(f"gaia/herbarium/{_current_room}/state",
                   json.dumps({"sources": srcs, "notes_1m": notes_1m,
                               "stanza": _current_room, "preset": _engine.preset_name,
+                              "drum_volume": _drum_volume,
                               "ts": int(now * 1000)}), retain=True)
 
 
@@ -414,17 +432,27 @@ def _on_connect(client, userdata, flags, rc, properties=None):
 
 
 def _on_message(client, userdata, msg):
-    global _current_room
+    global _current_room, _drum_volume
     if msg.topic.endswith("/music"):
         try:
-            preset = json.loads(msg.payload).get("preset")
+            payload = json.loads(msg.payload)
         except ValueError:
             return
-        if preset and _engine.set_preset(preset):
-            print(f"[Herbarium] Preset musicale → {preset}")
+        preset = payload.get("preset")
+        if preset:
+            if _engine.set_preset(preset):
+                print(f"[Herbarium] Preset musicale → {preset}")
+            else:
+                print(f"[Herbarium] Preset sconosciuto: {preset!r}")
+        if "drum_volume" in payload:
+            try:
+                _drum_volume = max(0, min(100, int(payload["drum_volume"])))
+            except (TypeError, ValueError):
+                pass
+            else:
+                _send_drum_volume()
+        if preset or "drum_volume" in payload:
             _publish_state()
-        else:
-            print(f"[Herbarium] Preset sconosciuto: {preset!r}")
         return
     try:
         new_room = json.loads(msg.payload).get("room")

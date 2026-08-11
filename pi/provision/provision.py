@@ -255,6 +255,31 @@ def set_herb_preset(name: str) -> tuple[bool, str]:
     return True, ""
 
 
+def get_drum_volume() -> int:
+    try:
+        return int(_read_herbarium_conf().get("HERBARIUM_DRUM_VOLUME", "100"))
+    except ValueError:
+        return 100
+
+
+def set_drum_volume(value: int) -> tuple[bool, str]:
+    """Stesso principio di set_herb_preset: scrive HERBARIUM_DRUM_VOLUME in
+    herbarium.conf e riavvia gaia-herbarium se già attivo."""
+    value = max(0, min(100, value))
+    cfg = _read_herbarium_conf()
+    cfg["HERBARIUM_DRUM_VOLUME"] = str(value)
+    try:
+        with open(HERBARIUM_CONF, "w") as f:
+            for k, v in cfg.items():
+                f.write(f"{k}={v}\n")
+    except OSError as e:
+        return False, str(e)
+    log(f"Volume batteria Herbarium impostato: {value}%")
+    if _svc_active("herbarium"):
+        _systemctl("restart", "gaia-herbarium")
+    return True, ""
+
+
 def _systemctl(*args) -> subprocess.CompletedProcess:
     return subprocess.run(["systemctl", *args], capture_output=True, text=True, timeout=60)
 
@@ -346,6 +371,7 @@ def services_state() -> dict:
         "volume": get_volume(),
         "stanza": cfg.get("stanza"),
         "herb_preset": get_herb_preset(),
+        "herb_drum_volume": get_drum_volume(),
     }
 
 
@@ -398,6 +424,9 @@ PORTAL_HTML = """<!DOCTYPE html>
 <div class="volrow" style="margin-top:6px">🎼<select id="herbpreset" style="flex:1"></select>
   <button style="width:auto;margin:0;padding:8px 14px;min-height:40px;font-size:.85rem;border-radius:8px"
     onclick="setPreset(this)">Applica</button></div>
+<div class="volrow">🥁<input type="range" id="herbdrumvol" min="0" max="100" value="100"
+  oninput="document.getElementById('herbdrumvollab').textContent=this.value+'%'"
+  onchange="setDrumVolume(this.value)"><span class="pct" id="herbdrumvollab">—</span></div>
 <div class="volrow">🔊<input type="range" id="vol" min="0" max="100" value="60"
   oninput="document.getElementById('vollab').textContent=this.value+'%'"
   onchange="setVol(this.value)"><span class="pct" id="vollab">—</span></div>
@@ -452,6 +481,11 @@ function render(d){
   }
   var p = document.getElementById('herbpreset');
   if(d.herb_preset && document.activeElement!==p) p.value = d.herb_preset;
+  var dv = document.getElementById('herbdrumvol');
+  if(d.herb_drum_volume!=null && document.activeElement!==dv){
+    dv.value = d.herb_drum_volume;
+    document.getElementById('herbdrumvollab').textContent = d.herb_drum_volume+'%';
+  }
 }
 function loadSvcs(){ fetch('/services').then(r=>r.json()).then(render).catch(()=>{}); }
 function setPreset(btn){
@@ -461,6 +495,10 @@ function setPreset(btn){
     body:JSON.stringify({preset: sel.value})})
   .then(r=>r.json()).then(d=>{ btn.disabled=false; btn.textContent='Applica'; if(d.error) alert(d.error); })
   .catch(()=>{ btn.disabled=false; btn.textContent='Applica'; });
+}
+function setDrumVolume(v){
+  fetch('/herbarium/drum_volume',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({value:+v})});
 }
 function toggle(name,active,btn){
   btn.disabled = true; btn.textContent = '…';
@@ -589,6 +627,18 @@ class PortalHandler(BaseHTTPRequestHandler):
         if path == "/herbarium/preset":
             ok, err = set_herb_preset((body.get("preset") or "").strip())
             resp = {"ok": ok, "herb_preset": get_herb_preset()}
+            if err:
+                resp["error"] = err
+            self._send_json(resp)
+            return
+
+        if path == "/herbarium/drum_volume":
+            try:
+                ok, err = set_drum_volume(int(body.get("value")))
+            except (TypeError, ValueError):
+                self._send_json({"ok": False, "error": "valore non valido"}, 400)
+                return
+            resp = {"ok": ok, "herb_drum_volume": get_drum_volume()}
             if err:
                 resp["error"] = err
             self._send_json(resp)

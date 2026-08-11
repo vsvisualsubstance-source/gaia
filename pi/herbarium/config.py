@@ -39,3 +39,8 @@ UDP_PORT          = int(_get("HERBARIUM_UDP_PORT", "8791"))
 # Motore musicale: preset di default (scale.md in music_engine.py). Cambiabile
 # a caldo via MQTT gaia/herbarium/{stanza}/music {"preset": "..."}.
 ENGINE_PRESET = _get("HERBARIUM_ENGINE_PRESET", "pentatonica_calma")
+
+# Volume batteria (canale 10, CC7 MIDI) 0-100 -- separato dal volume generale
+# del Pi. Cambiabile a caldo via MQTT gaia/herbarium/{stanza}/music
+# {"drum_volume": N} (2026-08-11).
+DRUM_VOLUME = int(_get("HERBARIUM_DRUM_VOLUME", "100"))
