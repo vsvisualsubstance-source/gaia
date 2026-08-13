@@ -38,6 +38,17 @@ echo ""
 echo "[3/5] Installazione pacchetti Python..."
 # numpy prima — ultralytics deve trovare la versione giusta
 pip install "numpy>=1.24,<2.0"
+# torch+torchvision CPU-only PRIMA di requirements.txt: su aarch64 il resolver
+# di pip può scegliere una build con dipendenze CUDA (nvidia-cudnn/cublas/nccl/
+# triton...), inutili senza GPU e che da sole superano i 2GB — saturano /tmp
+# (spesso tmpfs piccolo sui Pi) anche con dischi ampiamente capienti (bug
+# trovato dal vivo 2026-08-13 su vsrasp01: "No space left on device" con 37G
+# liberi su /). torchvision va installato QUI insieme a torch, dallo stesso
+# indice: se lo si lascia arrivare dopo come dipendenza transitiva di
+# ultralytics, pip lo prende dall'indice PyPI normale — una build non
+# allineata a torch+cpu che fallisce all'import ("RuntimeError: operator
+# torchvision::nms does not exist", stesso giorno, stesso Pi).
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 pip install -r "$SCRIPT_DIR/requirements.txt"
 echo "  ✓ pacchetti Python OK"
 

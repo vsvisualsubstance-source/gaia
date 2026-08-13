@@ -63,14 +63,14 @@
       "cmd": [
         "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
         "--kiosk",
-        "http://192.168.1.240:1880/welcome.html?cam=localhost&room={STANZA}",
+        "http://localhost:1880/welcome.html?cam=localhost&room={STANZA}",
         "--edge-kiosk-type=fullscreen",
         "--no-first-run",
         "--user-data-dir=C:\\gaia\\kiosk-profile"
       ],
       "cwd": "C:\\gaia",
       "check_script": false,
-      "_nota": "Welcome sul monitor OPS. Il task agent è 'Solo interattivo' quindi Edge appare sul desktop. user-data-dir dedicato: il processo resta figlio dell'agent (stop funziona)."
+      "_nota": "Welcome sul monitor OPS. Il task agent è 'Solo interattivo' quindi Edge appare sul desktop. user-data-dir dedicato: il processo resta figlio dell'agent (stop funziona). URL su localhost, NON sull'IP LAN (192.168.1.240, 2026-08-13): Node-RED gira in Docker/WSL2 con networking mirrored, che non crea un listener lato Windows per la porta pubblicata — OPS non riesce a raggiungere se stesso sul proprio IP di LAN (hairpin), solo su localhost o da macchine esterne (Core, Pi). welcome.html usa poi location.hostname per le sue chiamate a Node-RED, quindi l'host nell'URL iniziale si propaga a tutte le fetch/WS successive."
     },
     "mediaplayer": {
       "cmd": [

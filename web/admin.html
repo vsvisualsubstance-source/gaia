@@ -697,6 +697,7 @@ button.small{padding:3px 9px;font-size:.78rem;margin:0}
     <span id="pm-conn-label" style="font-size:.8rem;color:var(--muted)">Disconnesso</span>
     <button class="secondary small" onclick="pmCleanRooms()" title="Rimuove le stanze senza device e fuori mappa (dati live + topic retained)">🧹 Stanze orfane</button>
   </div>
+  <div id="pm-welcome-menu" style="display:none;flex-wrap:wrap;gap:6px;margin-bottom:10px"></div>
   <div id="pm-no-devices" style="text-align:center;padding:40px 20px;color:var(--muted);font-size:.9rem">
     Nessun Pi connesso — in attesa di heartbeat…
   </div>
@@ -1663,7 +1664,7 @@ async function deleteClip(apiBase, label, idx, refreshFn) {
 // gaia_admin.py — niente card clonate.
 // Stanza ATTUALE di ogni device dai profili semantici (Node-RED): label,
 // meter live e registrazioni seguono il device quando viene spostato.
-const _devRooms = { 'pi-fd75d8': 'cucina', 'ops-silvermini2': 'soggiorno', 'minipc-core-node-0': 'salotto' };
+const _devRooms = { 'pi-fd75d8': 'cucina', 'ops-silvermini2': 'soggiorno', 'minipc-core-node-0': 'salotto', 'pi-b2c8db': 'test' };
 function _wwRoom(key) { return _devRooms[(WW_DEVICES[key] || {}).deviceId] || ''; }
 async function loadDeviceRooms() {
   try {
@@ -1726,6 +1727,22 @@ const WW_DEVICES = {
       body: JSON.stringify({label, duration_s: dur, stanza: _wwRoom('ops') || 'soggiorno'})}),
     recDelay: dur => (dur + 3) * 1000,
     trainOk: '✓ Modello Gaia (OPS) addestrato e inviato a OPS — riavvia voice da Pi Manager',
+    trainRefreshDelay: 0,
+  },
+  vsrasp01: {
+    name: 'vsrasp01', deviceId: 'pi-b2c8db',
+    desc:  'Modello per il mic di vsrasp01 (ora in {ROOM}, mic webcam USB). La stanza si ' +
+           'sveglia se il trigger base "alexa" supera la SUA soglia OPPURE se questo ' +
+           'modello supera la propria (card "Voce {ROOM} — Soglie wakeword"). Distribuito via OTA.',
+    api:   '/api/gaia-wakeword-vsrasp01',
+    statsRoom: () => _wwRoom('vsrasp01'), rmsScale: 8000,
+    mic:   false,
+    recLabel: '📡 Registra da vsrasp01 — {ROOM}',
+    record: (label, dur) => fetch(`${API}/api/gaia-wakeword/record`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({label, duration_s: dur, stanza: _wwRoom('vsrasp01') || 'test'})}),
+    recDelay: dur => (dur + 3) * 1000,
+    trainOk: '✓ Modello Gaia (vsrasp01) addestrato e distribuito — riavvia voice da Pi Manager',
     trainRefreshDelay: 0,
   },
 };
@@ -2166,15 +2183,18 @@ function initPiManager() {
         _pmDevices[id] = d;
         isNew ? pmBuildCard(id, d) : pmPatchCard(id, d);
         pmLog('in', `[${id}] stanza=${d.stanza||'?'} ip=${d.ip||'?'}`);
+        pmWelcomeMenuRender();
       } catch(e) { pmLog('err', 'Parse: ' + e.message); }
     });
     setInterval(() => {
       const now = Date.now();
+      let changed = false;
       for (const [id, d] of Object.entries(_pmDevices)) {
         const was = d._offline;
         d._offline = (now - d._lastSeen) > 90000;
-        if (was !== d._offline) pmPatchCard(id, d);
+        if (was !== d._offline) { pmPatchCard(id, d); changed = true; }
       }
+      if (changed) pmWelcomeMenuRender();
     }, 10000);
   }
 
@@ -2320,15 +2340,23 @@ function pmSvcBtnHtml(key, d) {
   const meta  = PM_SVC_META[key] || {label:key, icon:'⚙️'};
   const state = (d.services||{})[key] || 'inactive';
   const cls   = state==='active'?'running':state==='failed'?'failed':'';
+  // camera: l'agent (Pi) ignora enable/disable diretti — parte/si ferma da
+  // sola insieme a yolo/mediapipe/kiosk (vedi CAMERA_CONSUMERS in agent.py).
+  // Bottoni ▶/■/↺ qui sarebbero un no-op silenzioso e fuorviante (bug
+  // segnalato dal vivo 2026-08-13: "non parte dalla dashboard" — in realtà
+  // va acceso via Yolo/Mediapipe) — mostro solo lo stato.
+  const toggle = key === 'camera'
+    ? `<div class="pm-svc-toggle" style="font-size:.72rem;color:var(--muted);text-align:center">auto (Yolo/Mediapipe)</div>`
+    : `<div class="pm-svc-toggle">
+      <button class="pm-btn green pm-svc-on" data-svc="${key}" title="Avvia">▶</button>
+      <button class="pm-btn red pm-svc-off"  data-svc="${key}" title="Stop">■</button>
+      <button class="pm-btn gray pm-svc-rst" data-svc="${key}" title="Restart">↺</button>
+    </div>`;
   return `<div class="pm-svc-btn ${cls}" data-svc="${key}">
     <span class="svc-icon">${meta.icon}</span>
     <span class="svc-name">${meta.label}</span>
     <span class="svc-state">${state}</span>
-    <div class="pm-svc-toggle">
-      <button class="pm-btn green pm-svc-on" data-svc="${key}" title="Avvia">▶</button>
-      <button class="pm-btn red pm-svc-off"  data-svc="${key}" title="Stop">■</button>
-      <button class="pm-btn gray pm-svc-rst" data-svc="${key}" title="Restart">↺</button>
-    </div>
+    ${toggle}
   </div>`;
 }
 function pmPerfHtml(d) {
@@ -2342,6 +2370,27 @@ function pmCapBadges(d) {
   const caps = d.capabilities||{};
   const b = [caps.camera?`<span class="pm-badge cap">📷 Camera</span>`:'', caps.mic?`<span class="pm-badge cap">🎤 Mic</span>`:''].filter(Boolean).join('');
   return b?`<div style="display:flex;gap:6px;flex-wrap:wrap">${b}</div>`:'';
+}
+
+// Menu rapido: un link Welcome per stanza (cam=IP del device con fotocamera
+// in quella stanza, room=stanza) — così si apre qualunque welcome senza
+// dover ricordare IP/parametri a mano (2026-08-13).
+function pmWelcomeMenuRender() {
+  const menu = document.getElementById('pm-welcome-menu');
+  if (!menu) return;
+  const byStanza = {};
+  for (const d of Object.values(_pmDevices)) {
+    if (!d.stanza || !d.capabilities?.camera || d._offline) continue;
+    byStanza[d.stanza] = d;   // ultimo vince se più device nella stessa stanza
+  }
+  const stanze = Object.keys(byStanza).sort();
+  if (!stanze.length) { menu.style.display = 'none'; menu.innerHTML = ''; return; }
+  menu.style.display = 'flex';
+  menu.innerHTML = stanze.map(s => {
+    const d = byStanza[s];
+    const url = `http://${location.hostname}:1880/welcome.html?cam=${encodeURIComponent(d.ip||'')}&room=${encodeURIComponent(s)}`;
+    return `<button class="pm-btn blue" style="width:auto;padding:4px 12px" onclick="window.open('${url}','_blank')">🖥 ${pmEsc(d.name||s)}</button>`;
+  }).join('');
 }
 
 function pmBuildCard(id, d) {
@@ -2398,6 +2447,7 @@ function pmBuildCard(id, d) {
       </div>
     </div>`:''}
     <div class="pm-card-actions">
+      ${d.capabilities?.camera && d.stanza ? `<button class="pm-btn blue pm-btn-welcome" onclick="window.open('http://${location.hostname}:1880/welcome.html?cam=${encodeURIComponent(d.ip||'')}&room=${encodeURIComponent(d.stanza)}','_blank')">🖥 Apri Welcome</button>` : ''}
       <button class="pm-btn gray pm-btn-status">Status</button>
       <button class="pm-btn amber pm-btn-reboot">Reboot</button>
       <button class="pm-btn red pm-btn-shutdown">⏻ Spegni</button>

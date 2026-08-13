@@ -1,6 +1,6 @@
 numpy>=2.0
 opencv-python-headless>=4.8
-mediapipe>=0.10
+mediapipe>=0.10,<1.0
 paho-mqtt>=1.6.1
 # Solo se OSC_LANDMARKS=1 (mocap diretto a TouchDesigner) — non serve sui Pi
 python-osc>=1.8

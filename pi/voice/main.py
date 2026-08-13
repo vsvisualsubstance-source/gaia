@@ -3,6 +3,8 @@
 GAIA Voice Node
 Pipeline: openWakeWord → faster-whisper STT → MQTT → Piper TTS
 """
+from __future__ import annotations
+
 import base64
 import io
 import json
@@ -17,9 +19,11 @@ import time
 import urllib.request
 import urllib.error
 import wave
+from fractions import Fraction
 
 import numpy as np
 import sounddevice as sd
+from scipy.signal import resample_poly
 from faster_whisper import WhisperModel
 from openwakeword.model import Model as WakeWordModel
 import paho.mqtt.client as mqtt
@@ -370,6 +374,61 @@ if os.path.exists(_DOORBELL_MODEL_PATH):
 SR    = config.SAMPLE_RATE
 CHUNK = config.CHUNK_SIZE
 
+
+class _MicStream:
+    """Wrapper attorno a sd.InputStream, stessa interfaccia (context manager,
+    .start()/.stop()/.close()/.read(n) → (data, overflowed)).
+
+    Alcuni microfoni USB (es. webcam economiche) espongono solo il loro
+    samplerate nativo (spesso 48000) e rifiutano richieste dirette a SR
+    (16000, quello che vuole openWakeWord/Whisper) con "Invalid sample rate"
+    — PortAudio, sul backend ALSA, apre l'hardware "hw:" diretto, senza il
+    layer "plug" che farebbe la conversione; sounddevice non espone quel
+    layer come device selezionabile (bug dal vivo 2026-08-13 su vsrasp01,
+    webcam CVTE ferma a 48000Hz). Qui si cade sul samplerate nativo del
+    device e si ricampiona in lettura — trasparente per chi chiama."""
+
+    def __init__(self, samplerate, channels, dtype, blocksize, device):
+        self._ratio = 1
+        try:
+            self._stream = sd.InputStream(samplerate=samplerate, channels=channels,
+                                          dtype=dtype, blocksize=blocksize, device=device)
+        except sd.PortAudioError:
+            dev = sd.query_devices(device, "input")
+            native_sr = int(dev["default_samplerate"])
+            frac = Fraction(samplerate, native_sr).limit_denominator(100)
+            self._up, self._down = frac.numerator, frac.denominator
+            self._out_n = blocksize
+            native_blocksize = max(1, round(blocksize * self._down / self._up))
+            print(f"[Voice] Mic '{dev['name']}' non supporta {samplerate}Hz, "
+                  f"uso {native_sr}Hz nativo + resample")
+            self._stream = sd.InputStream(samplerate=native_sr, channels=channels,
+                                          dtype=dtype, blocksize=native_blocksize, device=device)
+            self._ratio = self._up / self._down
+
+    def __enter__(self):
+        self._stream.__enter__()
+        return self
+
+    def __exit__(self, *a):
+        return self._stream.__exit__(*a)
+
+    def start(self): self._stream.start()
+    def stop(self):  self._stream.stop()
+    def close(self): self._stream.close()
+
+    def read(self, n):
+        if self._ratio == 1:
+            return self._stream.read(n)
+        native_n = max(1, round(n * self._down / self._up))
+        data, overflowed = self._stream.read(native_n)
+        resampled = resample_poly(data.flatten(), self._up, self._down).astype(np.int16)
+        # resample_poly può dare +/-1 campione rispetto a n per arrotondamento
+        if len(resampled) < n:
+            resampled = np.pad(resampled, (0, n - len(resampled)))
+        return resampled[:n].reshape(-1, 1), overflowed
+
+
 # ── Stats loop wakeword ────────────────────────────────────────────────────────
 _stats_ts         = 0.0
 _vol_samples: list[float] = []
@@ -456,8 +515,8 @@ def _do_calibrate(duration_s: int = 5):
     samples: list[float] = []
     n_chunks = int(SR / CHUNK * duration_s)
     try:
-        with sd.InputStream(samplerate=SR, channels=1, dtype="int16",
-                            blocksize=CHUNK, device=config.MIC_DEVICE) as s:
+        with _MicStream(samplerate=SR, channels=1, dtype="int16",
+                        blocksize=CHUNK, device=config.MIC_DEVICE) as s:
             for _ in range(n_chunks):
                 if not _running:
                     break
@@ -491,8 +550,8 @@ def _do_record_clip(label: str, duration_s: int):
     _publish_status("recording")
     chunks = []
     n_chunks = int(SR / CHUNK * duration_s)
-    with sd.InputStream(samplerate=SR, channels=1, dtype="int16",
-                        blocksize=CHUNK, device=config.MIC_DEVICE) as s:
+    with _MicStream(samplerate=SR, channels=1, dtype="int16",
+                    blocksize=CHUNK, device=config.MIC_DEVICE) as s:
         for _ in range(n_chunks):
             if not _running:
                 break
@@ -537,8 +596,8 @@ def _record_speech() -> np.ndarray | None:
     SILENCE_LIMIT = int(SR / CHUNK * 1.5)
     MAX_CHUNKS    = int(SR / CHUNK * config.RECORD_SECONDS_MAX)
 
-    with sd.InputStream(samplerate=SR, channels=1, dtype="int16", blocksize=CHUNK,
-                        device=config.MIC_DEVICE) as s:
+    with _MicStream(samplerate=SR, channels=1, dtype="int16", blocksize=CHUNK,
+                    device=config.MIC_DEVICE) as s:
         for _ in range(MAX_CHUNKS):
             if not _running:
                 break
@@ -586,7 +645,7 @@ def main():
 
         # ── Fase 1: ascolto wakeword ───────────────────────────────
         _publish_status("listening")
-        wakeword_stream = sd.InputStream(
+        wakeword_stream = _MicStream(
             samplerate=SR, channels=1, dtype="int16", blocksize=CHUNK,
             device=config.MIC_DEVICE,
         )

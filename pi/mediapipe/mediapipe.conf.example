@@ -6,7 +6,7 @@
 MEDIAPIPE_VENV=
 
 # Nome della stanza/camera (usato come room ID nel brain)
-CAMERA_NAME=ingresso1
+CAMERA_NAME=CONFIGURA
 
 # IP del broker MQTT (il miniPC con Node-RED)
 MQTT_HOST=192.168.1.142

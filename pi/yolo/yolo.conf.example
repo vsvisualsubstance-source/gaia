@@ -6,7 +6,7 @@
 YOLO_VENV=
 
 # Nome della stanza/room (claim iniziale, poi il Device Registry può correggere)
-NODE_ID=ingresso
+NODE_ID=CONFIGURA
 
 # Localizzazione
 LOCATION=casa

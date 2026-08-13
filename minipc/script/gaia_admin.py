@@ -158,6 +158,10 @@ GAIA_MODEL_PATH_MINIPC   = os.path.join(GAIA_WAKEWORD_DIR_MINIPC, "gaia_verifier
 # ma vanno smistati per device — vedi GAIA_WW_DIR_BY_DEVICE.
 GAIA_WAKEWORD_DIR_OPS = os.path.expanduser("~/core-node-0/minipc/script/gaia_wakeword_samples_ops")
 GAIA_MODEL_PATH_OPS   = os.path.join(GAIA_WAKEWORD_DIR_OPS, "gaia_verifier_ops.pkl")
+# Dataset/modello dedicato al mic di vsrasp01 (pi-b2c8db, Pi di test 2026-08-13
+# — mic webcam USB, acustica diversa dal Pi ingresso). Stesso schema di OPS.
+GAIA_WAKEWORD_DIR_VSRASP01 = os.path.expanduser("~/core-node-0/minipc/script/gaia_wakeword_samples_vsrasp01")
+GAIA_MODEL_PATH_VSRASP01   = os.path.join(GAIA_WAKEWORD_DIR_VSRASP01, "gaia_verifier_vsrasp01.pkl")
 # stanza → dataset per i campioni "gaia_*" registrati da remoto (default: Pi)
 # PER DEVICE, non per stanza: i device CAMBIANO stanza (2026-07-12 il Pi è
 # passato in cucina — per stanza i suoi campioni sarebbero finiti nel dataset
@@ -165,10 +169,11 @@ GAIA_MODEL_PATH_OPS   = os.path.join(GAIA_WAKEWORD_DIR_OPS, "gaia_verifier_ops.p
 GAIA_WW_DIR_BY_DEVICE = {
     "pi-fd75d8":       GAIA_WAKEWORD_DIR,
     "ops-silvermini2": GAIA_WAKEWORD_DIR_OPS,
+    "pi-b2c8db":       GAIA_WAKEWORD_DIR_VSRASP01,
 }
 # Target OTA mirati per i modelli voice: il broadcast colpirebbe TUTTI i
 # device voice (dal 2026-07-06 anche OPS) sovrascrivendo i modelli a vicenda.
-VOICE_MODEL_TARGETS = {"pi": ["pi-fd75d8"], "ops": ["ops-silvermini2"]}
+VOICE_MODEL_TARGETS = {"pi": ["pi-fd75d8"], "ops": ["ops-silvermini2"], "vsrasp01": ["pi-b2c8db"]}
 
 # ── Provision registry — device registrati al boot (discovery livello 3) ──
 # Contratto client: docs/discovery-protocol.md + pi/agent/agent.py::_provision_register
@@ -349,6 +354,11 @@ class AdminHandler(BaseHTTPRequestHandler):
             if len(parts) >= 6:
                 self._delete_clip(GAIA_WAKEWORD_DIR_OPS, parts[4], int(parts[5]))
                 return
+        if p.startswith("/api/gaia-wakeword-vsrasp01/clip/"):
+            parts = p.split("/")
+            if len(parts) >= 6:
+                self._delete_clip(GAIA_WAKEWORD_DIR_VSRASP01, parts[4], int(parts[5]))
+                return
 
         if p.startswith("/api/gaia-wakeword-minipc/clip/"):
             parts = p.split("/")
@@ -450,6 +460,15 @@ class AdminHandler(BaseHTTPRequestHandler):
                 self.send_response(400); self._cors(); self.end_headers()
             return
 
+        # Playback clip: /api/gaia-wakeword-vsrasp01/clip/{label}/{index}
+        if p.startswith("/api/gaia-wakeword-vsrasp01/clip/"):
+            parts = p.split("/")
+            if len(parts) >= 6:
+                self._serve_clip(GAIA_WAKEWORD_DIR_VSRASP01, parts[4], int(parts[5]))
+            else:
+                self.send_response(400); self._cors(); self.end_headers()
+            return
+
         # Playback clip: /api/gaia-wakeword-minipc/clip/{label}/{index}
         if p.startswith("/api/gaia-wakeword-minipc/clip/"):
             parts = p.split("/")
@@ -524,6 +543,21 @@ class AdminHandler(BaseHTTPRequestHandler):
                 "positive": pos_n, "positive_clips": pos_idx,
                 "negative": neg_n, "negative_clips": neg_idx,
                 "model_exists": os.path.exists(GAIA_MODEL_PATH_OPS),
+            }); return
+
+        if p == "/api/gaia-wakeword-vsrasp01/status":
+            def _vclips(lbl):
+                d = os.path.join(GAIA_WAKEWORD_DIR_VSRASP01, lbl)
+                if not os.path.isdir(d):
+                    return 0, []
+                fs = sorted(f for f in os.listdir(d) if f.endswith(".wav"))
+                return len(fs), [i for i in range(len(fs))]
+            pos_n, pos_idx = _vclips("positive")
+            neg_n, neg_idx = _vclips("negative")
+            self._json({
+                "positive": pos_n, "positive_clips": pos_idx,
+                "negative": neg_n, "negative_clips": neg_idx,
+                "model_exists": os.path.exists(GAIA_MODEL_PATH_VSRASP01),
             }); return
 
         if p == "/api/gaia-wakeword-minipc/status":
@@ -746,6 +780,50 @@ class AdminHandler(BaseHTTPRequestHandler):
                               json.dumps({"path": wav_path, "duration_s": duration_s}))
                 log.info(f"record_raw_clip inviato a gaia_listener → {wav_path}")
             self._json({"ok": True, "label": label, "duration_s": duration_s, "clip": idx})
+
+        elif path == "/api/gaia-wakeword-vsrasp01/upload":
+            label     = body.get("label", "positive")
+            audio_b64 = body.get("audio_base64", "")
+            if not audio_b64:
+                self._json({"ok": False, "error": "audio_base64 mancante"}, 400); return
+            try:
+                audio_bytes = base64.b64decode(audio_b64.split(",")[-1])
+            except Exception:
+                self._json({"ok": False, "error": "audio_base64 non valido"}, 400); return
+            dst = os.path.join(GAIA_WAKEWORD_DIR_VSRASP01, label)
+            os.makedirs(dst, exist_ok=True)
+            idx = len([f for f in os.listdir(dst) if f.endswith(".wav")])
+            wav_path = os.path.join(dst, f"clip_{idx:04d}.wav")
+            with open(wav_path, "wb") as f:
+                f.write(audio_bytes)
+            log.info(f"Gaia wakeword vsrasp01: salvato {wav_path}")
+            self._json({"ok": True, "label": label, "clip": idx})
+
+        elif path == "/api/gaia-wakeword-vsrasp01/train":
+            def _do_train_gaia_vsrasp01():
+                try:
+                    import sys
+                    sys.path.insert(0, os.path.dirname(DB_PATH))
+                    from train_doorbell_model import train_and_save
+                    ok, msg = train_and_save(samples_dir=GAIA_WAKEWORD_DIR_VSRASP01,
+                                             output_path=GAIA_MODEL_PATH_VSRASP01)
+                    log.info(f"Training Gaia wakeword (vsrasp01): {msg}")
+                    if ok:
+                        # Staging col nome _vsrasp01 (l'URL Node-RED lo serve così),
+                        # sul device viene scritto come models/gaia_verifier.pkl
+                        # che è il nome che pi/voice carica.
+                        _distribute_model_via_ota(
+                            src_path        = GAIA_MODEL_PATH_VSRASP01,
+                            service_subpath = "models/gaia_verifier_vsrasp01.pkl",
+                            service_type    = "voice",
+                            service_unit    = "gaia-voice",
+                            target_devices  = VOICE_MODEL_TARGETS["vsrasp01"],
+                            script_name     = "models/gaia_verifier.pkl",
+                        )
+                except Exception as e:
+                    log.error(f"Errore training Gaia vsrasp01: {e}")
+            threading.Thread(target=_do_train_gaia_vsrasp01, daemon=True).start()
+            self._json({"ok": True, "message": "Training Gaia wakeword (vsrasp01) avviato in background"})
 
         elif path == "/api/gaia-wakeword-minipc/upload":
             label     = body.get("label", "positive")
@@ -1005,6 +1083,13 @@ class AdminHandler(BaseHTTPRequestHandler):
             parts = path.split("/")
             if body.get("_method") == "DELETE":
                 self._delete_clip(GAIA_WAKEWORD_DIR_OPS, parts[4], int(parts[5]))
+            else:
+                self._json({"ok": False, "error": "_method:DELETE richiesto"}, 400)
+
+        elif path.startswith("/api/gaia-wakeword-vsrasp01/clip/") and len(path.split("/")) >= 6:
+            parts = path.split("/")
+            if body.get("_method") == "DELETE":
+                self._delete_clip(GAIA_WAKEWORD_DIR_VSRASP01, parts[4], int(parts[5]))
             else:
                 self._json({"ok": False, "error": "_method:DELETE richiesto"}, 400)
 
