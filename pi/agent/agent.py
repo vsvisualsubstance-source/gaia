@@ -216,8 +216,15 @@ def _sync_camera(cfg: dict):
 # automaticamente insieme (herbmp legge gaia/mediapipe/pose: senza mediapipe
 # resta sordo). NON disabilitato automaticamente quando il richiedente si
 # spegne: mediapipe può servire ad altro (RPG, game.html) anche da solo.
+# herbsim/herbmp sono solo generatori di note finte (plant_simulator.py /
+# mediapipe_source.py) — è gaia-herbarium.service (main.py) il motore che le
+# ascolta e le suona via Carla. Senza di lui attivo, silenzio totale anche a
+# simulatore acceso (bug dal vivo 2026-08-13 su vsrasp01: "non sento
+# herbarium suonare se attivo il simulatore" — herbsim/herbmp mancavano
+# della dipendenza su "herbarium" stesso, solo herbmp→mediapipe era dichiarata).
 SERVICE_DEPENDENCIES = {
-    "herbmp": ("mediapipe",),
+    "herbmp":  ("mediapipe", "herbarium"),
+    "herbsim": ("herbarium",),
 }
 
 
