@@ -19,7 +19,15 @@ sudo apt-get install -y -qq \
     libsndfile1 \
     ffmpeg \
     alsa-utils \
+    pipewire-alsa \
     wget
+# pipewire-alsa: se il mic è un'interfaccia USB (es. webcam) su un Pi con
+# PipeWire attivo (herbarium), PipeWire la reclama come sorgente di sistema
+# e l'accesso ALSA diretto ("hw:") di PortAudio smette di vederla del tutto
+# — sparisce da sd.query_devices(), RMS sempre 0, nessun errore esplicito
+# (bug dal vivo 2026-08-13 su vsrasp01, mic webcam CVTE). pipewire-alsa
+# registra il device "pipewire"/"default" in ALSA stesso, che PortAudio
+# torna a vedere (con conversione di samplerate automatica inclusa).
 
 # ── Venv ─────────────────────────────────────────────────────────────
 echo "[2/5] Creazione venv..."
