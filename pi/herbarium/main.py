@@ -42,6 +42,17 @@ Questo wrapper:
      → il brain le trasforma in XP (Druido) e curiosity — E in parallelo
      passa da music_engine.voice() e viene RISUONATA su engine_out → Carla.
   4. preset musicale cambiabile a caldo: gaia/herbarium/{stanza}/music {"preset":"..."}
+
+GOTCHA Carla via Flatpak (vsrasp01, 2026-08-13, Debian trixie senza KXStudio
+compatibile — vedi HERBARIUM_CARLA_EXTERNAL sotto): la sandbox vede SOLO
+$HOME (permesso "home" del manifest, non l'intero host) — patch.carxp che
+referenzia file fuori da $HOME (es. il default `/usr/share/sounds/sf2/
+default-GM.sf2`, o plugin LV2 in `/usr/lib/lv2`) li carica silenziosamente
+a vuoto: nessun errore visibile, ma silenzio totale in uscita pur con MIDI
+e audio-out wired correttamente. Fix: copiare il file dentro $HOME (es.
+~/gaia/herbarium/sf2/) e aggiornare SOLO la copia locale di patch.carxp
+(quella nel repo resta invariata — sui Pi con Carla da apt/KXStudio,
+sandbox assente, i path originali funzionano).
 """
 import json
 import os
@@ -56,7 +67,7 @@ import time
 import paho.mqtt.client as mqtt
 
 import config
-from music_engine import MusicEngine
+from music_engine import MusicEngine, VOICE_CHANNELS
 
 _running = True
 _current_room = config.ROOM
@@ -72,9 +83,29 @@ _drum_volume = config.DRUM_VOLUME    # 0-100, CC7 (Channel Volume) sul canale 10
 _play_lock = threading.Lock()        # protegge le scritture concorrenti sul device MIDI
 
 
+def _panic():
+    """All Notes Off (CC 123) su tutti i canali usati (voice 1-6 + batteria
+    10). Senza, fermare il servizio a metà di una nota tenuta dal tappeto
+    (sostenuto davvero, non decade da solo — v2.3) la lascia bloccata per
+    sempre in Carla: è un processo ESTERNO persistente
+    (HERBARIUM_CARLA_EXTERNAL=1) che sopravvive al riavvio del servizio
+    (bug dal vivo 2026-08-13 su vsrasp01: "il tappeto è rimasto attivo")."""
+    path = _engine_out_path
+    if not path:
+        return
+    try:
+        with open(path, "wb", buffering=0) as f:
+            for ch in (*VOICE_CHANNELS, 10):
+                f.write(bytes([0xB0 | ((ch - 1) & 0x0F), 0x7B, 0]))
+        print("[Herbarium] Panic: All Notes Off inviato")
+    except OSError as e:
+        print(f"[Herbarium] Panic fallito: {e}")
+
+
 def _shutdown(sig, frame):
     global _running
     _running = False
+    _panic()
 
 
 signal.signal(signal.SIGTERM, _shutdown)
