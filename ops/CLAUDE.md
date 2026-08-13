@@ -2,12 +2,19 @@
 
 Sei il Claude che lavora sulla macchina **OPS** del sistema GAIA: `silvermini2`,
 Windows 11, Ryzen 7, 32GB RAM, GPU 2GB, utente `vsvis` (account MS
-vs.visualsubstance@gmail.com). IP LAN `192.168.1.239`, Tailscale `100.91.251.83`.
+vs.visualsubstance@gmail.com). IP LAN `192.168.1.239` (ATTENZIONE: non è l'IP
+di servizio — vedi "Coordinate fisse" sotto, `192.168.1.240` è l'IP con cui
+Node-RED containerizzato è raggiungibile su questa macchina), Tailscale
+`100.91.251.83`.
 
 Questo file è stato scritto dal Claude che lavora sul **Core** (miniPC Linux
-`core-node-0`, IP `192.168.1.142`) il 2026-07-06 — è il passaggio di consegne.
-La memoria di progetto è in `ops/memory/` (leggila tutta prima di iniziare).
-L'architettura completa è in `docs/core-distribuito.md` e `pi/CLAUDE.md`.
+`core-node-0`, IP `192.168.1.142`) il 2026-07-06 — è il passaggio di consegne
+originale, quando OPS faceva solo visione+voce. **Superato in parte dal
+cutover del 2026-08-08**: Node-RED gira ora containerizzato QUI, su OPS (vedi
+memory `project-architettura-core-ops`, sezione "CUTOVER REALE" — leggila,
+non solo questo file). La memoria di progetto è in `ops/memory/` (leggila
+tutta prima di iniziare). L'architettura completa è in
+`docs/core-distribuito.md` (sezione "Runtime attuale") e `pi/CLAUDE.md`.
 
 ## Contesto in tre righe
 
@@ -16,11 +23,18 @@ broker MQTT, Ollama, Qdrant, OpenHAB e la web UI; i Raspberry per stanza fanno
 visione+voce. Questa macchina diventa **OPS**: prende visione (yolo+mediapipe)
 e voce, perché il Core ha solo 4 core e andava in saturazione.
 
-## Coordinate fisse
+## Coordinate fisse (aggiornate al cutover 2026-08-08)
 
-- **Broker MQTT**: `192.168.1.142:1883` (tutto passa da lì)
-- **Node-RED**: `http://192.168.1.142:1880` (payload WS su `/gaia`)
-- **Admin API**: `http://192.168.1.142:8765`
+- **Broker MQTT** (raw `:1883` e WS `:9001`): resta su Core, `192.168.1.142` —
+  NON su OPS, anche se Node-RED gira qui. Bug reale trovato due volte quando
+  una pagina risolveva la WS di mosquitto con `location.hostname` invece
+  dell'IP fisso di Core.
+- **Node-RED**: ORA QUI, containerizzato su OPS — `http://192.168.1.240:1880`
+  (payload WS su `/gaia`). Non più `192.168.1.142` come diceva la versione
+  originale di questo file.
+- **Admin API** (`gaia_admin.py`), **gaia-camera**: restano su Core,
+  `http://192.168.1.142:8765` / `:8766` — ancorati a voice_db/faces/camera
+  fisica del Core, non seguono Node-RED.
 - **Repo**: questo — il Claude del Core lavora su `main`; committa spesso,
   piccolo, e fai `git pull --rebase` prima di ogni push. I tuoi appunti di
   memoria vanno in `ops/memory/` (viaggiano via git, è il canale tra noi due).
@@ -136,7 +150,13 @@ Porta il pattern SUBPROCESS di `minipc/local_agent.py` su Windows:
 
 ## Regole della casa
 
-- Il broker, il brain e la web UI NON si toccano da qui: sono del Core.
+- **Aggiornato al cutover 2026-08-08**: il broker MQTT resta del Core, non si
+  tocca da qui. Node-RED/brain/web UI invece girano ORA QUI (container
+  Docker) — non sono più "territorio esclusivo del Core" come diceva questa
+  riga in origine. Se tocchi `flows.json` per il deploy su OPS, usa sempre la
+  copia patchata (broker `192.168.1.142`, non `localhost`) rigenerata da zero,
+  mai il file del repo così com'è — un deploy con `broker: localhost` ha già
+  disconnesso il MQTT in produzione una volta.
 - Non pubblicare su topic MQTT retained di configurazione (`gaia/devices/+/config`).
 - Commit piccoli con messaggi chiari; mai committare modelli/dati personali
   (vedi .gitignore).

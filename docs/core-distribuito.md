@@ -31,11 +31,48 @@ L'agent legge il manifest al boot: `SERVICE_MAP`/`SERVICE_DIRS` diventano dinami
 `device.json` (stato enabled/disabled) resta identico. Tutto il resto — announce,
 heartbeat, enable/disable/restart/set_config/ota_update — è già scritto e testato.
 
-## Matrice dei ruoli (chi può ospitare cosa)
+## Runtime attuale (cutover 2026-08-08 — supera la matrice sotto per Node-RED)
+
+La matrice qui sotto era il piano del 2026-07-06 ("Node-RED unico su Core"). Il
+2026-08-08 è stato eseguito un **cutover reale**, non più solo un test parallelo
+(dettagli completi in memory `project-architettura-core-ops`, sezione "CUTOVER
+REALE"): **Node-RED gira ora containerizzato su OPS**, non su Core.
+
+- **Node-RED (HTTP + WS `/gaia`)**: `http://192.168.1.240:1880` — segue OPS, non
+  più Core. Qualunque pagina che usa `location.hostname` per raggiungerlo è già
+  corretta automaticamente.
+- **mosquitto (MQTT raw `:1883` e WS `:9001`), gaia_admin.py (`:8765`),
+  gaia-camera (`:8766`)**: restano **fissi su Core, `192.168.1.142`** — NON
+  seguono `location.hostname`. Sono ancorati a hardware/dati locali del Core
+  (voice_db, faces, camera fisica) esattamente come previsto dalla matrice
+  sotto, e vanno referenziati con l'IP esplicito, mai dinamicamente. Questo è
+  stato un bug reale trovato due volte in produzione (Pi Manager e
+  `musica.html` con la WS di mosquitto risolta erroneamente verso OPS) — non
+  confondere "dove gira Node-RED" (dinamico, ora OPS) con "dove vive il
+  broker" (fisso, Core).
+- **Failover: manuale, non automatico.** `nodered.service` resta installato e
+  configurato su Core, solo fermo — riavviabile a mano come fallback se OPS ha
+  un problema. Non esiste oggi un meccanismo che rilevi OPS giù e torni
+  automaticamente su Core (l'unico failover automatico reale nel sistema è il
+  pool "backend sano" di Ollama, vedi sotto — un caso isolato, non un pattern
+  generale).
+- **Nota TD**: `gaia-touchdesigner.service` (`osc_bridge.py`) resta su Core ma
+  legge il feed WS da Node-RED — va ripuntato a OPS (`GAIA_WS_HOST=192.168.1.240`
+  in `/etc/gaia/touchdesigner.conf`, non versionato). Vedi
+  `minipc/touchdesigner/GAIA_TD_INTEGRATION.md`.
+- **Limite noto**: la copia Node-RED su OPS non ha le credenziali Telegram
+  sincronizzate (`flows_cred.json` cifrato con secret diverso) — bot Telegram
+  inattivo lì.
+- **Demo fuori casa**: se serve portare il sistema altrove (es. per una
+  demo), vedi `docs/demo-portatile.md` — si spostano fisicamente Core, OPS e
+  Pi insieme, Core diventa il DHCP server della rete di trasferta e assegna
+  gli stessi IP di casa, zero modifiche al codice.
+
+## Matrice dei ruoli (chi può ospitare cosa — piano originale 2026-07-06)
 
 | Servizio | Core | OPS/Touch | Media | Pi | Vincolo di località |
 |---|---|---|---|---|---|
-| Node-RED + brain | ✅ unico | — | — | — | è IL cervello, uno solo |
+| Node-RED + brain | ~~✅ unico~~ → **OPS**, v. nota cutover sopra | — | — | — | non più vincolato a Core |
 | mosquitto (docker) | ✅ unico | — | — | — | broker unico, tutti puntano qui |
 | Ollama, Qdrant (docker) | ✅ | — | — | — | RAM/CPU |
 | OpenHAB (docker) | ✅ | — | — | — | — |

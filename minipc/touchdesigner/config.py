@@ -16,7 +16,11 @@ def _load_conf(path):
 
 
 _defaults = {
-    # Sorgente dati: WebSocket già usata da dashboard/arte visiva (ThreeViewEngineGAME)
+    # Sorgente dati: WebSocket già usata da dashboard/arte visiva (ThreeViewEngineGAME).
+    # Default 'localhost' presume Node-RED sullo stesso host di questo bridge (Core).
+    # Dal cutover 2026-08-08 Node-RED gira su OPS: in produzione va sovrascritto a
+    # 192.168.1.240 via /etc/gaia/touchdesigner.conf (non versionato). Vedi
+    # docs/core-distribuito.md ("Runtime attuale") e GAIA_TD_INTEGRATION.md canale 1.
     'GAIA_WS_HOST':      'localhost',
     'GAIA_WS_PORT':      '1880',
     'GAIA_WS_PATH':      '/gaia',

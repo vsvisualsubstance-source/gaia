@@ -42,7 +42,19 @@ Setup e dettagli di entrambi: `minipc/touchdesigner/README.md`, sezione
 
 ## Canale 1 — Bridge Gaia↔TD (`minipc/touchdesigner/osc_bridge.py`)
 
-Host Core: `192.168.1.142`. Servizio: `gaia-touchdesigner.service`.
+Host Core: `192.168.1.142`. Servizio: `gaia-touchdesigner.service`. Il
+processo stesso resta sul Core, MA la sua **sorgente dati** (`GAIA_WS_HOST`,
+la WS `/gaia` di Node-RED che legge per costruire il feed OSC) da qui in
+avanti **non è più `localhost`/Core**: dal cutover Node-RED→OPS del
+2026-08-08 (vedi `docs/core-distribuito.md`, sezione "Runtime attuale"),
+Node-RED gira su OPS — `GAIA_WS_HOST` va impostato a `192.168.1.240` in
+`/etc/gaia/touchdesigner.conf` (non versionato, default nel codice resta
+`localhost` in `config.py`, va sovrascritto su questa macchina). Senza
+questo, il bridge entra in un loop di riconnessione silenzioso — nessun
+errore visibile, il feed OSC semplicemente si ferma (già capitato in
+produzione la mattina dopo il cutover). MQTT e le porte OSC (7000/7001/9008)
+restano invariate, ancorate al Core come sempre — solo la sorgente WS è
+cambiata.
 
 **Multi-istanza (2026-08-06)**: il bridge manda lo stesso feed a TUTTE le
 istanze TD vive contemporaneamente — le scopre da sé via MQTT
