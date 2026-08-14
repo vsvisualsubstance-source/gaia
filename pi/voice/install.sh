@@ -11,7 +11,7 @@ ARCH=$(uname -m)
 echo "  Architettura: $ARCH"
 
 # ── Dipendenze sistema ───────────────────────────────────────────────
-echo "[1/5] Dipendenze sistema..."
+echo "[1/6] Dipendenze sistema..."
 sudo apt-get update -qq
 sudo apt-get install -y -qq \
     python3 python3-venv python3-pip \
@@ -30,7 +30,7 @@ sudo apt-get install -y -qq \
 # torna a vedere (con conversione di samplerate automatica inclusa).
 
 # ── Venv ─────────────────────────────────────────────────────────────
-echo "[2/5] Creazione venv..."
+echo "[2/6] Creazione venv..."
 if [ ! -d "$SCRIPT_DIR/venv" ]; then
     python3 -m venv venv
 fi
@@ -41,7 +41,7 @@ pip install --upgrade pip -q
 pip install "numpy>=2.0" -q
 
 # ── Pacchetti Python ─────────────────────────────────────────────────
-echo "[3/5] Installazione pacchetti Python..."
+echo "[3/6] Installazione pacchetti Python..."
 pip install -r requirements.txt -q
 
 # Pre-download wakeword models
@@ -60,7 +60,7 @@ print('  ✓ Whisper pronto')
 "
 
 # ── Piper binary ─────────────────────────────────────────────────────
-echo "[4/5] Piper TTS binary..."
+echo "[4/6] Piper TTS binary..."
 mkdir -p bin models
 
 if [ "$ARCH" = "aarch64" ]; then
@@ -84,7 +84,7 @@ else
 fi
 
 # ── Modello voce Piper ────────────────────────────────────────────────
-echo "[5/5] Modello voce italiana (Piper)..."
+echo "[5/6] Modello voce italiana (Piper)..."
 PIPER_VOICE="it_IT-paola-medium"
 HF_BASE="https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/it/it_IT/paola/medium"
 
@@ -96,6 +96,28 @@ if [ ! -f "models/${PIPER_VOICE}.onnx" ]; then
 else
     echo "  ✓ Voce già presente"
 fi
+
+# ── Configurazione ────────────────────────────────────────────────────
+echo ""
+echo "[6/6] Configurazione..."
+sudo mkdir -p /etc/gaia
+if [ ! -f /etc/gaia/voice.conf ]; then
+    sudo cp "$SCRIPT_DIR/voice.conf.example" /etc/gaia/voice.conf
+    echo "  ✓ /etc/gaia/voice.conf creato"
+else
+    echo "  → /etc/gaia/voice.conf già presente, non sovrascritto"
+fi
+# Il servizio (User=$(whoami) nel .service) scrive di nuovo qui a runtime
+# per persistere le soglie tarate da Admin (_persist_voice_conf in main.py)
+# — se il file resta di root (es. creato con `sudo cp` a mano, come qui
+# sopra) quella scrittura fallisce silenziosamente nei log ("Permission
+# denied") e ogni taratura si perde al riavvio del servizio, anche se
+# sembra applicata subito (bug dal vivo 2026-08-14 su vsrasp01: soglia
+# wakeword "off" tornata attiva dopo un riavvio del Pi). chown va rifatto
+# anche su un file già esistente, non solo alla creazione: un file lasciato
+# di root da un run precedente resterebbe rotto per sempre.
+sudo chown "$(whoami)" /etc/gaia/voice.conf
+echo "  ✓ /etc/gaia/voice.conf scrivibile da $(whoami) (per le tarature da Admin)"
 
 echo ""
 echo "✅ Installazione completata!"

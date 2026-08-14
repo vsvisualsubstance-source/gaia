@@ -17,7 +17,16 @@ def _load_conf(path):
 
 
 _defaults = {
-    'NODE_ID':              'ingresso',
+    # Vuoto apposta: NODE_ID è un override esplicito RARO (impostabile a
+    # mano in voice.conf), CAMERA_NAME è quello scritto davvero dall'agent
+    # in device.conf ad ogni provisioning/cambio stanza. Con un default non
+    # vuoto qui, "NODE_ID or CAMERA_NAME" sotto non ricade MAI su CAMERA_NAME
+    # (una stringa non vuota è sempre truthy) — il servizio partiva sempre
+    # su "ingresso" ignorando la stanza vera del device.conf, corretto solo
+    # a posteriori (e non sempre in tempo) dalla correzione via Device
+    # Registry su MQTT (bug dal vivo 2026-08-14 su vsrasp01: soglie voce
+    # tarate sulla stanza sbagliata, mai arrivate al servizio).
+    'NODE_ID':              '',
     'CAMERA_NAME':          'ingresso',
     'MQTT_HOST':            '192.168.1.142',
     'MQTT_PORT':            '1883',
