@@ -19,7 +19,9 @@ This directory is the subtree deployed to each Raspberry Pi in the GAIA distribu
 
 > Qdrant (memoria vettoriale, solo miniPC) è nel `docker-compose.yaml` del repo root dal 2026-07-03, storage su `/home/core/qdrant_storage`. Nessun servizio Qdrant gira sui Pi.
 
-Five independent Python services live here, each in its own directory with its own venv and systemd unit:
+Independent Python services live here, one per directory. `yolo/`, `mediapipe/`, `voice/`
+have their own venv; the rest ("light" modules, see `docs/pi-moduli-futuri.md` §Contratto)
+run on system `python3` + system `paho-mqtt`:
 
 | Dir | Service | Role |
 |---|---|---|
@@ -28,6 +30,8 @@ Five independent Python services live here, each in its own directory with its o
 | `yolo/` | `gaia-yolo` | Person/object detection (ultralytics YOLO11) → `gaia/{room}/frame` etc. |
 | `mediapipe/` | `gaia-mediapipe` | Pose/gesture/emotion detection → `gaia/mediapipe/pose`. Requires ARM 64-bit (aarch64) — MediaPipe does not run on 32-bit Pi OS. |
 | `voice/` | `gaia-voice` | Wakeword (openWakeWord) → STT (faster-whisper) → MQTT, and MQTT → TTS (Piper) → speaker. |
+| `herbarium/` | `gaia-herbarium` | AV Herbarium — sensore MIDI (pianta/simulatore/mediapipe) → motore musicale (`music_engine.py`) → Carla headless → ALSA out. `herbsim`/`herbmp` sono sorgenti di note ALTERNATIVE (`Conflicts=` reciproco) — generano solo eventi finti, è `gaia-herbarium` stesso il motore che li ascolta e li suona: nessuno dei due produce audio senza di lui attivo. Vedi `docs/pi-moduli-futuri.md` Modulo 1. |
+| `livestream/` | `gaia-livestream` | Il Pi trasmette (mic/webcam o libreria locale) via **icecast2 locale** (non centralizzato — vedi `docs/pi-moduli-futuri.md` Modulo 2 per il perché). `icecast2` è un demone di sistema sempre attivo (come mosquitto su Core), non gestito dall'agent; `gaia-livestream` è solo il source client ffmpeg, on/off e cambio sorgente via MQTT `gaia/livestream/{stanza}/command`. |
 | `screen/` | `gaia-screen` | Superficie asemica su display DSI (pygame KMSDRM, engine `asemic_engine.py`). `Conflicts=` con gaia-kiosk: uno solo dei due possiede il display. |
 | `kiosk/` | `gaia-kiosk` | Welcome su display DSI (cage + Chromium `--kiosk --password-store=basic` — senza quel flag Chromium si blocca sul dialog del portachiavi GNOME). URL da `/etc/gaia/kiosk.conf` o default welcome con `cam=localhost&room=$CAMERA_NAME`. `Conflicts=` con gaia-screen. È in `CAMERA_CONSUMERS`: attivarlo accende camera_server per la bolla MJPEG. |
 | `mediaplayer/` | `gaia-mediaplayer` | Musica/radio per stanza: mpv IPC + MQTT (`gaia/media/{stanza}/command|status`). Cross-platform (unix socket / named pipe Windows) — stesso modulo su OPS (manifest) e minipc (local_agent). Preset+card web+Telegram `/musica` lato Core. |
@@ -65,6 +69,81 @@ Deployed Pis run **paho-mqtt 2.x** even though `requirements.txt` says `paho-mqt
 **MediaPipe payload contract**: publishes on every `PUBLISH_INTERVAL` tick regardless of whether a person is present (`person_detected: false` is a valid, expected message) — this lets Node-RED zero out presence without needing its own timeout logic. See `mediapipe/README.md` for the full field/value table (`emotion`, `gesture`, `pose`, `attention`, etc.) before changing the payload shape, since Node-RED's brain parses these fields by exact string value. Like yolo, analysis (FaceMesh+Hands+Pose — the heaviest part on Pi hardware) runs only every `FRAME_SKIP` captured frames (default `1` = every frame); publishing still happens on the `PUBLISH_INTERVAL` clock using the last computed result.
 
 **Voice pipeline** (`voice/main.py`): openWakeWord listens continuously; on wake it records until silence, transcribes with faster-whisper (`WHISPER_LANG="it"`), and publishes to `gaia/voice/command/{stanza}`. It also subscribes to `gaia/voice/tts/{stanza}` and speaks incoming text via Piper binary + `aplay`, publishing `listening`/`speaking` state to `gaia/voice/status/{stanza}` (retained).
+
+**LiveStream pipeline** (`livestream/main.py`): ffmpeg pushes either the mic (`-f alsa -i default`, via the pipewire-alsa plugin — see gotcha below) or a shuffled concat playlist of `LIVESTREAM_LIBRARY_DIR` (local to this Pi, not Core's music library) into a locally-running `icecast2` (fixed mount `stream.ogg`, port 8000). `icecast2` itself is a system daemon installed by `livestream/install.sh` and left always-running (like mosquitto on Core) — it is not started/stopped by the agent or by this script; only the ffmpeg source client is. Source switch is live via `gaia/livestream/{stanza}/command {"source":"mic"|"library"}` (also reachable from the captive portal and Admin's Pi Manager). Listener count in the retained `gaia/livestream/{stanza}/state` comes from icecast's own `status-json.xsl`. Deliberately **not** the centralized-server design in `docs/pi-moduli-futuri.md`'s original Modulo 2 plan — every Pi is self-contained, no dependency on a reachable Core/OPS.
+
+## Two Pi environment profiles (2026-08-14)
+
+Every Pi up to this point (`ingresso`, `studio`) was set up by **cloning the golden SD
+card** (see "Setting up a new Pi from a cloned SD card" below) — Raspberry Pi OS,
+**Python 3.11.2**, everything in this file written against that baseline. `vsrasp01`
+(set up 2026-08-13 from a **fresh Debian 13 "trixie" install**, not a clone — chosen
+at the time without realizing the Python version consequences) is the first Pi on
+**Python 3.13**, and several modules needed real workarounds to run there. Recorded
+here so the next fresh (non-cloned) Pi doesn't rediscover all of this from scratch —
+**cloning the golden card remains the recommended path**; only use a fresh install
++ these workarounds if cloning isn't an option.
+
+Findings, module by module, all confirmed live on `vsrasp01`:
+
+- **yolo**: unpinned `torch` resolves a CUDA-enabled build on some environments, pulling
+  ~2GB of unused `nvidia-*` packages that can fill a small `/tmp` tmpfs ("No space left
+  on device" with plenty of space on `/`). Fixed project-wide in `install.sh`: torch
+  **and** torchvision installed together from `https://download.pytorch.org/whl/cpu` —
+  torchvision must come from the same index or it mismatches the CPU-only torch build
+  ("operator torchvision::nms does not exist").
+- **mediapipe**: the legacy `mp.solutions.*` API (used throughout `mediapipe_node.py`)
+  was dropped in mediapipe 1.0.0, the *only* version with an aarch64 wheel for Python
+  3.13. The last version with both `.solutions` and an aarch64 wheel is 0.10.18, which
+  tops out at Python 3.12. On 3.13, build a **separate venv with a portable Python 3.12**
+  (`uv python install 3.12`, no system package needed) instead of the system interpreter.
+- **voice**: two independent Python-version ceilings, both below 3.13 —
+  `tflite-runtime` (an `openwakeword` dependency) has no PyPI wheel past Python 3.9 for
+  aarch64 (piwheels.org does have one at 3.9, official PyPI does not); separately,
+  `scikit-learn` must be **pinned to `==1.6.1`** (see below) which also caps out below
+  3.13 for aarch64. Net effect: voice needs a **portable Python 3.9** venv
+  (`uv python install 3.9`), the most constrained of any module. `main.py` also uses
+  `X | None` union-type hints (Python 3.10+ syntax) — add
+  `from __future__ import annotations` at the top before targeting anything below 3.10.
+- **scikit-learn cross-machine pin**: the "Gaia" wakeword verifier model is *trained on
+  Core* and *loaded on the Pi* via pickle — if the two machines' scikit-learn versions
+  differ, unpickling breaks with `'LogisticRegression' object has no attribute
+  'multi_class'` (or similar) with no useful traceback. Pin `scikit-learn==1.6.1`
+  identically in `voice/requirements.txt` **and** in Core's own `requirements.txt`
+  (whatever version is the ceiling for the most Python-constrained Pi in the fleet —
+  1.6.1 today because of voice's Python 3.9 requirement above).
+- **USB mic + PipeWire**: on any Pi where PipeWire is active (herbarium needs it), a
+  USB audio device (e.g. a webcam mic) gets claimed by PipeWire as a system source —
+  raw ALSA access (`hw:X,Y` or even the `default` PCM) from PortAudio/ffmpeg then stops
+  seeing the device at all (`sd.query_devices()` empty, or ffmpeg's `cannot open audio
+  device default (Host is down)`), silently, no permission-style error. Fix: install
+  `pipewire-alsa` (not just `pipewire-jack`) — it registers a `pipewire`/`default` ALSA
+  PCM that PortAudio/ffmpeg *can* see, PipeWire handling the sample-rate conversion
+  transparently. Needed by both `voice/` and `livestream/`; **also requires
+  `Environment=XDG_RUNTIME_DIR=/run/user/1000` in the `.service` file**, or the plugin
+  can't find the user's PipeWire session and fails the same way.
+- **herbarium + Carla**: the reference Pis install Carla from the KXStudio PPA (built
+  for Ubuntu) via `apt`. That PPA has no Debian trixie packages at all. Use the
+  **Flatpak build** (`flatpak install flathub studio.kx.carla`) instead — but the
+  Flatpak sandbox only sees `$HOME` (its `filesystems` permission is `home`, not the
+  whole host), so anything `patch.carxp` references outside `$HOME` (the default SF2
+  soundfont at `/usr/share/sounds/sf2/`, LV2 plugins in `/usr/lib/lv2`) loads silently
+  empty — MIDI/audio wiring all report success, but the synth produces no sound and
+  there's no error to grep for. Fix: copy the SF2 (`x42-plugins`'s `midifilter.lv2` too)
+  into `$HOME` and point *only the on-device copy* of `patch.carxp` at the new path —
+  never the repo's own `patch.carxp`, which stays correct for the apt-installed Carla
+  on reference Pis. Also: Flatpak Carla defaults to `ProcessMode=1` ("Multiple
+  Clients") which exposes one JACK/PipeWire client per plugin instead of Carla's own
+  single-`events-in` port that `herbarium/main.py`'s wiring code expects — set
+  `ProcessMode=2` ("Continuous Rack") in `~/.var/app/studio.kx.carla/config/falkTX/
+  Carla2.conf` (`[Engine]` section) to get the single-client behavior back.
+
+None of the above needed for a Pi cloned from the golden card — Python 3.11.2 already
+satisfies every dependency's normal, unpinned wheel range, and Carla comes from
+KXStudio as usual. Update this section (or replace it) once `ingresso` is back online
+and re-verified against the current code — some of the above may turn out to apply to
+*any* Debian trixie-based Pi regardless of how it's provisioned, not just fresh
+installs, but that hasn't been tested yet.
 
 ## Commands
 

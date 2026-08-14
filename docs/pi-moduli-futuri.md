@@ -6,19 +6,36 @@ di nuovi** senza reinventare nulla, e definisce i primi due moduli futuri.
 
 ## Contratto di un modulo Pi (checklist, ricavata dai moduli esistenti)
 
-Un modulo = una directory sotto `pi/` con questa forma:
+Un modulo = una directory sotto `pi/` con questa forma. In pratica esistono DUE varianti,
+a seconda che il modulo abbia dipendenze pip pesanti (torch/mediapipe/openwakeword) o
+solo `paho-mqtt` di sistema — aggiornato 2026-08-14 dopo aver notato che herbarium/
+mediaplayer/screen/kiosk (tutti "leggeri") non seguivano mai il contratto completo
+sotto, non per dimenticanza ma perché non ne avevano bisogno:
 
 ```
 pi/<modulo>/
-├── main.py            # servizio long-running, MQTT verso il broker Core
-├── config.py          # env > /etc/gaia/<modulo>.conf > default (pattern comune)
-├── <modulo>.conf.example
-├── requirements.txt
-├── install.sh         # venv locale + dipendenze apt
-├── start.sh           # supporto <MODULO>_VENV esterno (pattern comune)
-├── ota.py             # copia byte-per-byte da yolo/ (convenzione esistente)
-└── gaia-<modulo>.service
+├── main.py            # servizio long-running, MQTT verso il broker Core — SEMPRE
+├── config.py          # env > /etc/gaia/<modulo>.conf > default — SEMPRE
+├── <modulo>.conf.example                                        # SEMPRE
+├── gaia-<modulo>.service                                        # SEMPRE
+├── ota.py             # copia byte-per-byte da yolo/ — SEMPRE (costa poco, utile ovunque)
+├── install.sh         # SOLO se servono pacchetti apt (venv locale o system, es. icecast2/ffmpeg)
+├── requirements.txt   # SOLO se il modulo ha un venv dedicato (pip pesante)
+└── start.sh           # SOLO se ha senso un avvio manuale fuori da systemd (supporto
+                        # <MODULO>_VENV esterno se c'è un venv, altrimenti solo
+                        # `source /etc/gaia/<modulo>.conf && exec python3 main.py`)
 ```
+
+Moduli "pesanti" (venv dedicato): `yolo/`, `mediapipe/`, `voice/` — hanno tutti gli 8 file.
+Moduli "leggeri" (solo system python3 + paho-mqtt): `herbarium/`, `mediaplayer/`,
+`screen/`, `kiosk/`, `livestream/` — main.py, config.py, .conf.example, .service sempre;
+install.sh solo se il modulo installa pacchetti di sistema (livestream sì: icecast2/
+ffmpeg/pipewire-alsa; herbarium/mediaplayer/screen/kiosk no, presumono l'ambiente già
+pronto). requirements.txt/start.sh omessi quando non c'è un venv da gestire. `ota.py`
+manca ancora in herbarium/mediaplayer/screen/kiosk (mai stato necessario finora, non
+un principio) — `livestream/` invece ce l'ha (copiato byte-per-byte da yolo/, come da
+convenzione), primo modulo leggero a farlo: se torna utile aggiornare un modulo leggero
+da remoto senza SSH, vale la pena aggiungerlo anche agli altri quattro.
 
 Regole non negoziabili (fonte: CLAUDE.md di pi/ + esperienza sui 4 moduli):
 1. `DEVICE_ID = os.getenv("DEVICE_ID", socket.gethostname())` — mai hardcodare, altrimenti
@@ -192,10 +209,45 @@ sensore → lettura → mapping nota/scala → MIDI/OSC → host synth → ALSA 
   ("qualcuno sta suonando il ficus"), Arte Visiva/asemico che reagiscono alle note.
 - **Hardware per Pi**: MPR121 (~5€), DAC/ampli o casse USB (il jack del Pi è rumoroso).
 
-## Modulo 2 — LiveStream (icecast)
+## Modulo 2 — LiveStream (icecast) — V1 FATTA 2026-08-14
 
-**Idea**: la casa trasmette — flussi audio (herbarium, ambienti, radio di Gaia con TTS e
-pensieri) ascoltabili in LAN e volendo fuori.
+**Implementata** (`pi/livestream/`, servizio a contratto gaia-livestream). Architettura
+diversa da quella originariamente pianificata sotto — vedi perché nel GOTCHA in fondo.
+
+**Idea**: ogni Pi trasmette (mic/webcam o libreria musicale locale) — chi vuole ascoltare
+apre `web/livestream.html` (o il link diretto dello stream) da un qualsiasi device e
+preme play: l'audio esce dal jack di QUEL device, dove si può collegare un diffusore
+(es. Holosonic). Lo stream è audio-only e la riproduzione è sempre lato client, mai
+lato server.
+
+**Architettura AS-BUILT (icecast2 LOCALE su ogni Pi, non centralizzato)**:
+- **icecast2**: gira SUL Pi stesso, demone di sistema sempre attivo appena installato
+  (come mosquitto su Core) — non gestito dall'agent, non toccato da enable/disable.
+  Porta 8000, mount fisso `stream.ogg` (non `<stanza>.ogg`: la stanza può cambiare senza
+  spostare l'URL). Password sorgente generata random per device da `install.sh`
+  (altrimenti chiunque in LAN potrebbe spingere audio arbitrario in QUALSIASI mount —
+  icecast non ha altra autenticazione sulla connessione source).
+- **Modulo Pi `livestream`**: il *source client* — ffmpeg via `-f alsa -i default`
+  (mic/webcam, passa dal plugin ALSA di PipeWire — stesso motivo del fix in pi/voice:
+  un mic USB che PipeWire ha reclamato come sorgente di sistema sparisce dall'accesso
+  ALSA diretto) oppure playlist concat in loop dalla libreria musicale LOCALE al Pi
+  (`LIVESTREAM_LIBRARY_DIR`, non quella di Core). Cambio sorgente a caldo via MQTT
+  `gaia/livestream/{stanza}/command {"source":"mic"|"library"}`, o da captive
+  portal/Admin. Stato retained `gaia/livestream/{stanza}/state` con contatore
+  ascoltatori letto dal proprio `status-json.xsl` di icecast.
+- **web/livestream.html**: griglia di tutti gli stream della casa, scoperta automatica
+  via profili semantici (stesso pattern di `cameras.html`) — nessun IP hardcodato.
+
+**GOTCHA — perché icecast locale e non centralizzato**: il piano originale sotto
+prevedeva un server icecast2 unico su Core/Media coi Pi come soli source client.
+Requisito cambiato 2026-08-14: "non è un servizio server side e non deve girare su
+core o ops" — ogni Pi deve restare autosufficiente, senza dipendenza da un server
+centrale raggiungibile in rete. Se in futuro serve di nuovo un mount centralizzato
+(es. per un vero "server Media" dedicato), il piano originale resta valido come
+riferimento, sotto.
+
+<details>
+<summary>Piano originale (superato, centralizzato su Core/Media) — riferimento storico</summary>
 
 **Architettura** (due metà, ruoli diversi — vedi matrice in `docs/core-distribuito.md`):
 - **Server icecast2**: NON sul Pi — sul Core o sulla futura macchina Media (pacchetto
@@ -211,6 +263,8 @@ pensieri) ascoltabili in LAN e volendo fuori.
 - **Sinergie**: l'herbarium può essere la sorgente del mount (`herbarium.ogg`) — cavo
   virtuale ALSA loopback (`snd-aloop`) tra synth e source client. Il mediaplayer delle
   altre stanze può riprodurre il mount → le piante dell'ingresso suonano in salotto.
+
+</details>
 
 ## Ordine consigliato quando si parte
 

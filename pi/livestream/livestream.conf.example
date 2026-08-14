@@ -1,0 +1,33 @@
+# GAIA LiveStream — configurazione
+# Copia in /etc/gaia/livestream.conf e modifica per ogni Raspberry Pi
+# (install.sh la crea da solo al primo run, generando ICECAST_SOURCE_PASSWORD)
+
+# Broker MQTT
+MQTT_HOST=192.168.1.142
+MQTT_PORT=1883
+
+# Sorgente audio: "mic" (webcam/microfono via ffmpeg -f alsa) oppure
+# "library" (playlist in loop dalla libreria musicale LOCALE al Pi — non
+# quella di Core). Cambiabile a caldo via MQTT
+# gaia/livestream/{stanza}/command {"source": "mic"|"library"}, o dal
+# captive portal/Admin.
+LIVESTREAM_SOURCE=mic
+
+# "default" passa dal plugin ALSA di PipeWire (pipewire-alsa) invece
+# dell'hw: diretto — un microfono USB che PipeWire ha già reclamato come
+# sorgente di sistema sparisce dall'accesso ALSA diretto altrimenti.
+LIVESTREAM_MIC_DEVICE=default
+
+# Libreria musicale locale (modalità "library") — copiaci dentro i file audio
+LIVESTREAM_LIBRARY_DIR=/home/asemico/gaia/livestream/musica
+
+# icecast2 gira SEMPRE in locale su questo Pi (non centralizzato su Core/OPS)
+ICECAST_PORT=8000
+# Generata da install.sh — una per device: se fosse fissa/condivisa,
+# chiunque in LAN potrebbe spingere audio arbitrario nel mount di
+# QUALSIASI Pi (icecast non ha altra autenticazione sulla connessione source).
+ICECAST_SOURCE_PASSWORD=
+
+# Nome fisso: la stanza può cambiare senza spostare l'URL dello stream
+LIVESTREAM_MOUNT=stream.ogg
+LIVESTREAM_BITRATE=96k

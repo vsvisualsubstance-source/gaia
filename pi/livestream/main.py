@@ -31,6 +31,7 @@ import urllib.request
 import paho.mqtt.client as mqtt
 
 import config
+from ota import OtaHandler
 
 _running = True
 _current_room = config.ROOM
@@ -148,6 +149,20 @@ except AttributeError:
 _mqtt.reconnect_delay_set(min_delay=2, max_delay=30)
 
 
+class _OtaMqttAdapter:
+    """OtaHandler (copiato byte-per-byte da yolo/, vedi pi/CLAUDE.md) si
+    aspetta un .publish(topic, payload_dict, retain=False) che fa il suo
+    json.dumps — qui usiamo direttamente mqtt.Client, che invece vuole
+    stringa/bytes già pronti."""
+    def publish(self, topic, payload, retain=False):
+        _mqtt.publish(topic, json.dumps(payload, default=str), qos=0, retain=retain)
+
+
+_ota = OtaHandler(mqtt_client=_OtaMqttAdapter(), device_id=config.DEVICE_ID,
+                  device_type="livestream", base_dir=config._BASE,
+                  service_name="gaia-livestream")
+
+
 def _publish_state():
     _mqtt.publish(f"gaia/livestream/{_current_room}/state",
                   json.dumps({"active": _active, "source": _current_source,
@@ -164,12 +179,17 @@ def _topic_command():
 def _on_connect(client, userdata, flags, rc, properties=None):
     client.subscribe(f"gaia/devices/{config.DEVICE_ID}/config", qos=1)
     client.subscribe(_topic_command(), qos=1)
+    for t in _ota.topics():
+        client.subscribe(t)
     _publish_state()
     print(f"[MQTT] Connesso — stanza {_current_room}, sorgente {_current_source}")
 
 
 def _on_message(client, userdata, msg):
     global _current_room, _current_source, _active
+    if msg.topic in _ota.topics():
+        _ota.handle(msg.topic, msg.payload)
+        return
     if msg.topic.endswith("/command"):
         try:
             payload = json.loads(msg.payload)
