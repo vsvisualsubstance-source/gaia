@@ -66,12 +66,18 @@ PI_VOICE_SYNC_TARGETS = [
 ]
 
 PI_BASE_REPO   = os.path.expanduser("~/core-node-0/pi")  # root pi/ nel repo (serveFile legge da qui)
-MINIPC_IP      = "192.168.1.142"
+MINIPC_IP      = "192.168.1.142"  # mosquitto + questa stessa API restano su Core
 # Libreria musicale locale (punto 3 media): file su D serviti in streaming
 # da questa API — i player (mpv) leggono http://core:8765/music/<file>
 MUSIC_DIR      = "/media/core/D/musica"
 MUSIC_EXT      = ('.mp3', '.flac', '.ogg', '.wav', '.m4a', '.aac', '.opus')
 NODERED_PORT   = 1880
+# Node-RED (URL di download per l'OTA) è su OPS dal cutover 2026-08-08, non
+# più su Core — usare MINIPC_IP qui dava "Connection refused" silenzioso
+# lato Pi, nessun modello/script OTA arrivava più a destinazione da allora
+# (bug dal vivo 2026-08-13, riscontrato addestrando il modello wakeword
+# di vsrasp01: training ok, OTA falliva). Vedi docs/core-distribuito.md.
+NODERED_HOST   = "192.168.1.240"
 
 
 def _distribute_model_via_ota(src_path: str, service_subpath: str, service_type: str,
@@ -92,12 +98,30 @@ def _distribute_model_via_ota(src_path: str, service_subpath: str, service_type:
         os.makedirs(os.path.dirname(staging), exist_ok=True)
         shutil.copy2(src_path, staging)
         log.info(f"OTA staging: {staging}")
+        # 1b. Node-RED serve questo file (ServeFile in flows.json) da dentro il
+        # suo container Docker su OPS, che monta C:\gaia-docker-cfg\core-node-0
+        # come /home/core/core-node-0 — stesso path di staging qui sopra, ma
+        # è una copia SEPARATA sul disco Windows di OPS: senza sincronizzarla
+        # qui, ServeFile risponde 404 e il Pi riceve "Connection refused" o
+        # "file non trovato" (bug dal vivo 2026-08-13, mai notato da quando
+        # Node-RED è passato su OPS l'8 agosto — ogni OTA falliva in silenzio).
+        # Stesso principio di scripts/deploy_ops_web.sh, ma per il singolo
+        # file appena aggiornato invece che per l'intero repo.
+        try:
+            subprocess.run(
+                ["scp", staging,
+                 f"vsvis@{NODERED_HOST}:C:/gaia-docker-cfg/core-node-0/pi/{service_type}/{service_subpath}"],
+                capture_output=True, timeout=15, check=True,
+            )
+            log.info(f"OTA staging sincronizzato su OPS: {service_type}/{service_subpath}")
+        except Exception as e:
+            log.error(f"OTA: sync staging su OPS fallito ({e}) — il Pi non troverà il file")
         # 2. Calcola MD5
         with open(staging, 'rb') as f:
             md5 = hashlib.md5(f.read()).hexdigest()
         # 3. Pubblica OTA via MQTT
         version = time.strftime('%Y%m%d-%H%M')
-        url = f"http://{MINIPC_IP}:{NODERED_PORT}/gaia/ota/{service_type}/{service_subpath}"
+        url = f"http://{NODERED_HOST}:{NODERED_PORT}/gaia/ota/{service_type}/{service_subpath}"
         cmd = {
             "script":  service_subpath,
             "url":     url,

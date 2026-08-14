@@ -4,4 +4,13 @@ sounddevice>=0.4.6
 soundfile>=0.12
 faster-whisper>=0.10
 openwakeword>=0.6
+# openwakeword dipende da scikit-learn ma senza pin — il modello custom
+# "Gaia" viene addestrato su Core (venv separato, altra macchina/versione
+# Python) e caricato qui via pickle: se le due versioni di scikit-learn
+# divergono, l'unpickling rompe silenziosamente ("LogisticRegression object
+# has no attribute 'multi_class'", bug dal vivo 2026-08-13 su vsrasp01).
+# Pin qui e nel requirements.txt di Core sulla STESSA versione — 1.6.1
+# perché è l'ultima con wheel aarch64 per Python 3.9 (richiesto da
+# tflite-runtime, altra dipendenza di openwakeword, che si ferma lì).
+scikit-learn==1.6.1
 paho-mqtt>=1.6.1

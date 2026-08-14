@@ -23,6 +23,13 @@ resemblyzer
 
 # Wakeword (opzionale sul miniPC)
 openwakeword
+# Pin allineato a pi/voice/requirements.txt: i modelli "Gaia" custom si
+# addestrano qui (train_doorbell_model.py, via openwakeword.custom_verifier_
+# model) e si caricano via pickle sui Pi — se scikit-learn diverge tra le
+# due venv l'unpickling rompe silenziosamente (bug dal vivo 2026-08-13 su
+# vsrasp01). 1.6.1 perché è il tetto per i Pi che girano Python 3.9
+# (richiesto da tflite-runtime, altra dipendenza di openwakeword).
+scikit-learn==1.6.1
 
 # PyTorch — richiesto da resemblyzer e openwakeword
 torch==2.12.0+cu130

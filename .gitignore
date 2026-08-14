@@ -45,6 +45,7 @@ minipc/wakeword_models/
 # (registrazioni vocali), stessa categoria di voice_db.json
 minipc/script/gaia_wakeword_samples_minipc/
 minipc/script/gaia_wakeword_samples_ops/
+minipc/script/gaia_wakeword_samples_vsrasp01/
 minipc/script/gaia_wakeword_samples/
 
 # Local agent runtime (device-specific, generato automaticamente)
