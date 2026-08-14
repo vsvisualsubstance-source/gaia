@@ -2076,6 +2076,7 @@ const PM_SVC_META = {
   herbarium: { label: 'Herbarium', icon: '🌿' },
   herbsim:   { label: 'Herb. Sim', icon: '🎲' },
   herbmp:    { label: 'Herb. MP',  icon: '🕺' },
+  livestream:{ label: 'LiveStream',icon: '📡' },
   mosquitto: { label: 'MQTT Broker', icon: '📡' },
   qdrant:    { label: 'Qdrant',    icon: '🧠' },
   ollama:    { label: 'Ollama',    icon: '🤖' },
@@ -2101,6 +2102,8 @@ const HERB_PRESETS = [
 ];
 const _pmHerbPreset = {};   // stanza -> preset attuale (da gaia/herbarium/+/state)
 const _pmHerbVol    = {};   // stanza -> volume batteria attuale (0-100, da gaia/herbarium/+/state)
+const _pmLiveSource    = {};   // stanza -> sorgente attuale ("mic"|"library", da gaia/livestream/+/state)
+const _pmLiveListeners = {};   // stanza -> numero ascoltatori attuale
 
 async function pmCleanRooms() {
   try {
@@ -2132,6 +2135,7 @@ function initPiManager() {
       pmSetConn(true);
       _pmClient.subscribe('gaia/device/+/status');
       _pmClient.subscribe('gaia/herbarium/+/state');
+      _pmClient.subscribe('gaia/livestream/+/state');
       _pmClient.subscribe('gaia/td-bridge/status');
       _pmClient.subscribe('gaia/mocap-bridge/+/status');
       pmLog('in', `Connesso a ${mqttUrl}`);
@@ -2170,6 +2174,19 @@ function initPiManager() {
                 if (lbl) lbl.textContent = st.drum_volume + '%';
               }});
           }
+        } catch(e) {}
+        return;
+      }
+      if (topic.startsWith('gaia/livestream/') && topic.endsWith('/state')) {
+        try {
+          const st = JSON.parse(raw.toString());
+          const stanza = topic.split('/')[2];
+          if (st && st.source) {
+            _pmLiveSource[stanza] = st.source;
+            document.querySelectorAll(`.pm-inp-livesource[data-stanza="${stanza}"]`)
+              .forEach(sel => { if (document.activeElement !== sel) sel.value = st.source; });
+          }
+          _pmLiveListeners[stanza] = st?.active ? (st.listeners||0) : 0;
         } catch(e) {}
         return;
       }
@@ -2446,7 +2463,21 @@ function pmBuildCard(id, d) {
         <span class="pm-herbvol-lbl" style="font-size:.8rem;color:var(--muted);width:36px;text-align:right">${_pmHerbVol[d.stanza]??100}%</span>
       </div>
     </div>`:''}
+    ${svcKeys.includes('livestream')?`<div>
+      <div class="pm-section-label">📡 LiveStream (${_pmLiveListeners[d.stanza]||0} in ascolto)</div>
+      <div class="pm-rename-row">
+        <select class="pm-inp-livesource" data-stanza="${pmEsc(d.stanza||'')}" style="flex:1">
+          <option value="mic" ${(_pmLiveSource[d.stanza]||'mic')==='mic'?'selected':''}>Microfono</option>
+          <option value="library" ${_pmLiveSource[d.stanza]==='library'?'selected':''}>Libreria locale</option>
+        </select>
+        <button class="pm-btn blue pm-btn-livesource" style="width:auto;padding:0 14px">Applica</button>
+      </div>
+      <div style="font-size:.75rem;color:var(--muted);margin-top:4px;word-break:break-all">
+        ${d.services?.livestream?.endpoints?.stream||`http://${d.ip}:8000/stream.ogg`}
+      </div>
+    </div>`:''}
     <div class="pm-card-actions">
+      ${svcKeys.includes('livestream') ? `<button class="pm-btn blue" onclick="window.open('${d.services?.livestream?.endpoints?.stream||`http://${d.ip}:8000/stream.ogg`}','_blank')">🔊 Ascolta stream</button>` : ''}
       ${d.capabilities?.camera && d.stanza ? `<button class="pm-btn blue pm-btn-welcome" onclick="window.open('http://${location.hostname}:1880/welcome.html?cam=${encodeURIComponent(d.ip||'')}&room=${encodeURIComponent(d.stanza)}','_blank')">🖥 Apri Welcome</button>` : ''}
       <button class="pm-btn gray pm-btn-status">Status</button>
       <button class="pm-btn amber pm-btn-reboot">Reboot</button>
@@ -2546,6 +2577,15 @@ function pmAttachEvents(id, card) {
       pmLog('out', `Herbarium ${stanza}: volume batteria → ${volInp.value}%`);
     };
   }
+  const liveBtn = card.querySelector('.pm-btn-livesource');
+  if (liveBtn) liveBtn.onclick = () => {
+    const sel = card.querySelector('.pm-inp-livesource');
+    const stanza = sel?.dataset.stanza;
+    if (!stanza || !sel.value || !_pmClient) return;
+    _pmClient.publish(`gaia/livestream/${stanza}/command`, JSON.stringify({source: sel.value}));
+    pmLog('out', `LiveStream ${stanza}: sorgente → ${sel.value}`);
+    liveBtn.textContent = '✓'; setTimeout(() => { liveBtn.textContent = 'Applica'; }, 1200);
+  };
   card.querySelector('.pm-btn-status').onclick  = () => pmSend(id, {action:'status'});
   card.querySelector('.pm-btn-reboot').onclick  = () => { if(confirm(`Riavviare ${id}?`)) pmSend(id, {action:'reboot'}); };
   card.querySelector('.pm-btn-shutdown').onclick = () => { if(confirm(`Spegnere ${id}? Per riaccenderlo servirà staccare/riattaccare l'alimentazione.`)) pmSend(id, {action:'shutdown'}); };

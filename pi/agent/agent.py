@@ -115,6 +115,10 @@ def _service_endpoints(key: str, stanza: str, ip: str) -> dict:
     if key == "yolo":
         return {"frame": f"gaia/{stanza}/frame",
                 "snapshot": f"gaia/{stanza}/snapshot"}
+    if key == "livestream":
+        return {"stream": f"http://{ip}:8000/stream.ogg",
+                "command": f"gaia/livestream/{stanza}/command",
+                "state": f"gaia/livestream/{stanza}/state"}
     return {}
 
 

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GAIA · LiveStream</title>
+<style>
+:root{--bg:#050810;--card:#0e1221;--border:#1e2840;--accent:#00ffcc;--blue:#58a6ff;--yellow:#e3b341;--red:#f85149;--green:#3fb950;--text:#c9d1d9;--muted:#6b7a99}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;padding:16px;min-height:100vh}
+.nav{display:flex;gap:12px;margin-bottom:18px;align-items:center;border-bottom:1px solid var(--border);padding-bottom:12px}
+.nav a{color:var(--muted);text-decoration:none;font-size:.8rem;padding:4px 10px;border-radius:6px;transition:all .15s}
+.nav a:hover{color:var(--text);background:var(--card)}
+.nav a.active{color:var(--accent);background:#001a12}
+.nav-title{font-size:1.1rem;font-weight:700;color:var(--accent);margin-right:8px}
+.hint{color:var(--muted);font-size:.8rem;margin-bottom:16px;line-height:1.5}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px}
+.st-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.st-head{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--border)}
+.st-room{font-weight:700;font-size:.95rem;text-transform:capitalize}
+.st-dev{font-size:.7rem;color:var(--muted);font-family:monospace}
+.st-src{margin-left:auto;font-size:.68rem;background:#0c1e2a;color:var(--accent);border-radius:8px;padding:1px 8px;text-transform:capitalize}
+.st-body{padding:14px}
+.st-body audio{width:100%}
+.st-link{margin-top:10px;font-size:.72rem;color:var(--muted);word-break:break-all;display:flex;gap:6px;align-items:center}
+.st-link button{background:none;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:2px 8px;font-size:.7rem;cursor:pointer;flex-shrink:0}
+.st-link button:hover{color:var(--text);border-color:var(--muted)}
+.st-foot{display:flex;gap:10px;padding:8px 14px;font-size:.72rem;color:var(--muted);align-items:center;border-top:1px solid var(--border)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex-shrink:0}
+.dot.ok{background:var(--green);box-shadow:0 0 5px var(--green)}
+.dot.err{background:var(--red)}
+.empty{grid-column:1/-1;text-align:center;color:var(--muted);padding:60px 0}
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <div class="nav-title">📡 LiveStream</div>
+  <a href="portal.html">⌂</a>
+  <a href="dashboard.html">Dashboard</a>
+  <a href="admin.html">Admin</a>
+  <a href="cameras.html">Camere</a>
+  <a href="welcome.html">Welcome</a>
+  <span id="count" style="margin-left:auto;color:var(--muted);font-size:.8rem"></span>
+</div>
+
+<p class="hint">Ogni Pi trasmette dal proprio icecast2 locale — nessun server centrale.
+Chi apre questa pagina e preme play riproduce l'audio nel proprio device: collega il
+jack di quel device a un diffusore (es. Holosonic) per ascoltarlo lì.</p>
+
+<div class="grid" id="grid"><div class="empty">Carico i profili device…</div></div>
+
+<script>
+// Griglia di tutti gli stream audio della casa — scoperta automatica via
+// profili semantici (docs/gaia-semantico.md), stesso principio di cameras.html:
+// nessun IP hardcodato, ogni device che dichiara un endpoint "stream" appare qui.
+const $grid = document.getElementById('grid');
+
+async function load() {
+  let profiles = {};
+  try {
+    const r = await fetch(`http://${location.hostname}:1880/gaia/devices/profiles`);
+    profiles = await r.json();
+  } catch (e) {
+    $grid.innerHTML = '<div class="empty">Endpoint profili non raggiungibile</div>';
+    return;
+  }
+
+  const streams = [];
+  for (const [id, p] of Object.entries(profiles)) {
+    const url = p.services?.livestream?.endpoints?.stream;
+    if (!url) continue;
+    streams.push({
+      id, url,
+      room:  p.room_assigned || p.room || '?',
+      state: p.services?.livestream?.state || '?',
+    });
+  }
+
+  document.getElementById('count').textContent =
+    streams.length ? `${streams.length} stream dichiarati` : '';
+
+  if (!streams.length) {
+    $grid.innerHTML = '<div class="empty">Nessun Pi con LiveStream attivo nei profili</div>';
+    return;
+  }
+
+  $grid.innerHTML = streams.map(s => `
+    <div class="st-card">
+      <div class="st-head">
+        <span class="st-room">${s.room}</span>
+        <span class="st-dev">${s.id}</span>
+      </div>
+      <div class="st-body">
+        <audio controls preload="none" src="${s.url}"
+               onerror="this.nextElementSibling.style.display='block'"></audio>
+        <div class="st-link" style="display:none;color:var(--red)">stream non raggiungibile da questa rete</div>
+        <div class="st-link">
+          <span>${s.url}</span>
+          <button onclick="navigator.clipboard.writeText('${s.url}').then(()=>{this.textContent='✓';setTimeout(()=>this.textContent='copia',1200)})">copia</button>
+        </div>
+      </div>
+      <div class="st-foot">
+        <span class="dot ${s.state === 'active' ? 'ok' : 'err'}"></span>
+        <span>${s.state === 'active' ? 'in trasmissione' : 'spento'}</span>
+      </div>
+    </div>`).join('');
+}
+
+load();
+setInterval(() => {
+  // ricarica solo i metadati: se cambia il numero di stream dichiarati la
+  // griglia si ricostruisce (i player già aperti restano dov'erano)
+  fetch(`http://${location.hostname}:1880/gaia/devices/profiles`)
+    .then(r => r.json())
+    .then(p => {
+      const n = Object.values(p).filter(x => x.services?.livestream?.endpoints?.stream).length;
+      const cur = document.querySelectorAll('.st-card').length;
+      if (n !== cur) load();
+    }).catch(() => {});
+}, 15000);
+</script>
+</body>
+</html>

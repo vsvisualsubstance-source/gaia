@@ -192,6 +192,7 @@ GAIA_SERVICES = [
     ("voice",       "🎤", "Voce — wakeword e TTS"),
     ("yolo",        "👁️", "Visione YOLO"),
     ("mediapipe",   "🖐️", "MediaPipe — gesti e pose"),
+    ("livestream",  "📡", "LiveStream — trasmetti la stanza"),
 ]
 _SVC_NAMES       = {s[0] for s in GAIA_SERVICES}
 SVC_CONFLICTS    = {"screen": "kiosk", "kiosk": "screen"}  # Conflicts= reciproco nei .service
@@ -281,6 +282,60 @@ def set_drum_volume(value: int) -> tuple[bool, str]:
     if _svc_active("herbarium"):
         _systemctl("restart", "gaia-herbarium")
     return True, ""
+
+
+LIVESTREAM_CONF = "/etc/gaia/livestream.conf"
+
+
+def _read_livestream_conf() -> dict:
+    cfg = {}
+    if os.path.exists(LIVESTREAM_CONF):
+        with open(LIVESTREAM_CONF) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    cfg[k.strip()] = v.strip()
+    return cfg
+
+
+def get_livestream_source() -> str:
+    return _read_livestream_conf().get("LIVESTREAM_SOURCE", "mic")
+
+
+def set_livestream_source(source: str) -> tuple[bool, str]:
+    """Stesso principio di set_herb_preset: scrive LIVESTREAM_SOURCE in
+    livestream.conf e riavvia gaia-livestream se già attivo."""
+    if source not in ("mic", "library"):
+        return False, "sorgente non valida"
+    cfg = _read_livestream_conf()
+    cfg["LIVESTREAM_SOURCE"] = source
+    try:
+        with open(LIVESTREAM_CONF, "w") as f:
+            for k, v in cfg.items():
+                f.write(f"{k}={v}\n")
+    except OSError as e:
+        return False, str(e)
+    log(f"Sorgente LiveStream impostata: {source}")
+    if _svc_active("livestream"):
+        _systemctl("restart", "gaia-livestream")
+    return True, ""
+
+
+def get_stream_url() -> str:
+    """URL dello stream icecast locale — costruito dall'IP che questo Pi usa
+    davvero in questo momento (AP mode 10.42.0.1, o l'IP di LAN una volta
+    connesso), non hardcodato."""
+    mount = _read_livestream_conf().get("LIVESTREAM_MOUNT", "stream.ogg")
+    port = _read_livestream_conf().get("ICECAST_PORT", "8000")
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+    except OSError:
+        ip = "127.0.0.1"
+    return f"http://{ip}:{port}/{mount}"
 
 
 def _systemctl(*args) -> subprocess.CompletedProcess:
@@ -375,6 +430,8 @@ def services_state() -> dict:
         "stanza": cfg.get("stanza"),
         "herb_preset": get_herb_preset(),
         "herb_drum_volume": get_drum_volume(),
+        "livestream_source": get_livestream_source(),
+        "stream_url": get_stream_url(),
     }
 
 
@@ -430,6 +487,11 @@ PORTAL_HTML = """<!DOCTYPE html>
 <div class="volrow">🥁<input type="range" id="herbdrumvol" min="0" max="100" value="100"
   oninput="document.getElementById('herbdrumvollab').textContent=this.value+'%'"
   onchange="setDrumVolume(this.value)"><span class="pct" id="herbdrumvollab">—</span></div>
+<div class="volrow" style="margin-top:6px">📡<select id="livestreamsource" style="flex:1">
+  <option value="mic">Microfono</option><option value="library">Libreria locale</option></select>
+  <button style="width:auto;margin:0;padding:8px 14px;min-height:40px;font-size:.85rem;border-radius:8px"
+    onclick="setLivestreamSource(this)">Applica</button></div>
+<div id="streamlink" style="font-size:.8rem;color:#8b949e;margin:-2px 0 6px;word-break:break-all"></div>
 <div class="volrow">🔊<input type="range" id="vol" min="0" max="100" value="60"
   oninput="document.getElementById('vollab').textContent=this.value+'%'"
   onchange="setVol(this.value)"><span class="pct" id="vollab">—</span></div>
@@ -491,6 +553,10 @@ function render(d){
     dv.value = d.herb_drum_volume;
     document.getElementById('herbdrumvollab').textContent = d.herb_drum_volume+'%';
   }
+  var ls = document.getElementById('livestreamsource');
+  if(d.livestream_source && document.activeElement!==ls) ls.value = d.livestream_source;
+  if(d.stream_url) document.getElementById('streamlink').innerHTML =
+    'Link stream: <a href="'+d.stream_url+'" style="color:#00ffcc" target="_blank">'+d.stream_url+'</a>';
 }
 function loadSvcs(){ fetch('/services').then(r=>r.json()).then(render).catch(()=>{}); }
 function setPreset(btn){
@@ -504,6 +570,14 @@ function setPreset(btn){
 function setDrumVolume(v){
   fetch('/herbarium/drum_volume',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({value:+v})});
+}
+function setLivestreamSource(btn){
+  var sel = document.getElementById('livestreamsource');
+  btn.disabled = true; btn.textContent = '…';
+  fetch('/livestream/source',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({source: sel.value})})
+  .then(r=>r.json()).then(d=>{ btn.disabled=false; btn.textContent='Applica'; if(d.error) alert(d.error); })
+  .catch(()=>{ btn.disabled=false; btn.textContent='Applica'; });
 }
 function toggle(name,active,btn){
   btn.disabled = true; btn.textContent = '…';
@@ -644,6 +718,14 @@ class PortalHandler(BaseHTTPRequestHandler):
                 self._send_json({"ok": False, "error": "valore non valido"}, 400)
                 return
             resp = {"ok": ok, "herb_drum_volume": get_drum_volume()}
+            if err:
+                resp["error"] = err
+            self._send_json(resp)
+            return
+
+        if path == "/livestream/source":
+            ok, err = set_livestream_source((body.get("source") or "").strip())
+            resp = {"ok": ok, "livestream_source": get_livestream_source()}
             if err:
                 resp["error"] = err
             self._send_json(resp)
