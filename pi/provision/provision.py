@@ -510,7 +510,7 @@ PORTAL_HTML = """<!DOCTYPE html>
 <button class="ghost" style="width:100%;margin-top:26px"
   onclick="if(confirm('Riavviare Gaia?'))fetch('/reboot',{method:'POST'})">↻ Riavvia Gaia</button>
 <button class="ghost" style="width:100%;margin-top:10px"
-  onclick="if(confirm('Spegnere Gaia? Per riaccenderlo servirà staccare/riattaccare l\'alimentazione.'))fetch('/shutdown',{method:'POST'})">⏻ Spegni Gaia</button>
+  onclick="if(confirm('Spegnere Gaia? Per riaccenderlo servirà staccare/riattaccare l\\'alimentazione.'))fetch('/shutdown',{method:'POST'})">⏻ Spegni Gaia</button>
 <script>
 function send(f){
   document.getElementById('btn').disabled = true;
