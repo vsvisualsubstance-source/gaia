@@ -63,7 +63,8 @@ SERVICE_MAP = {
     "yolo":      "gaia-yolo",
     "mediapipe": "gaia-mediapipe",
     "voice":     "gaia-voice",
-    "camera":    "gaia-camera",   # gestito come dipendenza di yolo/mediapipe, non attivabile a mano
+    "camera":    "gaia-camera",   # servizio base indipendente: serve anche web/cameras.html da solo;
+                                   # yolo/mediapipe/kiosk lo richiedono come dipendenza (SERVICE_DEPENDENCIES)
     "screen":    "gaia-screen",   # superficie asemica su display DSI (pi/screen)
     "kiosk":     "gaia-kiosk",    # Welcome su display DSI (cage+Chromium) — Conflicts con screen
     "mediaplayer": "gaia-mediaplayer",  # musica/radio per stanza (mpv+MQTT)

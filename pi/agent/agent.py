@@ -189,33 +189,6 @@ def all_statuses() -> dict:
     return {k: service_status(k) for k in config.SERVICE_MAP}
 
 
-# Servizi che dipendono dal frame broker condiviso (camera_server) — vedi _sync_camera
-CAMERA_CONSUMERS = ("yolo", "mediapipe", "kiosk")   # kiosk: bolla MJPEG della welcome (localhost:8766)
-
-
-def _camera_consumer_count(cfg: dict) -> int:
-    services = cfg.get("services", {})
-    return sum(1 for k in CAMERA_CONSUMERS if services.get(k, {}).get("enabled", False))
-
-
-def _sync_camera(cfg: dict):
-    """Garantisce che gaia-camera sia attivo se e solo se almeno un consumer
-    (yolo/mediapipe) lo richiede in cfg. Idempotente — può essere chiamata
-    ogni volta che lo stato di un consumer cambia, senza dover tracciare
-    a mano le transizioni 0→1/1→0."""
-    if "camera" not in config.SERVICE_MAP:
-        return   # macchina senza camera nel manifest (ruolo core/media)
-    want = _camera_consumer_count(cfg) > 0
-    is_active = service_status("camera") == "active"
-    if want and not is_active:
-        print("[Agent] Avvio gaia-camera (richiesto da yolo/mediapipe)")
-        _systemctl("start", config.SERVICE_MAP["camera"])
-        time.sleep(1)   # lascia il tempo a camera_server di creare la shared memory
-    elif not want and is_active:
-        print("[Agent] Stop gaia-camera (nessun consumer attivo)")
-        _systemctl("stop", config.SERVICE_MAP["camera"])
-
-
 # Servizi che richiedono un ALTRO servizio attivo per funzionare — avviato
 # automaticamente insieme (herbmp legge gaia/mediapipe/pose: senza mediapipe
 # resta sordo). NON disabilitato automaticamente quando il richiedente si
@@ -226,16 +199,28 @@ def _sync_camera(cfg: dict):
 # simulatore acceso (bug dal vivo 2026-08-13 su vsrasp01: "non sento
 # herbarium suonare se attivo il simulatore" — herbsim/herbmp mancavano
 # della dipendenza su "herbarium" stesso, solo herbmp→mediapipe era dichiarata).
+#
+# camera: fino a v1.0.1 era un servizio a sé, poi resa una dipendenza
+# ref-counted "silenziosa" (CAMERA_CONSUMERS/_sync_camera, mai accendibile/
+# spegnibile a mano, si fermava da sola appena l'ultimo consumer si
+# spegneva) — rotto il caso d'uso "camera accesa da sola per servire
+# web/cameras.html senza yolo/mediapipe attivi" che il primo Pi (ingresso)
+# supportava. Segnalato dal vivo 2026-08-14. Tornata un servizio normale,
+# qui sotto come dipendenza di yolo/mediapipe/kiosk con lo stesso principio
+# di herbmp: si accende da sola quando serve, non si spegne da sola quando
+# il richiedente si spegne — va spenta esplicitamente se non serve più.
 SERVICE_DEPENDENCIES = {
-    "herbmp":  ("mediapipe", "herbarium"),
-    "herbsim": ("herbarium",),
+    "herbmp":     ("mediapipe", "herbarium"),
+    "herbsim":    ("herbarium",),
+    "yolo":       ("camera",),
+    "mediapipe":  ("camera",),
+    "kiosk":      ("camera",),   # bolla MJPEG della welcome (localhost:8766)
 }
 
 
 def _sync_dependencies(key: str, cfg: dict):
     """Avvia (se non già attivi) i servizi da cui 'key' dipende e li marca
-    enabled in cfg — idempotente, propaga anche la dipendenza camera se la
-    dipendenza stessa è un CAMERA_CONSUMER (es. mediapipe)."""
+    enabled in cfg — idempotente."""
     for dep in SERVICE_DEPENDENCIES.get(key, ()):
         if dep not in config.SERVICE_MAP:
             continue
@@ -244,15 +229,11 @@ def _sync_dependencies(key: str, cfg: dict):
             print(f"[Agent] Avvio {dep} (richiesto da {key})")
             _systemctl("start", config.SERVICE_MAP[dep])
             time.sleep(1)
-        if dep in CAMERA_CONSUMERS:
-            _sync_camera(cfg)
 
 
 def enable_service(key: str, cfg: dict = None) -> bool:
     if cfg is not None:
         _sync_dependencies(key, cfg)
-        if key in CAMERA_CONSUMERS:
-            _sync_camera(cfg)
     unit = config.SERVICE_MAP.get(key)
     if not unit:
         return False
@@ -263,10 +244,7 @@ def disable_service(key: str, cfg: dict = None) -> bool:
     unit = config.SERVICE_MAP.get(key)
     if not unit:
         return False
-    ok = _systemctl("stop", unit)
-    if key in CAMERA_CONSUMERS and cfg is not None:
-        _sync_camera(cfg)
-    return ok
+    return _systemctl("stop", unit)
 
 
 def restart_service(key: str) -> bool:
@@ -382,11 +360,6 @@ def _handle_command(cmd: dict):
 
     print(f"[Agent] Comando ricevuto: {cmd}")
 
-    if service == "camera" and action in ("enable", "disable"):
-        print("[Agent] gaia-camera è gestito automaticamente da yolo/mediapipe, comando ignorato")
-        _publish_status()
-        return
-
     if action == "enable" and service:
         with _config_lock:
             _device_config.setdefault("services", {}).setdefault(service, {})["enabled"] = True
@@ -396,8 +369,6 @@ def _handle_command(cmd: dict):
         else:
             with _config_lock:
                 _device_config["services"][service]["enabled"] = False
-            if service in CAMERA_CONSUMERS:
-                _sync_camera(_device_config)
 
     elif action == "disable" and service:
         with _config_lock:
@@ -408,8 +379,6 @@ def _handle_command(cmd: dict):
         else:
             with _config_lock:
                 _device_config["services"][service]["enabled"] = True
-            if service in CAMERA_CONSUMERS:
-                _sync_camera(_device_config)
 
     elif action == "restart" and service:
         restart_service(service)
@@ -536,7 +505,10 @@ def _ota_update(service_key: str, url: str, md5_expected: str, filename: str, ve
 # ──────────────────────────────────────────────────────────────────────
 def apply_initial_config():
     _write_device_env(_device_config)   # assicura /etc/gaia/device.conf aggiornato
-    _sync_camera(_device_config)        # avvia gaia-camera una sola volta se serve, prima dei consumer
+    # camera è un servizio normale ora (vedi SERVICE_DEPENDENCIES sopra): se è
+    # enabled per conto suo, o se lo è yolo/mediapipe/kiosk (che la richiedono
+    # come dipendenza), parte comunque in questo stesso giro — enable_service
+    # è idempotente, non serve più avviarla qui a parte prima del loop.
     for svc, cfg in _device_config.get("services", {}).items():
         if cfg.get("enabled", False):
             print(f"[Agent] Avvio: {svc}")

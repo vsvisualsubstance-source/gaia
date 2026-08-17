@@ -185,6 +185,7 @@ def save_stanza(stanza: str):
 
 # ── Servizi standalone (menu nel portale) ─────────────────────────────
 GAIA_SERVICES = [
+    ("camera",      "📷", "Camera — serve la pagina web camere"),
     ("herbarium",   "🌿", "Herbarium — le piante suonano"),
     ("mediaplayer", "🎵", "Media player"),
     ("screen",      "✴️", "Sigillo asemico (display)"),
@@ -196,7 +197,7 @@ GAIA_SERVICES = [
 ]
 _SVC_NAMES       = {s[0] for s in GAIA_SERVICES}
 SVC_CONFLICTS    = {"screen": "kiosk", "kiosk": "screen"}  # Conflicts= reciproco nei .service
-CAMERA_CONSUMERS = ("yolo", "mediapipe", "kiosk")          # stessa lista di agent.py
+CAMERA_CONSUMERS = ("yolo", "mediapipe", "kiosk")          # chi la richiede come dipendenza (mai auto-stop, vedi agent.py)
 
 # Preset del motore musicale Herbarium — stessi nomi/etichette di
 # web/admin.html (HERB_PRESETS) e chiavi di herbarium/music_engine.py
@@ -363,14 +364,15 @@ def _save_device_cfg(cfg: dict):
         log(f"Errore salvataggio device.json (ignoro): {e}")
 
 
-def _sync_camera(cfg: dict):
-    """Stesso refcount dell'agent: camera accesa sse un consumer è abilitato.
-    Serve perché qui bypassiamo l'agent (che gestisce la camera solo sui
-    comandi MQTT — e nel bosco MQTT non c'è)."""
-    services = cfg.get("services", {})
-    want = any(services.get(k, {}).get("enabled") for k in CAMERA_CONSUMERS)
-    if want != _svc_active("camera"):
-        _systemctl("start" if want else "stop", "gaia-camera")
+def _ensure_camera(cfg: dict):
+    """Se un consumer (yolo/mediapipe/kiosk) sta per partire, assicura che
+    gaia-camera sia già attiva. Solo one-way: non la ferma mai in automatico —
+    la camera è un servizio base indipendente (serve anche da sola web/cameras.html),
+    esattamente come in agent.py. Serve perché qui bypassiamo l'agent (che
+    gestisce le dipendenze solo sui comandi MQTT — e nel bosco MQTT non c'è)."""
+    if not _svc_active("camera"):
+        _systemctl("start", "gaia-camera")
+    cfg.setdefault("services", {}).setdefault("camera", {})["enabled"] = True
 
 
 def toggle_service(name: str, action: str) -> tuple[bool, str]:
@@ -386,7 +388,8 @@ def toggle_service(name: str, action: str) -> tuple[bool, str]:
     if r.returncode != 0:
         return False, (r.stderr or r.stdout).strip()[:200]
     services.setdefault(name, {})["enabled"] = (action == "start")
-    _sync_camera(cfg)
+    if action == "start" and name in CAMERA_CONSUMERS:
+        _ensure_camera(cfg)
     _save_device_cfg(cfg)
     log(f"Servizio {name}: {action}")
     return True, ""

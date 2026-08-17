@@ -2357,14 +2357,11 @@ function pmSvcBtnHtml(key, d) {
   const meta  = PM_SVC_META[key] || {label:key, icon:'⚙️'};
   const state = (d.services||{})[key] || 'inactive';
   const cls   = state==='active'?'running':state==='failed'?'failed':'';
-  // camera: l'agent (Pi) ignora enable/disable diretti — parte/si ferma da
-  // sola insieme a yolo/mediapipe/kiosk (vedi CAMERA_CONSUMERS in agent.py).
-  // Bottoni ▶/■/↺ qui sarebbero un no-op silenzioso e fuorviante (bug
-  // segnalato dal vivo 2026-08-13: "non parte dalla dashboard" — in realtà
-  // va acceso via Yolo/Mediapipe) — mostro solo lo stato.
-  const toggle = key === 'camera'
-    ? `<div class="pm-svc-toggle" style="font-size:.72rem;color:var(--muted);text-align:center">auto (Yolo/Mediapipe)</div>`
-    : `<div class="pm-svc-toggle">
+  // camera: servizio base indipendente — attivabile/disattivabile a mano
+  // per servire web/cameras.html anche con yolo/mediapipe spenti. Se yolo/
+  // mediapipe/kiosk vengono accesi, l'agent la avvia da sola come dipendenza
+  // (SERVICE_DEPENDENCIES in agent.py), ma non la ferma mai in automatico.
+  const toggle = `<div class="pm-svc-toggle">
       <button class="pm-btn green pm-svc-on" data-svc="${key}" title="Avvia">▶</button>
       <button class="pm-btn red pm-svc-off"  data-svc="${key}" title="Stop">■</button>
       <button class="pm-btn gray pm-svc-rst" data-svc="${key}" title="Restart">↺</button>
