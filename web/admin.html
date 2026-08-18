@@ -598,6 +598,22 @@ button.small{padding:3px 9px;font-size:.78rem;margin:0}
     <div id="db-msg" class="msg"></div>
   </div>
 
+  <!-- ── Sezione: Voce di Gaia ──────────────────────────────────────────── -->
+  <div class="section-hdr"><span>Voce di Gaia</span><div></div></div>
+
+  <div class="card">
+    <h2>Registro dei pensieri</h2>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:10px">
+      Il tono con cui Gaia genera i pensieri spontanei (Build Prompt Contestuale). "Poetica" è il
+      registro di sempre; "Underground" è più asciutto e diretto — pensato per installazioni fuori
+      casa (es. un locale).
+    </p>
+    <select id="register-select" onchange="setRegister(this.value)" style="width:100%;padding:8px">
+      <option value="">Caricamento…</option>
+    </select>
+    <div id="register-msg" class="msg"></div>
+  </div>
+
   <!-- ── Sezione: Automazioni ──────────────────────────────────────────── -->
   <div class="section-hdr"><span>Automazioni</span><div></div></div>
 
@@ -1312,6 +1328,35 @@ async function toggleAutomation(id, enabled, room) {
   loadAutomations();
 }
 
+async function loadRegister() {
+  const sel = document.getElementById('register-select');
+  try {
+    const r = await fetch(`${NODERED_API}/gaia/register`, {signal: AbortSignal.timeout(3000)});
+    if (!r.ok) throw new Error();
+    const d = await r.json();
+    sel.innerHTML = (d.options || []).map(o => `<option value="${o.id}">${o.label}</option>`).join('');
+    sel.value = d.register;
+  } catch {
+    sel.innerHTML = '<option value="">Errore di connessione</option>';
+  }
+}
+
+async function setRegister(register) {
+  try {
+    const r = await fetch(`${NODERED_API}/gaia/register/set`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({register})
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'errore sconosciuto');
+    setMsg('register-msg', `✓ Registro: ${register}`, 'ok');
+  } catch (e) {
+    setMsg('register-msg', `✗ Errore nel salvare il registro: ${e.message || e}`, 'err');
+    loadRegister();
+  }
+}
+
 // ── Preview webcam per enrollment volto ────────────────────────────────────
 let _faceStream = null;
 
@@ -1936,6 +1981,7 @@ refreshDoorbellStatus();
 setInterval(refreshDoorbellStatus, 5000);
 
 loadAutomations();
+loadRegister();
 
 poll();
 

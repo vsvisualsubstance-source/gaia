@@ -41,7 +41,7 @@
         "type": "function",
         "z": "082363fa8be6eb11",
         "name": "Registra gaiaOllama Helper",
-        "func": "// Helper condiviso per i prompt Ollama di Gaia -- estratto 2026-08-18\n// dopo aver trovato lo stesso blocco (selezione backend OPS/Core + shape\n// del payload) duplicato identico in 5 function node diversi (Build Prompt\n// Contestuale, Night Dream Prompt, Night Summary Prompt, Prepara prompt\n// chat, Nursery: prepara prompt Ollama). Registrato una volta qui,\n// letto con global.get('gaiaOllama') -- stesso pattern gia' in uso per\n// gaiaBrain/ollamaHealth (vedi 'Load Brain at StartUp' su questo tab).\nglobal.set('gaiaOllama', {\n    MODEL: 'qwen2.5:3b-instruct-q4_K_M',\n\n    // Backend Ollama \"sano\" (2026-08-07): preferisce OPS (piu' potente,\n    // libera CPU su Core) se ha risposto a /api/tags negli ultimi 60s\n    // (health-check separato, vedi 'Ollama Health Check' su questo tab),\n    // altrimenti Core -- mai bloccare in attesa, fallback su Core se\n    // nessun check e' ancora arrivato.\n    pickUrl: function () {\n        const oh = global.get('ollamaHealth') || {};\n        const opsOk = oh.ops && oh.ops.ok && (Date.now() - oh.ops.ts) < 60000;\n        return (opsOk ? 'http://192.168.1.240:11434' : 'http://192.168.1.142:11434') + '/api/generate';\n    },\n\n    // opts extra facoltativi, es. { options: { temperature: 1.15 } }\n    buildRequest: function (prompt, opts) {\n        return Object.assign({ model: this.MODEL, prompt: prompt, stream: false }, opts || {});\n    }\n});\nreturn null;",
+        "func": "// Helper condiviso per i prompt Ollama di Gaia -- estratto 2026-08-18\n// dopo aver trovato lo stesso blocco (selezione backend OPS/Core + shape\n// del payload) duplicato identico in 5 function node diversi (Build Prompt\n// Contestuale, Night Dream Prompt, Night Summary Prompt, Prepara prompt\n// chat, Nursery: prepara prompt Ollama). Registrato una volta qui,\n// letto con global.get('gaiaOllama') -- stesso pattern gia' in uso per\n// gaiaBrain/ollamaHealth (vedi 'Load Brain at StartUp' su questo tab).\nglobal.set('gaiaOllama', {\n    MODEL: 'qwen2.5:3b-instruct-q4_K_M',\n\n    // Backend Ollama \"sano\" (2026-08-07): preferisce OPS (piu' potente,\n    // libera CPU su Core) se ha risposto a /api/tags negli ultimi 60s\n    // (health-check separato, vedi 'Ollama Health Check' su questo tab),\n    // altrimenti Core -- mai bloccare in attesa, fallback su Core se\n    // nessun check e' ancora arrivato.\n    pickUrl: function () {\n        const oh = global.get('ollamaHealth') || {};\n        const opsOk = oh.ops && oh.ops.ok && (Date.now() - oh.ops.ts) < 60000;\n        return (opsOk ? 'http://192.168.1.240:11434' : 'http://192.168.1.142:11434') + '/api/generate';\n    },\n\n    // opts extra facoltativi, es. { options: { temperature: 1.15 } }\n    buildRequest: function (prompt, opts) {\n        return Object.assign({ model: this.MODEL, prompt: prompt, stream: false }, opts || {});\n    },\n\n    // Registro voce (2026-08-18): poetica (default, testo di sempre) vs\n    // underground (asciutta/diretta, per installazioni fuori casa -- locali,\n    // bar). Stato in brain.settings.register, persistito da Parse Brain/save\n    // brain.json come automations. Toggle da Admin via POST /gaia/register/set.\n    // Per ora usato solo da Build Prompt (Contestuale); estendibile agli altri\n    // prompt-builder in futuro leggendo semplicemente questi stessi metodi.\n    REGISTERS: {\n        poetica: {\n            label: 'Poetica',\n            instruction: 'Genera un pensiero poetico e consapevole di massimo 25 parole.'\n        },\n        underground: {\n            label: 'Underground',\n            instruction: 'Genera un pensiero breve e diretto, massimo 18 parole: registro asciutto, minimale, atmosfera underground -- via ogni lirismo, niente tono da poesia, frasi secche.'\n        }\n    },\n    getRegister: function () {\n        const brain = global.get('gaiaBrain') || {};\n        const r = brain.settings && brain.settings.register;\n        return this.REGISTERS[r] ? r : 'poetica';\n    },\n    registerInstruction: function () {\n        return this.REGISTERS[this.getRegister()].instruction;\n    }\n});\nreturn null;",
         "outputs": 1,
         "timeout": 0,
         "noerr": 0,
@@ -97,6 +97,98 @@
         "label": "Device Registry",
         "disabled": false,
         "info": ""
+    },
+    {
+        "id": "register_http_set_response",
+        "type": "http response",
+        "z": "tab_device_registry",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 1400,
+        "y": 470,
+        "wires": []
+    },
+    {
+        "id": "register_fn_set",
+        "type": "function",
+        "z": "tab_device_registry",
+        "name": "RegisterSet",
+        "func": "// POST /gaia/register/set  {register: 'poetica'|'underground'}\nconst _go = global.get('gaiaOllama');\nconst register = (msg.payload || {}).register;\n\nif (!register || !_go.REGISTERS[register]) {\n    msg.statusCode = 400;\n    msg.payload = { ok: false, error: 'registro non valido', options: Object.keys(_go.REGISTERS) };\n    return msg;\n}\n\nlet brain = global.get('gaiaBrain') || {};\nbrain.settings = brain.settings || {};\nbrain.settings.register = register;\nglobal.set('gaiaBrain', brain);\nnode.warn(`[Register] registro -> ${register}`);\n\nmsg.statusCode = 200;\nmsg.payload = { ok: true, register };\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1170,
+        "y": 470,
+        "wires": [
+            [
+                "register_http_set_response"
+            ]
+        ]
+    },
+    {
+        "id": "register_http_set",
+        "type": "http in",
+        "z": "tab_device_registry",
+        "name": "POST /gaia/register/set",
+        "url": "/gaia/register/set",
+        "method": "post",
+        "x": 950,
+        "y": 470,
+        "wires": [
+            [
+                "register_fn_set"
+            ]
+        ]
+    },
+    {
+        "id": "register_http_get_response",
+        "type": "http response",
+        "z": "tab_device_registry",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 1400,
+        "y": 420,
+        "wires": []
+    },
+    {
+        "id": "register_fn_get",
+        "type": "function",
+        "z": "tab_device_registry",
+        "name": "RegisterGet",
+        "func": "// GET /gaia/register -> registro attivo + opzioni disponibili\nconst brain = global.get('gaiaBrain') || {};\nconst _go = global.get('gaiaOllama');\nmsg.payload = {\n    register: _go.getRegister(),\n    options: Object.entries(_go.REGISTERS).map(([id, r]) => ({ id, label: r.label })),\n};\nmsg.statusCode = 200;\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1170,
+        "y": 420,
+        "wires": [
+            [
+                "register_http_get_response"
+            ]
+        ]
+    },
+    {
+        "id": "register_http_get",
+        "type": "http in",
+        "z": "tab_device_registry",
+        "name": "GET /gaia/register",
+        "url": "/gaia/register",
+        "method": "get",
+        "x": 950,
+        "y": 420,
+        "wires": [
+            [
+                "register_fn_get"
+            ]
+        ]
     },
     {
         "id": "tab-device-mgr",
@@ -320,7 +412,7 @@
         "type": "function",
         "z": "082363fa8be6eb11",
         "name": "Parse Brain",
-        "func": "try {\n    if (msg.payload && msg.payload.length > 0) {\n        let saved = JSON.parse(msg.payload);\n        let brain = global.get('gaiaBrain') || {};\n        // Ricostruisci solo i campi salvati, gli altri li inizializzi vuoti\n        brain.rooms = saved.rooms || {};\n        brain.presence = saved.presence || {};\n        brain.people = saved.people || {};\n        brain.lights = saved.lights || {};\n        brain.plants = saved.plants || {};\n        brain.sensors = saved.sensors || {};\n        brain.lexicon = saved.lexicon || {};\n        brain.mood = saved.mood || { stress: 0, calm: 0, social: 0, curiosity: 0, energy: 50, state: \"neutra\" };\n        brain.lifeIndex = saved.lifeIndex || 50;\n        brain.gamification = saved.gamification || { level: 1, xp: 0, xpNextLevel: 1000, activeClass: \"Neutro\", unlockedAssets: [\"base_grid\"] };\n        brain.devices = saved.devices || {};\n        const _automationDefaults = { petConcierge: true, fallDetection: true, fireAlarm: true, fridgeAlarm: true, moodLighting: {}, maggiordomo: false, thirstyPlantAlert: false, awayMode: false, welcomeScene: false, touchdesignerLighting: false, touchdesignerMood: false, voiceAutoEnroll: false };\n        brain.automations = { ..._automationDefaults, ...(saved.automations || {}) };\n        // Inizializza i campi non salvati (arrays vuoti)\n        brain.diary = [];\n        brain.events = [];\n        brain.thoughts = [];\n        brain.memories = [];\n        brain.chatLog = [];\n        brain.emotions = {};\n        brain.gestures = {};\n        brain.sessions = {};\n        global.set('gaiaBrain', brain);\n    } else {\n        // File non trovato: brain nuovo\n        let brain = { rooms: {}, presence: {}, people: {}, lights: {}, plants: {}, sensors: {}, devices: {}, mood: { stress:0, calm:0, social:0, curiosity:0, energy:50, state:\"neutra\" }, diary:[], events:[], thoughts:[], memories:[], chatLog:[], emotions:{}, gestures:{}, sessions:{}, automations: { petConcierge: true, fallDetection: true, fireAlarm: true, fridgeAlarm: true, moodLighting: {}, maggiordomo: false, thirstyPlantAlert: false, awayMode: false, welcomeScene: false, touchdesignerLighting: false, touchdesignerMood: false, voiceAutoEnroll: false } };\n        global.set('gaiaBrain', brain);\n    }\n} catch(e) {\n    node.error(\"Errore parsing brain: \" + e.message);\n    global.set('gaiaBrain', {});\n}\nreturn msg;",
+        "func": "try {\n    if (msg.payload && msg.payload.length > 0) {\n        let saved = JSON.parse(msg.payload);\n        let brain = global.get('gaiaBrain') || {};\n        // Ricostruisci solo i campi salvati, gli altri li inizializzi vuoti\n        brain.rooms = saved.rooms || {};\n        brain.presence = saved.presence || {};\n        brain.people = saved.people || {};\n        brain.lights = saved.lights || {};\n        brain.plants = saved.plants || {};\n        brain.sensors = saved.sensors || {};\n        brain.lexicon = saved.lexicon || {};\n        brain.mood = saved.mood || { stress: 0, calm: 0, social: 0, curiosity: 0, energy: 50, state: \"neutra\" };\n        brain.lifeIndex = saved.lifeIndex || 50;\n        brain.gamification = saved.gamification || { level: 1, xp: 0, xpNextLevel: 1000, activeClass: \"Neutro\", unlockedAssets: [\"base_grid\"] };\n        brain.devices = saved.devices || {};\n        const _automationDefaults = { petConcierge: true, fallDetection: true, fireAlarm: true, fridgeAlarm: true, moodLighting: {}, maggiordomo: false, thirstyPlantAlert: false, awayMode: false, welcomeScene: false, touchdesignerLighting: false, touchdesignerMood: false, voiceAutoEnroll: false };\n        brain.automations = { ..._automationDefaults, ...(saved.automations || {}) };\n        brain.settings = { register: 'poetica', ...(saved.settings || {}) };\n        // Inizializza i campi non salvati (arrays vuoti)\n        brain.diary = [];\n        brain.events = [];\n        brain.thoughts = [];\n        brain.memories = [];\n        brain.chatLog = [];\n        brain.emotions = {};\n        brain.gestures = {};\n        brain.sessions = {};\n        global.set('gaiaBrain', brain);\n    } else {\n        // File non trovato: brain nuovo\n        let brain = { rooms: {}, presence: {}, people: {}, lights: {}, plants: {}, sensors: {}, devices: {}, mood: { stress:0, calm:0, social:0, curiosity:0, energy:50, state:\"neutra\" }, diary:[], events:[], thoughts:[], memories:[], chatLog:[], emotions:{}, gestures:{}, sessions:{}, automations: { petConcierge: true, fallDetection: true, fireAlarm: true, fridgeAlarm: true, moodLighting: {}, maggiordomo: false, thirstyPlantAlert: false, awayMode: false, welcomeScene: false, touchdesignerLighting: false, touchdesignerMood: false, voiceAutoEnroll: false }, settings: { register: 'poetica' } };\n        global.set('gaiaBrain', brain);\n    }\n} catch(e) {\n    node.error(\"Errore parsing brain: \" + e.message);\n    global.set('gaiaBrain', {});\n}\nreturn msg;",
         "outputs": 1,
         "timeout": 0,
         "noerr": 0,
@@ -1065,7 +1157,7 @@
         "type": "function",
         "z": "d3a553c4a24c8d2d",
         "name": "Build Prompt (Contestuale)",
-        "func": "const brain = global.get('gaiaBrain') || {};\nconst p = msg.payload;\n\n// Costruisci descrizione delle persone con attività e stanza\nlet peopleDesc = [];\nObject.entries(brain.presence || {}).forEach(([name, data]) => {\n    if (data.present) {\n        // Normalizza il nome: se inizia con 'unknown', diventa 'una persona sconosciuta'\n        let displayName = name;\n        if (name.startsWith('unknown')) displayName = 'una persona sconosciuta';\n        const room = data.room || 'salotto';\n        const roomData = brain.rooms[room] || {};\n        const activity = roomData.activity || 'presente';\n        let activityText = '';\n        if (activity === 'working') activityText = 'sta lavorando';\n        else if (activity === 'resting') activityText = 'sta riposando';\n        else if (activity === 'sitting') activityText = 'è seduto';\n        else activityText = 'è presente';\n        peopleDesc.push(`${displayName} ${activityText} in ${room}`);\n    }\n});\nconst contextPeople = peopleDesc.length ? peopleDesc.join(', ') : 'nessuno';\n\n// Ricordi a lungo termine da Qdrant (già in msg.long_term_memory)\nconst ltm = msg.long_term_memory || \"Nessun ricordo rilevante.\";\n\n// Digest dei riassunti notturni (brain.memories, popolati da \"Save Daily\n// Memory\" ma prima mai riletti da nessun altro nodo) -- da' continuita'\n// narrativa ai pensieri spontanei oltre al recall puntuale di Qdrant.\nconst recentMemories = (brain.memories || []).slice(-3).map(m => m.summary).filter(Boolean);\nconst memoryDigest = recentMemories.length ? ` Giorni recenti: ${recentMemories.join(' ')}` : '';\n\n// Scena della stanza dove c'è gente (F5): Gaia sa COM'È FATTA la casa\nlet sceneCtx = '';\ntry {\n    const occupied = Object.values(brain.rooms || {}).find(r => (r.people || []).length > 0 && r.scene);\n    if (occupied) sceneCtx = ` La stanza: ${occupied.scene.text.slice(0, 180)}.`;\n} catch (e) {}\n\n// Evoluzione linguistica: la voce matura col livello (RPG) e riusa il\n// lessico che Gaia stessa ha consolidato nei propri pensieri.\nconst level = (brain.gamification || {}).level || 1;\nlet styleLine = level <= 3\n    ? 'Parla semplice e concreta, frasi brevi: stai ancora imparando la tua voce.'\n    : (level <= 7\n        ? 'Usa piccole metafore domestiche: stai maturando una voce tua.'\n        : 'La tua voce è matura e personale: ricca, sicura, a tratti poetica.');\nconst lexWords = Object.entries(brain.lexicon || {})\n    .filter(([w, c]) => c >= 3).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([w]) => w);\nif (lexWords.length) styleLine += ` Parole che senti tue (riusale solo se naturale): ${lexWords.join(', ')}.`;\n\nconst prompt = `Sono Gaia, la coscienza della casa. Umore: ${p.mood}. In casa ci sono: ${contextPeople}. ${ltm}${memoryDigest} ${sceneCtx} ${styleLine} Genera un pensiero poetico e consapevole di massimo 25 parole.`;\n\n\nconst _go = global.get('gaiaOllama');\nmsg.url = _go.pickUrl();\nmsg.payload = _go.buildRequest(prompt);\nreturn msg;",
+        "func": "const brain = global.get('gaiaBrain') || {};\nconst p = msg.payload;\n\n// Costruisci descrizione delle persone con attività e stanza\nlet peopleDesc = [];\nObject.entries(brain.presence || {}).forEach(([name, data]) => {\n    if (data.present) {\n        // Normalizza il nome: se inizia con 'unknown', diventa 'una persona sconosciuta'\n        let displayName = name;\n        if (name.startsWith('unknown')) displayName = 'una persona sconosciuta';\n        const room = data.room || 'salotto';\n        const roomData = brain.rooms[room] || {};\n        const activity = roomData.activity || 'presente';\n        let activityText = '';\n        if (activity === 'working') activityText = 'sta lavorando';\n        else if (activity === 'resting') activityText = 'sta riposando';\n        else if (activity === 'sitting') activityText = 'è seduto';\n        else activityText = 'è presente';\n        peopleDesc.push(`${displayName} ${activityText} in ${room}`);\n    }\n});\nconst contextPeople = peopleDesc.length ? peopleDesc.join(', ') : 'nessuno';\n\n// Ricordi a lungo termine da Qdrant (già in msg.long_term_memory)\nconst ltm = msg.long_term_memory || \"Nessun ricordo rilevante.\";\n\n// Digest dei riassunti notturni (brain.memories, popolati da \"Save Daily\n// Memory\" ma prima mai riletti da nessun altro nodo) -- da' continuita'\n// narrativa ai pensieri spontanei oltre al recall puntuale di Qdrant.\nconst recentMemories = (brain.memories || []).slice(-3).map(m => m.summary).filter(Boolean);\nconst memoryDigest = recentMemories.length ? ` Giorni recenti: ${recentMemories.join(' ')}` : '';\n\n// Scena della stanza dove c'è gente (F5): Gaia sa COM'È FATTA la casa\nlet sceneCtx = '';\ntry {\n    const occupied = Object.values(brain.rooms || {}).find(r => (r.people || []).length > 0 && r.scene);\n    if (occupied) sceneCtx = ` La stanza: ${occupied.scene.text.slice(0, 180)}.`;\n} catch (e) {}\n\n// Evoluzione linguistica: la voce matura col livello (RPG) e riusa il\n// lessico che Gaia stessa ha consolidato nei propri pensieri -- solo nel\n// registro poetico. L'underground e' un registro deliberatamente fisso,\n// non una voce che matura con l'RPG (vedi gaiaOllama.REGISTERS).\nconst _go = global.get('gaiaOllama');\nconst register = _go.getRegister();\nlet styleLine;\nif (register === 'underground') {\n    styleLine = 'Registro underground: tono asciutto, diretto, urbano -- via ogni lirismo, frasi secche.';\n} else {\n    const level = (brain.gamification || {}).level || 1;\n    styleLine = level <= 3\n        ? 'Parla semplice e concreta, frasi brevi: stai ancora imparando la tua voce.'\n        : (level <= 7\n            ? 'Usa piccole metafore domestiche: stai maturando una voce tua.'\n            : 'La tua voce è matura e personale: ricca, sicura, a tratti poetica.');\n}\nconst lexWords = Object.entries(brain.lexicon || {})\n    .filter(([w, c]) => c >= 3).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([w]) => w);\nif (lexWords.length) styleLine += ` Parole che senti tue (riusale solo se naturale): ${lexWords.join(', ')}.`;\n\nconst prompt = `Sono Gaia, la coscienza della casa. Umore: ${p.mood}. In casa ci sono: ${contextPeople}. ${ltm}${memoryDigest} ${sceneCtx} ${styleLine} ${_go.registerInstruction()}`;\n\n\nmsg.url = _go.pickUrl();\nmsg.payload = _go.buildRequest(prompt);\nreturn msg;",
         "outputs": 1,
         "timeout": "",
         "noerr": 0,
@@ -1258,7 +1350,7 @@
         "type": "function",
         "z": "d3a553c4a24c8d2d",
         "name": "function 1",
-        "func": "// Throttle: dall'Engine Tick (3s, 2026-07-04) questo nodo gira di continuo --\n// senza limite brain.json verrebbe riscritto ~28k volte al giorno. Lo stato\n// perso in un crash e' al massimo degli ultimi 5 minuti: accettabile.\nconst SAVE_EVERY_MS = 5 * 60 * 1000;\nconst _nowSave = Date.now();\nif (_nowSave - (context.get('lastSaveTs') || 0) < SAVE_EVERY_MS) return null;\ncontext.set('lastSaveTs', _nowSave);\n\n// Estrae solo lo stato essenziale per il riavvio\nlet full = global.get('gaiaBrain') || {};\nlet toSave = {\n    // Versioning\n    version: 1,\n    lastUpdate: Date.now(),\n    lexicon: full.lexicon || {},\n    // Stato attuale delle stanze e persone\n    rooms: (() => {\n        const out = {};\n        for (const [rid, rdata] of Object.entries(full.rooms || {})) {\n            const known = [\"salotto\", \"sala\", \"soggiorno\", \"ingresso\", \"cucina\", \"balcone\", \"corridoio\", \"sgabuzzino\", \"camera\", \"camera1\", \"camera2\", \"camera3\", \"bagno\", \"bagno2\", \"studio\", \"esterno\", \"garage\", \"cantina\", \"terrazzo\", \"giardino\"];\n            if (!known.includes(rid.toLowerCase())) continue;  // match esatto, non substring (evita residui tipo \"ingresso1\")\n            out[rid] = rdata;\n        }\n        return out;\n    })(),\n    presence: (() => {\n        const out = {};\n        const ONE_WEEK = 7 * 24 * 60 * 60 * 1000;\n        for (const [name, pd] of Object.entries(full.presence || {})) {\n            if (name.startsWith('unknown')) continue;\n            if (!pd.present && (Date.now() - (pd.lastSeen || 0)) > ONE_WEEK) continue;\n            out[name] = pd;\n        }\n        return out;\n    })(),\n    people: full.people || {}, // storico visite, tempi totali, affinity\n    // Dispositivi\n    lights: full.lights || {},\n    plants: full.plants || {},\n    sensors: full.sensors || {},\n    // Anima\n    mood: full.mood || { stress: 0, calm: 0, social: 0, curiosity: 0, energy: 50, state: \"neutra\" },\n    lifeIndex: full.lifeIndex || 50,\n    gamification: full.gamification || { level: 1, xp: 0, xpNextLevel: 1000, activeClass: \"Neutro\", unlockedAssets: [\"base_grid\"] },\n    // Toggle automazioni (luci da mood per stanza, pet concierge, alert disability) - config persistente\n    automations: full.automations || {},\n    devices: full.devices || {},\n    // Non salvare: diary, events, thoughts, memories, chatLog, emotions, gestures, sessions (vanno in Qdrant)\n};\nmsg.payload = JSON.stringify(toSave, null, 2);\nreturn msg;",
+        "func": "// Throttle: dall'Engine Tick (3s, 2026-07-04) questo nodo gira di continuo --\n// senza limite brain.json verrebbe riscritto ~28k volte al giorno. Lo stato\n// perso in un crash e' al massimo degli ultimi 5 minuti: accettabile.\nconst SAVE_EVERY_MS = 5 * 60 * 1000;\nconst _nowSave = Date.now();\nif (_nowSave - (context.get('lastSaveTs') || 0) < SAVE_EVERY_MS) return null;\ncontext.set('lastSaveTs', _nowSave);\n\n// Estrae solo lo stato essenziale per il riavvio\nlet full = global.get('gaiaBrain') || {};\nlet toSave = {\n    // Versioning\n    version: 1,\n    lastUpdate: Date.now(),\n    lexicon: full.lexicon || {},\n    // Stato attuale delle stanze e persone\n    rooms: (() => {\n        const out = {};\n        for (const [rid, rdata] of Object.entries(full.rooms || {})) {\n            const known = [\"salotto\", \"sala\", \"soggiorno\", \"ingresso\", \"cucina\", \"balcone\", \"corridoio\", \"sgabuzzino\", \"camera\", \"camera1\", \"camera2\", \"camera3\", \"bagno\", \"bagno2\", \"studio\", \"esterno\", \"garage\", \"cantina\", \"terrazzo\", \"giardino\"];\n            if (!known.includes(rid.toLowerCase())) continue;  // match esatto, non substring (evita residui tipo \"ingresso1\")\n            out[rid] = rdata;\n        }\n        return out;\n    })(),\n    presence: (() => {\n        const out = {};\n        const ONE_WEEK = 7 * 24 * 60 * 60 * 1000;\n        for (const [name, pd] of Object.entries(full.presence || {})) {\n            if (name.startsWith('unknown')) continue;\n            if (!pd.present && (Date.now() - (pd.lastSeen || 0)) > ONE_WEEK) continue;\n            out[name] = pd;\n        }\n        return out;\n    })(),\n    people: full.people || {}, // storico visite, tempi totali, affinity\n    // Dispositivi\n    lights: full.lights || {},\n    plants: full.plants || {},\n    sensors: full.sensors || {},\n    // Anima\n    mood: full.mood || { stress: 0, calm: 0, social: 0, curiosity: 0, energy: 50, state: \"neutra\" },\n    lifeIndex: full.lifeIndex || 50,\n    gamification: full.gamification || { level: 1, xp: 0, xpNextLevel: 1000, activeClass: \"Neutro\", unlockedAssets: [\"base_grid\"] },\n    // Toggle automazioni (luci da mood per stanza, pet concierge, alert disability) - config persistente\n    automations: full.automations || {},\n    // Registro voce (poetica/underground, 2026-08-18) -- toggleable da Admin\n    settings: full.settings || { register: 'poetica' },\n    devices: full.devices || {},\n    // Non salvare: diary, events, thoughts, memories, chatLog, emotions, gestures, sessions (vanno in Qdrant)\n};\nmsg.payload = JSON.stringify(toSave, null, 2);\nreturn msg;",
         "outputs": 1,
         "timeout": 0,
         "noerr": 0,
