@@ -99,6 +99,52 @@
         "info": ""
     },
     {
+        "id": "rooms_clearpresence_resp",
+        "type": "http response",
+        "z": "tab_device_registry",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 690,
+        "y": 1120,
+        "wires": []
+    },
+    {
+        "id": "rooms_clearpresence_fn",
+        "type": "function",
+        "z": "tab_device_registry",
+        "name": "RoomClearPresence",
+        "func": "// POST /gaia/rooms/clear-presence {room}\n// Svuota lo stato \"live\" (persone, mood, pose, oggetti) di una stanza SENZA\n// cancellarla (a differenza di /gaia/rooms/clean, che elimina la stanza\n// intera con roomGraph/retained -- quello serve per stanze sbagliate/\n// orfane, non per questo). Utile quando il device di una stanza resta\n// offline a lungo (es. riparazione) e i dati vecchi restano visibili in\n// dashboard -- bug reale trovato 2026-08-18 (\"Mauro\" ancora in ingresso\n// con mood 'neutral'/pose 'standing' 7 giorni dopo l'ultimo evento vero):\n// il ramo mediapipe di GAIA Brain non ripuliva mai la stanza precedente su\n// un cambio stanza. Corretto alla radice (non ricapiterà), questo endpoint\n// serve solo per i dati che erano GIA' rimasti vecchi.\nconst body = msg.payload || {};\nconst room = (body.room || '').trim().toLowerCase();\nif (!room) { msg.statusCode = 400; msg.payload = { ok: false, error: 'room richiesta' }; return msg; }\n\nlet brain = global.get('gaiaBrain') || {};\nconst r = (brain.rooms || {})[room];\nif (!r) { msg.statusCode = 404; msg.payload = { ok: false, error: 'stanza non trovata' }; return msg; }\n\nconst clearedPeople = r.people || [];\nconst now = Date.now();\nclearedPeople.forEach(p => {\n    // Non toccare chi nel frattempo è già correttamente tracciato altrove\n    // (il suo record presence.room punterebbe a un'altra stanza, non a\n    // questa) -- azzeriamo solo chi risulta ancora \"qui\" secondo presence.\n    if (brain.presence[p] && brain.presence[p].room === room) {\n        brain.presence[p].present = false;\n        brain.presence[p].room = null;\n        brain.presence[p].exitTs = now;\n    }\n});\nr.people = [];\nr.persons_count = 0;\nr.main_user = null;\nr.activity = 'empty';\nr.objects = {};\ndelete r.currentEmotion;\ndelete r.currentPose;\nglobal.set('gaiaBrain', brain);\nnode.warn(`[Rooms] Presenza/mood/pose svuotati per '${room}' (persone rimosse: ${clearedPeople.join(', ') || 'nessuna'})`);\n\nmsg.statusCode = 200;\nmsg.payload = { ok: true, room, cleared_people: clearedPeople };\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 460,
+        "y": 1120,
+        "wires": [
+            [
+                "rooms_clearpresence_resp"
+            ]
+        ]
+    },
+    {
+        "id": "rooms_clearpresence_http",
+        "type": "http in",
+        "z": "tab_device_registry",
+        "name": "POST /gaia/rooms/clear-presence",
+        "url": "/gaia/rooms/clear-presence",
+        "method": "post",
+        "x": 200,
+        "y": 1120,
+        "wires": [
+            [
+                "rooms_clearpresence_fn"
+            ]
+        ]
+    },
+    {
         "id": "register_http_set_response",
         "type": "http response",
         "z": "tab_device_registry",
