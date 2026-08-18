@@ -267,6 +267,8 @@ journalctl -u gaia-listener -f
 ```
 
 > Qdrant è gestito dal `docker-compose.yaml` come gli altri servizi (verificato 2026-07-03: migrato dal container manuale al compose senza perdita dati). Lo storage è il bind mount assoluto `/home/core/qdrant_storage` (collection `gaia_memory_large`, usata da `gaia-brain/brain_memory.py`), volutamente fuori dal repo.
+>
+> `brain_memory.py` stesso (il wrapper FastAPI su porta 8000 che genera gli embedding e scrive/legge Qdrant) **non è in Docker ma è comunque supervisionato** — systemd, unità `gaia-memory.service` (`Restart=always`), non `gaia-brain` (nome intuitivo ma sbagliato, verificato dal vivo 2026-08-18 mentre si diagnosticava un bug di performance). `systemctl status gaia-memory` / `journalctl -u gaia-memory -f` per i log.
 
 ---
 
