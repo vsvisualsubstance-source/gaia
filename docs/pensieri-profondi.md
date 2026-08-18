@@ -80,6 +80,28 @@ ogni evento in ingresso), `ThreeViewEngineGAME` (costruisce il payload WS dashbo
 Prompt`, `Save Daily Memory`, `Load Brain at StartUp`/`Parse Brain` (persistenza `gaiaBrain` su
 file, per sopravvivere ai riavvii Node-RED).
 
+## Helper condiviso `gaiaOllama` (2026-08-18)
+
+I 5 nodi che costruiscono un prompt per Ollama (`Build Prompt (Contestuale)`, `Night Dream
+Prompt`, `Night Summary Prompt`, `Prepara prompt chat` nel tab Chat, `Nursery: prepara prompt
+Ollama`) duplicavano identico lo stesso blocco: selezione backend sano OPS/Core (via
+`global.get('ollamaHealth')`) + shape del payload (`model`, `stream: false`). Estratto in un
+helper condiviso, registrato una volta al deploy da un nuovo nodo su tab "Inject" (`Init
+gaiaOllama Helper` → `Registra gaiaOllama Helper`, stesso pattern *inject once* + `global.set`
+già usato da `Load Brain at StartUp`/`Parse Brain`), letto ovunque con
+`global.get('gaiaOllama')`:
+
+```js
+global.get('gaiaOllama').pickUrl()               // sceglie OPS o Core, come prima
+global.get('gaiaOllama').buildRequest(prompt, opts)  // { model, prompt, stream:false, ...opts }
+```
+
+Refactor comportamentale-neutro (stesso identico output verificato con una simulazione offline
+dei 3 scenari OPS-sano/stale/nessun-check prima del deploy) — pensato come primo passo verso un
+"registro"/stile configurabile (poetico vs più asciutto/underground, IT/EN) per installazioni
+diverse dalla casa: quel parametro andrà naturalmente in `buildRequest`/un metodo affine di
+questo stesso helper, quando si deciderà il design.
+
 **Nota:** `Load Brain at StartUp` → `Parse Brain` ha `wires: [[]]` (non collegato in output) —
 verificare se il caricamento del brain salvato su file funziona ancora prima di affidarcisi.
 

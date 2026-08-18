@@ -9,7 +9,8 @@
 set -euo pipefail
 
 REPO="/home/core/core-node-0"
-PATCHED="/tmp/claude-1000/-home-core-core-node-0/139b6cd4-d727-4fcd-83d5-910eceaf6073/scratchpad/ops-nodered-data/flows.json"
+PATCHED="$(mktemp -t gaia-ops-nodered-flows-XXXXXX.json)"
+trap 'rm -f "$PATCHED"' EXIT
 OPS_HOST="192.168.1.240"
 
 python3 - "$REPO/node-red/flows.json" "$PATCHED" << 'PYEOF'
