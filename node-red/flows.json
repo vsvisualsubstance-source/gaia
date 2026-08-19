@@ -99,6 +99,56 @@
         "info": ""
     },
     {
+        "id": "svc_health_inject",
+        "type": "inject",
+        "z": "tab_device_registry",
+        "name": "Service Health (5 min)",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "300",
+        "crontab": "",
+        "once": true,
+        "onceDelay": 30,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 170,
+        "y": 1200,
+        "wires": [
+            [
+                "svc_health_fn"
+            ]
+        ]
+    },
+    {
+        "id": "svc_health_fn",
+        "type": "function",
+        "z": "tab_device_registry",
+        "name": "ServiceHealthCheck",
+        "func": "// Service Health Check (ogni 5 min) -- \"vero giro di prova\" per i\n// servizi che finora non erano monitorati affatto (Qdrant/Ollama/\n// gaia-memory/OpenHAB). A differenza di 'Ollama Health Check' (ogni 20s,\n// solo GET /api/tags, usato per instradare i prompt) qui si esegue un\n// giro REALE: un vero POST /remember (embedding Ollama + scrittura\n// Qdrant via brain_memory.py -- esattamente la catena rottasi il\n// 2026-08-18), col punto di test cancellato subito dopo per non\n// sporcare la collection. Intervallo volutamente basso (5 min, non 20s/\n// 60s) per non contribuire noi stessi al carico che vogliamo sorvegliare.\n// Stesso pattern edge-triggered di HealthCheck: un alert per episodio +\n// messaggio di rientro, niente spam, stesso canale Telegram.\nconst targets = {\n    qdrant: 'http://192.168.1.142:6333/collections/gaia_memory_large',\n    openhab: 'http://192.168.1.142:8080/rest/items?fields=name',\n};\n\nfunction getJson(url, timeoutMs) {\n    return new Promise((resolve) => {\n        const req = http.get(url, { timeout: timeoutMs }, (res) => {\n            res.resume();\n            resolve({ ok: res.statusCode >= 200 && res.statusCode < 300, status: res.statusCode });\n        });\n        req.on('timeout', () => { req.destroy(); resolve({ ok: false, error: 'timeout' }); });\n        req.on('error', (e) => resolve({ ok: false, error: e.message }));\n    });\n}\n\nfunction checkMemoryRoundtrip() {\n    // POST /remember reale (embedding Ollama + scrittura Qdrant), poi\n    // cancella subito il punto -- vero giro di prova, non un semplice ping.\n    return new Promise((resolve) => {\n        const payload = JSON.stringify({ text: 'healthcheck', category: 'healthcheck', importance: 0 });\n        const req = http.request('http://192.168.1.142:8000/remember', {\n            method: 'POST',\n            headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },\n            timeout: 30000,\n        }, (res) => {\n            let body = '';\n            res.on('data', (c) => { body += c; });\n            res.on('end', () => {\n                if (res.statusCode !== 200) return resolve({ ok: false, error: `HTTP ${res.statusCode}` });\n                try {\n                    const d = JSON.parse(body);\n                    if (d.status !== 'success' || !d.memory_id) return resolve({ ok: false, error: 'risposta inattesa' });\n                    const delPayload = JSON.stringify({ points: [d.memory_id] });\n                    const delReq = http.request('http://192.168.1.142:6333/collections/gaia_memory_large/points/delete', {\n                        method: 'POST',\n                        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(delPayload) },\n                        timeout: 8000,\n                    }, (delRes) => { delRes.resume(); });\n                    delReq.on('error', () => {});\n                    delReq.write(delPayload);\n                    delReq.end();\n                    resolve({ ok: true });\n                } catch (e) { resolve({ ok: false, error: 'risposta non valida' }); }\n            });\n        });\n        req.on('timeout', () => { req.destroy(); resolve({ ok: false, error: 'timeout 30s' }); });\n        req.on('error', (e) => resolve({ ok: false, error: e.message }));\n        req.write(payload);\n        req.end();\n    });\n}\n\n(async () => {\n    const brain = global.get('gaiaBrain') || {};\n    const h = brain._health = brain._health || { offline: {}, backupAlerted: false };\n    h.services = h.services || {};\n    const now = Date.now();\n    const out = [];\n\n    const results = {};\n    results.qdrant = await getJson(targets.qdrant, 8000);\n    results.openhab = await getJson(targets.openhab, 8000);\n    results.memory = await checkMemoryRoundtrip();\n\n    // Ollama: nessuna chiamata in piu' -- riusa global.ollamaHealth gia'\n    // raccolto ogni 20s da 'Ollama Health Check'. \"Giu'\" solo se ENTRAMBI\n    // i backend risultano non sani di recente.\n    const oh = global.get('ollamaHealth') || {};\n    const opsOk = oh.ops && oh.ops.ok && (now - oh.ops.ts) < 60000;\n    const coreOk = oh.core && oh.core.ok && (now - oh.core.ts) < 60000;\n    results.ollama = { ok: opsOk || coreOk };\n\n    const LABELS = {\n        qdrant: 'Qdrant',\n        openhab: 'OpenHAB',\n        memory: 'gaia-memory (embedding + scrittura Qdrant)',\n        ollama: 'Ollama (OPS e Core entrambi)',\n    };\n    for (const [svc, res] of Object.entries(results)) {\n        const was = !!h.services[svc];\n        if (!res.ok && !was) {\n            h.services[svc] = now;\n            out.push(`🔴 ${LABELS[svc]} non risponde${res.error ? ` (${res.error})` : ''}.`);\n        } else if (res.ok && was) {\n            const mins = Math.round((now - h.services[svc]) / 60000);\n            delete h.services[svc];\n            out.push(`✅ ${LABELS[svc]} è tornato a rispondere (giù ~${mins} min).`);\n        }\n    }\n\n    global.set('gaiaBrain', brain);\n    if (out.length) {\n        node.send([out.map((content) => ({ payload: { chatId: 1180846253, type: 'message', content } }))]);\n    }\n})();\nreturn null;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [
+            {
+                "var": "http",
+                "module": "http"
+            }
+        ],
+        "x": 420,
+        "y": 1200,
+        "wires": [
+            [
+                "health_telegram"
+            ]
+        ]
+    },
+    {
         "id": "rooms_clearpresence_resp",
         "type": "http response",
         "z": "tab_device_registry",
