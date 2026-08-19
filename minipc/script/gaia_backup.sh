@@ -1,17 +1,40 @@
 #!/bin/bash
 # GAIA backup notturno — dati preziosi NON versionabili in git (biometrici,
-# stato del brain, dataset di training). Due destinazioni:
-#   1. /media/core/D/backups/gaia   (altro disco della stessa macchina)
-#   2. Pi cucina ~/gaia-backup      (altra macchina, 148G liberi)
-# Esito su MQTT retained gaia/backup/status — l'health check del brain fa da
-# dead-man switch: nessun backup fresco da >26h → alert Telegram.
+# stato del brain, dataset di training). Tre destinazioni (ridisegnato
+# 2026-08-19, dopo che la seconda destinazione fissa -- un Pi identificato
+# per IP -- si è ritrovata fisicamente fuori casa per giorni, lasciando UNA
+# sola copia reale):
+#   1. /media/core/D/backups/gaia         (disco locale, stessa macchina)
+#   2. OPS: C:/gaia-docker-cfg/backups/gaia (altra macchina fisica, via scp
+#      -- niente rsync, non è detto sia installato su Windows/OpenSSH)
+#   3. Un Pi PRESENTE in casa ORA, scelto dinamicamente via GET /gaia/devices
+#      (online=true, profile.role='pi') invece di un IP fisso -- i Pi
+#      vengono spostati/sostituiti (visto dal vivo: "Pi cucina" diventato
+#      "Pi ingresso"). Best-effort: se nessun Pi risulta online, o se la
+#      copia fallisce, NON conta come fallimento del backup -- 1+2 bastano
+#      per l'alert dead-man-switch (dead-man switch = nessun backup fresco
+#      da >26h → alert Telegram via l'health check del brain).
 # Schedulato via crontab utente core (03:30) — il sudoers non permette di
 # installare unit systemd e il crontab utente gira anche senza sessione.
 # Niente --delete: un errore locale non deve propagarsi ai backup.
 set -u
 LOG=/media/core/D/backups/gaia_backup.log
 DST_LOCAL=/media/core/D/backups/gaia
-DST_PI=asemico@192.168.1.190:gaia-backup
+OPS_HOST=vsvis@192.168.1.240
+OPS_CONTAINER=gaia-nodered-test
+OPS_DST_WIN='C:\gaia-docker-cfg\backups\gaia'
+OPS_DST_SCP='C:/gaia-docker-cfg/backups/gaia'
+DEVICES_API=http://192.168.1.240:1880/gaia/devices
+
+# SSH user per Pi noti -- non uniforme tra i device (vsrasp01/pi-b2c8db usa
+# 'admin', il vecchio Pi cucina/ingresso usava 'asemico'). Se un Pi nuovo
+# non è in questa mappa si prova comunque con PI_USER_DEFAULT.
+declare -A PI_USER=(
+  [192.168.1.52]=admin
+  [192.168.1.190]=asemico
+)
+PI_USER_DEFAULT=admin
+
 SRC=(
   /home/core/gaia
   /home/core/core-node-0/minipc/script/gaia_wakeword_samples
@@ -30,16 +53,11 @@ echo "── $(date -Is) avvio backup" >> "$LOG"
 ok=1
 
 # Node-RED gira su OPS dall'8 agosto, non più su Core: /home/core/gaia/
-# (mood, lessico, presenze, sogni, riassunti) era rimasto congelato a
-# quella data e SRC puntava a /home/core/.node-red/flows.json, anch'esso
-# fermo all'8 agosto -- il backup notturno salvava fedelmente una copia
-# morta mentre la vera memoria di Gaia (dentro il container Docker su
-# OPS) non aveva alcun backup. Trovato dal vivo 2026-08-19. flows.json è
-# già risolto sopra (SRC ora punta al repo, aggiornato ad ogni deploy);
-# qui tiriamo giù lo stato vivo del brain da OPS PRIMA del backup, così
-# rientra nel giro rsync di sotto come tutto il resto.
-OPS_HOST=vsvis@192.168.1.240
-OPS_CONTAINER=gaia-nodered-test
+# (mood, lessico, presenze, sogni, riassunti) restava congelato a quella
+# data -- la vera memoria di Gaia (dentro il container Docker su OPS) non
+# aveva alcun backup. Trovato dal vivo 2026-08-19. Tiriamo giù lo stato
+# vivo da OPS PRIMA del backup, così rientra nei giri di sotto come tutto
+# il resto.
 mkdir -p /home/core/gaia
 for f in brain.json dreams.json memories.json thoughts.json; do
   tmp="/home/core/gaia/.${f}.tmp"
@@ -52,8 +70,39 @@ for f in brain.json dreams.json memories.json thoughts.json; do
   fi
 done
 
+# 1. Locale
 rsync -a --timeout=60 "${SRC[@]}" "$DST_LOCAL/" >> "$LOG" 2>&1 || ok=0
-rsync -a --timeout=120 "${SRC[@]}" "$DST_PI/" >> "$LOG" 2>&1 || ok=0
+
+# 2. OPS -- niente apici singoli nel comando remoto: la sessione SSH su
+# Windows passa per cmd.exe, che non li interpreta come quoting shell
+# (stesso gotcha già affrontato in scripts/deploy_ops_nodered.sh).
+timeout 15 ssh "$OPS_HOST" "if not exist \"$OPS_DST_WIN\" mkdir \"$OPS_DST_WIN\"" >> "$LOG" 2>&1
+timeout 90 scp -r -o ConnectTimeout=10 "${SRC[@]}" "$OPS_HOST:$OPS_DST_SCP/" >> "$LOG" 2>&1 || ok=0
+
+# 3. Un Pi presente ora (best-effort, non tocca $ok)
+pi_ip=$(timeout 8 curl -s "$DEVICES_API" 2>>"$LOG" | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+    cands = [x for x in d["devices"]
+             if x.get("online") and x.get("profile", {}).get("role") == "pi"
+             and x.get("ip") not in (None, "unknown")]
+    print(cands[0]["ip"] if cands else "")
+except Exception:
+    print("")
+' 2>>"$LOG")
+
+if [ -n "$pi_ip" ]; then
+    pi_user="${PI_USER[$pi_ip]:-$PI_USER_DEFAULT}"
+    echo "── $(date -Is) Pi presente trovato: ${pi_user}@${pi_ip}" >> "$LOG"
+    if rsync -a --timeout=60 -e "ssh -o ConnectTimeout=10" "${SRC[@]}" "${pi_user}@${pi_ip}:gaia-backup/" >> "$LOG" 2>&1; then
+        echo "── $(date -Is) copia sul Pi riuscita" >> "$LOG"
+    else
+        echo "── $(date -Is) ATTENZIONE: copia sul Pi fallita (best-effort, non conta per l'alert)" >> "$LOG"
+    fi
+else
+    echo "── $(date -Is) nessun Pi online al momento, salto la terza copia (best-effort)" >> "$LOG"
+fi
 
 bytes=$(du -sb "$DST_LOCAL" 2>/dev/null | cut -f1)
 echo "── $(date -Is) fine backup ok=$ok" >> "$LOG"
