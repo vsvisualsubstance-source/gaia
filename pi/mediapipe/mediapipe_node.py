@@ -499,16 +499,34 @@ def _face_to_dict(lm, w, h):
 
 
 def _pose_to_dict(lm):
-    """Estrae i campi derivati per UNA posa (lista landmark Pose, 33 punti)."""
+    """Estrae i campi derivati per UNA posa (lista landmark Pose, 33 punti).
+
+    'lying' aggiunta 2026-08-19 (prima non esisteva: il modulo Disability in
+    Node-RED cercava pose=='lying' per il rilevamento uomo a terra, ma quel
+    valore non veniva mai emesso -- codice morto dal giorno zero). Stesso
+    principio geometrico già in uso per standing/sitting (rapporto tra le
+    distanze normalizzate dei landmark), nessun modello nuovo: se il vettore
+    spalle->fianchi è più orizzontale (dx) che verticale (dy), il busto
+    giace di lato nell'inquadratura invece che in piedi/seduto. Soglia
+    dx>0.08 per non scattare su rumore quando la persona è piccola/lontana
+    (dx e dy entrambi minuscoli non sono un segnale affidabile). Euristica
+    non ancora calibrata su casi reali di caduta -- verificare dal vivo,
+    le soglie potrebbero aver bisogno di aggiustamenti.
+    """
     ls, rs = lm[11], lm[12]
     lw, rw = lm[15], lm[16]
     lh, rh = lm[23], lm[24]
+    shoulder_mid_x, shoulder_mid_y = (ls.x + rs.x) / 2, (ls.y + rs.y) / 2
+    hip_mid_x, hip_mid_y = (lh.x + rh.x) / 2, (lh.y + rh.y) / 2
+    torso_dy = abs(hip_mid_y - shoulder_mid_y)
+    torso_dx = abs(hip_mid_x - shoulder_mid_x)
     if lw.y < ls.y and rw.y < rs.y:
         pose_state = 'arms_up'
+    elif torso_dx > torso_dy and torso_dx > 0.08:
+        pose_state = 'lying'
     else:
-        torso = abs(((lh.y + rh.y) / 2) - ((ls.y + rs.y) / 2))
-        pose_state = 'standing' if torso > 0.25 else 'sitting'
-    x = (ls.x + rs.x) / 2
+        pose_state = 'standing' if torso_dy > 0.25 else 'sitting'
+    x = shoulder_mid_x
     return {'x': x, 'pose': pose_state}
 
 
