@@ -20,7 +20,7 @@ SRC=(
   /home/core/core-node-0/minipc/script/doorbell_samples
   /home/core/core-node-0/minipc/script/voice_db.json
   /home/core/core-node-0/minipc/script/listener_config.json
-  /home/core/.node-red/flows.json
+  /home/core/core-node-0/node-red/flows.json
   /media/core/D/face-env/faces
 )
 
@@ -28,6 +28,30 @@ mkdir -p "$DST_LOCAL"
 echo "── $(date -Is) avvio backup" >> "$LOG"
 
 ok=1
+
+# Node-RED gira su OPS dall'8 agosto, non più su Core: /home/core/gaia/
+# (mood, lessico, presenze, sogni, riassunti) era rimasto congelato a
+# quella data e SRC puntava a /home/core/.node-red/flows.json, anch'esso
+# fermo all'8 agosto -- il backup notturno salvava fedelmente una copia
+# morta mentre la vera memoria di Gaia (dentro il container Docker su
+# OPS) non aveva alcun backup. Trovato dal vivo 2026-08-19. flows.json è
+# già risolto sopra (SRC ora punta al repo, aggiornato ad ogni deploy);
+# qui tiriamo giù lo stato vivo del brain da OPS PRIMA del backup, così
+# rientra nel giro rsync di sotto come tutto il resto.
+OPS_HOST=vsvis@192.168.1.240
+OPS_CONTAINER=gaia-nodered-test
+mkdir -p /home/core/gaia
+for f in brain.json dreams.json memories.json thoughts.json; do
+  tmp="/home/core/gaia/.${f}.tmp"
+  if timeout 30 ssh "$OPS_HOST" "docker exec $OPS_CONTAINER cat /home/core/gaia/$f" > "$tmp" 2>>"$LOG" && [ -s "$tmp" ]; then
+    mv "$tmp" "/home/core/gaia/$f"
+  else
+    echo "── $(date -Is) ATTENZIONE: pull $f da OPS fallito, mantengo copia precedente" >> "$LOG"
+    rm -f "$tmp"
+    ok=0
+  fi
+done
+
 rsync -a --timeout=60 "${SRC[@]}" "$DST_LOCAL/" >> "$LOG" 2>&1 || ok=0
 rsync -a --timeout=120 "${SRC[@]}" "$DST_PI/" >> "$LOG" 2>&1 || ok=0
 
