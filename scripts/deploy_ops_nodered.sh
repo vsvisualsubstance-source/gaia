@@ -11,7 +11,24 @@ set -euo pipefail
 REPO="/home/core/core-node-0"
 PATCHED="$(mktemp -t gaia-ops-nodered-flows-XXXXXX.json)"
 trap 'rm -f "$PATCHED"' EXIT
-OPS_HOST="192.168.1.240"
+OPS_LAN="192.168.1.240"
+# Fallback Tailscale (2026-08-21): non si può interrogare
+# /gaia/devices/profiles per scoprire l'IP Tailscale di OPS -- quel
+# registro è servito DA OPS stesso (Node-RED, porta 1880): se la LAN verso
+# OPS è giù non si raggiunge nemmeno il registro. Costante di ultima
+# istanza (va aggiornata se OPS viene mai ri-autenticato su Tailscale),
+# stesso principio del "cold-bootstrap" in docs/discovery-protocol.md.
+OPS_TAILSCALE="100.91.251.83"
+OPS_HOST=$(python3 -c "
+import sys
+sys.path.insert(0, '$REPO/minipc/script')
+import net_resolve
+host = net_resolve.resolve_best('deploy-ops', [
+    {'kind': 'lan', 'host': '$OPS_LAN', 'port': 22},
+    {'kind': 'tailscale', 'host': '$OPS_TAILSCALE', 'port': 22},
+], ttl=0)
+print(host or '$OPS_LAN')
+")
 
 python3 - "$REPO/node-red/flows.json" "$PATCHED" << 'PYEOF'
 import json, sys

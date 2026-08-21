@@ -52,6 +52,7 @@ def _record_arecord(alsa_device: str, duration_s: int, wav_path: str) -> bool:
         return False
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, unquote, quote as _quote
+import urllib.request
 import paho.mqtt.client as mqtt
 
 MQTT_BROKER = "localhost"
@@ -78,6 +79,42 @@ NODERED_PORT   = 1880
 # (bug dal vivo 2026-08-13, riscontrato addestrando il modello wakeword
 # di vsrasp01: training ok, OTA falliva). Vedi docs/core-distribuito.md.
 NODERED_HOST   = "192.168.1.240"
+
+
+def _get_device_profiles() -> dict:
+    """Legge il registro device (popolato dall'heartbeat di ogni agent —
+    tailscale_ip/internet inclusi dal 2026-08-21, vedi
+    docs/discovery-protocol.md). Usato per scegliere l'host giusto per
+    RAGGIUNGERE UN DEVICE SPECIFICO, non per il proprio traffico: qui su
+    Core la LAN verso OPS funziona sempre, il punto è se il device
+    TARGET (che scaricherà l'OTA da OPS) ci arriva anche lui."""
+    try:
+        with urllib.request.urlopen(
+                f"http://{NODERED_HOST}:{NODERED_PORT}/gaia/devices/profiles", timeout=5) as r:
+            return json.loads(r.read())
+    except Exception as e:
+        log.warning(f"OTA: impossibile leggere /gaia/devices/profiles ({e})")
+        return {}
+
+
+def _resolve_ota_host_for(device_id: str, profiles: dict) -> str:
+    """Sceglie l'host (LAN o Tailscale di OPS) che `device_id` può
+    davvero raggiungere per scaricare l'OTA. Non un self-resolve di
+    gaia_admin.py — è il device target a dover raggiungere OPS, non noi.
+    Euristica: se l'IP LAN del device è sulla stessa /24 di NODERED_HOST,
+    assumiamo che la LAN funzioni anche tra loro; altrimenti proviamo
+    l'IP Tailscale di OPS (dal profilo di OPS stesso). Fallback su
+    NODERED_HOST se non si riesce a determinare nulla — comportamento di
+    sempre, invariato quando il registro non è disponibile."""
+    target_ip = (profiles.get(device_id) or {}).get("ip", "")
+    same_lan = bool(target_ip) and target_ip.rsplit(".", 1)[0] == NODERED_HOST.rsplit(".", 1)[0]
+    if same_lan or not target_ip:
+        return NODERED_HOST
+    ops_ts_ip = (profiles.get("ops-silvermini2") or {}).get("tailscale_ip")
+    if ops_ts_ip:
+        log.info(f"OTA: {device_id} fuori dalla LAN di OPS (ip={target_ip}), uso tailscale {ops_ts_ip}")
+        return ops_ts_ip
+    return NODERED_HOST
 
 
 def _distribute_model_via_ota(src_path: str, service_subpath: str, service_type: str,
@@ -136,9 +173,16 @@ def _distribute_model_via_ota(src_path: str, service_subpath: str, service_type:
         if _mqtt:
             if target_devices:
                 # Mirato: solo i device indicati (i modelli sono per-microfono,
-                # il broadcast li farebbe piovere su tutti i servizi voice)
+                # il broadcast li farebbe piovere su tutti i servizi voice).
+                # URL costruito PER DEVICE (2026-08-21): un target fuori dalla
+                # LAN di OPS riceve l'URL con l'IP Tailscale di OPS invece di
+                # quello LAN, altrimenti scaricherebbe "Connection refused"
+                # in silenzio come nel bug storico del 2026-08-13.
+                profiles = _get_device_profiles()
                 for dev in target_devices:
-                    _mqtt.publish(f"gaia/devices/{dev}/update", json.dumps(cmd), retain=False)
+                    host = _resolve_ota_host_for(dev, profiles)
+                    dev_cmd = {**cmd, "url": f"http://{host}:{NODERED_PORT}/gaia/ota/{service_type}/{service_subpath}"}
+                    _mqtt.publish(f"gaia/devices/{dev}/update", json.dumps(dev_cmd), retain=False)
                 log.info(f"OTA mirato: {service_subpath} v{version} → {target_devices}")
             else:
                 _mqtt.publish("gaia/ota/broadcast", json.dumps(cmd), retain=False)
