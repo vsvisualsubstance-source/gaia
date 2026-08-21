@@ -517,13 +517,20 @@ PORTAL_HTML = """<!DOCTYPE html>
 <script>
 function send(f){
   document.getElementById('btn').disabled = true;
+  var ssid = f.ssid.value;
   fetch('/connect', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ssid:f.ssid.value, psk:f.psk.value, stanza:f.stanza.value.trim().toLowerCase()})})
+    body: JSON.stringify({ssid:ssid, psk:f.psk.value, stanza:f.stanza.value.trim().toLowerCase()})})
   .then(r=>r.json()).then(d=>{
-    document.getElementById('msg').innerHTML =
-      '<div class="ok">Sto provando a connettermi a <b>'+f.ssid.value+'</b>…<br>' +
-      'Se la rete <b>%SSID%</b> sparisce, ha funzionato: ricollega il telefono al WiFi di casa.<br>' +
-      'Se riappare, la password era sbagliata: riprova.</div>';
+    var msg = %IS_AP%
+      ? ('Sto provando a connettermi a <b>'+ssid+'</b>…<br>' +
+         'Se la rete <b>%SSID%</b> sparisce, ha funzionato: ricollega il telefono al WiFi di casa.<br>' +
+         'Se riappare, la password era sbagliata: riprova.')
+      : ('Sto provando a connettermi a <b>'+ssid+'</b>…<br>' +
+         'Se questa pagina smette di rispondere dopo qualche secondo, il cambio è riuscito: il Pi ora '+
+         'ha un nuovo indirizzo IP sulla rete <b>'+ssid+'</b>, raggiungilo da lì.<br>' +
+         'Se questa pagina resta raggiungibile e ricarichi tra poco senza vedere errori qui sotto, '+
+         'ha funzionato ma sei rimasto sulla stessa rete di prima.');
+    document.getElementById('msg').innerHTML = '<div class="ok">'+msg+'</div>';
   }).catch(()=>{ document.getElementById('btn').disabled = false; });
   return false;
 }
@@ -658,6 +665,7 @@ class PortalHandler(BaseHTTPRequestHandler):
                 .replace("%OPTIONS%", opts)
                 .replace("%SUBTITLE%", subtitle)
                 .replace("%SSID%", AP_SSID)
+                .replace("%IS_AP%", "true" if cur_mode == "ap" else "false")
                 .replace("%WIFI_OPEN%", "open" if cur_mode == "ap" else "")
                 .replace("%ERROR%", f'<div class="err">Ultimo tentativo fallito: {err}</div>' if err else ""))
         body = html.encode()
