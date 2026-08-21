@@ -57,7 +57,24 @@ sui futuri client ESP32:
 2. **Broadcast UDP** — 3 tentativi, timeout 2s ciascuno.
 3. **mDNS** — risolve i nomi in `GAIA_MDNS_NAMES` (default
    `gaia.local,core-node-0.local`) e conferma con probe beacon/TCP.
-4. Nessun risultato → il chiamante ritenta con backoff (agent: 5s→60s).
+4. **Tailscale** (2026-08-21) — solo se `GAIA_CORE_TAILSCALE_HOST` è
+   impostato (IP 100.x.x.x o hostname MagicDNS `*.ts.net` di Core),
+   altrimenti `None` immediato, zero I/O di rete. Ultimo tier, provato
+   solo dopo che broadcast e mDNS hanno fallito entrambi — mai anticipato,
+   per non violare "LAN preferita" quando la rete locale funziona.
+   Stesso probe beacon/TCP degli altri tier. Verificato dal vivo
+   (2026-08-21) con un Pi realmente su una rete diversa da quella di
+   Core: broadcast/mDNS falliscono (reti diverse), il tier Tailscale
+   risolve correttamente `mqtt_host` all'IP tailscale di Core.
+
+   **Limite di cold-bootstrap**: un device che non ha *mai* raggiunto
+   Core via LAN non può scoprire il suo IP Tailscale da solo — non può
+   contattare `/api/provision` (livello 3 sotto) senza già conoscere un
+   host raggiungibile. Serve quindi un'ancora statica scritta al
+   provisioning (`/etc/gaia/device.conf`), esattamente come oggi esiste
+   per il default LAN in `pi/agent/config.py`. Non risolvibile lato
+   codice, è una disciplina di provisioning.
+5. Nessun risultato → il chiamante ritenta con backoff (agent: 5s→60s).
 
 Ogni successo aggiorna la cache.
 
@@ -69,7 +86,29 @@ Ogni successo aggiorna la cache.
 | `GAIA_DISCOVERY=0` | Disattiva la discovery nell'agent |
 | `GAIA_BEACON_PORT` | Porta beacon lato client (default 8899) |
 | `GAIA_MDNS_NAMES` | Lista nomi mDNS, separati da virgola |
+| `GAIA_CORE_TAILSCALE_HOST` | IP/hostname Tailscale di Core per il tier 4 — non impostata di default, nessun costo se assente |
 | `BEACON_PORT` / `MQTT_PORT` / `ADMIN_PORT` / `GAIA_VERSION` (lato beacon) | Config del responder |
+
+## Capacità di rete auto-riportate (heartbeat, 2026-08-21)
+
+Ogni agent (`pi/agent/agent.py`, `ops/agent/agent.py`, `minipc/local_agent.py`)
+pubblica, dentro `gaia/device/{id}/status` e `gaia/devices/{id}/profile`,
+due fatti auto-osservati (non un elenco derivato di "come sono
+raggiungibile" — quello lo stabilisce chi prova a connettersi, non il
+device stesso):
+
+```jsonc
+"tailscale_ip": "100.76.11.49",  // null se tailscale non installato/non su
+"internet":     true              // raggiungibilità di 1.1.1.1/8.8.8.8:53, cache 90s
+```
+
+Calcolati da `net_resolve.py` (`local_tailscale_ip()`, `has_internet()`),
+copiato identico in `pi/agent/`, `ops/agent/`, `minipc/`, `minipc/script/`
+(nessun meccanismo di import cross-directory nel repo, ogni agent è
+un'unità di deploy indipendente — sync manuale se lo si modifica). Contiene
+anche `resolve_best(purpose, candidates)`: prova candidati LAN prima, poi
+Tailscale, con cache per-processo — pensato per chi deve raggiungere un
+host generico via TCP (non il protocollo beacon di questo documento).
 
 ## mDNS (complementare)
 

@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 import paho.mqtt.client as mqtt
 import config
 import discovery
+import net_resolve
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -296,6 +297,8 @@ def _publish_status():
         "stanza":       _device_config.get("stanza", config.DEFAULT_STANZA),
         "role":         config.MACHINE_ROLE,
         "ip":           _get_ip(),
+        "tailscale_ip": net_resolve.local_tailscale_ip(),
+        "internet":     net_resolve.has_internet(),
         "capabilities": _capabilities,
         "services":     all_statuses(),
         "config":       _device_config.get("services", {}),
@@ -326,6 +329,8 @@ def _publish_profile(status_payload: dict):
         "role":         config.MACHINE_ROLE,
         "room":         stanza,
         "ip":           ip,
+        "tailscale_ip": status_payload.get("tailscale_ip"),
+        "internet":     status_payload.get("internet"),
         "capabilities": status_payload.get("capabilities", {}),
         "services":     services,
         "sw_version":   config.SW_VERSION,

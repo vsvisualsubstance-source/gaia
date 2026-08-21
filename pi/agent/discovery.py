@@ -1,5 +1,7 @@
 """
-Discovery di Gaia Core — cascata: IP in cache → broadcast UDP → mDNS.
+Discovery di Gaia Core — cascata: IP in cache → broadcast UDP → mDNS →
+Tailscale (2026-08-21, ultimo tier: solo se GAIA_CORE_TAILSCALE_HOST è
+impostato, altrimenti zero costo — vedi _tailscale()).
 
 Controparte client di minipc/beacon/gaia_beacon.py (protocollo v1):
 datagramma b"GAIA_DISCOVER" su UDP 8899 → risposta JSON con mqtt_host,
@@ -15,6 +17,14 @@ Uso (da agent.py, prima della connect MQTT):
 import json
 import os
 import socket
+
+# IP Tailscale di Core (100.x.x.x) o hostname MagicDNS (*.ts.net), da usare
+# SOLO quando cache/broadcast/mDNS falliscono tutti -- caso "device altrove,
+# raggiungibile solo via tailnet" (vedi docs/discovery-protocol.md). Limite
+# di cold-bootstrap noto: un Pi che non ha MAI toccato la LAN di Core non
+# può scoprire questo valore da solo, va scritto in /etc/gaia/device.conf
+# al provisioning, esattamente come il default LAN in config.py oggi.
+CORE_TAILSCALE_HOST = os.getenv("GAIA_CORE_TAILSCALE_HOST", "").strip() or None
 
 BEACON_PORT = int(os.getenv("GAIA_BEACON_PORT", "8899"))
 MAGIC       = b"GAIA_DISCOVER"
@@ -87,6 +97,22 @@ def _mdns() -> dict | None:
     return None
 
 
+def _tailscale() -> dict | None:
+    """Ultimo tier, provato solo se GAIA_CORE_TAILSCALE_HOST è impostato --
+    altrimenti None immediato, nessun I/O di rete (fondamentale per non
+    aggiungere latenza negli scenari offline dove tailscale non è
+    configurato per Core, es. Gaia-Demo). Stesso identico probe di
+    _mdns(): beacon UDP prima, poi TCP 1883 come fallback compat."""
+    if not CORE_TAILSCALE_HOST:
+        return None
+    info = _probe(CORE_TAILSCALE_HOST)
+    if info:
+        return info
+    if _probe_tcp(CORE_TAILSCALE_HOST):
+        return {"service": "gaia-core", "mqtt_host": CORE_TAILSCALE_HOST, "mqtt_port": 1883}
+    return None
+
+
 def _load_cache() -> str | None:
     try:
         with open(CACHE_FILE) as f:
@@ -109,6 +135,7 @@ def discover(cached_host: str | None = None) -> dict | None:
       1. ultimo host trovato (gaia_core.json), poi cached_host (config/env)
       2. broadcast UDP
       3. mDNS
+      4. Tailscale (solo se GAIA_CORE_TAILSCALE_HOST è impostato)
     Per gli host noti: prima beacon UDP, poi fallback TCP 1883 (compat
     con un Gaia Core senza beacon installato).
     Ritorna il dict del beacon (almeno mqtt_host/mqtt_port) o None.
@@ -131,6 +158,8 @@ def discover(cached_host: str | None = None) -> dict | None:
     info = _broadcast()
     if info is None:
         info = _mdns()
+    if info is None:
+        info = _tailscale()
     if info:
         _save_cache(info)
     return info

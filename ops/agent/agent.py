@@ -26,6 +26,7 @@ import hashlib
 from datetime import datetime, timezone
 
 import paho.mqtt.client as mqtt
+import net_resolve
 
 # La console Windows di default usa la codepage locale (es. cp1252) per
 # stdout quando non e' una tty (redirect su file) — i log dei sottoprocessi
@@ -315,6 +316,8 @@ def _publish_status():
         "stanza":       stanza,
         "role":         MACHINE_ROLE,
         "ip":           _get_ip(),
+        "tailscale_ip": net_resolve.local_tailscale_ip(),
+        "internet":     net_resolve.has_internet(),
         "capabilities": detect_capabilities(),
         "services":     services,
         "config":       svc_cfg,
@@ -342,6 +345,8 @@ def _publish_profile(status_payload: dict):
         "role":         MACHINE_ROLE,
         "room":         stanza,
         "ip":           ip,
+        "tailscale_ip": status_payload.get("tailscale_ip"),
+        "internet":     status_payload.get("internet"),
         "capabilities": status_payload.get("capabilities", {}),
         "services":     services,
         "sw_version":   "1.0.2",
