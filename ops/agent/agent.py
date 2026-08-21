@@ -83,6 +83,11 @@ _cfg        = {}
 _cfg_lock   = threading.RLock()
 _procs: dict = {}
 _procs_lock = threading.Lock()
+# Processi orfani (istanze reali OS, non lanciate dal Popen di QUESTA
+# istanza dell'agent) rilevati e adottati -- vedi _find_os_pid/_is_running.
+_adopted_pids: dict = {}
+_orphan_check_cache: dict = {}   # key -> (bool_alive, scaduto_a)
+_ORPHAN_CHECK_TTL = 20.0
 _start_ts   = time.monotonic()
 
 
@@ -182,13 +187,78 @@ def _http_check(url: str, timeout: float = 3.0) -> bool:
         return False
 
 
+def _find_os_pid(key: str) -> int | None:
+    """Scansiona i processi OS reali per un'istanza di 'key' non tracciata
+    da _procs -- serve quando l'AGENT STESSO e' stato riavviato (crash,
+    aggiornamento Windows, un deploy) lasciando il vecchio sottoprocesso
+    vivo come orfano: senza questo, _is_running si fida solo della memoria
+    dell'istanza agent CORRENTE e non vede quello vecchio ancora attivo.
+    Bug reale trovato dal vivo 2026-08-21 (kiosk: "stop"/"enable" da Admin
+    rispondevano OK senza toccare il processo reale -- Edge con lo stesso
+    --user-data-dir assorbe silenziosamente un secondo lancio invece di
+    aprirne uno nuovo, nessun errore visibile).
+
+    Signature = stesso path assoluto gia' verificato in _start_service
+    (check_script), o l'ultimo argomento per i servizi con
+    check_script=False (es. kiosk: --user-data-dir=... e' gia' univoco di
+    suo, a differenza di "main.py" che da solo comparirebbe identico per
+    yolo/mediapipe/voice/mediaplayer)."""
+    defn = _SERVICE_DEFS.get(key)
+    if not defn or defn.get("type") in ("docker", "http_check"):
+        return None
+    cmd = defn["cmd"]
+    cwd = defn.get("cwd")
+    if defn.get("check_script", True):
+        signature = os.path.join(cwd, cmd[-1]) if cwd else cmd[-1]
+    else:
+        signature = cmd[-1]
+    with _cfg_lock:
+        signature = signature.replace("{STANZA}", _cfg.get("stanza", ""))
+    try:
+        # Esclude powershell.exe/pwsh.exe dal match: senza, il processo che
+        # esegue QUESTA STESSA query si auto-matcha (la sua riga di comando
+        # contiene letteralmente la stringa 'signature' cercata) --
+        # falso positivo reale trovato dal vivo 2026-08-21, un PID diverso
+        # ad ogni chiamata, tutti già spariti al controllo successivo.
+        r = subprocess.run(
+            ["powershell", "-NoProfile", "-Command",
+             "(Get-CimInstance Win32_Process | Where-Object "
+             f"{{$_.CommandLine -like '*{signature}*' -and "
+             "$_.Name -ne 'powershell.exe' -and $_.Name -ne 'pwsh.exe'} | "
+             "Select-Object -First 1 -ExpandProperty ProcessId)"],
+            capture_output=True, text=True, timeout=8,
+        )
+        pid = r.stdout.strip()
+        return int(pid) if pid.isdigit() else None
+    except Exception:
+        return None
+
+
 def _is_running(key: str) -> bool:
     defn = _SERVICE_DEFS.get(key)
     if defn and defn.get("type") == "http_check":
         return _http_check(defn["check_url"])
     with _procs_lock:
         p = _procs.get(key)
-        return p is not None and p.poll() is None
+        if p is not None and p.poll() is None:
+            return True
+    # Nessun Popen nostro vivo -- prima di concludere "fermo", verifica se
+    # esiste un processo orfano reale (vedi _find_os_pid). Cache breve per
+    # non spammare PowerShell ad ogni heartbeat/status poll.
+    now = time.monotonic()
+    cached = _orphan_check_cache.get(key)
+    if cached and now < cached[1]:
+        return cached[0]
+    pid = _find_os_pid(key)
+    if pid is not None:
+        if _adopted_pids.get(key) != pid:
+            print(f"[Agent] {key}: rilevato processo orfano PID={pid} (non lanciato da questa istanza dell'agent, adottato)")
+        _adopted_pids[key] = pid
+    else:
+        _adopted_pids.pop(key, None)
+    alive = pid is not None
+    _orphan_check_cache[key] = (alive, now + _ORPHAN_CHECK_TTL)
+    return alive
 
 
 def _svc_status(key: str) -> str:
@@ -254,20 +324,34 @@ def _stop_service(key: str) -> bool:
         return False
     with _procs_lock:
         p = _procs.get(key)
-        if p is None or p.poll() is not None:
+        if p is not None and p.poll() is None:
+            # Windows non ha SIGTERM reale: terminate() manda comunque un
+            # segnale gestibile ai processi Python (CTRL_BREAK non serve
+            # qui, terminate() basta per i nostri script — nessun cleanup
+            # complesso oltre a chiudere socket/stream, gia' gestito nei
+            # finally).
+            p.terminate()
+            try:
+                p.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                p.kill()
             _procs[key] = None
+            print(f"[Agent] Fermato: {key}")
+            _orphan_check_cache.pop(key, None)
             return True
-        # Windows non ha SIGTERM reale: terminate() manda comunque un
-        # segnale gestibile ai processi Python (CTRL_BREAK non serve qui,
-        # terminate() basta per i nostri script — nessun cleanup complesso
-        # oltre a chiudere socket/stream, gia' gestito nei finally).
-        p.terminate()
-        try:
-            p.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            p.kill()
         _procs[key] = None
-    print(f"[Agent] Fermato: {key}")
+    # Nessun Popen nostro vivo -- ma potrebbe esserci un orfano adottato
+    # (agent riavviato dopo il lancio originale) da fermare comunque,
+    # altrimenti "stop" da Admin risponde OK senza chiudere nulla (bug
+    # trovato dal vivo 2026-08-21, vedi _find_os_pid).
+    pid = _adopted_pids.pop(key, None) or _find_os_pid(key)
+    if pid is not None:
+        try:
+            subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, timeout=8)
+            print(f"[Agent] Fermato processo orfano {key} (PID={pid})")
+        except Exception as e:
+            print(f"[Agent] Errore fermando orfano {key} (PID={pid}): {e}")
+    _orphan_check_cache.pop(key, None)
     return True
 
 

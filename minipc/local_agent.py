@@ -152,6 +152,11 @@ _cfg          = {}
 _cfg_lock     = threading.Lock()
 _procs: dict  = {}   # key → subprocess.Popen | None
 _procs_lock   = threading.Lock()
+# Processi orfani (istanze reali OS, non lanciate dal Popen di QUESTA
+# istanza dell'agent) rilevati e adottati -- vedi _find_os_pid/_is_running.
+_adopted_pids: dict = {}
+_orphan_check_cache: dict = {}   # key -> (bool_alive, scaduto_a)
+_ORPHAN_CHECK_TTL = 20.0
 
 
 # ── Config persistence ────────────────────────────────────────────────
@@ -274,13 +279,57 @@ def _docker_stop(container: str) -> bool:
         return False
 
 
+def _find_os_pid(key: str) -> int | None:
+    """Scansiona i processi OS reali per un'istanza di 'key' non tracciata
+    da _procs -- serve quando l'AGENT STESSO e' stato riavviato (crash,
+    restart manuale, deploy) lasciando il vecchio sottoprocesso vivo come
+    orfano: senza questo, _is_running si fida solo della memoria
+    dell'istanza agent CORRENTE e non vede quello vecchio ancora attivo.
+    Stesso bug reale trovato dal vivo 2026-08-21 su ops/agent/agent.py
+    (kiosk: "stop"/"enable" da Admin rispondevano OK senza toccare il
+    processo reale) -- stessa causa strutturale qui, fix gemello via
+    pgrep -f invece di Get-CimInstance (quello e' Windows)."""
+    defn = _SERVICE_DEFS.get(key)
+    if not defn or defn.get("type") == "docker":
+        return None
+    cmd = defn["cmd"]
+    if defn.get("check_script", True):
+        signature = cmd[1] if len(cmd) > 1 else cmd[0]
+    else:
+        signature = cmd[-1]
+    try:
+        r = subprocess.run(["pgrep", "-f", signature], capture_output=True, text=True, timeout=5)
+        pids = [int(p) for p in r.stdout.split() if p.isdigit()]
+        return pids[0] if pids else None
+    except Exception:
+        return None
+
+
 def _is_running(key: str) -> bool:
     defn = _SERVICE_DEFS.get(key)
     if defn and defn.get("type") == "docker":
         return _docker_is_running(defn["container"])
     with _procs_lock:
         p = _procs.get(key)
-        return p is not None and p.poll() is None
+        if p is not None and p.poll() is None:
+            return True
+    # Nessun Popen nostro vivo -- prima di concludere "fermo", verifica se
+    # esiste un processo orfano reale (vedi _find_os_pid). Cache breve per
+    # non spammare pgrep ad ogni heartbeat/status poll.
+    now = time.monotonic()
+    cached = _orphan_check_cache.get(key)
+    if cached and now < cached[1]:
+        return cached[0]
+    pid = _find_os_pid(key)
+    if pid is not None:
+        if _adopted_pids.get(key) != pid:
+            print(f"[Agent] {key}: rilevato processo orfano PID={pid} (non lanciato da questa istanza dell'agent, adottato)")
+        _adopted_pids[key] = pid
+    else:
+        _adopted_pids.pop(key, None)
+    alive = pid is not None
+    _orphan_check_cache[key] = (alive, now + _ORPHAN_CHECK_TTL)
+    return alive
 
 
 def _svc_status(key: str) -> str:
@@ -328,16 +377,29 @@ def _stop_service(key: str) -> bool:
         return _docker_stop(defn["container"])
     with _procs_lock:
         p = _procs.get(key)
-        if p is None or p.poll() is not None:
+        if p is not None and p.poll() is None:
+            p.terminate()
+            try:
+                p.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                p.kill()
             _procs[key] = None
+            print(f"[Agent] Fermato: {key}")
+            _orphan_check_cache.pop(key, None)
             return True
-        p.terminate()
-        try:
-            p.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            p.kill()
         _procs[key] = None
-    print(f"[Agent] Fermato: {key}")
+    # Nessun Popen nostro vivo -- ma potrebbe esserci un orfano adottato
+    # (agent riavviato dopo il lancio originale) da fermare comunque,
+    # altrimenti "stop" da Admin risponde OK senza chiudere nulla (stesso
+    # bug trovato dal vivo 2026-08-21 su ops/agent/agent.py).
+    pid = _adopted_pids.pop(key, None) or _find_os_pid(key)
+    if pid is not None:
+        try:
+            os.kill(pid, signal.SIGTERM)
+            print(f"[Agent] Fermato processo orfano {key} (PID={pid})")
+        except Exception as e:
+            print(f"[Agent] Errore fermando orfano {key} (PID={pid}): {e}")
+    _orphan_check_cache.pop(key, None)
     return True
 
 
