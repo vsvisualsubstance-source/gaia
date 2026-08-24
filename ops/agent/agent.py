@@ -227,6 +227,7 @@ def _find_os_pid(key: str) -> int | None:
              "$_.Name -ne 'powershell.exe' -and $_.Name -ne 'pwsh.exe'} | "
              "Select-Object -First 1 -ExpandProperty ProcessId)"],
             capture_output=True, text=True, timeout=8,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
         )
         pid = r.stdout.strip()
         return int(pid) if pid.isdigit() else None
@@ -347,7 +348,10 @@ def _stop_service(key: str) -> bool:
     pid = _adopted_pids.pop(key, None) or _find_os_pid(key)
     if pid is not None:
         try:
-            subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, timeout=8)
+            subprocess.run(
+                ["taskkill", "/PID", str(pid), "/F"], capture_output=True, timeout=8,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+            )
             print(f"[Agent] Fermato processo orfano {key} (PID={pid})")
         except Exception as e:
             print(f"[Agent] Errore fermando orfano {key} (PID={pid}): {e}")
