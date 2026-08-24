@@ -83,6 +83,14 @@ button.small{padding:4px 10px;font-size:.78rem}
 .live-dot{width:6px;height:6px;border-radius:50%;background:#444;display:inline-block}
 .live-dot.on{background:var(--cyan);box-shadow:0 0 4px var(--cyan)}
 .chan-err{color:var(--yellow);font-size:.78rem;margin-top:4px}
+
+.preset-row{display:flex;align-items:center;gap:12px;margin-top:16px;padding-top:14px;border-top:1px solid var(--border);flex-wrap:wrap}
+.preset-slots{display:flex;gap:10px;flex-wrap:wrap}
+.preset-slot{display:flex;align-items:center;gap:5px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:5px 6px}
+.preset-slot .slot-name{font-size:.78rem;font-weight:700;color:var(--muted);width:16px;text-align:center}
+.preset-slot.filled .slot-name{color:var(--accent)}
+.preset-slot .slot-dot{width:5px;height:5px;border-radius:50%;background:#333}
+.preset-slot.filled .slot-dot{background:var(--accent)}
 </style>
 </head>
 <body>
@@ -136,6 +144,10 @@ button.small{padding:4px 10px;font-size:.78rem}
     <div id="live-rows"></div>
   </div>
   <div id="band-grid" class="band-grid"></div>
+  <div class="preset-row">
+    <span class="svc-label" style="min-width:auto">Preset canale</span>
+    <div id="preset-slots" class="preset-slots"></div>
+  </div>
 </div>
 
 <script>
@@ -165,9 +177,18 @@ const MX_BANDS = [
 const MX_LEVEL_KEYS = ['Low', 'Mid', 'High', 'Kickdetection', 'Snaredetection', 'Rythm', 'Spectralcentroid', 'Smp', 'Fmp'];
 const MX_LEVELS_STALE_MS = 3000;   // non retained: se si ferma, il device ha smesso di mandare (o e' offline)
 
+// Preset per canale -- retained su MQTT (stesso principio di
+// patchdeck_matrix/status: il broker persiste, nessun backend nuovo da
+// scrivere, e qualunque browser che apre la pagina li ritrova gia'
+// pronti alla subscribe). Un topic per (canale, slot), non un unico
+// blob: cosi' salvare/caricare un canale non tocca gli altri 48.
+const MX_PRESET_SLOTS = ['A', 'B', 'C'];
+function mxPresetTopic(chan, slot) { return `gaia/mixeraudio/preset/${MX_DEVICE_ID}/ch${chan}/${slot}`; }
+
 let mxClient = null;
 let mxDevice = null;
 let mxLevels = null;   // {device_id, input_level, channels:{N:{...}}, channels_error:[...], ts, _lastSeen}
+let mxPresets = {};    // {[channel]: {[slot]: {params:{...}, ts}}}
 let mxChannel = null;   // numero canale selezionato
 
 function mxSetConn(ok) {
@@ -343,6 +364,56 @@ function mxRenderLiveBand() {
   }).join('');
 }
 
+function mxSavePreset(slot) {
+  if (mxChannel === null) return;
+  const byChan = mxChannelsFromParams(mxDevice?.params);
+  const chanParams = byChan[mxChannel];
+  if (!chanParams) return;
+  // Salva lo stato REALE del device (mxDevice.params), non i campi
+  // eventualmente in modifica non ancora inviata (.dirty) -- un preset
+  // deve riflettere cio' che il canale sta davvero suonando ora.
+  const preset = { params: { ...chanParams }, ts: Date.now() };
+  mxPresets[mxChannel] ||= {};
+  mxPresets[mxChannel][slot] = preset;   // aggiornamento ottimistico, il retained in arrivo conferma
+  mxClient?.publish(mxPresetTopic(mxChannel, slot), JSON.stringify(preset), { retain: true });
+  mxRenderPresetSlots();
+}
+
+function mxLoadPreset(slot) {
+  if (mxChannel === null) return;
+  const preset = mxPresets[mxChannel]?.[slot];
+  if (!preset) return;
+  for (const [suffix, value] of Object.entries(preset.params)) {
+    mxSendParam(`ch${mxChannel}_${suffix}`, value);
+    const input = document.querySelector(`#band-grid input[data-param="ch${mxChannel}_${suffix}"]`);
+    if (input && input !== document.activeElement) {
+      input.value = value;
+      input.classList.remove('dirty');
+      input.classList.add('sent');
+      setTimeout(() => input.classList.remove('sent'), 400);
+    }
+  }
+}
+
+function mxRenderPresetSlots() {
+  const wrap = document.getElementById('preset-slots');
+  if (mxChannel === null) { wrap.innerHTML = ''; return; }
+  const forChan = mxPresets[mxChannel] || {};
+  wrap.innerHTML = MX_PRESET_SLOTS.map(slot => {
+    const p = forChan[slot];
+    const title = p ? `salvato ${new Date(p.ts).toLocaleTimeString('it-IT')}` : 'slot vuoto';
+    return `
+    <div class="preset-slot${p ? ' filled' : ''}" title="${title}">
+      <span class="slot-dot"></span>
+      <span class="slot-name">${slot}</span>
+      <button class="small secondary" data-preset-save="${slot}">💾</button>
+      <button class="small secondary" data-preset-load="${slot}" ${p ? '' : 'disabled'}>▶</button>
+    </div>`;
+  }).join('');
+  wrap.querySelectorAll('[data-preset-save]').forEach(b => b.onclick = () => mxSavePreset(b.dataset.presetSave));
+  wrap.querySelectorAll('[data-preset-load]').forEach(b => b.onclick = () => mxLoadPreset(b.dataset.presetLoad));
+}
+
 function mxRenderSvc(svc) {
   const el = document.getElementById(`svc-${svc}-state`);
   if (!el) return;
@@ -370,6 +441,7 @@ function mxRenderAll() {
   if (mxBuiltForChannel !== mxChannel) mxBuildBands(chanParams);
   else mxUpdateBandValues(chanParams);
   mxRenderLiveBand();
+  mxRenderPresetSlots();
 }
 
 function mxInit() {
@@ -382,11 +454,29 @@ function mxInit() {
       // NON retained, ~1s reale (GAIA_INTERFACE.md / TD4Gaia 2026-08-24,4)
       // -- valori reattivi per canale, canale separato dallo status/heartbeat.
       mxClient.subscribe(`gaia/device/${MX_DEVICE_ID}/audio_levels`);
+      // Retained: tutti i preset di tutti i canali arrivano subito alla
+      // subscribe, cosi' i pallini "slot pieno/vuoto" sono corretti anche
+      // prima di aver mai selezionato quel canale in questa sessione.
+      mxClient.subscribe(`gaia/mixeraudio/preset/${MX_DEVICE_ID}/+/+`);
       mxStartPolling();
     });
     mxClient.on('error',   () => mxSetConn(false));
     mxClient.on('offline', () => mxSetConn(false));
     mxClient.on('message', (topic, raw) => {
+      if (topic.startsWith(`gaia/mixeraudio/preset/${MX_DEVICE_ID}/`)) {
+        const m = topic.match(/\/ch(\d+)\/([A-Z])$/);
+        if (!m) return;
+        const chan = parseInt(m[1], 10), slot = m[2];
+        if (!raw || !raw.length) { delete mxPresets[chan]?.[slot]; }
+        else {
+          try {
+            mxPresets[chan] ||= {};
+            mxPresets[chan][slot] = JSON.parse(raw.toString());
+          } catch (e) { return; }
+        }
+        if (chan === mxChannel) mxRenderPresetSlots();
+        return;
+      }
       if (!raw || !raw.length) return;
       if (topic.endsWith('/audio_levels')) {
         try {
