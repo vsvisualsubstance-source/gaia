@@ -2111,6 +2111,9 @@ async function forgetDevice(id) {
 // ── Pi Manager MQTT ──────────────────────────────────────────────────────────
 let _pmClient = null;
 const _pmDevices = {};
+// PatchDeck ha una pagina dedicata (patchdeck.html, 78 servizi) -- niente
+// box generico in Pi Devices, sarebbe un muro di bottoni illeggibile.
+const PD_HIDDEN_IDS = new Set(['td-MacBook-Air-di-Mauro.local']);
 const PM_SVC_META = {
   yolo:      { label: 'YOLO',      icon: '👁️' },
   mediapipe: { label: 'MediaPipe', icon: '🖐️' },
@@ -2241,6 +2244,11 @@ function initPiManager() {
         const d = JSON.parse(raw.toString());
         const id = d.device_id;
         if (!id) return;
+        if (PD_HIDDEN_IDS.has(id)) {
+          const stale = document.getElementById(`pm-card-${id}`);
+          if (stale) stale.remove();
+          return;
+        }
         const isNew = !_pmDevices[id];
         d._lastSeen = Date.now();
         d._offline  = false;

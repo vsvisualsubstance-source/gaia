@@ -129,7 +129,31 @@ const PD_PAGE_SIZE = 24;     // griglia 8x3 visibile per pagina
 
 let pdClient = null;
 let pdDevice = null;
+let pdMatrix = null;   // gaia/devices/{id}/patchdeck_matrix (retained, canale 5) -- {decks,patches,services{kind,patch,deck}}
 const pdPage = { a: 0, b: 0 };
+
+// Elenco {patch, key} per deck, derivato dalla matrice meccanica se
+// disponibile (kind:"load_patch") -- fallback alla convenzione di naming
+// load_x{N}_{deck} solo se la matrice non e' ancora arrivata (es. primo
+// istante prima che il retained message venga consegnato).
+function pdPatchList(deck) {
+  if (pdMatrix?.services) {
+    return Object.entries(pdMatrix.services)
+      .filter(([, s]) => s.kind === 'load_patch' && String(s.deck).toLowerCase() === deck)
+      .map(([key, s]) => ({ patch: s.patch, key }))
+      .sort((a, b) => a.patch - b.patch);
+  }
+  return Array.from({ length: PD_PATCH_COUNT }, (_, i) => ({ patch: i + 1, key: `load_x${i + 1}_${deck}` }));
+}
+
+function pdDeckToggleKey(deck) {
+  if (pdMatrix?.services) {
+    const hit = Object.entries(pdMatrix.services)
+      .find(([, s]) => s.kind === 'deck_toggle' && String(s.deck).toLowerCase() === deck);
+    if (hit) return hit[0];
+  }
+  return `deck_${deck}`;
+}
 
 function pdSetConn(ok) {
   const dot = document.getElementById('mqtt-dot');
@@ -149,25 +173,26 @@ function pdFlash(el) {
 function pdRenderGrid(deck) {
   const grid = document.getElementById(`deck${deck.toUpperCase()}-grid`);
   const services = pdDevice?.services || {};
-  const start = pdPage[deck] * PD_PAGE_SIZE + 1;
+  const list = pdPatchList(deck);
+  const start = pdPage[deck] * PD_PAGE_SIZE;
   grid.innerHTML = '';
   for (let i = 0; i < PD_PAGE_SIZE; i++) {
-    const n = start + i;
+    const item = list[start + i];
     const btn = document.createElement('button');
     btn.className = 'patch-cell';
-    if (n > PD_PATCH_COUNT) {
+    if (!item) {
       btn.disabled = true;
       btn.textContent = '';
     } else {
-      const key = `load_x${n}_${deck}`;
-      btn.textContent = n;
-      if (services[key] === 'active') btn.classList.add('active');
-      btn.onclick = () => { pdFlash(btn); pdSend(key, 'enable'); };
+      btn.textContent = item.patch;
+      if (services[item.key] === 'active') btn.classList.add('active');
+      btn.onclick = () => { pdFlash(btn); pdSend(item.key, 'enable'); };
     }
     grid.appendChild(btn);
   }
-  const totalPages = Math.ceil(PD_PATCH_COUNT / PD_PAGE_SIZE);
-  const lo = start, hi = Math.min(start + PD_PAGE_SIZE - 1, PD_PATCH_COUNT);
+  const totalPages = Math.max(1, Math.ceil(list.length / PD_PAGE_SIZE));
+  const lo = list[start]?.patch ?? '–';
+  const hi = list[Math.min(start + PD_PAGE_SIZE, list.length) - 1]?.patch ?? '–';
   document.getElementById(`deck${deck.toUpperCase()}-page`).textContent =
     `Pagina ${pdPage[deck] + 1}/${totalPages} (${lo}–${hi})`;
   document.getElementById(`deck${deck.toUpperCase()}-prev`).disabled = pdPage[deck] === 0;
@@ -176,7 +201,7 @@ function pdRenderGrid(deck) {
 
 function pdRenderDeckState(deck) {
   const el = document.getElementById(`deck${deck.toUpperCase()}-state`);
-  const state = (pdDevice?.services || {})[`deck_${deck}`] || 'inactive';
+  const state = (pdDevice?.services || {})[pdDeckToggleKey(deck)] || 'inactive';
   el.textContent = state;
   el.classList.toggle('active', state === 'active');
 }
@@ -202,11 +227,25 @@ function pdInit() {
     pdClient.on('connect', () => {
       pdSetConn(true);
       pdClient.subscribe('gaia/device/+/status');
+      // Retained, canale 5 (GAIA_INTERFACE.md / TD4Gaia 2026-08-24, 2): la
+      // matrice arriva subito alla subscribe anche se PatchDeck e' offline.
+      pdClient.subscribe(`gaia/devices/${PD_DEVICE_ID}/patchdeck_matrix`);
     });
     pdClient.on('error',   () => pdSetConn(false));
     pdClient.on('offline', () => pdSetConn(false));
     pdClient.on('message', (topic, raw) => {
       if (!raw || !raw.length) return;
+      if (topic.endsWith('/patchdeck_matrix')) {
+        try {
+          const m = JSON.parse(raw.toString());
+          if (m.device_id !== PD_DEVICE_ID) return;
+          pdMatrix = m;
+          pdPage.a = 0; pdPage.b = 0;
+          pdRenderGrid('a');
+          pdRenderGrid('b');
+        } catch (e) {}
+        return;
+      }
       try {
         const d = JSON.parse(raw.toString());
         if (d.device_id !== PD_DEVICE_ID) return;
@@ -234,7 +273,7 @@ function pdInit() {
 }
 
 document.querySelectorAll('[data-deck][data-action]').forEach(btn => {
-  btn.onclick = () => pdSend(`deck_${btn.dataset.deck}`, btn.dataset.action);
+  btn.onclick = () => pdSend(pdDeckToggleKey(btn.dataset.deck), btn.dataset.action);
 });
 document.getElementById('deckA-prev').onclick = () => { if (pdPage.a > 0) { pdPage.a--; pdRenderGrid('a'); } };
 document.getElementById('deckA-next').onclick = () => { pdPage.a++; pdRenderGrid('a'); };
