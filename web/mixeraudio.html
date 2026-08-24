@@ -149,6 +149,27 @@ function mxSendParam(param, value) {
   mxClient.publish(`gaia/device/${MX_DEVICE_ID}/command`, JSON.stringify({ action: 'set', param, value }));
 }
 
+// Il device pubblica lo status via heartbeat throttlato lato TD (~20-30s,
+// gaia_device_agent.py._HEARTBEAT_S), troppo lento per "leggere ogni
+// secondo". Ma _apply_command() rifà SEMPRE un _publish_status() a fine
+// funzione qualunque sia l'azione (anche "status" su un service inventato,
+// verificato dal vivo) -- lo sfruttiamo per forzare un refresh ogni
+// secondo mentre questa pagina è aperta e visibile, senza bisogno di
+// nessuna modifica lato TD.
+let mxPollTimer = null;
+function mxStartPolling() {
+  if (mxPollTimer) return;
+  mxPollTimer = setInterval(() => {
+    if (document.hidden || !mxClient?.connected) return;
+    mxClient.publish(`gaia/device/${MX_DEVICE_ID}/command`, JSON.stringify({ action: 'status', service: '_poll' }));
+  }, 1000);
+}
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && mxClient?.connected) {
+    mxClient.publish(`gaia/device/${MX_DEVICE_ID}/command`, JSON.stringify({ action: 'status', service: '_poll' }));
+  }
+});
+
 // ch{N}_{Suffisso} -> { N: {Suffisso: valore} }, scoperto dal vivo dal
 // payload "params" (non c'e' un topic-matrice come patchdeck_matrix per
 // questo device, quindi qui la convenzione di naming e' l'unica fonte).
@@ -174,11 +195,16 @@ function mxRenderChanStrip(byChan) {
   }
   empty.style.display = 'none';
   if (mxChannel === null || !nums.includes(mxChannel)) mxChannel = nums[0];
-  strip.innerHTML = nums.map(n =>
-    `<button class="chan-btn${n === mxChannel ? ' sel' : ''}" data-chan="${n}">${n}</button>`
-  ).join('');
+  const key = nums.join(',');
+  if (strip.dataset.key !== key) {
+    strip.dataset.key = key;
+    strip.innerHTML = nums.map(n => `<button class="chan-btn" data-chan="${n}">${n}</button>`).join('');
+    strip.querySelectorAll('.chan-btn').forEach(btn => {
+      btn.onclick = () => { mxChannel = parseInt(btn.dataset.chan, 10); mxRenderAll(); };
+    });
+  }
   strip.querySelectorAll('.chan-btn').forEach(btn => {
-    btn.onclick = () => { mxChannel = parseInt(btn.dataset.chan, 10); mxRenderAll(); };
+    btn.classList.toggle('sel', parseInt(btn.dataset.chan, 10) === mxChannel);
   });
 }
 
@@ -191,8 +217,15 @@ function mxCommitField(input, param) {
   mxSendParam(param, v);
 }
 
-function mxRenderBands(chanParams) {
+// Ricostruisce i controlli SOLO quando cambia il canale selezionato --
+// vedi mxUpdateBandValues() per l'aggiornamento periodico dei valori
+// (deve toccare solo il .value degli input, mai rifare l'innerHTML: con
+// un poll ogni secondo, ricreare il DOM ad ogni giro cancellerebbe la
+// digitazione in corso e il focus, esattamente il bug segnalato).
+let mxBuiltForChannel = null;
+function mxBuildBands(chanParams) {
   const grid = document.getElementById('band-grid');
+  mxBuiltForChannel = mxChannel;
   if (!chanParams) { grid.innerHTML = ''; return; }
   const known = new Set(MX_BANDS.flatMap(b => b.params));
   const extra = Object.keys(chanParams).filter(k => !known.has(k)).sort();
@@ -214,6 +247,22 @@ function mxRenderBands(chanParams) {
     input.addEventListener('input', () => input.classList.add('dirty'));
     input.addEventListener('blur', () => { if (input.classList.contains('dirty')) mxCommitField(input, input.dataset.param); });
     input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur(); });
+  });
+}
+
+function mxUpdateBandValues(chanParams) {
+  if (!chanParams) return;
+  document.querySelectorAll('#band-grid input[data-param]').forEach(input => {
+    // Non toccare un campo che l'utente sta editando ora (focus) o ha
+    // gia' modificato ma non ancora inviato (dirty, in attesa del blur) --
+    // altrimenti un valore letto dal device sovrascriverebbe la modifica
+    // dell'utente prima che parta il comando "set".
+    if (input === document.activeElement || input.classList.contains('dirty')) return;
+    const suffix = input.dataset.param.replace(/^ch\d+_/, '');
+    if (suffix in chanParams) {
+      const v = String(chanParams[suffix]);
+      if (input.value !== v) input.value = v;
+    }
   });
 }
 
@@ -240,7 +289,9 @@ function mxRenderAll() {
 
   const byChan = mxChannelsFromParams(mxDevice.params);
   mxRenderChanStrip(byChan);
-  mxRenderBands(mxChannel !== null ? byChan[mxChannel] : null);
+  const chanParams = mxChannel !== null ? byChan[mxChannel] : null;
+  if (mxBuiltForChannel !== mxChannel) mxBuildBands(chanParams);
+  else mxUpdateBandValues(chanParams);
 }
 
 function mxInit() {
@@ -250,6 +301,7 @@ function mxInit() {
     mxClient.on('connect', () => {
       mxSetConn(true);
       mxClient.subscribe('gaia/device/+/status');
+      mxStartPolling();
     });
     mxClient.on('error',   () => mxSetConn(false));
     mxClient.on('offline', () => mxSetConn(false));
