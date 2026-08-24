@@ -70,6 +70,19 @@ button.small{padding:4px 10px;font-size:.78rem}
 .param-row input:focus{border-color:var(--accent);outline:none}
 .param-row input.dirty{border-color:var(--yellow)}
 .param-row input.sent{border-color:var(--accent)}
+
+.level-bar-wrap{height:6px;border-radius:3px;background:var(--border);overflow:hidden;flex:1}
+.level-bar{height:100%;width:0;background:var(--cyan);transition:width .1s linear}
+.level-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.level-row:last-child{margin-bottom:0}
+.level-row label{font-size:.72rem;color:var(--muted);width:64px;flex-shrink:0}
+.level-row .level-val{font-size:.72rem;color:var(--text);width:42px;text-align:right;flex-shrink:0;font-variant-numeric:tabular-nums}
+.band.live{border-color:#173044}
+.band.live .band-title{color:var(--cyan)}
+.live-stale{opacity:.35}
+.live-dot{width:6px;height:6px;border-radius:50%;background:#444;display:inline-block}
+.live-dot.on{background:var(--cyan);box-shadow:0 0 4px var(--cyan)}
+.chan-err{color:var(--yellow);font-size:.78rem;margin-top:4px}
 </style>
 </head>
 <body>
@@ -90,6 +103,12 @@ button.small{padding:4px 10px;font-size:.78rem}
   <div class="dev-status">
     <span id="dev-badge" class="dev-badge offline">● offline</span>
     <span class="dev-meta" id="dev-meta">nessun dato ricevuto</span>
+    <span class="dev-meta"><span id="live-dot" class="live-dot"></span> live</span>
+  </div>
+  <div class="level-row" style="margin-top:10px">
+    <label>Input</label>
+    <div class="level-bar-wrap"><div id="input-level-bar" class="level-bar"></div></div>
+    <span id="input-level-val" class="level-val">—</span>
   </div>
   <div class="svc-row">
     <span class="svc-label">Audio Device</span>
@@ -111,6 +130,11 @@ button.small{padding:4px 10px;font-size:.78rem}
   <h2>Canale</h2>
   <div id="chan-strip" class="chan-strip"></div>
   <div id="chan-empty" class="chan-empty" style="display:none">In attesa dati dal device (nessun canale scoperto ancora)…</div>
+  <div id="chan-err" class="chan-err" style="display:none"></div>
+  <div id="live-band" class="band live" style="margin-top:12px;display:none">
+    <div class="band-title">🔴 Live (reattivo, sola lettura)</div>
+    <div id="live-rows"></div>
+  </div>
   <div id="band-grid" class="band-grid"></div>
 </div>
 
@@ -131,8 +155,19 @@ const MX_BANDS = [
   { title: 'Percussione', strip: /thresh$/, params: ['Kickthresh', 'Snarethresh', 'Rythmthresh'] },
 ];
 
+// Valori reattivi live per canale (GAIA_INTERFACE.md / TD4Gaia 2026-08-24,4
+// -- gaia/device/{id}/audio_levels, NON retained, ~1s). Diversi dai
+// parametri di configurazione sopra (quelli restano su register_param/
+// action:"set") -- questi sono sola lettura, calcolati ogni frame dal
+// componente di analisi audio. Assunti in [0,1] dagli esempi nel
+// changelog (Low/Mid/High/detection/Spectralcentroid/Smp/Fmp), barra
+// clampata per non rompersi visivamente se non lo fossero.
+const MX_LEVEL_KEYS = ['Low', 'Mid', 'High', 'Kickdetection', 'Snaredetection', 'Rythm', 'Spectralcentroid', 'Smp', 'Fmp'];
+const MX_LEVELS_STALE_MS = 3000;   // non retained: se si ferma, il device ha smesso di mandare (o e' offline)
+
 let mxClient = null;
 let mxDevice = null;
+let mxLevels = null;   // {device_id, input_level, channels:{N:{...}}, channels_error:[...], ts, _lastSeen}
 let mxChannel = null;   // numero canale selezionato
 
 function mxSetConn(ok) {
@@ -266,6 +301,48 @@ function mxUpdateBandValues(chanParams) {
   });
 }
 
+function mxClamp01(v) { return Math.max(0, Math.min(1, Number(v) || 0)); }
+
+function mxRenderInputLevel() {
+  const stale = !mxLevels || (Date.now() - mxLevels._lastSeen) > MX_LEVELS_STALE_MS;
+  document.getElementById('live-dot').classList.toggle('on', !stale);
+  const bar = document.getElementById('input-level-bar');
+  const val = document.getElementById('input-level-val');
+  if (!mxLevels) { bar.style.width = '0%'; val.textContent = '—'; return; }
+  const v = mxClamp01(mxLevels.input_level);
+  bar.style.width = (v * 100) + '%';
+  val.textContent = Number(mxLevels.input_level).toFixed(2);
+  bar.parentElement.parentElement.classList.toggle('live-stale', stale);
+}
+
+function mxRenderLiveBand() {
+  const wrap = document.getElementById('live-band');
+  const rows = document.getElementById('live-rows');
+  const errEl = document.getElementById('chan-err');
+  if (mxChannel === null || !mxLevels) { wrap.style.display = 'none'; errEl.style.display = 'none'; return; }
+  if ((mxLevels.channels_error || []).includes(mxChannel)) {
+    wrap.style.display = 'none';
+    errEl.style.display = '';
+    errEl.textContent = `⚠ canale ${mxChannel}: non ancora costruito in ControllerV7 (nessun dato live disponibile)`;
+    return;
+  }
+  errEl.style.display = 'none';
+  const chan = (mxLevels.channels || {})[mxChannel];
+  if (!chan) { wrap.style.display = 'none'; return; }
+  const stale = (Date.now() - mxLevels._lastSeen) > MX_LEVELS_STALE_MS;
+  wrap.style.display = '';
+  wrap.classList.toggle('live-stale', stale);
+  rows.innerHTML = MX_LEVEL_KEYS.filter(k => k in chan).map(k => {
+    const v = mxClamp01(chan[k]);
+    return `
+    <div class="level-row">
+      <label>${k}</label>
+      <div class="level-bar-wrap"><div class="level-bar" style="width:${v * 100}%"></div></div>
+      <span class="level-val">${Number(chan[k]).toFixed(2)}</span>
+    </div>`;
+  }).join('');
+}
+
 function mxRenderSvc(svc) {
   const el = document.getElementById(`svc-${svc}-state`);
   if (!el) return;
@@ -292,6 +369,7 @@ function mxRenderAll() {
   const chanParams = mxChannel !== null ? byChan[mxChannel] : null;
   if (mxBuiltForChannel !== mxChannel) mxBuildBands(chanParams);
   else mxUpdateBandValues(chanParams);
+  mxRenderLiveBand();
 }
 
 function mxInit() {
@@ -301,12 +379,26 @@ function mxInit() {
     mxClient.on('connect', () => {
       mxSetConn(true);
       mxClient.subscribe('gaia/device/+/status');
+      // NON retained, ~1s reale (GAIA_INTERFACE.md / TD4Gaia 2026-08-24,4)
+      // -- valori reattivi per canale, canale separato dallo status/heartbeat.
+      mxClient.subscribe(`gaia/device/${MX_DEVICE_ID}/audio_levels`);
       mxStartPolling();
     });
     mxClient.on('error',   () => mxSetConn(false));
     mxClient.on('offline', () => mxSetConn(false));
     mxClient.on('message', (topic, raw) => {
       if (!raw || !raw.length) return;
+      if (topic.endsWith('/audio_levels')) {
+        try {
+          const lv = JSON.parse(raw.toString());
+          if (lv.device_id !== MX_DEVICE_ID) return;
+          lv._lastSeen = Date.now();
+          mxLevels = lv;
+          mxRenderInputLevel();
+          mxRenderLiveBand();
+        } catch (e) {}
+        return;
+      }
       try {
         const d = JSON.parse(raw.toString());
         if (d.device_id !== MX_DEVICE_ID) return;
@@ -316,6 +408,7 @@ function mxInit() {
         mxRenderAll();
       } catch (e) {}
     });
+    setInterval(() => { mxRenderInputLevel(); mxRenderLiveBand(); }, 1000);
     setInterval(() => {
       if (mxDevice && Date.now() - mxDevice._lastSeen > 90000 && !mxDevice._offline) {
         mxDevice._offline = true;
