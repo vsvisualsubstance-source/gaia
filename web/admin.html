@@ -187,6 +187,7 @@ button.small{padding:3px 9px;font-size:.78rem;margin:0}
   <a href="gaia-art/index.html" class="topnav-link">Arte</a>
   <a href="mattoni.html" class="topnav-link">Mattoni</a>
   <a href="patchdeck.html" class="topnav-link">🎛 PatchDeck</a>
+  <a href="mixeraudio.html" class="topnav-link">🎚 MixerAudio</a>
   <div class="tab-bar">
     <button class="tab-btn active" onclick="showTab('cfg',this)">⚙ Configurazione</button>
     <button class="tab-btn" onclick="showTab('pi',this)">🍓 Pi Devices <span id="mqtt-dot" class="mqtt-dot"></span></button>
@@ -2111,9 +2112,11 @@ async function forgetDevice(id) {
 // ── Pi Manager MQTT ──────────────────────────────────────────────────────────
 let _pmClient = null;
 const _pmDevices = {};
-// PatchDeck ha una pagina dedicata (patchdeck.html, 78 servizi) -- niente
-// box generico in Pi Devices, sarebbe un muro di bottoni illeggibile.
-const PD_HIDDEN_IDS = new Set(['td-MacBook-Air-di-Mauro.local']);
+// PatchDeck/ControllerV7 hanno pagine dedicate (patchdeck.html,
+// mixeraudio.html) -- niente box generico in Pi Devices: PatchDeck ha 78
+// servizi, ControllerV7 564 parametri (register_param, non renderizzati
+// affatto dalla griglia servizi generica), sarebbero muri illeggibili.
+const PD_HIDDEN_IDS = new Set(['td-MacBook-Air-di-Mauro.local', 'td-controllerv7-macbook-air-di-mauro']);
 const PM_SVC_META = {
   yolo:      { label: 'YOLO',      icon: '👁️' },
   mediapipe: { label: 'MediaPipe', icon: '🖐️' },
