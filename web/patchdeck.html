@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GAIA PatchDeck</title>
+<style>
+:root {
+  --bg:#08090f; --card:#0e1221; --border:#1e2840;
+  --accent:#00ffcc; --blue:#58a6ff; --green:#3fb950; --red:#f85149;
+  --yellow:#e3b341; --cyan:#39c5cf;
+  --text:#c9d1d9; --muted:#6b7a99;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;padding:24px;max-width:960px;margin:0 auto}
+h1{color:var(--accent);font-size:1.6rem;margin-bottom:4px}
+.subtitle{color:var(--muted);font-size:.9rem;margin-bottom:24px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:16px}
+h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:8px}
+button{
+  background:var(--accent);color:#000;border:none;border-radius:6px;
+  padding:8px 16px;cursor:pointer;font-size:.85rem;font-weight:600;
+  transition:opacity .15s, transform .1s;
+}
+button:hover{opacity:.85}
+button:disabled{opacity:.3;cursor:default}
+button.secondary{background:var(--card);color:var(--text);border:1px solid var(--border)}
+button.gray{background:var(--border);color:var(--text)}
+button.red{background:var(--red);color:#fff}
+button.green{background:var(--green);color:#02150a}
+button.small{padding:4px 10px;font-size:.78rem}
+
+.topnav{display:flex;align-items:center;gap:10px;padding-bottom:10px;margin-bottom:20px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.topnav-title{font-size:1.1rem;font-weight:700;color:var(--accent);margin-right:4px}
+.topnav-link{color:var(--muted);text-decoration:none;font-size:.8rem;padding:3px 9px;border-radius:6px;border:1px solid transparent}
+.topnav-link:hover{color:var(--text);border-color:var(--border)}
+.mqtt-dot{width:8px;height:8px;border-radius:50%;background:#444;display:inline-block;transition:background .3s;flex-shrink:0;margin-left:auto}
+.mqtt-dot.ok{background:var(--green);box-shadow:0 0 5px var(--green)}
+.mqtt-dot.err{background:var(--red)}
+
+.dev-status{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.dev-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;font-size:.8rem;font-weight:600}
+.dev-badge.online{background:#0f2418;color:var(--green)}
+.dev-badge.offline{background:#2a0f0f;color:var(--red)}
+.dev-meta{color:var(--muted);font-size:.8rem}
+
+.deck-hdr{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.deck-hdr .deck-title{font-size:1rem;font-weight:700;color:var(--text);margin-right:auto}
+.deck-hdr .deck-state{font-size:.75rem;color:var(--muted);padding:2px 8px;border-radius:10px;background:var(--bg)}
+.deck-hdr .deck-state.active{color:var(--accent)}
+
+.patch-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:8px;margin-bottom:12px}
+.patch-cell{
+  aspect-ratio:1.1;background:var(--bg);border:1px solid var(--border);border-radius:8px;
+  color:var(--text);font-size:.82rem;font-weight:600;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;padding:0;
+  transition:all .12s;
+}
+.patch-cell:hover{border-color:var(--accent);color:var(--accent)}
+.patch-cell:disabled{opacity:.15;cursor:default;border-style:dashed}
+.patch-cell.active{background:#001a12;border-color:var(--accent);color:var(--accent)}
+.patch-cell.flash{background:var(--accent);color:#000;border-color:var(--accent)}
+
+.pager{display:flex;align-items:center;gap:10px;justify-content:center}
+.pager span{color:var(--muted);font-size:.8rem;min-width:100px;text-align:center}
+</style>
+</head>
+<body>
+
+<div class="topnav">
+  <div class="topnav-title">GAIA PatchDeck</div>
+  <a href="portal.html" class="topnav-link">⌂ Portal</a>
+  <a href="admin.html" class="topnav-link">Admin</a>
+  <a href="dashboard.html" class="topnav-link">Dashboard</a>
+  <span id="mqtt-dot" class="mqtt-dot"></span>
+</div>
+
+<h1>🎛 PatchDeck</h1>
+<div class="subtitle">Controllo remoto dei deck A/B di PatchDeck (APC40 · TouchDesigner) via MQTT</div>
+
+<div class="card">
+  <h2>Stato device</h2>
+  <div class="dev-status">
+    <span id="dev-badge" class="dev-badge offline">● offline</span>
+    <span class="dev-meta" id="dev-meta">nessun dato ricevuto</span>
+  </div>
+</div>
+
+<div class="card">
+  <div class="deck-hdr">
+    <span class="deck-title">Deck A</span>
+    <span id="deckA-state" class="deck-state">—</span>
+    <button class="small green" data-deck="a" data-action="enable">▶ Start</button>
+    <button class="small red" data-deck="a" data-action="disable">■ Stop</button>
+    <button class="small gray" data-deck="a" data-action="restart">↺ Restart</button>
+  </div>
+  <div id="deckA-grid" class="patch-grid"></div>
+  <div class="pager">
+    <button class="small secondary" id="deckA-prev">‹ Prec</button>
+    <span id="deckA-page">Pagina 1/2 (1–24)</span>
+    <button class="small secondary" id="deckA-next">Succ ›</button>
+  </div>
+</div>
+
+<div class="card">
+  <div class="deck-hdr">
+    <span class="deck-title">Deck B</span>
+    <span id="deckB-state" class="deck-state">—</span>
+    <button class="small green" data-deck="b" data-action="enable">▶ Start</button>
+    <button class="small red" data-deck="b" data-action="disable">■ Stop</button>
+    <button class="small gray" data-deck="b" data-action="restart">↺ Restart</button>
+  </div>
+  <div id="deckB-grid" class="patch-grid"></div>
+  <div class="pager">
+    <button class="small secondary" id="deckB-prev">‹ Prec</button>
+    <span id="deckB-page">Pagina 1/2 (1–24)</span>
+    <button class="small secondary" id="deckB-next">Succ ›</button>
+  </div>
+</div>
+
+<script>
+// Stesso pattern MQTT-over-WS di admin.html (pmSend/gaia/device/+/status) --
+// mosquitto resta su Core anche se Node-RED gira altrove, non segue
+// location.hostname (vedi commento in admin.html initPiManager()).
+const PD_BROKER = '192.168.1.142';
+const PD_DEVICE_ID = 'td-MacBook-Air-di-Mauro.local';
+const PD_PATCH_COUNT = 38;   // load_x1..38, vedi GAIA_INTERFACE.md (TD4Gaia) 2026-08-24
+const PD_PAGE_SIZE = 24;     // griglia 8x3 visibile per pagina
+
+let pdClient = null;
+let pdDevice = null;
+const pdPage = { a: 0, b: 0 };
+
+function pdSetConn(ok) {
+  const dot = document.getElementById('mqtt-dot');
+  dot.className = 'mqtt-dot ' + (ok ? 'ok' : 'err');
+}
+
+function pdSend(service, action) {
+  if (!pdClient || !pdClient.connected) return;
+  pdClient.publish(`gaia/device/${PD_DEVICE_ID}/command`, JSON.stringify({ action, service }));
+}
+
+function pdFlash(el) {
+  el.classList.add('flash');
+  setTimeout(() => el.classList.remove('flash'), 350);
+}
+
+function pdRenderGrid(deck) {
+  const grid = document.getElementById(`deck${deck.toUpperCase()}-grid`);
+  const services = pdDevice?.services || {};
+  const start = pdPage[deck] * PD_PAGE_SIZE + 1;
+  grid.innerHTML = '';
+  for (let i = 0; i < PD_PAGE_SIZE; i++) {
+    const n = start + i;
+    const btn = document.createElement('button');
+    btn.className = 'patch-cell';
+    if (n > PD_PATCH_COUNT) {
+      btn.disabled = true;
+      btn.textContent = '';
+    } else {
+      const key = `load_x${n}_${deck}`;
+      btn.textContent = n;
+      if (services[key] === 'active') btn.classList.add('active');
+      btn.onclick = () => { pdFlash(btn); pdSend(key, 'enable'); };
+    }
+    grid.appendChild(btn);
+  }
+  const totalPages = Math.ceil(PD_PATCH_COUNT / PD_PAGE_SIZE);
+  const lo = start, hi = Math.min(start + PD_PAGE_SIZE - 1, PD_PATCH_COUNT);
+  document.getElementById(`deck${deck.toUpperCase()}-page`).textContent =
+    `Pagina ${pdPage[deck] + 1}/${totalPages} (${lo}–${hi})`;
+  document.getElementById(`deck${deck.toUpperCase()}-prev`).disabled = pdPage[deck] === 0;
+  document.getElementById(`deck${deck.toUpperCase()}-next`).disabled = pdPage[deck] >= totalPages - 1;
+}
+
+function pdRenderDeckState(deck) {
+  const el = document.getElementById(`deck${deck.toUpperCase()}-state`);
+  const state = (pdDevice?.services || {})[`deck_${deck}`] || 'inactive';
+  el.textContent = state;
+  el.classList.toggle('active', state === 'active');
+}
+
+function pdRenderDevice() {
+  const badge = document.getElementById('dev-badge');
+  const meta = document.getElementById('dev-meta');
+  if (!pdDevice) return;
+  const offline = pdDevice._offline;
+  badge.className = 'dev-badge ' + (offline ? 'offline' : 'online');
+  badge.textContent = offline ? '● offline' : '● online';
+  meta.textContent = `${pdDevice.name || PD_DEVICE_ID} · ip ${pdDevice.ip || '?'}`;
+  pdRenderDeckState('a');
+  pdRenderDeckState('b');
+  pdRenderGrid('a');
+  pdRenderGrid('b');
+}
+
+function pdInit() {
+  const mqttUrl = `ws://${PD_BROKER}:9001`;
+  function start() {
+    pdClient = mqtt.connect(mqttUrl);
+    pdClient.on('connect', () => {
+      pdSetConn(true);
+      pdClient.subscribe('gaia/device/+/status');
+    });
+    pdClient.on('error',   () => pdSetConn(false));
+    pdClient.on('offline', () => pdSetConn(false));
+    pdClient.on('message', (topic, raw) => {
+      if (!raw || !raw.length) return;
+      try {
+        const d = JSON.parse(raw.toString());
+        if (d.device_id !== PD_DEVICE_ID) return;
+        d._offline = false;
+        d._lastSeen = Date.now();
+        pdDevice = d;
+        pdRenderDevice();
+      } catch (e) {}
+    });
+    setInterval(() => {
+      if (pdDevice && Date.now() - pdDevice._lastSeen > 90000 && !pdDevice._offline) {
+        pdDevice._offline = true;
+        pdRenderDevice();
+      }
+    }, 10000);
+  }
+  if (typeof mqtt !== 'undefined') {
+    start();
+  } else {
+    const s = document.createElement('script');
+    s.src = 'https://unpkg.com/mqtt/dist/mqtt.min.js';
+    s.onload = start;
+    document.head.appendChild(s);
+  }
+}
+
+document.querySelectorAll('[data-deck][data-action]').forEach(btn => {
+  btn.onclick = () => pdSend(`deck_${btn.dataset.deck}`, btn.dataset.action);
+});
+document.getElementById('deckA-prev').onclick = () => { if (pdPage.a > 0) { pdPage.a--; pdRenderGrid('a'); } };
+document.getElementById('deckA-next').onclick = () => { pdPage.a++; pdRenderGrid('a'); };
+document.getElementById('deckB-prev').onclick = () => { if (pdPage.b > 0) { pdPage.b--; pdRenderGrid('b'); } };
+document.getElementById('deckB-next').onclick = () => { pdPage.b++; pdRenderGrid('b'); };
+
+pdRenderGrid('a');
+pdRenderGrid('b');
+pdInit();
+</script>
+</body>
+</html>
