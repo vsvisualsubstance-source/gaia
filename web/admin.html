@@ -188,6 +188,7 @@ button.small{padding:3px 9px;font-size:.78rem;margin:0}
   <a href="mattoni.html" class="topnav-link">Mattoni</a>
   <a href="patchdeck.html" class="topnav-link">🎛 PatchDeck</a>
   <a href="mixeraudio.html" class="topnav-link">🎚 MixerAudio</a>
+  <a href="dmx.html" class="topnav-link">💡 DMX</a>
   <div class="tab-bar">
     <button class="tab-btn active" onclick="showTab('cfg',this)">⚙ Configurazione</button>
     <button class="tab-btn" onclick="showTab('pi',this)">🍓 Pi Devices <span id="mqtt-dot" class="mqtt-dot"></span></button>
@@ -2112,11 +2113,12 @@ async function forgetDevice(id) {
 // ── Pi Manager MQTT ──────────────────────────────────────────────────────────
 let _pmClient = null;
 const _pmDevices = {};
-// PatchDeck/ControllerV7 hanno pagine dedicate (patchdeck.html,
-// mixeraudio.html) -- niente box generico in Pi Devices: PatchDeck ha 78
-// servizi, ControllerV7 564 parametri (register_param, non renderizzati
-// affatto dalla griglia servizi generica), sarebbero muri illeggibili.
-const PD_HIDDEN_IDS = new Set(['td-MacBook-Air-di-Mauro.local', 'td-controllerv7-macbook-air-di-mauro']);
+// PatchDeck/ControllerV7/DMX hanno pagine dedicate (patchdeck.html,
+// mixeraudio.html, dmx.html) -- niente box generico in Pi Devices:
+// PatchDeck ha 78 servizi, ControllerV7 588 parametri e DMX 25
+// (register_param, non renderizzati affatto dalla griglia servizi
+// generica), sarebbero muri illeggibili o incompleti.
+const PD_HIDDEN_IDS = new Set(['td-MacBook-Air-di-Mauro.local', 'td-controllerv7-macbook-air-di-mauro', 'td-dmx.1']);
 const PM_SVC_META = {
   yolo:      { label: 'YOLO',      icon: '👁️' },
   mediapipe: { label: 'MediaPipe', icon: '🖐️' },
