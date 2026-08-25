@@ -58,7 +58,112 @@ Core, `net_resolve.py` prova prima l'IP LAN poi l'IP Tailscale — stesso
 principio ovunque nel repo, dettaglio completo in
 `docs/discovery-protocol.md`.
 
-## 2. Il protocollo agente — un pattern, sei istanze
+## 2. Il motore cognitivo — Node-RED (`gaiaBrain`)
+
+Node-RED (su OPS) non è solo il Device Registry — ospita lo **stato
+cognitivo centrale** (`global.get('gaiaBrain')`: rooms, people, soul/mood,
+progression RPG, lights, sensors, plants, thoughts, memories, dreams) e la
+pipeline che lo alimenta e lo racconta.
+
+```
+SORGENTI                     NODE-RED (gaiaBrain)                USCITE
+┌────────────────┐          ┌──────────────────────┐          ┌────────────────────────┐
+│ Pi/OPS frame     │─────────►│                        │─────────►│ WS ws://host:1880/gaia   │
+│ YOLO/MediaPipe   │          │  gaiaBrain              │          │  dashboard · welcome ·  │
+│                  │          │  rooms · people ·       │          │  gaia-art (ogni tick)   │
+│ Hue via OpenHAB   │─────────►│  soul/mood · lights ·   │          └────────────────────────┘
+│ (regola busmqtt,  │ HueNorm │  sensors · plants ·     │
+│ Docker :8080)     │          │  progression RPG        │          ┌────────────────────────┐
+│                  │          │                        │─────────►│ Pensieri Profondi        │
+│ Mattoni ESP32     │─────────►│                        │          │  (dettaglio sotto)       │
+│ (BrickNorm,       │          │                        │          └────────────────────────┘
+│ simulatore)       │          │                        │
+│                  │          │                        │          ┌────────────────────────┐
+│ Voce / comandi     │─────────►│                        │─────────►│ Bot Telegram             │
+│ Telegram          │          │                        │          │  /stato /attiva /dillo… │
+└────────────────┘          └──────────────────────┘          │  + linguaggio naturale   │
+                                                                │  → Hue via OpenHAB       │
+                                                                └────────────────────────┘
+```
+
+**Hue/OpenHAB**: OpenHAB gira in Docker su Core (`:8080`). Una regola
+(`busmqtt`) pubblica ogni cambio del gruppo `gAllHueDevices` su
+`openhab/hue/{Item}/state`, letto da Node-RED (`HueNorm`) e scritto in
+`brain.lights`. I comandi vanno nella direzione opposta: `POST
+http://localhost:8080/rest/items/{Item}` (testo semplice, nessuna auth
+richiesta per un item già esistente — solo la creazione di nuovi item via
+REST la richiede). Il bridge fisico (Hue Bridge Pro, sostituito il
+2026-08-22) è raggiunto in API v1 con bridge-id fisso `4c442d6265`: l'IP
+del bridge è riconfigurabile senza toccare i ~90 item/canali OpenHAB
+esistenti, perché il bridge-id (non l'IP) è ciò che li lega.
+
+**Telegram**: una sola function Node-RED ("Gestisci messaggi Telegram", 3
+output: chat/reply/mqtt-array) gestisce sia i comandi slash (`/stato`,
+`/attiva`, `/musica`, `/promemoria`, `/dillo`, `/sogno`, `/aiuto`) sia il
+linguaggio naturale per le luci Hue (scene, colori, percentuali) — quello
+che non matcha nessun pattern cade a conversazione libera via Ollama.
+Dietro le quinte quattro canali MQTT: `gaia/notify/telegram` (solo
+Telegram), `gaia/echo/say` (solo Echo, via binding amazonechocontrol di
+OpenHAB), `gaia/voice/tts/{stanza}` (solo voce locale Piper), e
+`gaia/notify/all` (fan-out sui tre sopra, per automazioni future).
+
+**Mattoni ESP32** (`esp/sim/brick_node.py`, oggi un simulatore Python, non
+firmware reale — la roadmap ESP32/Arduino vera non è ancora iniziata,
+bassa priorità): parla lo stesso protocollo MQTT di Pi/OPS
+(announce/config/profile/comandi), esteso con due campi del "DNA
+Costruttivo" del progetto sorella **Casa Zero** (casa stampata in 3D,
+repo separato) — `interfaces` (power/data/mesh) e `position.neighbors`
+(topologia locale dichiarata dal nodo stesso, nessuna mappa centrale).
+`web/mattoni.html` calcola la mappa emergente via BFS dalle relazioni di
+vicinato — stesso principio del Device Registry, ma senza un grafo
+autorevole preesistente.
+
+### Pensieri Profondi — la pipeline cognitiva
+
+```
+evento (presenza, voce, tick)
+   │
+   ▼
+Cognitive Trigger  (filtro + throttle 3 min)
+   │
+   ▼
+Prepara Query LTM ──► Qdrant recall :8000  (memoria episodica)
+   │
+   ▼
+Inietta Memoria + brain.memories  (ultimi 3 riassunti notturni)
+   │
+   ▼
+Build Prompt (Contestuale)  — mood + lexicon (parole ricorrenti) + maturità RPG
+   │
+   ▼
+Ollama qwen2.5:3b-instruct
+   │
+   ▼
+Extract Thought & Push TTS ──► brain.thoughts (max 300) ──► payload WS "thought"
+   │
+   ▼
+QdrantStore  (persiste il pensiero)
+
+── ogni notte, ore 21:00 ──────────────────────────────────────────────────
+Night Reflection ──┬─► Night Summary Prompt (riassume brain.diary)
+                    └─► Night Dream Prompt (temperature 1.15, libera associazione)
+                          │                                    │
+                          ▼                                    ▼
+                 Save Daily Memory                        Save Dream
+                 brain.memories (365 gg)                  brain.dreams (30, viola)
+                                                                │
+                                                                ▼
+                                                  gaia/brain/dream (MQTT retained)
+                                                  → stile asemico "dream" · /sogno Telegram
+```
+
+**Modelli Ollama** (Docker su Core, nessuna GPU — Intel HD 530, scelta
+modelli piccoli deliberata): `qwen2.5:3b-instruct-q4_K_M` (tutti i prompt
+di conversazione/pensiero), `moondream` (visione, solo
+`scene_worker.py`, ogni 15 min), `mxbai-embed-large` (embedding per
+Qdrant).
+
+## 3. Il protocollo agente — un pattern, sei istanze
 
 Pi, OPS, Core e ogni istanza TouchDesigner parlano lo stesso protocollo
 minimo (`gaia_device_agent`, stesso schema in `pi/agent/agent.py`,
@@ -110,7 +215,7 @@ per chi non chiama mai `register_param()`, quindi PatchDeck e i Pi non
 hanno mai visto cambiare il proprio payload aggiungendo queste feature a
 ControllerV7/DMX.
 
-## 3. Interfacce web — client diretti del broker
+## 4. Interfacce web — client diretti del broker
 
 Le pagine di controllo (`patchdeck.html`, `mixeraudio.html`, `dmx.html`, il
 tab Pi Manager di `admin.html`) non passano da un backend intermedio:
@@ -134,7 +239,7 @@ Il controllo (slider, pulsanti, preset) non aspetta mai un giro per
 Node-RED — va e torna dal broker in meno di un secondo. Solo la parte
 anagrafica (stanza, capabilities, file statici) passa da Node-RED.
 
-## 4. Due sessioni, un solo file di confine
+## 5. Due sessioni, un solo file di confine
 
 Questa sessione (repo Gaia, nessun accesso diretto a TouchDesigner) e la
 sessione "TD/Mac" (Envoy/MCP, TD live) non si parlano direttamente —
@@ -159,7 +264,7 @@ sempre un fetch fresco del contenuto (non solo lo sha) — due sessioni
 attive in parallelo sullo stesso file sono un rischio reale, non teorico
 (incidente reale 2026-08-06, vedi memoria `project-touchdesigner-osc`).
 
-## 5. Indice componenti
+## 6. Indice componenti
 
 | Componente             | Macchina         | Porta / protocollo      | Ruolo                                        |
 |--------------------------|-------------------|----------------------------|-------------------------------------------------|
@@ -173,6 +278,9 @@ attive in parallelo sullo stesso file sono un rischio reale, non teorico
 | ops/agent.py               | OPS               | mqtt                       | Servizi pre-prod — stesso schema dei Pi          |
 | gaia_device_agent.py       | Mac TD (+ OPS)    | mqttclientDAT nativo       | PatchDeck · ControllerV7 · DMX                   |
 | TD4Gaia                   | GitHub            | repo pubblico              | Progetto TD + canale di confine Core↔TD/Mac      |
+| Hue Bridge                 | rete locale       | API v1 · bridge-id fisso   | Luci fisiche — `hue:bridge:4c442d6265`           |
+| Bot Telegram               | Node-RED (OPS)    | function unica, 3 output   | Comandi + linguaggio naturale → Hue/Echo/voce    |
+| esp/sim/brick_node.py      | Core (simulatore) | mqtt, protocollo Pi-compat.| Prototipo "mattone intelligente" (Casa Zero)     |
 
 ---
 
