@@ -163,6 +163,63 @@ di conversazione/pensiero), `moondream` (visione, solo
 `scene_worker.py`, ogni 15 min), `mxbai-embed-large` (embedding per
 Qdrant).
 
+### Due modi in cui Gaia raggiunge TouchDesigner
+
+Il canale 4 (§3, `gaia/device/{id}/command`) non serve solo a controllare
+manualmente PatchDeck/ControllerV7/DMX dal web o da Telegram — è anche la
+base di un secondo percorso, distinto e più importante concettualmente:
+Gaia stessa che **decide** di attivare qualcosa su TD in risposta alla
+propria vita interiore, non solo su comando umano.
+
+1. **Comando diretto** — un umano (o un'automazione esplicita) decide COSA
+   accendere: `web/patchdeck.html`/`mixeraudio.html`/`dmx.html`, il tab Pi
+   Manager di Admin, `/attiva <servizio>` su Telegram. Stesso protocollo
+   di Pi/OPS, nessuna intelligenza nel mezzo.
+2. **Nursery** — Gaia (Node-RED + Ollama) decide da sola di attivare un
+   componente visivo TD pre-costruito in risposta a un evento di vita
+   della casa: una persona riconosciuta, un sogno notturno, un level-up
+   RPG, un volto appena registrato, una nota di una pianta.
+
+#### Nursery — l'iniziativa di Gaia verso TouchDesigner
+
+```
+5 eventi one-shot (GAIA Brain)
+person_recognized · dream_new · level_up · face_enrolled · plant_note
+   │                                          (5° trigger, room_discovered
+   ▼                                           → room_portal, non ancora
+nursery_trigger_fn  (filtro + throttle)         costruito: richiede
+   │                                             rilevare la prima comparsa
+   ▼                                             di una stanza — lavoro
+Ollama qwen2.5:3b                                vero, non "gratis" come
+   sceglie SOLO il componente (una parola)        gli altri 4)
+   │
+   ▼
+nursery_validate_fn — whitelist contro nursery_components.json
+   │                    parametri (hue/shape/energy) derivati via
+   │                    FNV-1a dal contesto — MAI da Ollama
+   ▼
+gaia/nursery/activate  (TTL 5 min — mai attivo per sempre)
+   │
+   ▼
+TD — esegue SOLO dalla whitelist, mai generazione di codice a runtime
+```
+
+**Perché Ollama non sceglie anche i parametri**: bug reale trovato dal
+vivo (2026-08-07) — il modello locale (`qwen2.5:3b-instruct-q4_K_M`) si
+blocca in modo affidabile ogni volta che gli si chiede di generare `{ }`,
+sia con `format` a schema JSON sia con un prompt che lo chiede in testo
+libero. Isolato con oltre 10 test diretti, indipendente da CPU/lunghezza
+prompt — una risposta a una parola invece funziona sempre. Per questo i
+parametri (hue/shape/energy) si derivano deterministicamente via FNV-1a
+dal contesto (persona/parola sogno), stesso principio del vocabolario
+asemico — nessun JSON richiesto a Ollama in nessun punto della catena.
+
+Attivi e verificati dal vivo con publish MQTT reali (2026-08-08):
+`face_sigil`, `levelup_burst`, `plant_bloom`. `person_sigil` (da
+`person_recognized`) pubblicato correttamente ma **non confermato** se
+`gaia_nursery` lato TD lo applichi davvero — `gaia/nursery/status`
+restava vuoto nei test, domanda aperta lasciata a TD/Mac.
+
 ## 3. Il protocollo agente — un pattern, sei istanze
 
 Pi, OPS, Core e ogni istanza TouchDesigner parlano lo stesso protocollo
