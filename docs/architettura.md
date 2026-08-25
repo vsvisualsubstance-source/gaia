@@ -58,6 +58,20 @@ Core, `net_resolve.py` prova prima l'IP LAN poi l'IP Tailscale — stesso
 principio ovunque nel repo, dettaglio completo in
 `docs/discovery-protocol.md`.
 
+**N macchine, un solo agent** (`docs/core-distribuito.md`): qualunque
+macchina nuova (Pi, OPS, Core, o una futura macchina "media" per
+streaming) usa lo stesso agent — un manifest per-macchina
+(`/etc/gaia/services.json`, campo `machine_role`) dichiara quali servizi
+PUÒ ospitare; Pi Manager la vede automaticamente, zero lavoro UI in più.
+
+**Attenzione fisso vs dinamico** (bug reale successo due volte in
+produzione — Pi Manager e `musica.html` con la WS risolta erroneamente
+verso OPS): `mosquitto` (:1883/:9001), `gaia_admin.py` (:8765) e
+`gaia-camera` (:8766) restano **sempre su Core**, IP esplicito — non
+seguono mai `location.hostname`. Solo **Node-RED** (:1880) è dinamico e
+segue la macchina che lo ospita davvero (oggi OPS). Non confondere "dove
+gira Node-RED" con "dove vive il broker".
+
 ## 2. Il motore cognitivo — Node-RED (`gaiaBrain`)
 
 Node-RED (su OPS) non è solo il Device Registry — ospita lo **stato
@@ -272,6 +286,17 @@ per chi non chiama mai `register_param()`, quindi PatchDeck e i Pi non
 hanno mai visto cambiare il proprio payload aggiungendo queste feature a
 ControllerV7/DMX.
 
+**Dal profilo ai moduli** (`docs/gaia-semantico.md`): l'hardware rilevato
+(`capabilities`) suggerisce automaticamente i moduli attivabili — camera→
+YOLO/MediaPipe, mic→voice, audio_out→TTS/mediaplayer, display/touch→
+kiosk, midi/i2c→AV Herbarium — mai auto-avvio, solo un'opzione proposta
+in Pi Manager. Il cambio di stanza di un device passa **sempre** da un
+solo endpoint canonico, `POST /api/provision/assign` (gaia_admin.py
+:8765), che sincronizza in un colpo solo i tre registri coinvolti
+(provision registry, Device Registry Node-RED, comando diretto
+all'agent) — un bug reale (refuso "ingresso1" persistente, 2026-07-03/04)
+ha insegnato che aggiornarne solo uno li fa divergere silenziosamente.
+
 ## 4. Interfacce web — client diretti del broker
 
 Le pagine di controllo (`patchdeck.html`, `mixeraudio.html`, `dmx.html`, il
@@ -338,6 +363,81 @@ attive in parallelo sullo stesso file sono un rischio reale, non teorico
 | Hue Bridge                 | rete locale       | API v1 · bridge-id fisso   | Luci fisiche — `hue:bridge:4c442d6265`           |
 | Bot Telegram               | Node-RED (OPS)    | function unica, 3 output   | Comandi + linguaggio naturale → Hue/Echo/voce    |
 | esp/sim/brick_node.py      | Core (simulatore) | mqtt, protocollo Pi-compat.| Prototipo "mattone intelligente" (Casa Zero)     |
+
+## 7. Moduli e automazioni
+
+Comportamenti e servizi periferici che completano il quadro — dettaglio
+completo nei doc gemelli in `docs/`, qui solo ciò che serve per
+orientarsi.
+
+### Automazioni proattive — 11 toggle (`admin.html` → Automazioni)
+
+| id | Default | Cosa fa |
+|---|---|---|
+| `petConcierge` | ON | Cura animali — `docs/pet-disability.md` |
+| `fallDetection` | ON | Rilevamento cadute (sicurezza) |
+| `fireAlarm` | ON | Allarme incendio (sicurezza) |
+| `fridgeAlarm` | ON | Frigo aperto (sicurezza) |
+| `moodLighting` | OFF, per-stanza | Scena luci da mood (`MoodSceneSync`) |
+| `maggiordomo` | OFF | Citofono · pioggia+finestre · spegne luci stanza vuota da >10min — `docs/maggiordomo.md` |
+| `thirstyPlantAlert` | OFF | Alert Telegram pianta assetata (umidità <25%) |
+| `awayMode` | OFF | Nessuno in casa da >30min → spegne tutte le luci |
+| `welcomeScene` | OFF | Persona nota rientra la sera → accende ingresso |
+| `touchdesignerLighting` | OFF | Luci pilotate da parametri generati in TD (`gaia/touchdesigner/lighting/#`) |
+| `voiceAutoEnroll` | OFF (attivo) | Doppia conferma volto+voce → raffina il profilo vocale esistente |
+
+Le prime 4 (sicurezza/cura) sono ON di default; tutte le altre partono
+OFF, opt-in esplicito — stessa convenzione ovunque nel progetto.
+
+### Alexa/Echo
+
+3 Echo reali (cucina, soggiorno, bagno — etichette non ovvie: "Cassa
+camera" è fisicamente in bagno) via binding `amazonechocontrol` di
+OpenHAB. Un TTS Queue Manager manda pensieri/level-up su TUTTI gli Echo
+indipendentemente dalle risposte vocali dirette — due canali distinti,
+facili da confondere.
+
+### AV Herbarium — le piante suonano (V1/V2 fatte)
+
+Sensori MIDI (hotplug ALSA/pipewire, qualunque sorgente si collega da
+sola) → `music_engine.py` (scale/accordi/preset, puro Python, 6 preset
+pronti) → Carla headless (3× Yoshimi in catena) → audio locale sul Pi.
+Eventi normalizzati alimentano XP RPG (classe Druido) e mood.curiosity.
+Sorgenti alternative mutuamente esclusive: simulatore casuale o
+mediapipe ("la stanza suona in risposta a chi la abita" — gesti/
+emozioni/postura mappati su note).
+
+### LiveStream (V1 fatta)
+
+icecast2 **locale su ogni Pi**, non centralizzato — requisito esplicito
+2026-08-14: nessuna dipendenza da un server raggiungibile in rete, ogni
+Pi resta autosufficiente. Sorgente mic o libreria musicale locale al Pi,
+cambio a caldo via MQTT. `web/livestream.html` scopre gli stream via
+profilo semantico, nessun IP hardcodato.
+
+### Gamification RPG
+
+`brain.gamification` (livello, classe, XP per categoria — es. Druido da
+Herbarium) alimenta sia `web/game.html` (biomi, diario) sia i trigger
+Nursery (`level_up`, §2) — luci archetipo e rune asemiche oro al
+level-up.
+
+### Vocabolario Asemico
+
+Lingua visiva deterministica (`web/asemic.js`) usata ovunque Gaia
+"scrive" qualcosa di non testuale — sogni (stile viola), pensieri, rune
+RPG. Stessa identità visiva su welcome.html, dashboard, kiosk Pi.
+
+### Rete audio Dante/DSP — roadmap, non ancora consumata dal brain
+
+Hardware collegato per davvero (Sennheiser TCCM + Solaro QR1-UC via
+Dante), telemetria UDP nativa testata dal vivo (localizzazione mic —
+Horizontal/Vertical Angle — e VISCA-over-IP per le camere PTZ) — ma
+**nessun consumo di questi dati in Node-RED/brain ancora**: oggi solo
+verifica di trasporto lato driver esterno dell'utente. Scenari futuri
+(sting sincronizzato multi-stanza, ducking centralizzato, TTS itinerante
+tra stanze) restano design, non implementazione — dettaglio completo in
+`docs/dante-dsp-audio.md`.
 
 ---
 
