@@ -714,6 +714,7 @@ button.small{padding:3px 9px;font-size:.78rem;margin:0}
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
     <span style="font-size:.8rem;color:var(--muted)">Connessione MQTT ws:<span id="pm-broker-label"></span>:9001</span>
     <span id="pm-conn-label" style="font-size:.8rem;color:var(--muted)">Disconnesso</span>
+    <span id="pm-offline-count" style="font-size:.78rem;color:var(--muted);display:none"></span>
     <button class="secondary small" onclick="pmCleanRooms()" title="Rimuove le stanze senza device e fuori mappa (dati live + topic retained)">🧹 Stanze orfane</button>
   </div>
   <div id="pm-welcome-menu" style="display:none;flex-wrap:wrap;gap:6px;margin-bottom:10px"></div>
@@ -2254,13 +2255,19 @@ function initPiManager() {
           if (stale) stale.remove();
           return;
         }
-        const isNew = !_pmDevices[id];
-        d._lastSeen = Date.now();
-        d._offline  = false;
+        // Usa il ts INCORPORATO nel messaggio, non l'orario di ricezione --
+        // un retained vecchio di ore/giorni arriva "ora" ma non è affatto
+        // fresco (stesso bug già trovato e fissato una volta nel watchdog
+        // Python TDDeviceRegistry, reintrodotto qui — vedi memoria). Senza
+        // questo fix un device morto da giorni sembra online per i primi
+        // 90s dopo ogni apertura della pagina.
+        d._lastSeen = d.ts || Date.now();
+        d._offline  = (Date.now() - d._lastSeen) > 90000;
         _pmDevices[id] = d;
-        isNew ? pmBuildCard(id, d) : pmPatchCard(id, d);
-        pmLog('in', `[${id}] stanza=${d.stanza||'?'} ip=${d.ip||'?'}`);
+        pmApplyCardVisibility(id, d);
+        pmLog('in', `[${id}] stanza=${d.stanza||'?'} ip=${d.ip||'?'}${d._offline ? ' (offline, nascosto)' : ''}`);
         pmWelcomeMenuRender();
+        pmRenderOfflineCount();
       } catch(e) { pmLog('err', 'Parse: ' + e.message); }
     });
     setInterval(() => {
@@ -2269,9 +2276,9 @@ function initPiManager() {
       for (const [id, d] of Object.entries(_pmDevices)) {
         const was = d._offline;
         d._offline = (now - d._lastSeen) > 90000;
-        if (was !== d._offline) { pmPatchCard(id, d); changed = true; }
+        if (was !== d._offline) { pmApplyCardVisibility(id, d); changed = true; }
       }
-      if (changed) pmWelcomeMenuRender();
+      if (changed) { pmWelcomeMenuRender(); pmRenderOfflineCount(); }
     }, 10000);
   }
 
@@ -2465,6 +2472,36 @@ function pmWelcomeMenuRender() {
     const url = `http://${location.hostname}:1880/welcome.html?cam=${encodeURIComponent(d.ip||'')}&room=${encodeURIComponent(s)}`;
     return `<button class="pm-btn blue" style="width:auto;padding:4px 12px" onclick="window.open('${url}','_blank')">🖥 ${pmEsc(d.name||s)}</button>`;
   }).join('');
+}
+
+// Un device offline viene TOLTO dall'interfaccia (non solo affievolito) --
+// riappare da solo appena torna a mandare un heartbeat fresco. Se non
+// resta nessuna card visibile, ripristina il messaggio "nessun Pi connesso".
+function pmApplyCardVisibility(id, d) {
+  const card = document.getElementById(`pm-card-${id}`);
+  if (d._offline) {
+    if (card) card.remove();
+    const grid = document.getElementById('pm-devices-grid');
+    if (grid && !grid.children.length) {
+      grid.style.display = 'none';
+      document.getElementById('pm-no-devices').style.display = '';
+    }
+  } else if (card) {
+    pmPatchCard(id, d);
+  } else {
+    pmBuildCard(id, d);
+  }
+}
+
+function pmRenderOfflineCount() {
+  const el = document.getElementById('pm-offline-count');
+  const n = Object.values(_pmDevices).filter(d => d._offline && !PD_HIDDEN_IDS.has(d.device_id)).length;
+  if (n > 0) {
+    el.style.display = '';
+    el.textContent = `${n} device offline nascosti`;
+  } else {
+    el.style.display = 'none';
+  }
 }
 
 function pmBuildCard(id, d) {

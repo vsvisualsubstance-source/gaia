@@ -493,8 +493,11 @@ function mxInit() {
       try {
         const d = JSON.parse(raw.toString());
         if (d.device_id !== MX_DEVICE_ID) return;
-        d._offline = false;
-        d._lastSeen = Date.now();
+        // Usa il ts INCORPORATO nel messaggio, non l'orario di ricezione --
+        // un retained vecchio arriva "ora" ma non e' fresco (bug gia' noto,
+        // vedi TDDeviceRegistry lato Python).
+        d._lastSeen = d.ts || Date.now();
+        d._offline = (Date.now() - d._lastSeen) > 90000;
         mxDevice = d;
         mxRenderAll();
       } catch (e) {}

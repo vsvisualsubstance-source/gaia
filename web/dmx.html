@@ -193,13 +193,35 @@ function dxCurrentValue(name, def) {
 function dxLabel(name) { return name.replace(/^dmx_/, '').replace(/_/g, ' '); }
 
 // ── Tab bar ──────────────────────────────────────────────────────────
+// Uno scenario offline (o mai visto pubblicare uno status) viene tolto
+// dalla barra tab, non solo affievolito -- ricompare da solo appena
+// torna a mandare un heartbeat fresco. Evita di riempire l'interfaccia
+// di vecchie prove/scenari abbandonati (visto dal vivo 2026-08-25: 17
+// device registrati nel Device Registry, solo 4 realmente vivi in quel
+// momento, alcuni fermi da giorni).
+function dxIsOnline(id) {
+  return !!(dxDevices[id]?.status && !dxDevices[id].status._offline);
+}
+
 function dxRenderTabs() {
   const wrap = document.getElementById('dmx-tabs');
   const empty = document.getElementById('dmx-no-scenarios');
   const panel = document.getElementById('dmx-panel');
-  const ids = Object.keys(dxDevices).sort((a, b) => dxDevices[a].order - dxDevices[b].order);
+  const allIds = Object.keys(dxDevices).sort((a, b) => dxDevices[a].order - dxDevices[b].order);
+  const ids = allIds.filter(dxIsOnline);
+
+  // Se lo scenario attivo non è (più) online, passa al primo disponibile.
+  if (dxActiveId !== null && !ids.includes(dxActiveId)) {
+    dxActiveId = ids[0] ?? null;
+    dxBuiltFor = null;
+  }
+
   if (!ids.length) {
     wrap.innerHTML = '';
+    const hiddenCount = allIds.length;
+    empty.textContent = hiddenCount
+      ? `Nessuno scenario DMX online (${hiddenCount} registrato/i ma offline) — in attesa di un heartbeat fresco…`
+      : 'Nessuno scenario DMX scoperto ancora — in attesa di un device che pubblichi dmx_matrix…';
     empty.style.display = '';
     panel.style.display = 'none';
     return;
@@ -209,8 +231,7 @@ function dxRenderTabs() {
   wrap.innerHTML = ids.map(id => {
     const d = dxDevices[id];
     const label = d.status?.name || d.status?.stanza || id;
-    const offline = d.status?._offline;
-    return `<div class="dmx-tab${id === dxActiveId ? ' active' : ''}${offline ? ' offline' : ''}" data-tab="${id}">
+    return `<div class="dmx-tab${id === dxActiveId ? ' active' : ''}" data-tab="${id}">
       <span class="tab-dot"></span>${label}
     </div>`;
   }).join('');
@@ -429,8 +450,10 @@ function dxRegisterMatrix(m) {
 function dxRegisterStatus(d) {
   const id = d.device_id;
   if (!dxDevices[id]) return;   // status di un device che non ha (ancora) pubblicato dmx_matrix -- non è uno scenario DMX noto, ignorato
-  d._offline = false;
-  d._lastSeen = Date.now();
+  // Usa il ts INCORPORATO nel messaggio, non l'orario di ricezione -- un
+  // retained vecchio di ore/giorni arriva "ora" ma non e' affatto fresco.
+  d._lastSeen = d.ts || Date.now();
+  d._offline = (Date.now() - d._lastSeen) > DX_STALE_MS;
   dxDevices[id].status = d;
   dxRenderTabs();   // il nome nella tab può essere cambiato
   if (id === dxActiveId) dxRenderAll();
