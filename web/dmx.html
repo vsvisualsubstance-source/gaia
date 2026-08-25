@@ -319,17 +319,31 @@ function dxBuildSections() {
     const kind = el.dataset.kind;
     const row = () => el.closest('.param-row');
     if (kind === 'range') {
-      el.addEventListener('input', () => {
-        row().classList.add('dirty');
-        const disp = wrap.querySelector(`[data-valdisp="${name}"]`);
-        if (disp) { disp.textContent = Number(el.value).toFixed(3); disp.classList.remove('default'); }
-      });
-      el.addEventListener('change', () => {   // 'change' su un range = al rilascio, non ad ogni tick di drag
+      // 'dirty' blocca gli aggiornamenti in arrivo da TD finché l'interazione
+      // non si considera "completa" (change = al rilascio dello slider) --
+      // se 'change' non scatta mai per qualunque motivo (bug trovato dal
+      // vivo 2026-08-25: un campo restava bloccato per sempre, ignorando
+      // ogni valore live successivo mentre gli altri funzionavano), il
+      // campo resterebbe sordo per sempre. Rete di sicurezza: un timeout
+      // e un fallback su 'blur' risolvono comunque l'interazione.
+      let dirtyTimer = null;
+      const resolve = () => {
+        if (!row().classList.contains('dirty')) return;   // già risolta (change/blur/timeout arrivati in ordine diverso)
+        clearTimeout(dirtyTimer);
         row().classList.remove('dirty');
         row().classList.add('sent');
         setTimeout(() => row().classList.remove('sent'), 400);
         dxSendParam(name, parseFloat(el.value));
+      };
+      el.addEventListener('input', () => {
+        row().classList.add('dirty');
+        const disp = wrap.querySelector(`[data-valdisp="${name}"]`);
+        if (disp) { disp.textContent = Number(el.value).toFixed(3); disp.classList.remove('default'); }
+        clearTimeout(dirtyTimer);
+        dirtyTimer = setTimeout(resolve, 4000);
       });
+      el.addEventListener('change', resolve);   // 'change' su un range = al rilascio, non ad ogni tick di drag
+      el.addEventListener('blur', resolve);
     } else if (kind === 'enum') {
       el.addEventListener('change', () => {
         row().classList.add('sent');
