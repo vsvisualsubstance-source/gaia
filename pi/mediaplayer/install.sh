@@ -33,9 +33,18 @@ echo "  ✓ paho-mqtt OK"
 # install_service.sh) -- MAI un file statico con "asemico" hardcoded: trovato
 # dal vivo un Pi (vsrasp01) il cui utente reale e' "admin", causa esatta di
 # "status=217/USER, Failed to determine user credentials" in systemd.
+#
+# XDG_RUNTIME_DIR: senza questa variabile mpv non trova la sessione
+# PipeWire/PulseAudio dell'utente (un servizio systemd di SISTEMA non ne
+# eredita una) e cade fino a JACK, di solito non installato -- stesso
+# gotcha trovato dal vivo su vsrasp01 il 2026-08-26 (nessun audio, nessun
+# errore visibile lato Gaia). $(id -u) e' lo stesso utente di User= sopra,
+# quindi la directory /run/user/<uid> esiste sempre se quell'utente ha
+# gia' fatto login (desktop/lightdm) almeno una volta.
 echo ""
 echo "[3/3] Servizio systemd..."
 USER_NAME=$(whoami)
+USER_UID=$(id -u)
 sudo tee /etc/systemd/system/gaia-mediaplayer.service > /dev/null << EOF
 [Unit]
 Description=GAIA Mediaplayer — musica/radio per stanza (mpv + MQTT)
@@ -49,6 +58,7 @@ WorkingDirectory=$SCRIPT_DIR
 EnvironmentFile=/etc/gaia/device.conf
 EnvironmentFile=-/etc/gaia/mediaplayer.conf
 Environment=PYTHONUNBUFFERED=1
+Environment=XDG_RUNTIME_DIR=/run/user/$USER_UID
 ExecStart=/usr/bin/python3 $SCRIPT_DIR/main.py
 Restart=on-failure
 RestartSec=5

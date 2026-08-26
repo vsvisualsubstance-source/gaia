@@ -30,17 +30,23 @@ MQTT_PORT = int(_get("MQTT_PORT", "1883"))
 IS_WIN         = os.name == "nt"
 MPV_BIN        = _get("MPV_BIN", "mpv")
 MPV_SOCK       = _get("MPV_SOCK", r"\\.\pipe\gaia-mpv" if IS_WIN else "/tmp/gaia-mpv.sock")
-# es. "alsa/plughw:CARD=Headphones,DEV=0" per forzare il jack del Pi.
+# es. "alsa/plughw:CARD=Headphones,DEV=0" (jack 3.5mm, bypassa PipeWire) o
+# "pipewire/alsa_output.usb-..." (va bene se la scheda e' gia' in uso
+# esclusivo da PipeWire, es. una USB -- vedi gotcha sotto).
 # GOTCHA (trovato dal vivo su vsrasp01, 2026-08-26): senza questa variabile
 # mpv auto-seleziona l'uscita provando pipewire/pulse/alsa/JACK in ordine --
-# sotto systemd (nessuna sessione utente/XDG_RUNTIME_DIR) pipewire/pulse
-# falliscono silenziosamente e mpv arriva fino a JACK, che di solito non e'
-# nemmeno installato ("jack server is not running", errore 524, nessun
-# audio, nessun crash visibile). Impostare sempre esplicitamente un device
-# alsa/plughw reale in /etc/gaia/mediaplayer.conf su ogni Pi nuovo --
-# verificare quale scheda e' quella giusta con `mpv --audio-device=help`
-# e un test rapido (`mpv --ao=alsa --audio-device=... file.wav`) prima di
-# fidarsi del default.
+# sotto systemd (nessuna sessione utente/XDG_RUNTIME_DIR, vedi install.sh)
+# pipewire/pulse falliscono silenziosamente e mpv arriva fino a JACK, di
+# solito non installato ("jack server is not running", errore 524, nessun
+# audio, nessun crash visibile). Una scheda USB puo' risultare "Device or
+# resource busy" con --ao=alsa diretto se PipeWire la tiene gia' aperta in
+# esclusiva (caso vsrasp01/Communicator) -- in quel caso il device va
+# passato COME pipewire (`pipewire/alsa_output...`, nome esatto da
+# `mpv --audio-device=help`), non come alsa/plughw diretto, e install.sh
+# deve gia' aver messo XDG_RUNTIME_DIR nella unit altrimenti pipewire non
+# e' raggiungibile comunque. Testare sempre con
+# `mpv --audio-device=... file.wav` (interattivo, non da systemd) prima
+# di fidarsi del default.
 MPV_AUDIO_DEVICE = _get("MPV_AUDIO_DEVICE", "")
 # Uscita verso la rete Dante (Solaro QR1), diversa per macchina — es. su Core
 # "pulse/alsa_output.usb-XILICA_AUDIO_SOLARO_QR1_ASOLARO_QR1-00.analog-stereo"
