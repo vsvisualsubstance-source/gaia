@@ -2256,10 +2256,26 @@ function initPiManager() {
           }
           _pmLiveListeners[stanza] = st?.active ? (st.listeners||0) : 0;
           if (st && st.mic_device_options) {
+            const hadOptions = (_pmLiveMicOptions[stanza]||[]).length > 1;
             _pmLiveMicOptions[stanza] = st.mic_device_options;
             _pmLiveMicDevice[stanza]  = st.mic_device;
-            document.querySelectorAll(`.pm-inp-livemic[data-stanza="${stanza}"]`)
-              .forEach(sel => { if (document.activeElement !== sel && st.mic_device) sel.value = st.mic_device; });
+            const sels = document.querySelectorAll(`.pm-inp-livemic[data-stanza="${stanza}"]`);
+            if (!hadOptions && st.mic_device_options.length > 1 && !sels.length) {
+              // Le opzioni sono arrivate via MQTT DOPO che la card era già stata
+              // costruita (a differenza del selettore sorgente, sempre presente,
+              // questo blocco è condizionale sui dati) -- il blocco select non
+              // esisteva ancora nel DOM, va ricostruita la card intera una volta
+              // per farlo comparire. Le altre chiamate (cambio valore) restano
+              // un patch leggero, non toccano il resto della card.
+              const entry = Object.entries(_pmDevices).find(([, d]) => d.stanza === stanza);
+              if (entry) {
+                const [devId, devData] = entry;
+                document.getElementById(`pm-card-${devId}`)?.remove();
+                pmBuildCard(devId, devData);
+              }
+            } else {
+              sels.forEach(sel => { if (document.activeElement !== sel && st.mic_device) sel.value = st.mic_device; });
+            }
           }
         } catch(e) {}
         return;
