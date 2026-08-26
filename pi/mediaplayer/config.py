@@ -30,7 +30,17 @@ MQTT_PORT = int(_get("MQTT_PORT", "1883"))
 IS_WIN         = os.name == "nt"
 MPV_BIN        = _get("MPV_BIN", "mpv")
 MPV_SOCK       = _get("MPV_SOCK", r"\\.\pipe\gaia-mpv" if IS_WIN else "/tmp/gaia-mpv.sock")
-# es. "alsa/plughw:CARD=Headphones,DEV=0" per forzare il jack del Pi
+# es. "alsa/plughw:CARD=Headphones,DEV=0" per forzare il jack del Pi.
+# GOTCHA (trovato dal vivo su vsrasp01, 2026-08-26): senza questa variabile
+# mpv auto-seleziona l'uscita provando pipewire/pulse/alsa/JACK in ordine --
+# sotto systemd (nessuna sessione utente/XDG_RUNTIME_DIR) pipewire/pulse
+# falliscono silenziosamente e mpv arriva fino a JACK, che di solito non e'
+# nemmeno installato ("jack server is not running", errore 524, nessun
+# audio, nessun crash visibile). Impostare sempre esplicitamente un device
+# alsa/plughw reale in /etc/gaia/mediaplayer.conf su ogni Pi nuovo --
+# verificare quale scheda e' quella giusta con `mpv --audio-device=help`
+# e un test rapido (`mpv --ao=alsa --audio-device=... file.wav`) prima di
+# fidarsi del default.
 MPV_AUDIO_DEVICE = _get("MPV_AUDIO_DEVICE", "")
 # Uscita verso la rete Dante (Solaro QR1), diversa per macchina — es. su Core
 # "pulse/alsa_output.usb-XILICA_AUDIO_SOLARO_QR1_ASOLARO_QR1-00.analog-stereo"
