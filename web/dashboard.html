@@ -141,6 +141,7 @@ button.btn-sm.active{border-color:var(--accent);color:var(--accent)}
   <div id="sec-lights"  style="display:none"></div>
   <div id="sec-sensors" style="display:none"></div>
   <div id="sec-plants"  style="display:none"></div>
+  <div id="sec-herbarium" style="display:none"></div>
   <div id="sec-events"  style="display:none"></div>
   <div id="sec-metrics" style="display:none"></div>
   <div id="sec-init" class="card" style="grid-column:1/-1;text-align:center;color:var(--muted)">⏳ Connessione in corso…</div>
@@ -225,11 +226,32 @@ function setSection(id, html, show){
 
 // ── Render functions ───────────────────────────────────────────────────────────
 function renderThought(data){
-  if(!data.thought) return '';
+  const tts = data.tts;
+  // "Detto di recente" -- data.tts non ha un TTL proprio (resta l'ultima
+  // frase per sempre finche' Gaia non parla di nuovo), quindi il filtro
+  // di freschezza e' qui lato dashboard: senza, una frase di ore fa
+  // sembrerebbe pronunciata ora.
+  const ttsRecent = tts && tts.text && (Date.now() - (tts.ts||0)) < 120000;
+  if(!data.thought && !data.lastDream && !ttsRecent) return '';
   return`<div class="card" style="grid-column:1/-1">
     <div class="card-title"><span>🧠</span> Pensiero di GAIA</div>
-    <div style="font-style:italic;color:var(--accent);line-height:1.5">"${escHtml(data.thought)}"</div>
+    ${data.thought?`<div style="font-style:italic;color:var(--accent);line-height:1.5">"${escHtml(data.thought)}"</div>`:''}
+    ${ttsRecent?`<div style="margin-top:8px;font-size:.85rem;color:var(--blue)">🔊 "${escHtml(tts.text)}"</div>`:''}
+    ${data.lastDream?`<div style="margin-top:8px;font-size:.85rem;color:#c678dd;font-style:italic">💭 ${escHtml(data.lastDream)}</div>`:''}
     ${data.lastMemory?`<div style="margin-top:8px;font-size:.78rem;color:var(--muted)">Ultimo ricordo: ${escHtml(data.lastMemory)}</div>`:''}
+  </div>`;
+}
+
+function renderHerbarium(data){
+  const notes = data.herbarium?.notes;
+  if(!notes||!notes.length) return '';
+  const byRoom={};
+  notes.forEach(n=>{(byRoom[n.room]||=[]).push(n);});
+  return`<div class="card"><div class="card-title"><span>🌿</span> Herbarium — in ascolto</div>
+    ${Object.entries(byRoom).map(([room,ns])=>{
+      const last=ns[ns.length-1];
+      return`<div class="metric-row"><span>🎵 ${escHtml(room)}</span><span class="metric-val">${ns.length} note/min · ultima ${fmtTs(last.ts)}</span></div>`;
+    }).join('')}
   </div>`;
 }
 
@@ -422,14 +444,16 @@ function renderEvents(data){
 }
 
 function renderMetrics(data){
-  if(!data.metrics&&!data.stats) return '';
-  const m=data.metrics||{};
-  return`<div class="card"><div class="card-title"><span>📊</span> Metriche</div>
-    ${[['👤 Persone attive', m.activePeople??data.stats?.totalPeopleCount??'—'],
+  if(!data.metrics&&!data.stats&&!data.hourlyStats) return '';
+  const m=data.metrics||{}, h=data.hourlyStats||{};
+  const rows=[['👤 Persone attive', m.activePeople??data.stats?.totalPeopleCount??'—'],
        ['💡 Luci accese', m.activeLights??data.stats?.activeLightsCount??'—'],
        ['🌡 Temp. media', m.averageTemperature!=null?m.averageTemperature.toFixed(1)+'°C':'—'],
-       ['🔋 Batterie scariche', m.lowBatteryDevices??'—']
-      ].map(([k,v])=>`<div class="metric-row"><span>${k}</span><span class="metric-val">${v}</span></div>`).join('')}
+       ['🔋 Batterie scariche', m.lowBatteryDevices??'—']];
+  if(h.eventsLastHour!=null) rows.push(['📈 Eventi ultima ora', h.eventsLastHour]);
+  if(h.eventsLast24h!=null) rows.push(['📈 Eventi ultime 24h', h.eventsLast24h]);
+  return`<div class="card"><div class="card-title"><span>📊</span> Metriche</div>
+    ${rows.map(([k,v])=>`<div class="metric-row"><span>${k}</span><span class="metric-val">${v}</span></div>`).join('')}
   </div>`;
 }
 
@@ -451,7 +475,8 @@ function updateUI(data){
   }
   document.getElementById('ts-label').textContent=data.ts?new Date(data.ts).toLocaleTimeString():'';
 
-  setSection('sec-thought', renderThought(data), !!data.thought);
+  const thoughtHtml = renderThought(data);
+  setSection('sec-thought', thoughtHtml, !!thoughtHtml);
   setSection('sec-soul',    renderSoul(data),    !!data.soul);
   setSection('sec-rpg',     renderRpg(data),     !!data.progression);
   setSection('sec-people',  renderPeople(data),  true);
@@ -460,8 +485,9 @@ function updateUI(data){
   setSection('sec-lights',  renderLights(data),  (data.lights||[]).length>0);
   setSection('sec-sensors', renderSensors(data), (data.sensors||[]).length>0);
   setSection('sec-plants',  renderPlants(data),  (data.plants||[]).length>0);
+  setSection('sec-herbarium', renderHerbarium(data), (data.herbarium?.notes||[]).length>0);
   setSection('sec-events',  renderEvents(data),  (data.events||[]).length>0);
-  setSection('sec-metrics', renderMetrics(data), !!(data.metrics||data.stats));
+  setSection('sec-metrics', renderMetrics(data), !!(data.metrics||data.stats||data.hourlyStats));
 
   updateVoicePill(data);
   drawRunes();   // v5: mini-rune nei chip (ridisegna solo i canvas nuovi)
