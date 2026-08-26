@@ -53,6 +53,14 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 // semantici (docs/gaia-semantico.md): nessun IP hardcodato, ogni device che
 // dichiara un endpoint mjpeg appare qui. Sorveglianza locale v1.
 const $grid = document.getElementById('grid');
+// Un profilo è retained/persistente nel Device Registry anche quando il
+// device non pubblica più da giorni (visto dal vivo 2026-08-25: device
+// fermi da 300+ ore ancora nei profili) -- stesso principio già applicato
+// ad admin.html/dmx.html, qui sul campo ts del profilo invece che dello
+// status MQTT: un device offline viene tolto dalla griglia, non lasciato
+// con uno stream rotto per sempre.
+const STALE_MS = 90000;
+let _lastKey = null;   // id ordinati delle camere online -- ricostruisce il DOM (e riavvia gli stream MJPEG) SOLO se cambia davvero il set online, non ad ogni poll
 
 async function load() {
   let profiles = {};
@@ -64,10 +72,13 @@ async function load() {
     return;
   }
 
+  const now = Date.now();
   const cams = [];
+  let offlineCount = 0;
   for (const [id, p] of Object.entries(profiles)) {
     const mjpeg = p.services?.camera?.endpoints?.mjpeg;
     if (!mjpeg) continue;
+    if (!p.ts || (now - p.ts) > STALE_MS) { offlineCount++; continue; }
     cams.push({
       id, mjpeg,
       room:  p.room_assigned || p.room || '?',
@@ -76,13 +87,22 @@ async function load() {
     });
   }
 
-  document.getElementById('count').textContent =
-    cams.length ? `${cams.length} camere dichiarate` : '';
+  document.getElementById('count').textContent = cams.length
+    ? `${cams.length} camere online${offlineCount ? ` · ${offlineCount} offline nascoste` : ''}`
+    : '';
 
   if (!cams.length) {
-    $grid.innerHTML = '<div class="empty">Nessun device con camera nei profili</div>';
+    _lastKey = '';
+    $grid.innerHTML = `<div class="empty">Nessuna camera online${offlineCount ? ` (${offlineCount} device offline nascosti)` : ' nei profili'}</div>`;
     return;
   }
+
+  // Non ricostruire il DOM (e riavviare gli stream MJPEG già connessi) se
+  // il set di camere online è lo stesso di prima -- solo il conteggio in
+  // alto e i dati statici cambierebbero, non serve toccare le <img>.
+  const key = cams.map(c => c.id).sort().join(',');
+  if (key === _lastKey) return;
+  _lastKey = key;
 
   $grid.innerHTML = cams.map(c => `
     <div class="cam-card">
@@ -108,17 +128,10 @@ async function load() {
 }
 
 load();
-setInterval(() => {
-  // ricarica solo i metadati (le img MJPEG restano connesse): se compaiono
-  // device nuovi la griglia si ricostruisce
-  fetch(`http://${location.hostname}:1880/gaia/devices/profiles`)
-    .then(r => r.json())
-    .then(p => {
-      const n = Object.values(p).filter(x => x.services?.camera?.endpoints?.mjpeg).length;
-      const cur = document.querySelectorAll('.cam-card').length;
-      if (n !== cur) load();
-    }).catch(() => {});
-}, 15000);
+// Ricarica sempre (non solo su cambio conteggio): un device può passare
+// online→offline senza che il numero totale di camere dichiarate cambi
+// mai (il profilo resta nel registry, cambia solo la freschezza del ts).
+setInterval(load, 15000);
 </script>
 </body>
 </html>
