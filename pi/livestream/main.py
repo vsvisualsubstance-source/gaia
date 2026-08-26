@@ -36,6 +36,12 @@ from ota import OtaHandler
 _running = True
 _current_room = config.ROOM
 _current_source = config.SOURCE if config.SOURCE in ("mic", "library") else "mic"
+_current_mic_device = config.MIC_DEVICE   # può cambiare a caldo se MIC_DEVICE_OPTIONS è configurato
+# Label corrispondente a _current_mic_device (per la UI, che manda/mostra
+# label non stringhe alsa) — None se si parte dal MIC_DEVICE singolo, non
+# da una delle opzioni multiple.
+_current_mic_label = next((k for k, v in config.MIC_DEVICE_OPTIONS.items()
+                            if v == _current_mic_device), None)
 _active = False              # streaming acceso/spento (comando utente)
 _ffmpeg: subprocess.Popen | None = None
 _lock = threading.Lock()
@@ -83,7 +89,7 @@ def _ffmpeg_cmd() -> list | None:
         return ["ffmpeg", "-nostdin", "-loglevel", "warning",
                 "-stream_loop", "-1", "-f", "concat", "-safe", "0", "-i", playlist] + common
     return ["ffmpeg", "-nostdin", "-loglevel", "warning",
-            "-f", "alsa", "-i", config.MIC_DEVICE] + common
+            "-f", "alsa", "-i", _current_mic_device] + common
 
 
 def _start_ffmpeg() -> bool:
@@ -169,6 +175,8 @@ def _publish_state():
                               "mount": config.MOUNT, "bitrate": config.BITRATE,
                               "listeners": _icecast_listeners() if _active else 0,
                               "stanza": _current_room,
+                              "mic_device": _current_mic_label,
+                              "mic_device_options": list(config.MIC_DEVICE_OPTIONS.keys()),
                               "ts": int(time.time() * 1000)}), retain=True)
 
 
@@ -186,7 +194,7 @@ def _on_connect(client, userdata, flags, rc, properties=None):
 
 
 def _on_message(client, userdata, msg):
-    global _current_room, _current_source, _active
+    global _current_room, _current_source, _current_mic_device, _current_mic_label, _active
     if msg.topic in _ota.topics():
         _ota.handle(msg.topic, msg.payload)
         return
@@ -202,6 +210,15 @@ def _on_message(client, userdata, msg):
                 _current_source = source
             print(f"[LiveStream] Sorgente → {source}")
             changed = True
+        mic_device_label = payload.get("mic_device")
+        if mic_device_label in config.MIC_DEVICE_OPTIONS:
+            new_device = config.MIC_DEVICE_OPTIONS[mic_device_label]
+            if new_device != _current_mic_device:
+                with _lock:
+                    _current_mic_device = new_device
+                    _current_mic_label = mic_device_label
+                print(f"[LiveStream] Microfono → {mic_device_label} ({new_device})")
+                changed = True
         if "active" in payload:
             want = bool(payload["active"])
             if want != _active:

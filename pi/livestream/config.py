@@ -41,6 +41,19 @@ SOURCE = _get("LIVESTREAM_SOURCE", "mic")
 # (stesso bug incontrato con pi/voice, vedi install.sh di quel modulo).
 MIC_DEVICE = _get("LIVESTREAM_MIC_DEVICE", "default")
 
+# Selettore multi-microfono (2026-08-26, trovato dal vivo su vsrasp01: due
+# ingressi USB reali contemporaneamente collegati, "Communicator" e webcam
+# "C920" -- niente ingresso jack, i Raspberry Pi non ne hanno uno per audio).
+# Opzionale: due coppie label/device, cambiabili a caldo via MQTT
+# {"mic_device": "<label>"} quando source=mic. Vuoto = nessuna scelta
+# esposta, resta il MIC_DEVICE singolo sopra (comportamento di sempre).
+MIC_DEVICE_OPTIONS = {}
+for _slot in ("A", "B"):
+    _label = _get(f"LIVESTREAM_MIC_{_slot}_LABEL", "")
+    _device = _get(f"LIVESTREAM_MIC_{_slot}_DEVICE", "")
+    if _label and _device:
+        MIC_DEVICE_OPTIONS[_label] = _device
+
 LIBRARY_DIR = _get("LIVESTREAM_LIBRARY_DIR", os.path.join(_BASE, "musica"))
 LIBRARY_EXT = (".mp3", ".flac", ".ogg", ".wav", ".m4a", ".aac", ".opus")
 

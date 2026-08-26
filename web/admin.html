@@ -2170,6 +2170,8 @@ const _pmHerbPreset = {};   // stanza -> preset attuale (da gaia/herbarium/+/sta
 const _pmHerbVol    = {};   // stanza -> volume batteria attuale (0-100, da gaia/herbarium/+/state)
 const _pmLiveSource    = {};   // stanza -> sorgente attuale ("mic"|"library", da gaia/livestream/+/state)
 const _pmLiveListeners = {};   // stanza -> numero ascoltatori attuale
+const _pmLiveMicDevice  = {};   // stanza -> label mic attuale (solo se il Pi ha più mic USB configurati)
+const _pmLiveMicOptions = {};   // stanza -> [label, ...] mic disponibili
 
 async function pmCleanRooms() {
   try {
@@ -2253,6 +2255,12 @@ function initPiManager() {
               .forEach(sel => { if (document.activeElement !== sel) sel.value = st.source; });
           }
           _pmLiveListeners[stanza] = st?.active ? (st.listeners||0) : 0;
+          if (st && st.mic_device_options) {
+            _pmLiveMicOptions[stanza] = st.mic_device_options;
+            _pmLiveMicDevice[stanza]  = st.mic_device;
+            document.querySelectorAll(`.pm-inp-livemic[data-stanza="${stanza}"]`)
+              .forEach(sel => { if (document.activeElement !== sel && st.mic_device) sel.value = st.mic_device; });
+          }
         } catch(e) {}
         return;
       }
@@ -2595,6 +2603,14 @@ function pmBuildCard(id, d) {
         </select>
         <button class="pm-btn blue pm-btn-livesource" style="width:auto;padding:0 14px">Applica</button>
       </div>
+      ${(_pmLiveMicOptions[d.stanza]||[]).length>1?`<div class="pm-rename-row" style="margin-top:6px">
+        <select class="pm-inp-livemic" data-stanza="${pmEsc(d.stanza||'')}" style="flex:1">
+          ${_pmLiveMicOptions[d.stanza].map(label=>
+            `<option value="${pmEsc(label)}" ${_pmLiveMicDevice[d.stanza]===label?'selected':''}>${pmEsc(label)}</option>`
+          ).join('')}
+        </select>
+        <button class="pm-btn blue pm-btn-livemic" style="width:auto;padding:0 14px">Applica</button>
+      </div>`:''}
       <div style="font-size:.75rem;color:var(--muted);margin-top:4px;word-break:break-all">
         ${d.services?.livestream?.endpoints?.stream||`http://${d.ip}:8000/stream.ogg`}
       </div>
@@ -2708,6 +2724,15 @@ function pmAttachEvents(id, card) {
     _pmClient.publish(`gaia/livestream/${stanza}/command`, JSON.stringify({source: sel.value}));
     pmLog('out', `LiveStream ${stanza}: sorgente → ${sel.value}`);
     liveBtn.textContent = '✓'; setTimeout(() => { liveBtn.textContent = 'Applica'; }, 1200);
+  };
+  const liveMicBtn = card.querySelector('.pm-btn-livemic');
+  if (liveMicBtn) liveMicBtn.onclick = () => {
+    const sel = card.querySelector('.pm-inp-livemic');
+    const stanza = sel?.dataset.stanza;
+    if (!stanza || !sel.value || !_pmClient) return;
+    _pmClient.publish(`gaia/livestream/${stanza}/command`, JSON.stringify({mic_device: sel.value}));
+    pmLog('out', `LiveStream ${stanza}: microfono → ${sel.value}`);
+    liveMicBtn.textContent = '✓'; setTimeout(() => { liveMicBtn.textContent = 'Applica'; }, 1200);
   };
   card.querySelector('.pm-btn-status').onclick  = () => pmSend(id, {action:'status'});
   card.querySelector('.pm-btn-reboot').onclick  = () => { if(confirm(`Riavviare ${id}?`)) pmSend(id, {action:'reboot'}); };
