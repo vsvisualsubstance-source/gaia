@@ -39,12 +39,12 @@ h2{font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:var(--mu
 .now-room{font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:4px;display:flex;justify-content:space-between}
 .now-title{font-size:.86rem;font-weight:600;min-height:1.2em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .now-sub{font-size:.72rem;color:var(--muted);margin-top:2px}
-.now-controls{display:flex;align-items:center;gap:8px;margin-top:8px}
-.now-controls button{background:none;border:1px solid var(--border);color:var(--text);border-radius:6px;
+.now-controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:8px}
+.now-controls button{background:none;border:1px solid var(--border);color:var(--text);border-radius:6px;flex-shrink:0;
   padding:3px 8px;cursor:pointer;font-size:.8rem}
 .now-controls button:hover{border-color:var(--accent);color:var(--accent)}
 .now-controls button.on{background:#001a12;border-color:var(--accent);color:var(--accent)}
-.now-controls input[type=range]{flex:1;accent-color:var(--accent)}
+.now-controls input[type=range]{flex:1 1 60px;min-width:60px;accent-color:var(--accent)}
 .empty-hint{color:var(--muted);font-size:.82rem;padding:10px 0}
 
 /* Transport globale */
