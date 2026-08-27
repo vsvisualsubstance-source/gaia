@@ -172,6 +172,14 @@ class TDDeviceRegistry:
     che consuma Pi Manager per disegnare la sezione con i pulsanti."""
 
     OFFLINE_AFTER_S = 90
+    # Pulizia automatica dei retained di un device sparito per davvero
+    # (2026-08-27, su richiesta esplicita dopo che le prove DMX di una sera
+    # avevano lasciato 6+ device_id orfani sul broker, puliti a mano) --
+    # soglia MOLTO più lunga di OFFLINE_AFTER_S apposta: un rig spento per
+    # la notte (TD chiuso, laptop in sospensione) non deve perdere la sua
+    # dmx_matrix/patchdeck_matrix (configurazione/calibrazione vera, non
+    # solo un heartbeat) solo perché è stato silente per un weekend breve.
+    REAP_AFTER_S  = 48 * 3600
     STATUS_TOPIC  = "gaia/td-bridge/status"
     COMMAND_TOPIC = "gaia/td-bridge/command"
 
@@ -199,6 +207,41 @@ class TDDeviceRegistry:
         while True:
             time.sleep(30)
             self._check_offline_transitions()
+            self._reap_stale()
+
+    # Famiglia di topic retained che un device del canale 4+5 (Pi-Manager +
+    # Device Registry) può aver pubblicato -- pulire un topic mai esistito
+    # è un no-op innocuo lato mosquitto, quindi si cancellano tutti senza
+    # bisogno di sapere a priori se questo device era DMX/PatchDeck/altro.
+    _REAP_TOPIC_SUFFIXES = (
+        "device/{id}/status", "devices/{id}/announce", "devices/{id}/config",
+        "devices/{id}/profile", "devices/{id}/dmx_matrix",
+        "devices/{id}/patchdeck_matrix",
+    )
+
+    def _reap_stale(self):
+        now = time.time()
+        with self._lock:
+            snapshot = {k: dict(v) for k, v in self._targets.items()}
+        reaped_any = False
+        for device_id, t in snapshot.items():
+            age = now - t["last_seen"]
+            if age <= self.REAP_AFTER_S:
+                continue
+            name = t.get("name") or device_id
+            for suffix in self._REAP_TOPIC_SUFFIXES:
+                self._mqtt.publish(f"gaia/{suffix.format(id=device_id)}",
+                                    payload=None, qos=1, retain=True)
+            with self._lock:
+                self._targets.pop(device_id, None)
+            self._alerted_offline.discard(device_id)
+            reaped_any = True
+            hours = round(age / 3600)
+            self._notify(f"🧹 TouchDesigner \"{name}\" ({device_id}) silente da {hours}h "
+                         f"— retained ripuliti dal broker (soglia {self.REAP_AFTER_S // 3600}h).")
+            print(f"[TD-Bridge] REAP: {device_id} ripulito dopo {hours}h di silenzio")
+        if reaped_any:
+            self._publish_status()
 
     def _check_offline_transitions(self):
         now = time.time()
