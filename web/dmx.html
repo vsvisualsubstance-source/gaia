@@ -136,7 +136,19 @@ let dxClient = null;
 // è il segnale di appartenenza autoritativo, non un pattern sul nome).
 let dxDevices = {};     // device_id -> { matrix, status, order }
 let dxOrder = 0;
-let dxActiveId = null;
+// Bug reale trovato dal vivo (2026-08-27): senza questa memoria, la tab
+// attiva di default era "il primo dmx_matrix che arriva" -- con più
+// scenari registrati (oggi 4: due con nome, due anonimi da vecchie prove)
+// l'ordine di consegna dei retained non è garantito, quindi un reload
+// poteva atterrare su un device diverso ogni volta, anche uno anonimo
+// senza dati interessanti -- sembrava "tutto sparito" anche con dati
+// reali presenti su un'altra tab. Ricorda l'ultima scelta esplicita.
+let dxActiveId = localStorage.getItem('gaiaDmxActiveId') || null;
+// true finché il device ricordato non si è ripresentato -- durante questa
+// finestra dxRenderTabs() non deve "scappare" verso il primo disponibile
+// solo perché il ricordato non è ancora arrivato (diverso da essere
+// davvero offline). Scade da sola dopo una breve grazia, vedi dxInit().
+let dxPersistPending = !!dxActiveId;
 let dxBuiltFor = null;  // device_id per cui il DOM di #param-sections è aggiornato ora
 
 function dxSetConn(ok) {
@@ -210,8 +222,13 @@ function dxRenderTabs() {
   const allIds = Object.keys(dxDevices).sort((a, b) => dxDevices[a].order - dxDevices[b].order);
   const ids = allIds.filter(dxIsOnline);
 
-  // Se lo scenario attivo non è (più) online, passa al primo disponibile.
-  if (dxActiveId !== null && !ids.includes(dxActiveId)) {
+  // Se lo scenario attivo non è (più) online, passa al primo disponibile --
+  // MA non durante la finestra di grazia per un device ricordato che
+  // semplicemente non è ancora arrivato (dxPersistPending): altrimenti la
+  // riassegnazione scatterebbe PRIMA che il suo dmx_matrix/status abbia
+  // anche solo una possibilità di arrivare, vanificando la memoria appena
+  // introdotta al primo giro utile.
+  if (dxActiveId !== null && !dxPersistPending && !ids.includes(dxActiveId)) {
     dxActiveId = ids[0] ?? null;
     dxBuiltFor = null;
   }
@@ -243,6 +260,8 @@ function dxRenderTabs() {
 function dxSelectTab(id) {
   if (id === dxActiveId || !dxDevices[id]) return;
   dxActiveId = id;
+  dxPersistPending = false;
+  localStorage.setItem('gaiaDmxActiveId', id);
   dxRenderTabs();
   dxRenderAll();
   dxPollActive();
@@ -326,6 +345,13 @@ function dxBuildSections() {
   const dev = dxActive();
   const matrix = dev?.matrix;
   if (!matrix) { wrap.innerHTML = '<div class="dev-meta">In attesa della matrice (gaia/devices/…/dmx_matrix)…</div>'; return; }
+  // Matrice ricevuta ma nessun status live ancora arrivato: costruire gli
+  // slider ora userebbe i default della matrice come se fossero i valori
+  // reali (visto dal vivo: "appare a zero poi vedo i valori" -- uno scatto
+  // confuso, non un dato sbagliato). Meglio un'attesa esplicita; NON segna
+  // dxBuiltFor, quindi il prossimo dxRenderAll (status in arrivo) ritenta
+  // automaticamente la build vera.
+  if (!dev.status) { wrap.innerHTML = '<div class="dev-meta">Matrice ricevuta, in attesa dei valori live dal device…</div>'; return; }
   const known = new Set(DX_SECTIONS.flatMap(s => s.params));
   const extra = Object.keys(matrix.params || {}).filter(k => !known.has(k)).sort();
   const sections = extra.length ? [...DX_SECTIONS, { title: 'Altro', params: extra }] : DX_SECTIONS;
@@ -443,6 +469,7 @@ function dxRegisterMatrix(m) {
   if (isNew) dxDevices[id] = { order: dxOrder++, status: null, matrix: null };
   dxDevices[id].matrix = m;
   if (dxActiveId === null) dxActiveId = id;   // primo scenario scoperto -> attivo di default
+  if (id === dxActiveId) dxPersistPending = false;   // il device ricordato è ricomparso
   dxRenderTabs();
   if (id === dxActiveId) dxRenderAll();
 }
@@ -468,6 +495,13 @@ function dxInit() {
       dxClient.subscribe('gaia/device/+/status');
       dxClient.subscribe('gaia/devices/+/dmx_matrix');
       dxStartPolling();
+      // Il device ricordato potrebbe essere stato rimosso/rinominato per
+      // sempre (non solo momentaneamente offline) -- senza questo timeout
+      // dxPersistPending resterebbe true all'infinito e la tab bar
+      // aspetterebbe un device che non tornerà mai più.
+      setTimeout(() => {
+        if (dxPersistPending) { dxPersistPending = false; dxRenderTabs(); dxRenderAll(); }
+      }, 5000);
     });
     dxClient.on('error',   () => dxSetConn(false));
     dxClient.on('offline', () => dxSetConn(false));
