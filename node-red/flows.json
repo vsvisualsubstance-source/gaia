@@ -3742,7 +3742,7 @@
         "type": "function",
         "z": "tab_device_registry",
         "name": "AutomationsList",
-        "func": "// GET /gaia/automations -> stato di tutte le automazioni con default\nconst brain = global.get('gaiaBrain') || {};\nconst a = brain.automations || {};\n\nconst moodLightingRooms = {};\nfor (const roomId of Object.keys(brain.rooms || {})) {\n    if (roomId.includes('cam') || roomId.includes('vision') || roomId === 'unknown') continue;\n    moodLightingRooms[roomId] = (a.moodLighting || {})[roomId] === true;\n}\n\n    msg.payload = {\n    automations: [\n        { id: 'petConcierge',  label: 'Pet Concierge (luce soffusa per animali)', scope: 'global', enabled: a.petConcierge !== false },\n        { id: 'fallDetection', label: 'Rilevamento uomo a terra',                 scope: 'global', enabled: a.fallDetection !== false },\n        { id: 'fireAlarm',     label: 'Allarme incendio',                        scope: 'global', enabled: a.fireAlarm !== false },\n        { id: 'fridgeAlarm',   label: 'Allarme frigo aperto',                    scope: 'global', enabled: a.fridgeAlarm !== false },\n        { id: 'moodLighting',  label: 'Luci automatiche da mood', scope: 'per_room', rooms: moodLightingRooms },\n        { id: 'maggiordomo',   label: 'Maggiordomo (citofono, pioggia/finestre, spegnimento luci)', scope: 'global', enabled: a.maggiordomo === true },\n        { id: 'thirstyPlantAlert', label: 'Alert pianta assetata', scope: 'global', enabled: a.thirstyPlantAlert === true },\n        { id: 'awayMode',      label: 'Modalita fuori casa (spegni tutto)', scope: 'global', enabled: a.awayMode === true },\n        { id: 'welcomeScene',  label: 'Scena bentornato (sera)', scope: 'global', enabled: a.welcomeScene === true },\n        { id: 'touchdesignerLighting', label: 'Luci pilotate da TouchDesigner', scope: 'global', enabled: a.touchdesignerLighting === true },\n        { id: 'touchdesignerMood', label: 'Mood pilotato da TouchDesigner', scope: 'global', enabled: a.touchdesignerMood === true },\n        { id: 'voiceAutoEnroll', label: 'Doppia conferma vocale + auto-enrollment', scope: 'global', enabled: a.voiceAutoEnroll === true },\n    ],\n    ts: Date.now(),\n};\nmsg.statusCode = 200;\nreturn msg;\n",
+        "func": "// GET /gaia/automations -> stato di tutte le automazioni con default\nconst brain = global.get('gaiaBrain') || {};\nconst a = brain.automations || {};\n\nconst moodLightingRooms = {};\nfor (const roomId of Object.keys(brain.rooms || {})) {\n    if (roomId.includes('cam') || roomId.includes('vision') || roomId === 'unknown') continue;\n    moodLightingRooms[roomId] = (a.moodLighting || {})[roomId] === true;\n}\n\n    msg.payload = {\n    automations: [\n        { id: 'petConcierge',  label: 'Pet Concierge (luce soffusa per animali)', scope: 'global', enabled: a.petConcierge !== false },\n        { id: 'fallDetection', label: 'Rilevamento uomo a terra',                 scope: 'global', enabled: a.fallDetection !== false },\n        { id: 'fireAlarm',     label: 'Allarme incendio',                        scope: 'global', enabled: a.fireAlarm !== false },\n        { id: 'fridgeAlarm',   label: 'Allarme frigo aperto',                    scope: 'global', enabled: a.fridgeAlarm !== false },\n        { id: 'moodLighting',  label: 'Luci automatiche da mood', scope: 'per_room', rooms: moodLightingRooms },\n        { id: 'maggiordomo',   label: 'Maggiordomo (citofono, pioggia/finestre, spegnimento luci)', scope: 'global', enabled: a.maggiordomo === true },\n        { id: 'thirstyPlantAlert', label: 'Alert pianta assetata', scope: 'global', enabled: a.thirstyPlantAlert === true },\n        { id: 'awayMode',      label: 'Modalita fuori casa (spegni tutto)', scope: 'global', enabled: a.awayMode === true },\n        { id: 'welcomeScene',  label: 'Scena bentornato (sera)', scope: 'global', enabled: a.welcomeScene === true },\n        { id: 'touchdesignerLighting', label: 'Luci pilotate da TouchDesigner', scope: 'global', enabled: a.touchdesignerLighting === true },\n        { id: 'touchdesignerMood', label: 'Mood pilotato da TouchDesigner', scope: 'global', enabled: a.touchdesignerMood === true },\n        { id: 'voiceAutoEnroll', label: 'Doppia conferma vocale + auto-enrollment', scope: 'global', enabled: a.voiceAutoEnroll === true },\n        { id: 'gaiaVjDmx', label: 'Gaia VJ -- palette DMX da mood', scope: 'global', enabled: a.gaiaVjDmx === true },\n        { id: 'gaiaVjPatchdeck', label: 'Gaia VJ -- clip PatchDeck da mood', scope: 'global', enabled: a.gaiaVjPatchdeck === true },\n    ],\n    ts: Date.now(),\n};\nmsg.statusCode = 200;\nreturn msg;\n",
         "outputs": 1,
         "timeout": 0,
         "noerr": 0,
@@ -3788,7 +3788,7 @@
         "type": "function",
         "z": "tab_device_registry",
         "name": "ToggleAutomation",
-        "func": "// POST /gaia/automations/toggle  {id, enabled, room?}\nconst GLOBAL_IDS = ['petConcierge', 'fallDetection', 'fireAlarm', 'fridgeAlarm', 'maggiordomo', 'thirstyPlantAlert', 'awayMode', 'welcomeScene', 'touchdesignerLighting', 'touchdesignerMood', 'voiceAutoEnroll'];\nconst body = msg.payload || {};\nconst id = body.id;\nconst enabled = body.enabled === true;\nconst room = body.room;\n\nif (!id || (id !== 'moodLighting' && !GLOBAL_IDS.includes(id))) {\n    msg.statusCode = 400;\n    msg.payload = { ok: false, error: 'id automazione non valido' };\n    return msg;\n}\nif (id === 'moodLighting' && !room) {\n    msg.statusCode = 400;\n    msg.payload = { ok: false, error: 'room richiesto per moodLighting' };\n    return msg;\n}\n\nlet brain = global.get('gaiaBrain') || {};\nbrain.automations = brain.automations || {};\n\nif (id === 'moodLighting') {\n    brain.automations.moodLighting = brain.automations.moodLighting || {};\n    brain.automations.moodLighting[room] = enabled;\n} else {\n    brain.automations[id] = enabled;\n}\n\nglobal.set('gaiaBrain', brain);\nnode.warn(`[Automations] ${id}${room ? '/' + room : ''} -> ${enabled}`);\n\nmsg.statusCode = 200;\nmsg.payload = { ok: true, id, room: room || null, enabled };\nreturn msg;\n",
+        "func": "// POST /gaia/automations/toggle  {id, enabled, room?}\nconst GLOBAL_IDS = ['petConcierge', 'fallDetection', 'fireAlarm', 'fridgeAlarm', 'maggiordomo', 'thirstyPlantAlert', 'awayMode', 'welcomeScene', 'touchdesignerLighting', 'touchdesignerMood', 'voiceAutoEnroll', 'gaiaVjDmx', 'gaiaVjPatchdeck'];\nconst body = msg.payload || {};\nconst id = body.id;\nconst enabled = body.enabled === true;\nconst room = body.room;\n\nif (!id || (id !== 'moodLighting' && !GLOBAL_IDS.includes(id))) {\n    msg.statusCode = 400;\n    msg.payload = { ok: false, error: 'id automazione non valido' };\n    return msg;\n}\nif (id === 'moodLighting' && !room) {\n    msg.statusCode = 400;\n    msg.payload = { ok: false, error: 'room richiesto per moodLighting' };\n    return msg;\n}\n\nlet brain = global.get('gaiaBrain') || {};\nbrain.automations = brain.automations || {};\n\nif (id === 'moodLighting') {\n    brain.automations.moodLighting = brain.automations.moodLighting || {};\n    brain.automations.moodLighting[room] = enabled;\n} else {\n    brain.automations[id] = enabled;\n}\n\nglobal.set('gaiaBrain', brain);\nnode.warn(`[Automations] ${id}${room ? '/' + room : ''} -> ${enabled}`);\n\nmsg.statusCode = 200;\nmsg.payload = { ok: true, id, room: room || null, enabled };\nreturn msg;\n",
         "outputs": 1,
         "timeout": 0,
         "noerr": 0,
@@ -6599,6 +6599,51 @@
             ],
             [
                 "tg_svc_mqtt_out"
+            ]
+        ]
+    },
+    {
+        "id": "vj_mood_inject",
+        "type": "inject",
+        "z": "d3a553c4a24c8d2d",
+        "name": "ogni 60s",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "60",
+        "crontab": "",
+        "once": true,
+        "onceDelay": 5,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 1600,
+        "y": 560,
+        "wires": [
+            [
+                "vj_mood_fn"
+            ]
+        ]
+    },
+    {
+        "id": "vj_mood_fn",
+        "type": "function",
+        "z": "d3a553c4a24c8d2d",
+        "name": "Gaia VJ: mood -> DMX/PatchDeck",
+        "func": "// Gaia VJ -- mood -> palette DMX / clip PatchDeck (2026-08-27)\n// Stesso principio della Nursery (canale 9): Gaia sceglie, mai un LLM nel\n// loop per la scelta stessa -- mappa curata a mano per coerenza artistica\n// (Ollama si e' gia' dimostrato inaffidabile su output strutturato, vedi\n// Nursery), variazione dentro la mappa via lo stesso hash FNV-1a gia' usato\n// ovunque nel progetto (web/asemic.js, pi/screen/asemic_engine.py).\n//\n// Due toggle INDIPENDENTI (Admin -> Automazioni: \"Gaia VJ -- palette DMX\n// da mood\" / \"Gaia VJ -- clip PatchDeck da mood\"), entrambi spenti di\n// default -- su richiesta esplicita: non deve mai interferire con show\n// manuali o momenti critici (es. durante un allarme) solo perche' il mood\n// e' cambiato, e i due sistemi vanno accesi/spenti separatamente (es.\n// tenere la luce automatica ma gestire i clip a mano).\nfunction fnv1a(str) {\n    let h = 2166136261 >>> 0;\n    for (const ch of String(str).toLowerCase()) {\n        h ^= ch.codePointAt(0);\n        h = Math.imul(h, 16777619) >>> 0;\n    }\n    return h >>> 0;\n}\nfunction mulberry32(a) {\n    return function () {\n        a |= 0; a = a + 0x6D2B79F5 | 0;\n        let t = Math.imul(a ^ a >>> 15, 1 | a);\n        t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;\n        return ((t ^ t >>> 14) >>> 0) / 4294967296;\n    };\n}\n\nconst brain = global.get('gaiaBrain') || {};\nconst dmxOn = brain.automations?.gaiaVjDmx === true;\nconst patchdeckOn = brain.automations?.gaiaVjPatchdeck === true;\nif (!dmxOn && !patchdeckOn) return null;\n\n// Stesso alias di web/asemic.js -- MAI biforcare il vocabolario mood tra\n// superfici diverse, altrimenti \"serena\" e \"calm\" finirebbero su palette\n// diverse pur essendo lo stesso stato.\nconst MOOD_ALIAS = { serena: 'calm', sofferente: 'stress', instabile: 'stress',\n                     viva: 'social', stabile: 'neutra', neutrale: 'neutra' };\n\n// Mappa curata a mano (non hash-alla-cieca su tutte le 19 palette): ogni\n// mood ha 2-3 palette coerenti artisticamente, la variazione dentro il\n// gruppo viene dal seed -- palette reali lette dal vivo da dmx_matrix\n// (td-dmx-ops-a/b), non inventate.\nconst MOOD_PALETTES = {\n    neutra:    ['Basic', 'Basic 2', 'Warm'],\n    calm:      ['Ocean', 'Cool', 'Forest'],\n    stress:    ['Fire', 'Fire Inverted', 'Red'],\n    social:    ['Neon Party', 'Sunset', 'Magenta-Cyan'],\n    curiosity: ['Plasma', 'Rainbow (Daslight)', 'Deep Purple'],\n};\n\n// Device_id fissi (manuali e stabili, vedi TD4Gaia GAIA_INTERFACE.md\n// \"REGOLA Deviceid\" 2026-08-27) -- se rinominati di nuovo lato TD, aggiornare\n// qui.\nconst DMX_DEVICES = ['td-dmx-ops-a', 'td-dmx-ops-b'];\nconst PATCHDECK_DEVICE = 'td-MacBook-Air-di-Mauro.local';\nconst PATCHDECK_CLIPS = 38;\n\nlet mood = brain.mood?.state || 'neutra';\nmood = MOOD_ALIAS[mood] || mood;\nif (!MOOD_PALETTES[mood]) mood = 'neutra';\n\n// Tracciamento SEPARATO per sistema: se uno dei due toggle viene acceso\n// dopo che l'altro ha gia' applicato il mood corrente, deve comunque\n// scattare alla prima occasione utile invece di aspettare il prossimo\n// cambio di mood (che potrebbe non arrivare per ore).\nconst rnd = mulberry32(fnv1a(mood));\nconst candidates = MOOD_PALETTES[mood];\nconst palette = candidates[Math.floor(rnd() * candidates.length)];\nconst clip = 1 + Math.floor(rnd() * PATCHDECK_CLIPS);\nlet clipB = 1 + Math.floor(rnd() * PATCHDECK_CLIPS);\nif (clipB === clip) clipB = (clipB % PATCHDECK_CLIPS) + 1;   // mai uguale al deck A\n\nconst msgs = [];\nlet did = [];\n\nif (dmxOn && global.get('gaiaVjLastMoodDmx') !== mood) {\n    global.set('gaiaVjLastMoodDmx', mood);\n    for (const id of DMX_DEVICES) {\n        msgs.push({ topic: `gaia/device/${id}/command`,\n                    payload: JSON.stringify({ action: 'set', param: 'dmx_palette', value: palette }) });\n    }\n    did.push(`DMX palette=${palette}`);\n}\n\nif (patchdeckOn && global.get('gaiaVjLastMoodPatchdeck') !== mood) {\n    global.set('gaiaVjLastMoodPatchdeck', mood);\n    msgs.push({ topic: `gaia/device/${PATCHDECK_DEVICE}/command`,\n                payload: JSON.stringify({ action: 'enable', service: `load_x${clip}_a` }) });\n    msgs.push({ topic: `gaia/device/${PATCHDECK_DEVICE}/command`,\n                payload: JSON.stringify({ action: 'enable', service: 'deck_a' }) });\n    msgs.push({ topic: `gaia/device/${PATCHDECK_DEVICE}/command`,\n                payload: JSON.stringify({ action: 'enable', service: `load_x${clipB}_b` }) });\n    msgs.push({ topic: `gaia/device/${PATCHDECK_DEVICE}/command`,\n                payload: JSON.stringify({ action: 'enable', service: 'deck_b' }) });\n    did.push(`PatchDeck A=${clip} B=${clipB}`);\n}\n\nif (!msgs.length) return null;\nnode.warn(`[Gaia VJ] mood -> ${mood} | ${did.join(' | ')}`);\nreturn [msgs];",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1810,
+        "y": 560,
+        "wires": [
+            [
+                "dm-mqtt-out"
             ]
         ]
     }
