@@ -136,6 +136,14 @@ const PD_BROKER = '192.168.1.142';
 // restare stabile tra un reload e l'altro finche' risponde davvero.
 let PD_DEVICE_ID = localStorage.getItem('gaiaPatchdeckDeviceId') || null;
 let pdConfirmed = false;   // true quando arriva un vero status per PD_DEVICE_ID
+// Candidati visti nel frattempo mentre si aspetta conferma del device
+// ricordato (2026-08-28): senza questo, i messaggi di un device NUOVO che
+// arrivano PRIMA della scadenza della finestra di grazia venivano scartati
+// (non combaciano ancora con PD_DEVICE_ID) e la pagina restava ad
+// aspettare il prossimo aggiornamento live del device nuovo, che puo'
+// tardare parecchio se l'heartbeat non e' frequente -- stesso principio
+// del bug gia' trovato e fissato in dmx.html.
+const pdCandidates = {};   // device_id -> { matrix, status }
 const PD_PATCH_COUNT = 38;   // load_x1..38, vedi GAIA_INTERFACE.md (TD4Gaia) 2026-08-24
 const PD_PAGE_SIZE = 24;     // griglia 8x3 visibile per pagina
 
@@ -232,6 +240,27 @@ function pdRenderDevice() {
   pdRenderGrid('b');
 }
 
+// Adotta un device_id come quello attivo, applicando subito qualunque
+// dato gia' visto per lui in pdCandidates (evita di aspettare un altro
+// giro di messaggi dopo averlo scelto).
+function pdAdopt(id) {
+  PD_DEVICE_ID = id;
+  pdConfirmed = false;
+  localStorage.setItem('gaiaPatchdeckDeviceId', id);
+  const c = pdCandidates[id];
+  if (c?.matrix) { pdMatrix = c.matrix; pdPage.a = 0; pdPage.b = 0; }
+  if (c?.status) {
+    const d = { ...c.status };
+    d._lastSeen = d.ts || Date.now();
+    d._offline = (Date.now() - d._lastSeen) > 90000;
+    pdDevice = d;
+    pdConfirmed = true;
+  }
+  pdRenderGrid('a');
+  pdRenderGrid('b');
+  pdRenderDevice();
+}
+
 function pdInit() {
   const mqttUrl = `ws://${PD_BROKER}:9001`;
   function start() {
@@ -246,10 +275,15 @@ function pdInit() {
       // Il device ricordato da un reload precedente potrebbe essere morto
       // per davvero (rinominato/sostituito, non solo momentaneamente
       // offline) -- se non conferma un vero status entro questa finestra,
-      // ci si libera e si adotta il prossimo device che si presenta.
+      // ci si libera e si adotta subito il miglior candidato gia' visto nel
+      // frattempo (pdCandidates), invece di aspettare passivamente il
+      // prossimo aggiornamento live (che puo' tardare).
       setTimeout(() => {
-        if (!pdConfirmed) { PD_DEVICE_ID = null; pdMatrix = null; pdDevice = null; pdRenderDevice(); }
-      }, 5000);
+        if (pdConfirmed) return;
+        const withStatus = Object.entries(pdCandidates).find(([, c]) => c.status);
+        const any = withStatus || Object.entries(pdCandidates)[0];
+        if (any) { pdAdopt(any[0]); } else { PD_DEVICE_ID = null; pdMatrix = null; pdDevice = null; pdRenderDevice(); }
+      }, 1500);
     });
     pdClient.on('error',   () => pdSetConn(false));
     pdClient.on('offline', () => pdSetConn(false));
@@ -258,10 +292,8 @@ function pdInit() {
       if (topic.endsWith('/patchdeck_matrix')) {
         try {
           const m = JSON.parse(raw.toString());
-          if (PD_DEVICE_ID === null) {
-            PD_DEVICE_ID = m.device_id;
-            localStorage.setItem('gaiaPatchdeckDeviceId', PD_DEVICE_ID);
-          }
+          (pdCandidates[m.device_id] = pdCandidates[m.device_id] || {}).matrix = m;
+          if (PD_DEVICE_ID === null) pdAdopt(m.device_id);
           if (m.device_id !== PD_DEVICE_ID) return;
           pdMatrix = m;
           pdPage.a = 0; pdPage.b = 0;
@@ -272,10 +304,8 @@ function pdInit() {
       }
       try {
         const d = JSON.parse(raw.toString());
-        if (PD_DEVICE_ID === null) {
-          PD_DEVICE_ID = d.device_id;
-          localStorage.setItem('gaiaPatchdeckDeviceId', PD_DEVICE_ID);
-        }
+        (pdCandidates[d.device_id] = pdCandidates[d.device_id] || {}).status = d;
+        if (PD_DEVICE_ID === null) pdAdopt(d.device_id);
         if (d.device_id !== PD_DEVICE_ID) return;
         pdConfirmed = true;
         // Usa il ts INCORPORATO nel messaggio, non l'orario di ricezione --
