@@ -2126,7 +2126,10 @@ const _pmDevices = {};
 // fisso) -- un Set con un solo device_id fisso ('td-dmx.1') lasciava
 // filtrare tutti gli scenari successivi, trovato dal vivo 2026-08-25.
 // Match per prefisso invece di elenco esatto.
-const PD_HIDDEN_IDS = new Set(['td-MacBook-Air-di-Mauro.local', 'td-controllerv7-macbook-air-di-mauro']);
+const PD_HIDDEN_IDS = new Set(['PatchDeck-Mac-Mauro', 'td-controllerv7-macbook-air-di-mauro']);
+// Deviceid vecchio ('td-MacBook-Air-di-Mauro.local') sostituito col nuovo
+// dopo la migrazione all'Agent universale (2026-08-28) -- l'elenco qui
+// andava aggiornato a mano, non c'e' scoperta automatica per questo Set.
 function pmIsHiddenFromGrid(id) {
   return PD_HIDDEN_IDS.has(id) || /^td-dmx/i.test(id);
 }
