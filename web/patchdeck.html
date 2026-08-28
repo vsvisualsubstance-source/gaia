@@ -302,8 +302,22 @@ function pdInit() {
           if (m.device_id !== PD_DEVICE_ID) return;
           pdMatrix = m;
           pdPage.a = 0; pdPage.b = 0;
-          pdRenderGrid('a');
-          pdRenderGrid('b');
+          // TERZO BUG REALE (stesso giorno, stavolta con localStorage
+          // "avvelenato" da PRIMA di questo fix): un PD_DEVICE_ID ricordato
+          // da un reload precedente (es. agganciato per sbaglio a Core dal
+          // bug originale) veniva accettato ciecamente per ogni status
+          // successivo -- Core pubblica status di continuo, quindi
+          // "sembrava" sempre confermato. Se lo status era gia' arrivato ma
+          // non ancora applicato (vedi il filtro sotto), applicalo ora che
+          // la matrice conferma per davvero che e' un PatchDeck vero.
+          if (!pdConfirmed && pdCandidates[m.device_id]?.status) {
+            const d = { ...pdCandidates[m.device_id].status };
+            d._lastSeen = d.ts || Date.now();
+            d._offline = (Date.now() - d._lastSeen) > 90000;
+            pdDevice = d;
+            pdConfirmed = true;
+          }
+          if (pdDevice) pdRenderDevice(); else { pdRenderGrid('a'); pdRenderGrid('b'); }
         } catch (e) {}
         return;
       }
@@ -326,8 +340,16 @@ function pdInit() {
         // "nessun dato ricevuto" fino al prossimo heartbeat live (10-20s+).
         // Ora si crea/aggiorna sempre il candidato -- l'adozione resta
         // comunque vietata da qui, la decide solo chi ha un .matrix vero.
+        //
+        // TERZO BUG REALE, vedi nota gemella nell'handler della matrice
+        // qui sopra: uno status NON va MAI applicato come vero finche' non
+        // e' confermato da una matrice reale per lo stesso device_id --
+        // altrimenti un PD_DEVICE_ID ricordato per sbaglio da un vecchio
+        // localStorage (es. Core, che pubblica status di continuo) resta
+        // agganciato per sempre perche' "sembra" sempre confermato.
         (pdCandidates[d.device_id] = pdCandidates[d.device_id] || {}).status = d;
         if (d.device_id !== PD_DEVICE_ID) return;
+        if (!pdCandidates[d.device_id]?.matrix) return;
         pdConfirmed = true;
         // Usa il ts INCORPORATO nel messaggio, non l'orario di ricezione --
         // un retained vecchio arriva "ora" ma non e' fresco (bug gia' noto,
