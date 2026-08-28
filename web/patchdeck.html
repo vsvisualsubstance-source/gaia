@@ -304,8 +304,16 @@ function pdInit() {
       }
       try {
         const d = JSON.parse(raw.toString());
-        (pdCandidates[d.device_id] = pdCandidates[d.device_id] || {}).status = d;
-        if (PD_DEVICE_ID === null) pdAdopt(d.device_id);
+        // BUG REALE trovato dal vivo con un browser vero contro il broker
+        // vero (2026-08-28, jsdom con soli messaggi PatchDeck non l'aveva
+        // beccato): gaia/device/+/status e' il flusso di TUTTI i device di
+        // Gaia (Core/OPS/Pi/DMX/...), non solo PatchDeck -- adottare da qui
+        // ha fatto agganciare la pagina al miniPC Core stesso, il primo
+        // status arrivato sul wildcard. L'adozione scatta SOLO dalla
+        // matrice (patchdeck_matrix, che pubblicano solo device PatchDeck
+        // veri) -- qui si aggiorna un candidato SOLO se esiste gia' (cioe'
+        // la sua matrice e' gia' stata vista), mai crearne uno nuovo.
+        if (pdCandidates[d.device_id]) pdCandidates[d.device_id].status = d;
         if (d.device_id !== PD_DEVICE_ID) return;
         pdConfirmed = true;
         // Usa il ts INCORPORATO nel messaggio, non l'orario di ricezione --
