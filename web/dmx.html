@@ -231,6 +231,12 @@ function dxRenderTabs() {
   if (dxActiveId !== null && !dxPersistPending && !ids.includes(dxActiveId)) {
     dxActiveId = ids[0] ?? null;
     dxBuiltFor = null;
+    // Bug trovato dal vivo (2026-08-28): senza questa riga la riassegnazione
+    // automatica non veniva mai salvata (solo il click manuale lo faceva) --
+    // ogni singolo reload ripartiva dal device morto ricordato e rifaceva
+    // tutta la finestra di grazia da capo invece di ricordare la scelta
+    // buona della volta precedente.
+    if (dxActiveId !== null) localStorage.setItem('gaiaDmxActiveId', dxActiveId);
   }
 
   if (!ids.length) {
@@ -498,10 +504,13 @@ function dxInit() {
       // Il device ricordato potrebbe essere stato rimosso/rinominato per
       // sempre (non solo momentaneamente offline) -- senza questo timeout
       // dxPersistPending resterebbe true all'infinito e la tab bar
-      // aspetterebbe un device che non tornerà mai più.
+      // aspetterebbe un device che non tornerà mai più. 1.5s basta e avanza
+      // (i retained arrivano in pochi ms dalla subscribe, verificato dal
+      // vivo) -- 5s lasciava la pagina in uno stato confuso troppo a lungo
+      // (tab non evidenziata, pannello fermo) prima di autocorreggersi.
       setTimeout(() => {
         if (dxPersistPending) { dxPersistPending = false; dxRenderTabs(); dxRenderAll(); }
-      }, 5000);
+      }, 1500);
     });
     dxClient.on('error',   () => dxSetConn(false));
     dxClient.on('offline', () => dxSetConn(false));
