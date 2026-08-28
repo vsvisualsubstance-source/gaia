@@ -125,7 +125,17 @@ button.small{padding:4px 10px;font-size:.78rem}
 // mosquitto resta su Core anche se Node-RED gira altrove, non segue
 // location.hostname (vedi commento in admin.html initPiManager()).
 const PD_BROKER = '192.168.1.142';
-const PD_DEVICE_ID = 'td-MacBook-Air-di-Mauro.local';
+// Scoperto dal vivo, non piu' hardcoded (2026-08-28): il device_id di
+// PatchDeck e' cambiato piu' volte nella stessa serata durante la
+// migrazione al nuovo Agent universale (td-MacBook-Air-di-Mauro.local ->
+// PatchDeck-Mac-Mauro) -- un ID fisso qui rompe la pagina ad ogni rename,
+// i comandi finiscono su un device ormai muto senza nessun errore
+// visibile. Stesso principio gia' in dmx.html: il segnale di
+// appartenenza autoritativo e' chi pubblica davvero, non un nome scritto
+// qui. Ricorda l'ultimo device confermato vivo (localStorage) per
+// restare stabile tra un reload e l'altro finche' risponde davvero.
+let PD_DEVICE_ID = localStorage.getItem('gaiaPatchdeckDeviceId') || null;
+let pdConfirmed = false;   // true quando arriva un vero status per PD_DEVICE_ID
 const PD_PATCH_COUNT = 38;   // load_x1..38, vedi GAIA_INTERFACE.md (TD4Gaia) 2026-08-24
 const PD_PAGE_SIZE = 24;     // griglia 8x3 visibile per pagina
 
@@ -229,9 +239,17 @@ function pdInit() {
     pdClient.on('connect', () => {
       pdSetConn(true);
       pdClient.subscribe('gaia/device/+/status');
-      // Retained, canale 5 (GAIA_INTERFACE.md / TD4Gaia 2026-08-24, 2): la
-      // matrice arriva subito alla subscribe anche se PatchDeck e' offline.
-      pdClient.subscribe(`gaia/devices/${PD_DEVICE_ID}/patchdeck_matrix`);
+      // Wildcard, non piu' un device_id fisso (2026-08-28) -- vedi nota su
+      // PD_DEVICE_ID sopra. Retained, canale 5: la matrice arriva subito
+      // alla subscribe anche se PatchDeck e' offline.
+      pdClient.subscribe('gaia/devices/+/patchdeck_matrix');
+      // Il device ricordato da un reload precedente potrebbe essere morto
+      // per davvero (rinominato/sostituito, non solo momentaneamente
+      // offline) -- se non conferma un vero status entro questa finestra,
+      // ci si libera e si adotta il prossimo device che si presenta.
+      setTimeout(() => {
+        if (!pdConfirmed) { PD_DEVICE_ID = null; pdMatrix = null; pdDevice = null; pdRenderDevice(); }
+      }, 5000);
     });
     pdClient.on('error',   () => pdSetConn(false));
     pdClient.on('offline', () => pdSetConn(false));
@@ -240,6 +258,10 @@ function pdInit() {
       if (topic.endsWith('/patchdeck_matrix')) {
         try {
           const m = JSON.parse(raw.toString());
+          if (PD_DEVICE_ID === null) {
+            PD_DEVICE_ID = m.device_id;
+            localStorage.setItem('gaiaPatchdeckDeviceId', PD_DEVICE_ID);
+          }
           if (m.device_id !== PD_DEVICE_ID) return;
           pdMatrix = m;
           pdPage.a = 0; pdPage.b = 0;
@@ -250,7 +272,12 @@ function pdInit() {
       }
       try {
         const d = JSON.parse(raw.toString());
+        if (PD_DEVICE_ID === null) {
+          PD_DEVICE_ID = d.device_id;
+          localStorage.setItem('gaiaPatchdeckDeviceId', PD_DEVICE_ID);
+        }
         if (d.device_id !== PD_DEVICE_ID) return;
+        pdConfirmed = true;
         // Usa il ts INCORPORATO nel messaggio, non l'orario di ricezione --
         // un retained vecchio arriva "ora" ma non e' fresco (bug gia' noto,
         // vedi TDDeviceRegistry lato Python).
