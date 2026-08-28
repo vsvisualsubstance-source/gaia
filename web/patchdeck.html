@@ -280,8 +280,13 @@ function pdInit() {
       // prossimo aggiornamento live (che puo' tardare).
       setTimeout(() => {
         if (pdConfirmed) return;
-        const withStatus = Object.entries(pdCandidates).find(([, c]) => c.status);
-        const any = withStatus || Object.entries(pdCandidates)[0];
+        // Solo candidati con una matrice vera (patchdeck_matrix) sono device
+        // PatchDeck reali -- un candidato con solo .status (ora possibile,
+        // vedi nota sopra) potrebbe essere Core/OPS/qualunque altro device
+        // sul wildcard, mai adottabile qui.
+        const real = Object.entries(pdCandidates).filter(([, c]) => c.matrix);
+        const withStatus = real.find(([, c]) => c.status);
+        const any = withStatus || real[0];
         if (any) { pdAdopt(any[0]); } else { PD_DEVICE_ID = null; pdMatrix = null; pdDevice = null; pdRenderDevice(); }
       }, 1500);
     });
@@ -311,9 +316,17 @@ function pdInit() {
         // ha fatto agganciare la pagina al miniPC Core stesso, il primo
         // status arrivato sul wildcard. L'adozione scatta SOLO dalla
         // matrice (patchdeck_matrix, che pubblicano solo device PatchDeck
-        // veri) -- qui si aggiorna un candidato SOLO se esiste gia' (cioe'
-        // la sua matrice e' gia' stata vista), mai crearne uno nuovo.
-        if (pdCandidates[d.device_id]) pdCandidates[d.device_id].status = d;
+        // veri) -- vedi il filtro su c.matrix qui sotto e nel timeout.
+        // SECONDO BUG REALE (stesso giorno, trovato aspettando piu' a lungo
+        // col browser vero): il retained di /status puo' arrivare PRIMA di
+        // quello di patchdeck_matrix (le due subscribe non garantiscono
+        // ordine di consegna) -- se qui si scartava lo status per un
+        // candidato non ancora creato, andava perso per sempre (i retained
+        // si consegnano una sola volta per subscribe), e la pagina restava
+        // "nessun dato ricevuto" fino al prossimo heartbeat live (10-20s+).
+        // Ora si crea/aggiorna sempre il candidato -- l'adozione resta
+        // comunque vietata da qui, la decide solo chi ha un .matrix vero.
+        (pdCandidates[d.device_id] = pdCandidates[d.device_id] || {}).status = d;
         if (d.device_id !== PD_DEVICE_ID) return;
         pdConfirmed = true;
         // Usa il ts INCORPORATO nel messaggio, non l'orario di ricezione --
