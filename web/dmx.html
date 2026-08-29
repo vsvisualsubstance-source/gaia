@@ -131,10 +131,27 @@ const DX_SECTIONS = [
 ];
 
 let dxClient = null;
-// Multi-scenario: ogni device che pubblica dmx_matrix diventa una tab --
-// nessun device_id hardcoded, scoperti dal vivo (gaia/devices/+/dmx_matrix
+// Multi-scenario: ogni device che pubblica dmx_matrix diventa una o due tab
+// -- nessun device_id hardcoded, scoperti dal vivo (gaia/devices/+/dmx_matrix
 // è il segnale di appartenenza autoritativo, non un pattern sul nome).
-let dxDevices = {};     // device_id -> { matrix, status, order }
+//
+// Due schemi coesistono sul broker dal 2026-08-29 (migrazione Agent
+// unico multi-rig, vedi TD4Gaia GAIA_INTERFACE.md sezione "DMX, agente
+// unico multi-rig"): il vecchio (un device = un rig, dmx_matrix piatta
+// {params,services} come sempre) e il nuovo (un device copre 2 rig,
+// dmx_matrix = {device_id, rigs:{a:{params,services}, b:{...}}}, con
+// nomi servizio/parametro PREFISSATI per rig in status/profile
+// (dmx_a_kick_enable) ma NON prefissati dentro rigs.a/rigs.b della
+// matrice (dmx_kick_enable) -- due forme diverse per lo stesso dato,
+// verificato dal vivo). `dxDevices` qui sotto è quindi chiavato per
+// SCENARIO (id reale per un device a rig singolo, `${device_id}::a`/
+// `::b` per un device multi-rig), non necessariamente per device_id --
+// ogni scenario porta con sé `realDeviceId` (dove mandare i comandi) e
+// `rigLabel` (per ri-aggiungere il prefisso ai nomi servizio/parametro
+// prima di inviarli, null per gli scenari a rig singolo). Tutto il
+// rendering sotto (sezioni, slider, servizi) resta identico in entrambi
+// i casi: legge sempre matrix/status "scoped" al singolo rig.
+let dxDevices = {};     // scenario_id -> { matrix, status, order, realDeviceId, rigLabel }
 let dxOrder = 0;
 // Bug reale trovato dal vivo (2026-08-27): senza questa memoria, la tab
 // attiva di default era "il primo dmx_matrix che arriva" -- con più
@@ -155,19 +172,35 @@ function dxSetConn(ok) {
   document.getElementById('mqtt-dot').className = 'mqtt-dot ' + (ok ? 'ok' : 'err');
 }
 
+// Ri-aggiunge il prefisso di rig (dmx_kick_enable -> dmx_a_kick_enable) --
+// no-op per uno scenario a rig singolo (rigLabel null). I nomi dentro
+// matrix/status "scoped" restano sempre SENZA prefisso (vedi nota sopra
+// su dxDevices), solo il comando reale sul wire lo richiede.
+function dxRePrefix(name, rigLabel) {
+  return rigLabel ? name.replace(/^dmx_/, `dmx_${rigLabel}_`) : name;
+}
+
 function dxSendAction(service, action) {
-  if (!dxClient || !dxClient.connected || !dxActiveId) return;
-  dxClient.publish(`gaia/device/${dxActiveId}/command`, JSON.stringify({ action, service }));
+  const dev = dxActive();
+  if (!dxClient || !dxClient.connected || !dev) return;
+  const realService = dxRePrefix(service, dev.rigLabel);
+  dxClient.publish(`gaia/device/${dev.realDeviceId}/command`, JSON.stringify({ action, service: realService }));
 }
 
 function dxSendParam(param, value) {
-  if (!dxClient || !dxClient.connected || !dxActiveId) return;
-  dxClient.publish(`gaia/device/${dxActiveId}/command`, JSON.stringify({ action: 'set', param, value }));
+  const dev = dxActive();
+  if (!dxClient || !dxClient.connected || !dev) return;
+  const realParam = dxRePrefix(param, dev.rigLabel);
+  dxClient.publish(`gaia/device/${dev.realDeviceId}/command`, JSON.stringify({ action: 'set', param: realParam, value }));
 }
 
 function dxPollActive() {
-  if (!dxClient?.connected || !dxActiveId) return;
-  dxClient.publish(`gaia/device/${dxActiveId}/command`, JSON.stringify({ action: 'status', service: '_poll' }));
+  const dev = dxActive();
+  if (!dxClient?.connected || !dev) return;
+  // Per un device multi-rig questo polla il device intero (non solo il
+  // rig della tab attiva) -- innocuo, l'altro rig riceve comunque un
+  // refresh gratis se la sua tab viene aperta subito dopo.
+  dxClient.publish(`gaia/device/${dev.realDeviceId}/command`, JSON.stringify({ action: 'status', service: '_poll' }));
 }
 
 // Stesso trucco di mixeraudio.html: _apply_command() lato TD rifà sempre
@@ -253,7 +286,8 @@ function dxRenderTabs() {
   panel.style.display = '';
   wrap.innerHTML = ids.map(id => {
     const d = dxDevices[id];
-    const label = d.status?.name || d.status?.stanza || id;
+    const base = d.status?.name || d.status?.stanza || d.realDeviceId;
+    const label = d.rigLabel ? `${base} · Rig ${d.rigLabel.toUpperCase()}` : base;
     return `<div class="dmx-tab${id === dxActiveId ? ' active' : ''}" data-tab="${id}">
       <span class="tab-dot"></span>${label}
     </div>`;
@@ -454,7 +488,8 @@ function dxRenderAll() {
     const offline = st._offline;
     badge.className = 'dev-badge ' + (offline ? 'offline' : 'online');
     badge.textContent = offline ? '● offline' : '● online';
-    meta.textContent = `${st.name || dxActiveId} · ip ${st.ip || '?'} · ${st.stanza || '?'}`;
+    const rigSuffix = dev.rigLabel ? ` · Rig ${dev.rigLabel.toUpperCase()}` : '';
+    meta.textContent = `${st.name || dev.realDeviceId} · ip ${st.ip || '?'} · ${st.stanza || '?'}${rigSuffix}`;
     const empty = !Object.keys(st.services || {}).length && !Object.keys(st.params || {}).length;
     if (empty) {
       warn.style.display = '';
@@ -468,28 +503,102 @@ function dxRenderAll() {
 }
 
 // ── Discovery + MQTT ─────────────────────────────────────────────────
+// Un device con "rigs" (schema multi-rig, 2026-08-29) genera UNO scenario
+// per rig; un device col vecchio schema piatto (params/services diretti,
+// niente "rigs") genera UNO scenario che coincide col device stesso --
+// stesso trattamento di sempre, zero regressione per gli scenari vecchi
+// ancora eventualmente in giro.
+// BUG REALE trovato dal vivo col browser vero (2026-08-29, stessa firma
+// già vista e risolta stamattina su patchdeck.html "status arrivato prima
+// della matrice veniva scartato"): le due subscribe (status/matrix) non
+// garantiscono ordine di consegna -- se lo status di un device arriva
+// PRIMA della sua matrice, nessuno scenario esiste ancora per quel
+// device_id e lo status veniva scartato per sempre (i retained si
+// consegnano una sola volta). La pagina restava bloccata su "nessun dato
+// ricevuto" nonostante il device fosse davvero online -- intermittente,
+// dipende dall'ordine di arrivo dei retained in quel preciso avvio.
+// Fix: bufferizzare SEMPRE l'ultimo status grezzo per device_id reale
+// (dxPendingStatus), a prescindere da quali scenari esistano già --
+// applicato subito se possibile, e ri-applicato non appena la matrice
+// mancante arriva (dentro dxRegisterScenario).
+let dxPendingStatus = {};   // realDeviceId -> ultimo payload status grezzo
+
 function dxRegisterMatrix(m) {
-  const id = m.device_id;
-  if (!id) return;
-  const isNew = !dxDevices[id];
-  if (isNew) dxDevices[id] = { order: dxOrder++, status: null, matrix: null };
-  dxDevices[id].matrix = m;
-  if (dxActiveId === null) dxActiveId = id;   // primo scenario scoperto -> attivo di default
-  if (id === dxActiveId) dxPersistPending = false;   // il device ricordato è ricomparso
+  const deviceId = m.device_id;
+  if (!deviceId) return;
+  if (m.rigs && typeof m.rigs === 'object') {
+    for (const [rigLabel, rigMatrix] of Object.entries(m.rigs)) {
+      dxRegisterScenario(`${deviceId}::${rigLabel}`, deviceId, rigLabel, rigMatrix);
+    }
+  } else {
+    dxRegisterScenario(deviceId, deviceId, null, m);
+  }
+}
+
+function dxRegisterScenario(scenarioId, realDeviceId, rigLabel, matrix) {
+  const isNew = !dxDevices[scenarioId];
+  if (isNew) dxDevices[scenarioId] = { order: dxOrder++, status: null, matrix: null, realDeviceId, rigLabel };
+  dxDevices[scenarioId].matrix = matrix;
+  dxDevices[scenarioId].realDeviceId = realDeviceId;
+  dxDevices[scenarioId].rigLabel = rigLabel;
+  if (dxActiveId === null) dxActiveId = scenarioId;   // primo scenario scoperto -> attivo di default
+  if (scenarioId === dxActiveId) dxPersistPending = false;   // lo scenario ricordato è ricomparso
+  // Applica subito uno status già arrivato in precedenza per questo stesso
+  // device_id reale (vedi nota sopra) -- niente attesa del prossimo
+  // heartbeat live, che su un device silenzioso potrebbe non arrivare mai.
+  if (dxPendingStatus[realDeviceId]) dxApplyStatus(dxPendingStatus[realDeviceId]);
   dxRenderTabs();
-  if (id === dxActiveId) dxRenderAll();
+  if (scenarioId === dxActiveId) dxRenderAll();
+}
+
+// Toglie il prefisso di rig da un dict di servizi/parametri (dmx_a_x ->
+// dmx_x) -- l'inverso esatto di dxRePrefix, per riportare lo status
+// "piatto per-device" del canale 4 alla stessa forma "scoped per-rig"
+// usata dalla matrice (vedi nota su dxDevices in cima al file).
+function dxStripPrefix(obj, rigLabel) {
+  const out = {};
+  const prefix = `dmx_${rigLabel}_`;
+  for (const [k, v] of Object.entries(obj || {})) {
+    if (k.startsWith(prefix)) out['dmx_' + k.slice(prefix.length)] = v;
+  }
+  return out;
+}
+
+// Applica un payload status grezzo a TUTTI gli scenari già noti per il suo
+// device_id reale (uno per un device a rig singolo, fino a due per un
+// device multi-rig) -- estratta a parte perché va richiamata sia da un
+// nuovo status in arrivo sia, con lo stesso identico payload, da una
+// matrice che arriva in ritardo su uno status già bufferizzato.
+function dxApplyStatus(d) {
+  const realDeviceId = d.device_id;
+  const scenarioIds = Object.keys(dxDevices).filter(sid => dxDevices[sid].realDeviceId === realDeviceId);
+  if (!scenarioIds.length) return false;   // nessuno scenario noto ancora -- resta solo nel buffer
+  // Usa il ts INCORPORATO nel messaggio, non l'orario di ricezione -- un
+  // retained vecchio di ore/giorni arriva "ora" ma non e' affatto fresco.
+  const lastSeen = d.ts || Date.now();
+  const offline = (Date.now() - lastSeen) > DX_STALE_MS;
+  for (const sid of scenarioIds) {
+    const rigLabel = dxDevices[sid].rigLabel;
+    const scoped = rigLabel
+      ? { ...d, services: dxStripPrefix(d.services, rigLabel), params: dxStripPrefix(d.params, rigLabel) }
+      : d;
+    scoped._lastSeen = lastSeen;
+    scoped._offline = offline;
+    dxDevices[sid].status = scoped;
+  }
+  if (dxActiveId === null && !offline) {
+    dxActiveId = scenarioIds[0];
+    localStorage.setItem('gaiaDmxActiveId', dxActiveId);
+  }
+  dxRenderTabs();   // il nome nella tab può essere cambiato
+  if (scenarioIds.includes(dxActiveId)) dxRenderAll();
+  return true;
 }
 
 function dxRegisterStatus(d) {
-  const id = d.device_id;
-  if (!dxDevices[id]) return;   // status di un device che non ha (ancora) pubblicato dmx_matrix -- non è uno scenario DMX noto, ignorato
-  // Usa il ts INCORPORATO nel messaggio, non l'orario di ricezione -- un
-  // retained vecchio di ore/giorni arriva "ora" ma non e' affatto fresco.
-  d._lastSeen = d.ts || Date.now();
-  d._offline = (Date.now() - d._lastSeen) > DX_STALE_MS;
-  dxDevices[id].status = d;
-  dxRenderTabs();   // il nome nella tab può essere cambiato
-  if (id === dxActiveId) dxRenderAll();
+  if (!d.device_id) return;
+  dxPendingStatus[d.device_id] = d;   // bufferizza SEMPRE, anche se già applicabile
+  dxApplyStatus(d);
 }
 
 function dxInit() {
