@@ -24,6 +24,7 @@ import re
 import socket
 import threading
 import time
+import urllib.request
 
 import websocket
 from pythonosc.udp_client import SimpleUDPClient
@@ -219,6 +220,28 @@ class TDDeviceRegistry:
         "devices/{id}/patchdeck_matrix",
     )
 
+    def _forget_from_registry(self, device_id):
+        """Pulire i retained MQTT non basta: il Device Registry di Node-RED
+        (brain.devices, quello dietro GET /gaia/devices/profiles) è uno
+        stato SEPARATO, popolato via announce/profile — un retained vuoto
+        fallisce il parsing lato Node-RED e viene ignorato in silenzio,
+        quindi il reap qui sopra puliva il broker ma lasciava il device
+        per sempre nel registry (dati sporchi permanenti, trovato dal vivo
+        2026-08-29 dopo una sessione di pulizia manuale). POST /gaia/device/
+        forget (già esistente, usato anche da Admin) chiude il cerchio.
+        Best-effort: se Node-RED è giù in questo momento non deve bloccare
+        né far fallire il reap MQTT, che resta comunque valido da solo."""
+        url = f"http://{config.GAIA_WS_HOST}:{config.GAIA_WS_PORT}/gaia/device/forget"
+        body = json.dumps({"device_id": device_id, "force": True}).encode()
+        req = urllib.request.Request(url, data=body,
+                                      headers={"Content-Type": "application/json"},
+                                      method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                resp.read()
+        except Exception as e:
+            print(f"[TD-Bridge] REAP: forget da Node-RED fallito per {device_id}: {e}")
+
     def _reap_stale(self):
         now = time.time()
         with self._lock:
@@ -232,6 +255,7 @@ class TDDeviceRegistry:
             for suffix in self._REAP_TOPIC_SUFFIXES:
                 self._mqtt.publish(f"gaia/{suffix.format(id=device_id)}",
                                     payload=None, qos=1, retain=True)
+            self._forget_from_registry(device_id)
             with self._lock:
                 self._targets.pop(device_id, None)
             self._alerted_offline.discard(device_id)
