@@ -418,23 +418,39 @@ function drawCore(t) {
     const bR = Math.min(W, H) * (0.10 + life * 0.05);
     const amp = bR * 0.28 * (0.4 + life * 0.6);
 
+    // Ammorbidito su richiesta (2026-08-29): il nucleo, per quanto piccolo,
+    // leggeva troppo "grafico/invadente" -- meno opacità sui tratti, righe
+    // più sottili, sfumatura centrale più ampia e diffusa (niente bordo
+    // netto) per un respiro più emozionale, meno un cerchio disegnato.
     for (let i = 0; i < 4; i++) {
         const ph = (i * Math.PI * 2) / 4;
         const r = bR * (1 + i * 0.62) + amp * Math.sin(t * spd + ph);
-        const a = (0.34 - i * 0.07) * (0.6 + 0.4 * Math.sin(t * spd * 0.5 + ph));
+        const a = (0.19 - i * 0.04) * (0.6 + 0.4 * Math.sin(t * spd * 0.5 + ph));
         ctx.beginPath();
         ctx.arc(cx, cy, Math.max(r, 4), 0, Math.PI * 2);
         ctx.strokeStyle = `rgba(${hue},${a})`;
-        ctx.lineWidth = isL ? 2.4 : 1.6;
+        ctx.lineWidth = isL ? 1.7 : 1.0;
         ctx.stroke();
     }
-    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, bR * 0.5);
-    g.addColorStop(0, `rgba(${hue},.55)`);
+    // Disco centrale in blending NORMALE, non 'lighter' come il resto della
+    // scena (drawCore viene chiamato dentro un blocco 'lighter', vedi il
+    // loop principale) -- additivo + stesso punto ogni frame vuol dire che
+    // qualunque alpha, ripetuta abbastanza, satura verso il bianco pieno:
+    // e' la vera causa per cui il nucleo leggeva "acceso" anche dopo aver
+    // abbassato i valori sopra. Isolandolo in source-over, il livello di
+    // trasparenza visibile e' quello impostato qui, non quello che decide
+    // l'accumulo frame-su-frame.
+    const prevOp = ctx.globalCompositeOperation;
+    ctx.globalCompositeOperation = 'source-over';
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, bR * 0.7);
+    g.addColorStop(0, `rgba(${hue},.22)`);
+    g.addColorStop(0.55, `rgba(${hue},.08)`);
     g.addColorStop(1, `rgba(${hue},0)`);
     ctx.fillStyle = g;
     ctx.beginPath();
-    ctx.arc(cx, cy, bR * 0.5, 0, Math.PI * 2);
+    ctx.arc(cx, cy, bR * 0.7, 0, Math.PI * 2);
     ctx.fill();
+    ctx.globalCompositeOperation = prevOp;
     return { cx, cy, bR };
 }
 
