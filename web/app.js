@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 // =====================================================
 // SCENA ONIRICA AVANZATA (METEO SENSORIALE + RPG CLIMATE)
@@ -17,6 +18,25 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.2;
 document.body.appendChild(renderer.domElement);
+
+// Controllo camera col mouse (2026-08-29, richiesto esplicitamente):
+// prima la camera oscillava solo in automatico attorno al centro, senza
+// modo di ruotare a mano -- una stanza attiva col grafo compresso ma
+// posizionata "dietro" (rispetto all'oscillazione automatica, che copre
+// solo un arco stretto) restava comunque fuori vista senza un modo per
+// girarsi a guardarla. Drag = ruota, rotellina = zoom, resta autoRotate
+// leggero quando l'utente non tocca nulla (stesso "respiro" di prima,
+// ma l'utente può sempre prendere il controllo).
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0.6, 0);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.35;
+controls.minDistance = 3;
+controls.maxDistance = 20;
+controls.maxPolarAngle = Math.PI * 0.55; // non scendere sotto il piano/griglia
+controls.update();
 
 // =====================================================
 // LUCI CINETICHE
@@ -898,10 +918,12 @@ function animate() {
     }
     gestureParticles.geometry.attributes.position.needsUpdate = true;
 
-    // 8. Regia Automatica Cinematica
-    camera.position.x = Math.sin(elapsedTime * 0.06) * 1.8;
-    camera.position.z = 7.0 + Math.cos(elapsedTime * 0.04) * 0.8;
-    camera.lookAt(0, 0.6, 0);
+    // 8. Regia camera -- prima oscillazione automatica fissa (sin/cos su
+    // x/z, lookAt fisso), sostituita da OrbitControls (vedi init sopra):
+    // autoRotate dà lo stesso "respiro" quando l'utente non tocca nulla,
+    // ma ora il drag del mouse prende il sopravvento per davvero, invece
+    // di essere sovrascritto ad ogni frame da questa assegnazione diretta.
+    controls.update();
 
     // HUD ogni frame (non solo ai messaggi WS) — serve per la dissolvenza
     // morbida tra pensiero e sogno guidata da dreamIntensity
