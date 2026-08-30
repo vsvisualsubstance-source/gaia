@@ -450,7 +450,17 @@ function computeRoomLayout(graph) {
                 const ang = depth === 1
                     ? idx * (Math.PI * 2 / kids.length) - Math.PI / 2
                     : pAng + (idx - (kids.length - 1) / 2) * 0.55;
-                const r = depth * 2.7;
+                // Prima cresceva linearmente senza limite (depth * 2.7) -- una
+                // stanza a 2-3 salti dall'hub nel grafo finiva ben oltre gli
+                // anelli decorativi (raggio max ~4.2), quasi fuori
+                // dall'inquadratura della telecamera (fissa vicino al centro,
+                // vedi camera.position). Segnalato dal vivo: "stanza attiva
+                // lontana, in fondo, dietro l'anello più grande". Radice
+                // quadrata invece che lineare: cresce ancora con la
+                // profondità (l'ordine relativo resta leggibile) ma resta
+                // compressa in un raggio che sta dentro l'inquadratura anche
+                // per grafi profondi.
+                const r = 2.2 + Math.sqrt(depth) * 1.8;
                 pos[k] = { x: Math.cos(ang) * r, z: Math.sin(ang) * r };
             });
         });
@@ -529,11 +539,17 @@ function updateYOLOObjects() {
             if (count === 0) return;
             const id = `${room.id}_${objName}`; activeIds.add(id);
             if (!yoloObjects.has(id)) {
+                // Ingranditi (2026-08-29, segnalato dal vivo insieme al
+                // raggio delle stanze sopra): a distanza reale dalla
+                // telecamera questi oggetti erano troppo piccoli per
+                // leggersi come "qualcosa che si costruisce", specialmente
+                // per una stanza che con la nuova compressione del raggio
+                // resta comunque un po' più lontana delle altre.
                 let geo;
-                if(['chair', 'couch'].includes(objName)) geo = new THREE.BoxGeometry(0.18, 0.18, 0.18);
-                else if(objName === 'bed') geo = new THREE.BoxGeometry(0.4, 0.1, 0.25);
-                else if(['laptop', 'computer'].includes(objName)) geo = new THREE.BoxGeometry(0.15, 0.03, 0.1);
-                else geo = new THREE.SphereGeometry(0.08, 4, 4);
+                if(['chair', 'couch'].includes(objName)) geo = new THREE.BoxGeometry(0.28, 0.28, 0.28);
+                else if(objName === 'bed') geo = new THREE.BoxGeometry(0.55, 0.15, 0.35);
+                else if(['laptop', 'computer'].includes(objName)) geo = new THREE.BoxGeometry(0.22, 0.05, 0.15);
+                else geo = new THREE.SphereGeometry(0.13, 6, 6);
                 const mat = new THREE.MeshStandardMaterial({ roughness: 0.4, transparent: true, opacity: 0.6, wireframe: true });
                 const mesh = new THREE.Mesh(geo, mat);
                 mesh.userData = { offsetX: (Math.random() - 0.5) * 0.6, offsetZ: (Math.random() - 0.5) * 0.6, targetColor: new THREE.Color() };
