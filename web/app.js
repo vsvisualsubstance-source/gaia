@@ -228,6 +228,7 @@ const lightGems = new Map();
 const shadowFigures = new Map();
 const roomMarkers = new Map();
 const yoloObjects = new Map();
+const tdDeviceMeshes = new Map();
 
 // Particelle per i Gesti di MediaPipe
 let gestureParticles;
@@ -621,6 +622,55 @@ function updateYOLOObjects() {
     }
 }
 
+// Agent TD visibili come oggetti nella loro stanza (2026-08-30, richiesto
+// esplicitamente): stesso pattern di updateYOLOObjects() sopra -- una forma
+// per famiglia (sfera PatchDeck, cubo DMX, cono generico), offset casuale
+// per non sovrapporsi quando una stanza ha più device (es. "studio" ne ha
+// 3), grigio/trasparente se offline. room.tdDevices arriva già pronto da
+// ThreeViewEngineGAME (id/ip/online/family/name per stanza).
+function updateTDDevices() {
+    const visionData = state.vision; if (!visionData || !visionData.rooms) return;
+    const activeIds = new Set();
+    visionData.rooms.forEach((room) => {
+        (room.tdDevices || []).forEach((td) => {
+            const id = td.id; activeIds.add(id);
+            const fam = (td.family || '').toLowerCase();
+            if (!tdDeviceMeshes.has(id)) {
+                let geo;
+                if (fam === 'patchdeck') geo = new THREE.SphereGeometry(0.16, 10, 10);
+                else if (fam === 'dmx') geo = new THREE.BoxGeometry(0.24, 0.24, 0.24);
+                else geo = new THREE.ConeGeometry(0.16, 0.32, 6);
+                const mat = new THREE.MeshStandardMaterial({ roughness: 0.3, metalness: 0.6, transparent: true, opacity: 0.85 });
+                const mesh = new THREE.Mesh(geo, mat);
+                const lbl = _makeRoomLabel(td.name || id);
+                lbl.scale.set(1.0, 0.2, 1);
+                lbl.position.set(0, 0.32, 0);
+                mesh.add(lbl);
+                mesh.userData = {
+                    offsetX: (Math.random() - 0.5) * 0.9,
+                    offsetZ: (Math.random() - 0.5) * 0.9,
+                    targetColor: new THREE.Color()
+                };
+                scene.add(mesh); tdDeviceMeshes.set(id, mesh);
+            }
+            const mesh = tdDeviceMeshes.get(id);
+            const roomPos = roomMarkers.get(room.id);
+            if (roomPos) mesh.position.set(roomPos.position.x + mesh.userData.offsetX, 0.3, roomPos.position.z + mesh.userData.offsetZ);
+
+            let colorHex = 0x556688; // offline/sconosciuto
+            if (td.online) {
+                const pal = dmxPaletteColor(room.dmxPaletteA);
+                colorHex = pal !== null ? pal : (fam === 'patchdeck' ? 0x00ffcc : fam === 'dmx' ? 0xffaa22 : 0x4488ff);
+            }
+            mesh.userData.targetColor.setHex(colorHex);
+            mesh.material.opacity = td.online ? 0.85 : 0.25;
+        });
+    });
+    for (const [id, mesh] of tdDeviceMeshes) {
+        if (!activeIds.has(id)) { scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose(); tdDeviceMeshes.delete(id); }
+    }
+}
+
 // =====================================================
 // HUD OVERLAY CYBERPUNK (AGGIORNATO CON RIGHE STATS RPG)
 // =====================================================
@@ -783,6 +833,7 @@ function connectWebSocket() {
             updateShadows();
             updateRoomMarkers();
             updateYOLOObjects();
+            updateTDDevices();
 
             // Eventi clip PatchDeck: burst dorato nella stanza del deck
             // invece di una riga di diario testuale (index.html deve
@@ -970,6 +1021,7 @@ function animate() {
         marker.scale.set(ts, ts, 1); marker.rotation.z += 0.002;
     }
     for (const mesh of yoloObjects.values()) { if(mesh.userData.targetColor) mesh.material.color.lerp(mesh.userData.targetColor, lFactor); mesh.rotation.y += 0.01; }
+    for (const mesh of tdDeviceMeshes.values()) { mesh.material.color.lerp(mesh.userData.targetColor, lFactor); mesh.rotation.y += 0.008; }
 
     // 7. Particelle Gestuali MediaPipe
     const gPositions = gestureParticles.geometry.attributes.position.array;
