@@ -97,7 +97,7 @@ h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;color:var(--mut
 
 <div class="bottom">
   <div class="card"><h2 style="margin-top:0">Le vie dell'anima</h2><div id="arch"></div></div>
-  <div class="card"><h2 style="margin-top:0">Diario delle imprese</h2><ul class="diary" id="diary"></ul></div>
+  <div class="card" id="diary-card"><h2 style="margin-top:0">Diario delle imprese</h2><ul class="diary" id="diary"></ul></div>
 </div>
 
 <details class="card" style="margin-top:14px">
@@ -254,6 +254,23 @@ function renderArch(d){
 }
 
 // ── Diario delle imprese (eventi → linguaggio di gioco) ────────────────────
+// Toggle da Admin -> Automazioni ("Gioco -- mostra il diario testuale"),
+// stesso pannello generico già usato per il resto (nessuna UI nuova serve
+// lì) -- letto una volta al caricamento, non via WS: è una preferenza di
+// visualizzazione rara da cambiare, non uno stato che deve arrivare in
+// tempo reale. feedDiary() continua comunque ad accumulare eventi anche a
+// card nascosta, così riattivandola i dati sono già pronti.
+let _showDiaryText = true;
+(async () => {
+  try {
+    const r = await fetch('/gaia/automations', {signal: AbortSignal.timeout(3000)});
+    const d = await r.json();
+    const a = (d.automations || []).find(x => x.id === 'gameDiaryText');
+    _showDiaryText = a ? a.enabled !== false : true;
+  } catch { _showDiaryText = true; }
+  document.getElementById('diary-card').style.display = _showDiaryText ? '' : 'none';
+})();
+
 const _diary = [];        // {ts, html} — accumulato lato client
 let _lastEvTs = 0, _lastVoiceTs = 0, _lastThought = '';
 
