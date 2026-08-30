@@ -459,7 +459,15 @@ function computeRoomLayout(graph) {
     if (!nodes.length) return null;
     let hub = nodes[0], best = -1;
     nodes.forEach(n => { const d = (graph[n] || []).length; if (d > best) { best = d; hub = n; } });
-    const pos = { [hub]: { x: 0, z: 0 } };
+    // L'hub non sta più nell'origine (2026-08-30, richiesto esplicitamente):
+    // (0,0) è il posto del cuore/nucleo, non di una stanza -- in un layout
+    // circolare non ha senso che una stanza reale coincida col centro
+    // simbolico. Stesso raggio base (2.2) da cui parte l'anello di depth 1,
+    // così l'hub diventa il primo "anello interno" invece di un caso
+    // speciale a parte -- angolo fisso, qualunque direzione va bene per un
+    // solo punto.
+    const HUB_RADIUS = 2.2;
+    const pos = { [hub]: { x: HUB_RADIUS, z: 0 } };
     const visited = new Set([hub]);
     let frontier = [hub], depth = 0;
     while (frontier.length && depth < 6) {
