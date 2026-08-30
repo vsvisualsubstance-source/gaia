@@ -119,9 +119,15 @@ del motore (regole XP, curva livelli, Engine Tick 3s, verifica eseguita):
 tutto (HUD, VFX level-up, colori per classe) e ora riceve dati veri; la dashboard ha la
 card "🎮 Progressione RPG".
 
+`game.html` (nav "Gioco") è la superficie di gioco dedicata: eroe, mappa a
+biomi delle stanze, diario delle imprese. Dal 2026-08-29/30 le stanze con
+un Agent TouchDesigner diventano biomi "Sala macchine" (palette DMX come
+mood, kick audio come pulsazione, clip PatchDeck nel diario) — stessi dati
+portati anche nella scena 3D `index.html`/`app.js` (tinta stanza, mesh per
+device, burst su clip). Dettagli completi in `docs/rpg-engine.md`.
+
 **Roadmap rimanente:**
-1. **Superficie di gioco** dedicata nel portal (oltre alla scena 3D esistente).
-2. **Multisensoriale**: level-up → scene luci OpenHAB (`MoodSceneSync`), preset TouchDesigner.
+1. **Multisensoriale**: level-up → scene luci OpenHAB (`MoodSceneSync`), preset TouchDesigner.
 3. **Asset 3D reali** per i nomi riservati in `ASSET_ORDER` (rune_circle, glyph_trail…).
 4. **Vocabolario Asemico v5**: glifi come rune di gioco (`docs/vocabolario-asemico.md`).
 5. **Bilanciamento** XP/cooldown dopo giorni di uso reale.

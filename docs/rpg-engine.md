@@ -96,6 +96,55 @@ war per stanze del roomGraph senza sensori, barre archetipi, **diario delle
 imprese** (eventi → linguaggio di gioco). Guardia innerHTML-se-cambia (WS a
 rate alto). Nessun nodo Node-RED nuovo: consuma il payload esistente.
 
+## Sala macchine — biomi TouchDesigner (2026-08-29/30)
+
+Una stanza con un Agent TD registrato (`brain.rooms[stanza]._touchdesigner`,
+popolato da `td_room_presence_fn`, Node-RED) diventa un bioma "Sala
+macchine" invece del solito bioma ambientale — vedi `biomeKind()` in
+game.html, controllato per primo. Estensioni sullo stesso canale
+(nessun nodo Node-RED nuovo oltre a `td_room_presence_fn`/`td_audio_fn`):
+- **Palette DMX come mood del bioma**: `room.dmxPaletteA` (letto da
+  `p.params.dmx_a_palette` sullo status del device DMX) colora bordo/glow
+  della card bioma (`DMX_PALETTE_COLORS` in game.html).
+- **Kick audio come pulsazione**: `room.audioKick` (da `gaia/device/+/
+  audio_levels`, 1Hz, via `td_audio_fn` — non retained, richiede
+  `brain._tdDeviceRoom[device_id]` per risolvere la stanza) fa pulsare
+  bioma+eroe (`.biome-kick`/`.hero-kick`, CSS keyframes).
+- **Clip PatchDeck nel diario**: un `load_x{N}_{a|b}` che passa a "active"
+  genera un evento `category:'clip'` (confronto contro l'ultimo stato
+  servizi noto per device_id, non contro tutta la storia).
+
+**Stessi dati portati anche in `index.html`/`app.js`** (2026-08-30,
+esplicitamente richiesto — l'utente guarda quella pagina, non game.html):
+l'anello della stanza prende il colore della palette invece del generico
+colore-attività, un kick pulsa scala/opacità del marker, un evento clip
+genera un burst dorato di particelle (riuso di `triggerGestureBurst`, già
+usata per i gesti MediaPipe) — niente testo, index.html resta solo-visuale
+per design (vedi toggle `visualHud`). Ogni Agent TD registrato in una
+stanza compare anche come mesh distinta (sfera PatchDeck, cubo DMX, cono
+generico) con etichetta nome, tinta dalla palette se online — dato
+`room.tdDevices` (id/ip/online/family/name) già calcolato da
+`ThreeViewEngineGAME`, family/name presi da una cache popolata da
+`td_room_presence_fn` (`brain._tdDeviceFamily`/`_tdDeviceName`) perché
+`brain.devices` non li porta.
+
+**Finestra eventi**: `recentEvents` (Node-RED, `ThreeViewEngineGAME`) era
+`.slice(-30)` — con qualcuno in casa vision/mediapipe generano un evento
+ogni 100-300ms, quindi un evento raro come un clip PatchDeck spariva dal
+diario entro pochi secondi. Allargata a `.slice(-150)`.
+
+**Gotcha device TD "zombie"**: dopo una migrazione/rinomina lato TD (es.
+passaggio ad Agent unico multi-rig, 2026-08-29), le vecchie istanze
+(`PatchDeck-Mac-Mauro`, `PatchDeck-DMX`, `DMX-OPS` vecchio,
+`td-controllerv7-macbook-air-di-mauro`, ecc.) possono restare vive sul lato
+TD e ripubblicare periodicamente con stanza vecchia/sbagliata (`Test`,
+`ConsolleDmx`, `unknown`), ricreando "stanze fantasma" anche dopo un
+`/gaia/device/forget`. Il forget è solo un purge temporaneo: il fix vero è
+fermare/rinominare l'istanza vecchia lato TD. Nel farne pulizia trovato e
+corretto anche un bug reale in `rooms_clean_fn`: confrontava sempre nomi
+stanza lowercased contro chiavi `brain.rooms` non garantite lowercase
+(quindi `cleaned:[]` silenzioso su stanze tipo "Test"/"ConsolleDmx").
+
 ## Tap Switch — i riti (2026-07-17)
 
 Hue Tap (4 bottoni fisici, stato in `Hue_tap_switch_1_Stato_interruttore_a_pulsante`,

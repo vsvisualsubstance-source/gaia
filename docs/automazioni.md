@@ -8,7 +8,12 @@ l'audit di cosa esiste davvero.
 ## Sistema di toggle ufficiale (Node-RED `AutomationsList`/`ToggleAutomation`, tab Device Registry)
 
 `GET /gaia/automations` + `POST /gaia/automations/toggle` — **è il pannello "Automazioni" reale
-in admin.html**, verificato funzionante end-to-end. Espone 11 automazioni:
+in admin.html**, verificato funzionante end-to-end.
+
+> Tabella non più allineata al codice (`automations_fn_get` in
+> `node-red/flows.json` ha anche `touchdesignerMood`, `gaiaVjDmx`,
+> `gaiaVjPatchdeck`, non elencati qui — drift preesistente, non risolto in
+> questo aggiornamento). Aggiunte solo le due righe 2026-08-29/30:
 
 | id | Scope | Default | Cosa fa |
 |---|---|---|---|
@@ -23,6 +28,8 @@ in admin.html**, verificato funzionante end-to-end. Espone 11 automazioni:
 | `welcomeScene` | globale | **OFF** | Persona nota rientra la sera (dopo le 20 o prima delle 6) → accende luce ingresso, cooldown 2h/persona |
 | `touchdesignerLighting` | globale | **OFF** | Vedi sotto — luci pilotate da parametri generati in TouchDesigner |
 | `voiceAutoEnroll` | globale | **OFF** (attivato e verificato dal vivo 2026-07-04) | Doppia conferma vocale + auto-enrollment — vedi sezione dedicata sotto |
+| `gameDiaryText` | globale | **ON** | Mostra/nasconde la card diario testuale in `game.html` — vedi `docs/rpg-engine.md` |
+| `visualHud` | globale | **ON** | Mostra/nasconde l'HUD testuale sovrapposto alla scena 3D in `index.html` |
 
 ## Doppia conferma vocale + auto-enrollment (2026-07-04)
 
