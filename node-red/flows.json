@@ -6665,5 +6665,97 @@
         "wires": [
             []
         ]
+    },
+    {
+        "id": "quiethours_http_get",
+        "type": "http in",
+        "z": "tab_device_registry",
+        "name": "GET /gaia/quiethours",
+        "url": "/gaia/quiethours",
+        "method": "get",
+        "x": 950,
+        "y": 530,
+        "wires": [
+            [
+                "quiethours_fn_get"
+            ]
+        ]
+    },
+    {
+        "id": "quiethours_fn_get",
+        "type": "function",
+        "z": "tab_device_registry",
+        "name": "GetQuietHours",
+        "func": "// GET /gaia/quiethours -> ore di silenzio attive (start/end, 0-23)\nconst brain = global.get('gaiaBrain') || {};\nconst q = (brain.settings && brain.settings.quietHours) || { start: 23, end: 8 };\nmsg.payload = { start: q.start, end: q.end };\nmsg.statusCode = 200;\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1170,
+        "y": 530,
+        "wires": [
+            [
+                "quiethours_http_get_response"
+            ]
+        ]
+    },
+    {
+        "id": "quiethours_http_get_response",
+        "type": "http response",
+        "z": "tab_device_registry",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 1400,
+        "y": 530,
+        "wires": []
+    },
+    {
+        "id": "quiethours_http_set",
+        "type": "http in",
+        "z": "tab_device_registry",
+        "name": "POST /gaia/quiethours/set",
+        "url": "/gaia/quiethours/set",
+        "method": "post",
+        "x": 950,
+        "y": 580,
+        "wires": [
+            [
+                "quiethours_fn_set"
+            ]
+        ]
+    },
+    {
+        "id": "quiethours_fn_set",
+        "type": "function",
+        "z": "tab_device_registry",
+        "name": "SetQuietHours",
+        "func": "// POST /gaia/quiethours/set {start, end} -- ore 0-23, avvolgimento gestito\n// gia' dal consumer (TTS Queue Manager: start > end => notte a cavallo)\nconst body = msg.payload || {};\nconst start = parseInt(body.start, 10);\nconst end = parseInt(body.end, 10);\n\nif (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || start > 23 || end < 0 || end > 23) {\n    msg.statusCode = 400;\n    msg.payload = { ok: false, error: 'ore non valide (0-23)' };\n    return msg;\n}\n\nlet brain = global.get('gaiaBrain') || {};\nbrain.settings = brain.settings || {};\nbrain.settings.quietHours = { start, end };\nglobal.set('gaiaBrain', brain);\nnode.warn(`[QuietHours] silenzio ${start}-${end}`);\n\nmsg.statusCode = 200;\nmsg.payload = { ok: true, start, end };\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1170,
+        "y": 580,
+        "wires": [
+            [
+                "quiethours_http_set_response"
+            ]
+        ]
+    },
+    {
+        "id": "quiethours_http_set_response",
+        "type": "http response",
+        "z": "tab_device_registry",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 1400,
+        "y": 580,
+        "wires": []
     }
 ]

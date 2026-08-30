@@ -619,6 +619,25 @@ button.small{padding:3px 9px;font-size:.78rem;margin:0}
     <div id="register-msg" class="msg"></div>
   </div>
 
+  <div class="card">
+    <h2>Ore di silenzio</h2>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:10px">
+      In questa fascia oraria i pensieri spontanei restano visibili (dashboard, Telegram) ma Gaia non
+      li dice a voce (né sugli Echo). Utile per la notte — se lavori spesso presto la mattina, alza
+      l'ora di fine.
+    </p>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <label style="font-size:.82rem;color:var(--muted)">Da
+        <input type="number" id="quiet-start" min="0" max="23" style="width:60px;padding:6px;margin:0 4px">
+      </label>
+      <label style="font-size:.82rem;color:var(--muted)">a
+        <input type="number" id="quiet-end" min="0" max="23" style="width:60px;padding:6px;margin:0 4px">
+      </label>
+      <button onclick="saveQuietHours()">Salva</button>
+    </div>
+    <div id="quiet-msg" class="msg"></div>
+  </div>
+
   <!-- ── Sezione: Automazioni ──────────────────────────────────────────── -->
   <div class="section-hdr"><span>Automazioni</span><div></div></div>
 
@@ -1363,6 +1382,40 @@ async function setRegister(register) {
   }
 }
 
+async function loadQuietHours() {
+  try {
+    const r = await fetch(`${NODERED_API}/gaia/quiethours`, {signal: AbortSignal.timeout(3000)});
+    if (!r.ok) throw new Error();
+    const d = await r.json();
+    document.getElementById('quiet-start').value = d.start;
+    document.getElementById('quiet-end').value = d.end;
+  } catch {
+    setMsg('quiet-msg', 'Errore di connessione', 'err');
+  }
+}
+
+async function saveQuietHours() {
+  const start = parseInt(document.getElementById('quiet-start').value, 10);
+  const end = parseInt(document.getElementById('quiet-end').value, 10);
+  if (isNaN(start) || isNaN(end) || start < 0 || start > 23 || end < 0 || end > 23) {
+    setMsg('quiet-msg', '✗ Ore non valide (0-23)', 'err');
+    return;
+  }
+  try {
+    const r = await fetch(`${NODERED_API}/gaia/quiethours/set`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({start, end})
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'errore sconosciuto');
+    setMsg('quiet-msg', `✓ Silenzio dalle ${start} alle ${end}`, 'ok');
+  } catch (e) {
+    setMsg('quiet-msg', `✗ Errore nel salvare: ${e.message || e}`, 'err');
+    loadQuietHours();
+  }
+}
+
 // ── Preview webcam per enrollment volto ────────────────────────────────────
 let _faceStream = null;
 
@@ -1988,6 +2041,7 @@ setInterval(refreshDoorbellStatus, 5000);
 
 loadAutomations();
 loadRegister();
+loadQuietHours();
 
 poll();
 
