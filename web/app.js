@@ -521,6 +521,37 @@ function _makeRoomLabel(name) {
     return sprite;
 }
 
+// Etichetta stanza (nome, statica) sopra + una seconda sprite piccola,
+// AGGIORNABILE, per temp/luce/oscurità (2026-08-30, richiesto esplicitamente
+// -- questi dati sono già in room.temperature/ambient_light/darkness dal
+// payload esistente, HUE_SENSOR_ROOMS lato Node-RED, mancava solo il
+// rendering qui). Canvas ridisegnato solo se il testo cambia davvero
+// (dirty-check, stesso principio già in uso altrove nel progetto per non
+// sprecare ridisegni ad ogni tick WS).
+function _makeStatsSprite() {
+    const cv = document.createElement('canvas');
+    cv.width = 256; cv.height = 40;
+    const ctx = cv.getContext('2d');
+    const tex = new THREE.CanvasTexture(cv);
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0.6, depthWrite: false }));
+    sprite.scale.set(1.3, 0.2, 1);
+    sprite.visible = false;
+    return { sprite, ctx, canvas: cv, texture: tex, lastKey: '' };
+}
+function _updateStatsSprite(stats, text) {
+    if (!stats || text === stats.lastKey) return;
+    stats.lastKey = text;
+    stats.sprite.visible = !!text;
+    if (!text) return;
+    const ctx = stats.ctx;
+    ctx.clearRect(0, 0, stats.canvas.width, stats.canvas.height);
+    ctx.font = '500 20px Segoe UI, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(148,179,253,0.8)';
+    ctx.fillText(text, 128, 26);
+    stats.texture.needsUpdate = true;
+}
+
 function updateRoomMarkers() {
     const layout = computeRoomLayout(state.roomGraph);
     const liveRooms = new Map(((state.vision && state.vision.rooms) || []).map(r => [r.id, r]));
@@ -536,6 +567,10 @@ function updateRoomMarkers() {
             const lbl = _makeRoomLabel(id);
             lbl.position.set(0, 0.55, 0);
             marker.add(lbl);
+            const stats = _makeStatsSprite();
+            stats.sprite.position.set(0, 0.42, 0);
+            marker.add(stats.sprite);
+            marker.userData.stats = stats;
             scene.add(marker); roomMarkers.set(id, marker);
         }
         const p = layout && layout[id];
@@ -575,11 +610,19 @@ function updateRoomMarkers() {
             if (room.audioKick > 0.5) {
                 marker.userData.kickFlashUntil = performance.now() + 350;
             }
+            // Temp/luce/oscurità per stanza (2026-08-30): dati già nel
+            // payload (HUE_SENSOR_ROOMS), qui solo il rendering.
+            const statParts = [];
+            if (typeof room.temperature === 'number') statParts.push(`${room.temperature.toFixed(1)}°C`);
+            if (typeof room.ambient_light === 'number') statParts.push(`${Math.round(room.ambient_light)} lx`);
+            if (room.darkness) statParts.push('🌙');
+            _updateStatsSprite(marker.userData.stats, statParts.join(' · '));
         } else {
             // stanza nota dal grafo ma senza sensori: presenza spettrale
             marker.material.opacity = 0.12;
             marker.material.color.setHex(0x223344);
             marker.userData.targetScale = 0.6;
+            _updateStatsSprite(marker.userData.stats, '');
         }
         i += 1;
     });
