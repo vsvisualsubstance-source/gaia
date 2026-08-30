@@ -46,6 +46,14 @@ h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;color:var(--mut
 .biome{background:var(--card);border:1px solid var(--border);border-radius:12px;
        padding:14px;position:relative;transition:border-color .4s,box-shadow .4s}
 .biome.alive{border-color:#3a5a40;box-shadow:0 0 14px #33ff8822}
+/* Console TD (DMX/PatchDeck/MixerAudio/Agent Gaia) -- 2026-08-29, stesso
+   riquadro biome ma tema "sala macchine" invece di natura: bordo/glow
+   ciano freddo, sfondo leggermente più scuro/blu invece del card grigio
+   standard, così si legge a colpo d'occhio come tecnico e non fisico. */
+.biome.tech{border-color:#1a4a52;box-shadow:0 0 14px #00ffcc22;
+      background:linear-gradient(135deg,var(--card),#081a1c)}
+.biome.tech .biome-kind{color:var(--cyan)}
+.biome.tech.alive{border-color:#1a5a5a;box-shadow:0 0 16px #00ffcc33}
 .biome-head{display:flex;align-items:center;gap:10px;margin-bottom:8px}
 .biome-name{font-weight:700;font-size:.95rem;text-transform:capitalize}
 .biome-kind{font-size:.7rem;color:var(--gold);letter-spacing:.05em}
@@ -202,6 +210,11 @@ function renderHero(d){
 
 // ── Biomi ──────────────────────────────────────────────────────────────────
 function biomeKind(r, herbRooms){
+  // Console TD (DMX/PatchDeck/MixerAudio/Agent Gaia) -- resa attiva dal
+  // 2026-08-29 via TD Room Presence lato Node-RED (touchdesignerActive).
+  // Controllata per prima: una "stanza" tecnica non ha senso letta come
+  // giardino/focolare/penombra, è un tipo di bioma a parte.
+  if (r.touchdesignerActive)          return ['🎛️','Sala macchine'];
   if (herbRooms.has(r.id))            return ['🌿','Giardino sonoro'];
   if ((r.persons_count||0) > 0)       return ['🔥','Focolare vivo'];
   if (r.darkness)                     return ['🌑','Penombra'];
@@ -224,9 +237,10 @@ function renderBiomes(d){
     if (r.speaking)              stats.push(`🗣 ${escHtml(r.speaking)}`);
     const herb = herbRooms.has(r.id)
       ? `<div class="biome-herb">♪ ${((d.herbarium||{}).notes||[]).filter(n=>n.room===r.id).slice(-6).map(n=>NOTE_WORDS[n.note%12]).join(' ')}</div>` : '';
-    return `<div class="biome${(r.persons_count||0)>0?' alive':''}">
+    const techCls = r.touchdesignerActive ? ' tech' : '';
+    return `<div class="biome${(r.persons_count||0)>0?' alive':''}${techCls}">
       <div class="biome-head">
-        <canvas data-word="${escHtml(r.id)}" data-color="rgba(0,255,204,.75)" data-lw="1.1" width="34" height="28"></canvas>
+        <canvas data-word="${escHtml(r.id)}" data-color="${r.touchdesignerActive?'rgba(0,255,204,.9)':'rgba(0,255,204,.75)'}" data-lw="1.1" width="34" height="28"></canvas>
         <div><div class="biome-name">${escHtml(r.name||r.id)}</div>
         <div class="biome-kind">${ic} ${kind}</div></div>
       </div>
