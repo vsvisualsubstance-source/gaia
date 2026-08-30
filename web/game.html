@@ -5,9 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>GAIA — Il Gioco</title>
 <style>
-:root{--bg:#050810;--card:#0e1221;--border:#1e2840;--accent:#00ffcc;--blue:#58a6ff;
+/* --card/--border alzati (2026-08-29, su segnalazione: oggetti/stanze
+   troppo neri su sfondo nero, quasi invisibili senza lo stato "alive"/
+   "tech" a dargli un glow) -- stesso --bg, ma card e bordo ora hanno
+   abbastanza contrasto da leggersi anche "a riposo", senza dover
+   accendere nulla per vederli. */
+:root{--bg:#050810;--card:#161d36;--border:#2e3a5e;--accent:#00ffcc;--blue:#58a6ff;
       --gold:#ffd65a;--red:#ff5555;--green:#33ff88;--magenta:#ff00ff;--cyan:#00ffff;
-      --text:#c9d1d9;--muted:#6b7a99}
+      --text:#c9d1d9;--muted:#8493b8}
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;
      padding:16px;min-height:100vh}
@@ -44,25 +49,28 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:18px 0 10px}
 .biomes{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
 .biome{background:var(--card);border:1px solid var(--border);border-radius:12px;
-       padding:14px;position:relative;transition:border-color .4s,box-shadow .4s}
+       padding:14px;position:relative;transition:border-color .4s,box-shadow .4s;
+       /* glow ambiente anche "a riposo", non solo su alive/tech -- prima un
+          bioma quieto spariva quasi del tutto nello sfondo (2026-08-29). */
+       box-shadow:0 0 10px rgba(88,166,255,.07)}
 .biome.alive{border-color:#3a5a40;box-shadow:0 0 14px #33ff8822}
 /* Console TD (DMX/PatchDeck/MixerAudio/Agent Gaia) -- 2026-08-29, stesso
    riquadro biome ma tema "sala macchine" invece di natura: bordo/glow
    ciano freddo, sfondo leggermente più scuro/blu invece del card grigio
    standard, così si legge a colpo d'occhio come tecnico e non fisico. */
-.biome.tech{border-color:#1a4a52;box-shadow:0 0 14px #00ffcc22;
-      background:linear-gradient(135deg,var(--card),#081a1c)}
+.biome.tech{border-color:#2a6a72;box-shadow:0 0 14px #00ffcc22;
+      background:linear-gradient(135deg,var(--card),#102a2e)}
 .biome.tech .biome-kind{color:var(--cyan)}
 .biome.tech.alive{border-color:#1a5a5a;box-shadow:0 0 16px #00ffcc33}
 .biome-head{display:flex;align-items:center;gap:10px;margin-bottom:8px}
 .biome-name{font-weight:700;font-size:.95rem;text-transform:capitalize}
 .biome-kind{font-size:.7rem;color:var(--gold);letter-spacing:.05em}
 .biome-stats{display:flex;flex-wrap:wrap;gap:6px;font-size:.74rem;color:var(--muted)}
-.biome-stats span{background:#0a0e1c;border:1px solid var(--border);border-radius:8px;padding:2px 8px}
+.biome-stats span{background:#1c2540;border:1px solid var(--border);border-radius:8px;padding:2px 8px}
 .biome-herb{margin-top:8px;font-size:.72rem;color:var(--green)}
 .fog{display:flex;flex-wrap:wrap;gap:8px}
-.fog-tile{background:#0a0d18;border:1px dashed #1a2135;border-radius:10px;padding:6px 12px;
-      font-size:.72rem;color:#3a4560;text-transform:capitalize}
+.fog-tile{background:#141a2e;border:1px dashed #2e3a5e;border-radius:10px;padding:6px 12px;
+      font-size:.72rem;color:#7181a8;text-transform:capitalize}
 
 /* ── Archetipi + diario ── */
 .bottom{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-top:4px}
