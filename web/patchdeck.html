@@ -233,7 +233,7 @@ function pdRenderDevice() {
   const offline = pdDevice._offline;
   badge.className = 'dev-badge ' + (offline ? 'offline' : 'online');
   badge.textContent = offline ? '● offline' : '● online';
-  meta.textContent = `${pdDevice.name || PD_DEVICE_ID} · ip ${pdDevice.ip || '?'}`;
+  meta.textContent = `${pdDevice.name || PD_DEVICE_ID} · stanza ${pdDevice.stanza || '?'} · ip ${pdDevice.ip || '?'}`;
   pdRenderDeckState('a');
   pdRenderDeckState('b');
   pdRenderGrid('a');

@@ -163,7 +163,7 @@ class _MocapTargetRegistry:
         last_seen = raw_ts / 1000 if isinstance(raw_ts, (int, float)) and raw_ts > 0 else time.time()
         self._targets[td_id] = {
             'ip': ip, 'name': d.get('name') or td_id, 'stanza': d.get('stanza'),
-            'enabled': enabled, 'last_seen': last_seen,
+            'family': d.get('family'), 'enabled': enabled, 'last_seen': last_seen,
         }
         return is_new
 

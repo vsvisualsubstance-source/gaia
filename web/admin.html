@@ -2174,18 +2174,19 @@ const _pmDevices = {};
 // mixeraudio.html, dmx.html) -- niente box generico in Pi Devices:
 // PatchDeck ha 78 servizi, ControllerV7 588 parametri e DMX 25 per
 // scenario (register_param, non renderizzati affatto dalla griglia
-// servizi generica), sarebbero muri illeggibili o incompleti.
-// DMX e' MULTI-scenario (td-dmx.1, td-dmx.1-b, td-dmxV8, td-dmxV8.1,
-// td-dmxV8.2, ecc. -- scoperti dal vivo da dmx.html, non un elenco
-// fisso) -- un Set con un solo device_id fisso ('td-dmx.1') lasciava
-// filtrare tutti gli scenari successivi, trovato dal vivo 2026-08-25.
-// Match per prefisso invece di elenco esatto.
-const PD_HIDDEN_IDS = new Set(['PatchDeck-Mac-Mauro', 'td-controllerv7-macbook-air-di-mauro']);
-// Deviceid vecchio ('td-MacBook-Air-di-Mauro.local') sostituito col nuovo
-// dopo la migrazione all'Agent universale (2026-08-28) -- l'elenco qui
-// andava aggiornato a mano, non c'e' scoperta automatica per questo Set.
-function pmIsHiddenFromGrid(id) {
-  return PD_HIDDEN_IDS.has(id) || /^td-dmx/i.test(id);
+// servizi generica), sarebbero muri illeggibili o incompleti -- hanno
+// pagine dedicate (patchdeck/mixeraudio/dmx.html).
+// STORIA (2026-08-25 → 2026-08-30): prima un Set di device_id fissi
+// (rotto ad ogni rename TD, trovato marcio più volte: 2026-08-25 con
+// DMX multi-scenario, 2026-08-30 con l'intera flotta rinominata per la
+// nuova convenzione td-{family}-{macchina}) + una regex `/^td-dmx/i`
+// come pezza. Sostituito con un check STRUTTURALE sul `role` del
+// payload stesso -- ogni device TD lo pubblica sempre, a differenza del
+// device_id che può cambiare in qualunque momento (i device TD si
+// spostano di stanza/vengono rinominati liberamente, letto dal vivo dal
+// payload, mai assunto fisso). Nessuna lista da mantenere mai più.
+function pmIsHiddenFromGrid(d) {
+  return d && d.role === 'touchdesigner';
 }
 const PM_SVC_META = {
   yolo:      { label: 'YOLO',      icon: '👁️' },
@@ -2341,7 +2342,7 @@ function initPiManager() {
         const d = JSON.parse(raw.toString());
         const id = d.device_id;
         if (!id) return;
-        if (pmIsHiddenFromGrid(id)) {
+        if (pmIsHiddenFromGrid(d)) {
           const stale = document.getElementById(`pm-card-${id}`);
           if (stale) stale.remove();
           return;
@@ -2430,15 +2431,21 @@ function pmTdToggle(deviceId, action) {
 const _pmMocapBySender = {};   // sender_device_id -> {td_device_id: {ip,name,stanza,enabled,offline}}
 
 // Il mocap ha senso solo per istanze TD che RENDERIZZANO qualcosa che
-// reagisce al corpo (Gaia TD generica, PatchDeck) -- ControllerV7 (audio)
-// e DMX (luci, N scenari td-dmx*) non lo usano mai, per design (confermato
+// reagisce al corpo (Gaia TD generica, PatchDeck) -- ControllerV7/
+// mixeraudio (audio) e DMX (luci) non lo usano mai, per design (confermato
 // dall'utente 2026-08-25). Il registry lato mediapipe_node.py li registra
 // comunque (qualunque role=="touchdesigner", nessun filtro per capability
 // oggi) -- filtrato qui solo per non offrirli come opt-in inutile/confuso,
 // non cambia cosa viene davvero inviato (di default enabled=false per
 // chiunque non sia sulla stessa macchina, quindi non riceverebbero nulla
 // comunque finché non abilitati a mano).
-function pmMocapIsRelevant(id) {
+// Prima un controllo sul device_id (rotto al primo rename, stesso motivo
+// di pmIsHiddenFromGrid sopra) -- ora legge `family` (aggiunto al target
+// da mediapipe_node.py 2026-08-30), letto dal vivo invece che dedotto dal
+// nome. Fallback sul vecchio pattern finché i Pi/OPS non hanno ricevuto
+// l'aggiornamento e riavviato mediapipe (family manca nei target vecchi).
+function pmMocapIsRelevant(id, family) {
+  if (family) return family !== 'mixeraudio' && family !== 'dmx';
   return id !== 'td-controllerv7-macbook-air-di-mauro' && !/^td-dmx/i.test(id);
 }
 
@@ -2448,7 +2455,7 @@ function pmMocapRender() {
   const rows = [];
   for (const [sender, targets] of Object.entries(_pmMocapBySender)) {
     for (const [id, t] of Object.entries(targets || {})) {
-      if (t.offline || !pmMocapIsRelevant(id)) continue;   // offline tolto dalla vista, non-visuale escluso dall'opt-in
+      if (t.offline || !pmMocapIsRelevant(id, t.family)) continue;   // offline tolto dalla vista, non-visuale escluso dall'opt-in
       rows.push({ sender, id, ...t });
     }
   }
@@ -2605,7 +2612,7 @@ function pmApplyCardVisibility(id, d) {
 
 function pmRenderOfflineCount() {
   const el = document.getElementById('pm-offline-count');
-  const n = Object.values(_pmDevices).filter(d => d._offline && !pmIsHiddenFromGrid(d.device_id)).length;
+  const n = Object.values(_pmDevices).filter(d => d._offline && !pmIsHiddenFromGrid(d)).length;
   if (n > 0) {
     el.style.display = '';
     el.textContent = `${n} device offline nascosti`;

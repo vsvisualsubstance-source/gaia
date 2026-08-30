@@ -431,7 +431,7 @@ function mxRenderAll() {
   const offline = mxDevice._offline;
   badge.className = 'dev-badge ' + (offline ? 'offline' : 'online');
   badge.textContent = offline ? '● offline' : '● online';
-  meta.textContent = `${mxDevice.name || MX_DEVICE_ID} · ip ${mxDevice.ip || '?'}`;
+  meta.textContent = `${mxDevice.name || MX_DEVICE_ID} · stanza ${mxDevice.stanza || '?'} · ip ${mxDevice.ip || '?'}`;
   mxRenderSvc('audio_device');
   mxRenderSvc('audio_source_live');
   mxRenderSvc('audio_source_file');
