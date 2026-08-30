@@ -561,14 +561,21 @@ function updateRoomMarkers() {
     ids.forEach(id => {
         let marker = roomMarkers.get(id);
         if (!marker) {
-            const ringGeo = new THREE.RingGeometry(0.4, 0.44, 6);
+            // Raddoppiate (2026-08-30, richiesto esplicitamente -- lo spazio
+            // circolare disponibile lo permette): 0.4/0.44 -> 0.8/0.88,
+            // etichetta/stats riposizionate e ingrandite di pari passo per
+            // restare proporzionate al nuovo anello, non più piccole/vicine
+            // di prima rispetto ad esso.
+            const ringGeo = new THREE.RingGeometry(0.8, 0.88, 6);
             const ringMat = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, transparent: true, opacity: 0.4, wireframe: true });
             marker = new THREE.Mesh(ringGeo, ringMat); marker.rotation.x = -Math.PI / 2;
             const lbl = _makeRoomLabel(id);
-            lbl.position.set(0, 0.55, 0);
+            lbl.position.set(0, 1.1, 0);
+            lbl.scale.set(3.2, 0.6, 1);
             marker.add(lbl);
             const stats = _makeStatsSprite();
-            stats.sprite.position.set(0, 0.42, 0);
+            stats.sprite.position.set(0, 0.84, 0);
+            stats.sprite.scale.set(2.6, 0.4, 1);
             marker.add(stats.sprite);
             marker.userData.stats = stats;
             scene.add(marker); roomMarkers.set(id, marker);
@@ -650,7 +657,10 @@ function updateYOLOObjects() {
                 else geo = new THREE.SphereGeometry(0.13, 6, 6);
                 const mat = new THREE.MeshStandardMaterial({ roughness: 0.4, transparent: true, opacity: 0.6, wireframe: true });
                 const mesh = new THREE.Mesh(geo, mat);
-                mesh.userData = { offsetX: (Math.random() - 0.5) * 0.6, offsetZ: (Math.random() - 0.5) * 0.6, targetColor: new THREE.Color() };
+                // Offset raddoppiato insieme all'anello stanza (vedi sopra),
+                // altrimenti gli oggetti YOLO restano ammassati al centro di
+                // un anello ora molto più grande.
+                mesh.userData = { offsetX: (Math.random() - 0.5) * 1.2, offsetZ: (Math.random() - 0.5) * 1.2, targetColor: new THREE.Color() };
                 scene.add(mesh); yoloObjects.set(id, mesh);
             }
             const mesh = yoloObjects.get(id); const roomPos = roomMarkers.get(room.id);
@@ -689,9 +699,10 @@ function updateTDDevices() {
                 lbl.scale.set(1.0, 0.2, 1);
                 lbl.position.set(0, 0.32, 0);
                 mesh.add(lbl);
+                // Stesso motivo del raddoppio sopra per gli oggetti YOLO.
                 mesh.userData = {
-                    offsetX: (Math.random() - 0.5) * 0.9,
-                    offsetZ: (Math.random() - 0.5) * 0.9,
+                    offsetX: (Math.random() - 0.5) * 1.8,
+                    offsetZ: (Math.random() - 0.5) * 1.8,
                     targetColor: new THREE.Color()
                 };
                 scene.add(mesh); tdDeviceMeshes.set(id, mesh);
