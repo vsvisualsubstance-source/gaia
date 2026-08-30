@@ -78,6 +78,8 @@ let state = {
 let lastThought = "";
 let lastLevel = 1;
 let lastClass = "Neutro";
+let lastClipEventTs = 0;
+let clipEventsInit = false;
 
 // =====================================================
 // SEQUENZA SOGNO — quando arriva un sogno notturno nuovo (lastDreamTs),
@@ -490,6 +492,20 @@ function computeRoomLayout(graph) {
     return pos;
 }
 
+// Colori delle palette DMX (2026-08-30, porta in index.html gli stessi
+// effetti già su game.html: palette come mood, kick audio come pulsazione,
+// clip PatchDeck come evento visivo -- qui in 3D invece che testo, index.html
+// deve restare pulita/solo-visuale per richiesta esplicita, vedi HUD toggle).
+const DMX_PALETTE_COLORS = {
+    'Fire': 0xff5522, 'Fire Inverted': 0xff8800, 'Sunset': 0xff7744,
+    'Amber': 0xffaa22, 'Warm': 0xffcc66, 'Yellow': 0xffee44, 'Red': 0xff3333,
+    'Ocean': 0x2299dd, 'Cool': 0x44bbee, 'Blue': 0x3366ff,
+    'Plasma': 0xcc44ff, 'Deep Purple': 0x7722cc, 'Magenta-Cyan': 0xff33cc,
+    'Forest': 0x33aa55, 'Neon Party': 0xff22aa, 'Rainbow (Daslight)': 0xdd44ff,
+    'Basic': 0x00ffcc, 'Basic 2': 0x00ddaa
+};
+function dmxPaletteColor(name) { return name && DMX_PALETTE_COLORS[name] !== undefined ? DMX_PALETTE_COLORS[name] : null; }
+
 function _makeRoomLabel(name) {
     const cv = document.createElement('canvas');
     cv.width = 256; cv.height = 48;
@@ -539,6 +555,24 @@ function updateRoomMarkers() {
             if (room.speaking) {
                 marker.material.color.setHex(0x00ffcc);
                 marker.userData.targetScale = 1.5;
+            }
+            // Stanza con un rig TouchDesigner/DMX attivo: la stanza prende
+            // il colore reale della palette in scena in quel momento invece
+            // del generico colore-attività, così l'anello riflette cosa sta
+            // davvero succedendo lì (stesso principio del tag palette in
+            // game.html, qui come tinta diretta anziché testo).
+            if (room.touchdesignerActive && room.dmxPaletteA) {
+                const pal = dmxPaletteColor(room.dmxPaletteA);
+                if (pal !== null) {
+                    marker.material.color.setHex(pal);
+                    marker.material.opacity = Math.max(marker.material.opacity, 0.6);
+                }
+            }
+            // Kick audio: riattiva ad ogni tick sopra soglia (non solo al
+            // fronte di salita) così un ritmo sostenuto pulsa di continuo,
+            // stesso comportamento di renderHero() in game.html.
+            if (room.audioKick > 0.5) {
+                marker.userData.kickFlashUntil = performance.now() + 350;
             }
         } else {
             // stanza nota dal grafo ma senza sensori: presenza spettrale
@@ -749,6 +783,28 @@ function connectWebSocket() {
             updateShadows();
             updateRoomMarkers();
             updateYOLOObjects();
+
+            // Eventi clip PatchDeck: burst dorato nella stanza del deck
+            // invece di una riga di diario testuale (index.html deve
+            // restare pulita/solo-visuale). Al primo messaggio dopo il
+            // connect ci si limita a segnare il punto di partenza, senza
+            // sparare un burst per ogni evento già nella finestra storica.
+            if (state.events && state.events.length > 0) {
+                const clipEvents = state.events.filter(e => e.category === 'clip');
+                if (!clipEventsInit) {
+                    lastClipEventTs = clipEvents.reduce((m, e) => Math.max(m, e.ts), 0);
+                    clipEventsInit = true;
+                } else {
+                    clipEvents.forEach(e => {
+                        if (e.ts > lastClipEventTs) {
+                            const marker = roomMarkers.get(e.device);
+                            triggerGestureBurst(marker ? marker.position : new THREE.Vector3(0, 0.3, 0), 0xffd700);
+                        }
+                    });
+                    lastClipEventTs = clipEvents.reduce((m, e) => Math.max(m, e.ts), lastClipEventTs);
+                }
+            }
+
             updateHUD();
 
         } catch (e) { console.warn("WS parse error:", e); }
@@ -902,7 +958,15 @@ function animate() {
 
     // 6. Stanze e YOLO
     for (const marker of roomMarkers.values()) {
-        const ts = THREE.MathUtils.lerp(marker.scale.x, marker.userData.targetScale || 1, lFactor);
+        let ts = THREE.MathUtils.lerp(marker.scale.x, marker.userData.targetScale || 1, lFactor);
+        // Pulsazione kick audio: bump di scala/opacità che si esaurisce da
+        // solo entro kickFlashUntil, un piccolo "battito" percepibile senza
+        // testo (vedi commento sopra su dmxPaletteColor/audioKick).
+        if (marker.userData.kickFlashUntil && performance.now() < marker.userData.kickFlashUntil) {
+            const remain = (marker.userData.kickFlashUntil - performance.now()) / 350;
+            ts += remain * 0.5;
+            marker.material.opacity = Math.min(0.9, (marker.material.opacity || 0.45) + remain * 0.4);
+        }
         marker.scale.set(ts, ts, 1); marker.rotation.z += 0.002;
     }
     for (const mesh of yoloObjects.values()) { if(mesh.userData.targetColor) mesh.material.color.lerp(mesh.userData.targetColor, lFactor); mesh.rotation.y += 0.01; }
