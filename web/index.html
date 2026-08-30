@@ -17,11 +17,18 @@
 
 <body>
 
+<!-- Vendorizzato in locale (2026-08-29, "Gaia resta offline" -- vedi
+     memoria feedback_gaia_offline.md, stesso motivo per cui mqtt.js e'
+     in vendor/ invece che da CDN): prima puntava a unpkg.com, un
+     download live ad ogni caricamento pagina, rotto senza internet.
+     File reali in web/vendor/three/, versione 0.150.0 pinnata,
+     verificata (REVISION='150', OrbitControls esportata correttamente)
+     prima di sostituire l'URL. -->
 <script type="importmap">
 {
   "imports": {
-    "three": "https://unpkg.com/three@0.150.0/build/three.module.js",
-    "three/addons/": "https://unpkg.com/three@0.150.0/examples/jsm/"
+    "three": "./vendor/three/three.module.js",
+    "three/addons/": "./vendor/three/examples/jsm/"
   }
 }
 </script>
