@@ -497,6 +497,42 @@ function computeRoomLayout(graph) {
         });
         frontier = next;
     }
+    // Rilassamento anti-sovrapposizione (2026-08-30, richiesto esplicitamente
+    // -- "soggiorno e salotto troppo vicini"): il BFS sopra posiziona per
+    // depth+angolo, non garantisce una distanza minima -- un figlio "di
+    // mezzo" tra fratelli (offset angolare vicino a zero rispetto al
+    // genitore) può finire quasi allineato radialmente col genitore stesso,
+    // separato solo dal delta di raggio tra le due profondità (~0.75), meno
+    // del diametro di un anello ora raddoppiato (0.88 di raggio). Non un
+    // caso speciale su questa coppia: una passata di repulsione a coppie,
+    // generale per qualunque topologia futura del grafo stanze.
+    const MIN_SEP = 2.2;
+    const ids = Object.keys(pos);
+    for (let iter = 0; iter < 40; iter++) {
+        let moved = false;
+        for (let a = 0; a < ids.length; a++) {
+            for (let b = a + 1; b < ids.length; b++) {
+                const pa = pos[ids[a]], pb = pos[ids[b]];
+                const dx = pb.x - pa.x, dz = pb.z - pa.z;
+                const dist = Math.hypot(dx, dz);
+                if (dist >= MIN_SEP) continue;
+                moved = true;
+                const push = (MIN_SEP - dist) / 2;
+                if (dist > 0.0001) {
+                    const ux = dx / dist, uz = dz / dist;
+                    pa.x -= ux * push; pa.z -= uz * push;
+                    pb.x += ux * push; pb.z += uz * push;
+                } else {
+                    // stesso punto esatto: separa in una direzione arbitraria
+                    // ma deterministica (angolo aureo, mai due coppie uguali)
+                    const ang = (a * 137.5) * Math.PI / 180;
+                    pa.x -= Math.cos(ang) * push; pa.z -= Math.sin(ang) * push;
+                    pb.x += Math.cos(ang) * push; pb.z += Math.sin(ang) * push;
+                }
+            }
+        }
+        if (!moved) break;
+    }
     _roomLayoutCache = pos; _roomLayoutV = graph._v;
     return pos;
 }
