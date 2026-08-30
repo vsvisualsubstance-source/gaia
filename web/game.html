@@ -30,6 +30,8 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 .hero{background:linear-gradient(135deg,#0e1221,#131022);border:1px solid #2a2540;
       border-radius:14px;padding:18px;margin-bottom:16px;display:flex;gap:18px;
       align-items:center;flex-wrap:wrap}
+@keyframes heroKickPulse { 0%{box-shadow:0 0 0 #ff880000} 15%{box-shadow:0 0 30px #ff880066} 100%{box-shadow:0 0 0 #ff880000} }
+.hero-kick{animation:heroKickPulse .35s ease-out}
 .hero-level{font-size:2.4rem;font-weight:800;color:var(--gold);line-height:1;
       text-shadow:0 0 18px #ffd65a44}
 .hero-class{font-size:1rem;font-weight:700}
@@ -62,6 +64,11 @@ h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;color:var(--mut
       background:linear-gradient(135deg,var(--card),#102a2e)}
 .biome.tech .biome-kind{color:var(--cyan)}
 .biome.tech.alive{border-color:#1a5a5a;box-shadow:0 0 16px #00ffcc33}
+/* Kick audio live dal mixer (2026-08-30) -- pulse breve, si spegne da solo
+   quando audioKick decade lato server (~3s) e la classe sparisce al
+   prossimo render, niente timeout JS lato client da gestire qui. */
+@keyframes biomeKickPulse { 0%{transform:scale(1)} 50%{transform:scale(1.03)} 100%{transform:scale(1)} }
+.biome-kick{animation:biomeKickPulse .3s ease-out}
 .biome-head{display:flex;align-items:center;gap:10px;margin-bottom:8px}
 .biome-name{font-weight:700;font-size:.95rem;text-transform:capitalize}
 .biome-kind{font-size:.7rem;color:var(--gold);letter-spacing:.05em}
@@ -158,6 +165,20 @@ const CLASS_COLOR = { Mago:'var(--cyan)', Bardo:'var(--magenta)',
 const ARCH = [['mago','Mago','#00ffff','🪄'],['bardo','Bardo','#ff00ff','🎭'],
               ['guerriero','Guerriero','#ff5555','⚔️'],['druido','Druido','#33ff88','🌿']];
 
+// Palette DMX -> colore rappresentativo (2026-08-30, richiesto esplicitamente):
+// nomi reali letti dal vivo dalla matrice DMX (dmx_a_palette/dmx_b_palette),
+// non inventati. Copre le principali; una palette non mappata usa il ciano
+// "tech" di default invece di sparire senza colore.
+const DMX_PALETTE_COLORS = {
+  'Fire': '#ff5522', 'Fire Inverted': '#ff8800', 'Sunset': '#ff7744',
+  'Amber': '#ffaa22', 'Warm': '#ffcc66', 'Yellow': '#ffee44', 'Red': '#ff3333',
+  'Ocean': '#2299dd', 'Cool': '#44bbee', 'Blue': '#3366ff',
+  'Plasma': '#cc44ff', 'Deep Purple': '#7722cc', 'Magenta-Cyan': '#ff33cc',
+  'Forest': '#33aa55', 'Neon Party': '#ff22aa', 'Rainbow (Daslight)': '#dd44ff',
+  'Basic': '#00ffcc', 'Basic 2': '#00ddaa',
+};
+function dmxPaletteColor(name) { return DMX_PALETTE_COLORS[name] || null; }
+
 function escHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 // il WS arriva a rate alto: innerHTML solo se cambia (niente flicker dei canvas)
 function setHtml(id, html){
@@ -214,6 +235,19 @@ function renderHero(d){
       const w = RUNE_WORDS[a]||a.replace(/_/g,' ');
       return `<div class="rune" title="${escHtml(a)}"><canvas data-word="${escHtml(w)}" width="44" height="34"></canvas><span>${escHtml(w)}</span></div>`;
     }).join('')||'<span style="color:var(--muted);font-size:.75rem">nessuna runa rivelata</span>'}</div>`);
+
+  // Pulse sull'eroe sincronizzato col kick reale del mixer (2026-08-30,
+  // richiesto esplicitamente) -- qualunque stanza abbia un kick attivo fa
+  // pulsare l'eroe, non serve sapere quale. Classe su #hero (l'elemento
+  // stesso, non l'HTML rimpiazzato sopra) cosi' l'animazione riparte ad
+  // ogni WS che porta un kick fresco, anche se il contenuto non cambia.
+  const anyKick = (d.rooms||[]).some(r => r.audioKick > 0.5);
+  const heroEl = document.getElementById('hero');
+  if (anyKick) {
+    heroEl.classList.remove('hero-kick');
+    void heroEl.offsetWidth; // forza il reflow, altrimenti il retrigger dell'animazione su kick consecutivi non si vede
+    heroEl.classList.add('hero-kick');
+  }
 }
 
 // ── Biomi ──────────────────────────────────────────────────────────────────
@@ -243,14 +277,24 @@ function renderBiomes(d){
     if (r.emotion)               stats.push(`✨ ${escHtml(r.emotion)}`);
     if (r.gesture)               stats.push(`🖐 ${escHtml(r.gesture)}`);
     if (r.speaking)              stats.push(`🗣 ${escHtml(r.speaking)}`);
+    if (r.dmxPaletteA)           stats.push(`💡 ${escHtml(r.dmxPaletteA)}${r.dmxPaletteB && r.dmxPaletteB!==r.dmxPaletteA?` / ${escHtml(r.dmxPaletteB)}`:''}`);
+    if (r.audioKick > 0.5)       stats.push(`🥁 kick`);
     const herb = herbRooms.has(r.id)
       ? `<div class="biome-herb">♪ ${((d.herbarium||{}).notes||[]).filter(n=>n.room===r.id).slice(-6).map(n=>NOTE_WORDS[n.note%12]).join(' ')}</div>` : '';
     const techCls = r.touchdesignerActive ? ' tech' : '';
-    return `<div class="biome${(r.persons_count||0)>0?' alive':''}${techCls}">
+    // Colore DMX come "mood" del bioma (2026-08-30): sovrascrive il ciano
+    // tech di default solo se una palette nota e' attiva -- resta un
+    // riquadro tech "spento" (ciano) quando non c'e' nessuna palette da
+    // mostrare, invece di forzare un colore a caso.
+    const paletteColor = dmxPaletteColor(r.dmxPaletteA);
+    const kickPulse = r.audioKick > 0.5 ? ' biome-kick' : '';
+    const styleOverride = paletteColor
+      ? ` style="border-color:${paletteColor}88;box-shadow:0 0 14px ${paletteColor}33"` : '';
+    return `<div class="biome${(r.persons_count||0)>0?' alive':''}${techCls}${kickPulse}"${styleOverride}>
       <div class="biome-head">
-        <canvas data-word="${escHtml(r.id)}" data-color="${r.touchdesignerActive?'rgba(0,255,204,.9)':'rgba(0,255,204,.75)'}" data-lw="1.1" width="34" height="28"></canvas>
+        <canvas data-word="${escHtml(r.id)}" data-color="${paletteColor || (r.touchdesignerActive?'rgba(0,255,204,.9)':'rgba(0,255,204,.75)')}" data-lw="1.1" width="34" height="28"></canvas>
         <div><div class="biome-name">${escHtml(r.name||r.id)}</div>
-        <div class="biome-kind">${ic} ${kind}</div></div>
+        <div class="biome-kind"${paletteColor?` style="color:${paletteColor}"`:''}>${ic} ${kind}</div></div>
       </div>
       <div class="biome-stats">${stats.map(s=>`<span>${s}</span>`).join('')||'<span>silenzio</span>'}</div>
       ${herb}</div>`;
@@ -319,6 +363,8 @@ function feedDiary(d){
       tell(e.ts, `Un segno della mano: ${escHtml(e.value)}`);
     else if (e.category==='motion' && e.value===true && e.source==='hue')
       tell(e.ts, `Passi risuonano (${escHtml(room.split('_')[1]||'sentiero')})`);
+    else if (e.category==='clip' && e.value)
+      tell(e.ts, `<span class="gold">🎬 Un nuovo incantesimo si accende sul Deck ${escHtml(e.value.deck)}</span>`);
   }
   const evs = d.events||[];
   if (evs.length) _lastEvTs = Math.max(_lastEvTs, evs[evs.length-1].ts);
