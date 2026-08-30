@@ -496,7 +496,11 @@ function updateRoomMarkers() {
         else if (marker.position.lengthSq() === 0) marker.position.set(Math.cos(i * 1.6) * 3.2, 0.01, Math.sin(i * 1.6) * 3.2);
 
         const room = liveRooms.get(id);
-        const colors = { working: 0x0077ff, resting: 0x00ff77, sitting: 0xffaa00, empty: 0x111122, idle: 0x111122, active: 0x0077ff };
+        // empty/idle alzati da 0x111122 (quasi nero puro, invisibile su
+        // sfondo nero) -- una stanza MONITORATA ma quieta deve restare
+        // visibile, distinta dalla "presenza spettrale" sotto (stanza nota
+        // dal grafo ma senza sensori, quella sì intenzionalmente flebile).
+        const colors = { working: 0x0077ff, resting: 0x00ff77, sitting: 0xffaa00, empty: 0x445577, idle: 0x445577, active: 0x0077ff };
         if (room) {
             marker.material.opacity = 0.45;
             marker.material.color.setHex(colors[room.activity] || colors[room.current_activity] || 0x111122);
@@ -537,7 +541,8 @@ function updateYOLOObjects() {
             }
             const mesh = yoloObjects.get(id); const roomPos = roomMarkers.get(room.id);
             if (roomPos) mesh.position.set(roomPos.position.x + mesh.userData.offsetX, 0.15, roomPos.position.z + mesh.userData.offsetZ);
-            const colors = { working: 0x4488ff, resting: 0x44ff88, sitting: 0xffaa44, empty: 0x333333, idle: 0x333333, active: 0x4488ff };
+            // stesso motivo del marker stanza sopra: 0x333333 spariva nel nero
+            const colors = { working: 0x4488ff, resting: 0x44ff88, sitting: 0xffaa44, empty: 0x556688, idle: 0x556688, active: 0x4488ff };
             mesh.userData.targetColor.setHex(colors[room.activity] || colors[room.current_activity] || 0x333333);
         });
     });
@@ -555,7 +560,24 @@ hudCanvas.style.position = 'absolute'; hudCanvas.style.top = '0'; hudCanvas.styl
 document.body.appendChild(hudCanvas);
 const hudCtx = hudCanvas.getContext('2d');
 
+// Toggle da Admin -> Automazioni ("Vista 3D -- mostra HUD testuale"),
+// richiesto esplicitamente per una vista pulita solo-visuale senza testo
+// sopra la scena 3D. Stesso pannello generico già usato altrove (nessuna
+// UI nuova in admin.html) -- letto una volta al caricamento, non via WS:
+// è una preferenza di visualizzazione rara da cambiare.
+let _showHud = true;
+(async () => {
+    try {
+        const r = await fetch('/gaia/automations', { signal: AbortSignal.timeout(3000) });
+        const d = await r.json();
+        const a = (d.automations || []).find(x => x.id === 'visualHud');
+        _showHud = a ? a.enabled !== false : true;
+    } catch { _showHud = true; }
+    hudCanvas.style.display = _showHud ? '' : 'none';
+})();
+
 function updateHUD() {
+    if (!_showHud) return;
     hudCtx.clearRect(0, 0, hudCanvas.width, hudCanvas.height);
     const gradient = hudCtx.createLinearGradient(0, 0, 0, 120);
     gradient.addColorStop(0, 'rgba(3, 3, 12, 0.85)'); gradient.addColorStop(1, 'rgba(3, 3, 12, 0.0)');
