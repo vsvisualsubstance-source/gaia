@@ -136,9 +136,13 @@ function connectWS() {
             S.voice           = d.voiceStatus?.status || 'idle';
             const lights = Array.isArray(d.lights) ? d.lights : [];
             S.lightsTarget = lights.filter(l => l.power).length;
+            // gesture/smile aggiunti (2026-08-30, richiesto esplicitamente):
+            // erano già nel payload (stessa struttura people[] di index.html/
+            // app.js) ma scartati qui -- solo emotion+room venivano letti.
             people = (Array.isArray(d.people) ? d.people : [])
                 .filter(p => p.present !== false)
-                .map(p => ({ name: p.name || '…', emotion: p.emotion || 'neutral', room: p.room || 'unknown' }));
+                .map(p => ({ name: p.name || '…', emotion: p.emotion || 'neutral', room: p.room || 'unknown',
+                             gesture: p.gesture || 'none', smile: p.smile_score || 0 }));
             if (d.thought) thoughtTarget = d.thought;
 
             // Sogno nuovo → sequenza dedicata (velo viola + testo in alto)
@@ -496,9 +500,17 @@ function drawOnePerson(p, i, groupSize, anchor, t, core) {
     const x = anchor.x + Math.cos(localAng) * localR;
     const y = anchor.y + Math.sin(localAng) * localR * 0.7 + bob;
 
+    // Calore continuo dal sorriso reale (mediapipe smile_score, 0-100),
+    // non più binario su emotion==='happy' -- un sorriso appena accennato
+    // scalda appena l'orbe, uno ampio la scalda quasi del tutto. emotion
+    // resta un pavimento minimo (0.35) così un "happy" senza smile_score
+    // disponibile si vede comunque un po'.
     const happy = p.emotion === 'happy';
-    const warm = happy ? [255, 214, 130] : cur.accent;
-    const pulse = happy ? 1 + 0.12 * Math.sin(t * 3 + seed * 9) : 1;
+    const warmFactor = Math.max(happy ? 0.35 : 0, Math.min(1, (p.smile || 0) / 60));
+    const warm = warmFactor > 0
+        ? cur.accent.map((c, i) => c + (([255, 214, 130][i]) - c) * warmFactor)
+        : cur.accent;
+    const pulse = warmFactor > 0.15 ? 1 + 0.12 * warmFactor * Math.sin(t * 3 + seed * 9) : 1;
 
     const g = ctx.createRadialGradient(x, y, 0, x, y, 26 * pulse);
     g.addColorStop(0, `rgba(${warm[0]|0},${warm[1]|0},${warm[2]|0},0.50)`);
@@ -507,6 +519,18 @@ function drawOnePerson(p, i, groupSize, anchor, t, core) {
     ctx.beginPath();
     ctx.arc(x, y, 26 * pulse, 0, Math.PI * 2);
     ctx.fill();
+
+    // Anello sottile quando mediapipe rileva un gesto reale -- un modo
+    // leggero di far vedere che Gaia si accorge di un saluto/pollice in
+    // su/ecc, senza aggiungere altro testo o iconografia sopra l'orbe.
+    if (p.gesture && p.gesture !== 'none') {
+        const ringR = 26 * pulse + 6 + Math.sin(t * 2.4 + seed * 6) * 2;
+        ctx.beginPath();
+        ctx.arc(x, y, ringR, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(${cur.accent[0]|0},${cur.accent[1]|0},${cur.accent[2]|0},0.45)`;
+        ctx.lineWidth = 1.3;
+        ctx.stroke();
+    }
 
     ctx.fillStyle = 'rgba(240,246,255,0.92)';
     ctx.beginPath();
