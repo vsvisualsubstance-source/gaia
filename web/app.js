@@ -335,6 +335,8 @@ function updateGarden() {
                 blade.rotation.z = (Math.random() - 0.5) * 0.2;
                 group.add(blade);
             }
+            group.userData.offsetX = (Math.random() - 0.5) * 1.0;
+            group.userData.offsetZ = (Math.random() - 0.5) * 1.0;
             scene.add(group); plantBlades.set(id, group);
         }
         const group = plantBlades.get(id);
@@ -342,8 +344,19 @@ function updateGarden() {
         const health = p.health || (moisture / 100);
         group.userData.targetColor = new THREE.Color().setHSL(0.28 + health * 0.12, 0.9, 0.2 + health * 0.3);
         group.userData.targetScaleY = 0.5 + health * 1.0;
-        const angle = (i / Math.max(1, plants.length)) * Math.PI * 2;
-        group.position.set(Math.cos(angle) * 3.4, 0, Math.sin(angle) * 3.4);
+        // Posizionata nella sua stanza reale (2026-08-30, richiesto
+        // esplicitamente -- prima ignorava p.room, anello fisso per indice
+        // slegato da qualunque stanza). Stesso pattern già in uso per gli
+        // oggetti YOLO e le mesh device TD. Fallback all'anello vecchio solo
+        // se la stanza non è ancora nota (roomMarkers si popola dal tick
+        // precedente, stesso ordine già in uso per updateShadows()/persone).
+        const roomPos = roomMarkers.get(p.room);
+        if (roomPos) {
+            group.position.set(roomPos.position.x + group.userData.offsetX, 0, roomPos.position.z + group.userData.offsetZ);
+        } else {
+            const angle = (i / Math.max(1, plants.length)) * Math.PI * 2;
+            group.position.set(Math.cos(angle) * 3.4, 0, Math.sin(angle) * 3.4);
+        }
     });
     for (const [id, group] of plantBlades) {
         if (!aliveIds.has(id)) { scene.remove(group); group.children.forEach(b => { b.geometry.dispose(); b.material.dispose(); }); plantBlades.delete(id); }
