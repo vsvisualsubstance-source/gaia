@@ -173,6 +173,99 @@ nuovo `POST /gaia/device/forget {device_id}` (rifiuta se il device è vivo,
 pulisce entry nel registry + retained config/profile/status). Il mediapipe
 attuale eredita DEVICE_ID dall'agent: nessuna doppia identità.
 
+## Contratto Agent Universale — proposta 2026-08-30 (IN REVISIONE, niente costruito)
+
+**Why:** richiesta esplicita dell'utente ("chi sono, dove sono, cosa faccio,
+che servizi offro... ma in una visione più aperta") dopo il lavoro di questa
+sessione su palette/kick/device TD in `index.html`/`game.html` e sulle piante
+posizionate per stanza — l'idea è dare a QUALSIASI agent Gaia (non solo i
+mattoni) un modo di dichiarare la propria posizione in modo più ricco di un
+semplice nome-stanza.
+
+**Punto di partenza, non ripartire da zero**: verificato oggi che esistono
+già 3 pezzi separati che rispondono ciascuno a un pezzo della domanda, mai
+riconciliati tra loro:
+
+1. **Contratto 1 sopra (profilo semantico, 2026-07-09)** già risponde a "chi
+   sono / cosa ho / cosa offro" per OGNI agent (Pi/OPS/Core): `device_id`,
+   `role`, `room`, `capabilities`, `services` (con `endpoints`), `sw_version`.
+2. **`family`** (aggiunto 2026-08-29, SOLO per gli agent TD — vedi
+   TD4Gaia/`GAIA_INTERFACE.md` sezione "1b"): distingue il PROGETTO
+   (dmx/patchdeck/mixeraudio/gaia/...) dall'ISTANZA (`device_id`) — un
+   livello che il Contratto 1 originale non aveva previsto, mai generalizzato
+   agli agent non-TD.
+3. **Il modello "mattone"** (`esp/sim/brick_node.py`, `web/mattoni.html`,
+   2026-07-24): `position.neighbors` (`nord`/`sud`/`est`/`ovest`/`sopra`/
+   `sotto`, verso ALTRI device_id) + `interfaces` (`power`/`data`/`mesh`) —
+   **verificato dal vivo per la prima volta oggi** (mai testata la resa
+   visiva prima d'ora): funziona, mappa emergente corretta, nessun piano
+   centrale. Ma resta un'isola: SOLO i mattoni lo usano, e non è mai stato
+   collegato al `roomGraph` (Contratto 3 sopra).
+
+**Il gap concreto**: oggi esistono DUE sistemi di "dove sono" che non si
+parlano — il `roomGraph` (stanze come nodi con nome, adiacenza SENZA
+direzione, quello usato da `index.html`/`game.html` per il layout 3D
+tutta questa sessione) e `position.neighbors` dei mattoni (direzione VERA
+N/S/E/O, ma solo tra device, mai a livello di stanza). Un mattone in
+"ingresso" e un Pi in "ingresso" condividono solo il nome stanza, non un
+riferimento spaziale comune.
+
+### Proposta (in revisione — NON costruita, da discutere prima di scrivere codice)
+
+**A. Generalizzare `family` a tutti gli agent**, non solo TD — stringa
+libera opzionale (`"pi-agent"`, `"ops-agent"`, variante mattone, ecc.),
+stesso trattamento già in uso per TD (minuscolo sempre, mai dedotto dal
+device_id). Costo quasi zero: il campo esiste già nel protocollo, solo
+il consumo lato Node-RED (`brain._tdDeviceFamily`, oggi popolato solo da
+`td_room_presence_fn`) andrebbe generalizzato a QUALSIASI `role`.
+
+**B. Estendere il `roomGraph` con `neighbors` direzionali OPZIONALI per
+stanza** — stesso vocabolario dei mattoni (`nord`/`sud`/`est`/`ovest`/
+`sopra`/`sotto`), scritti a mano nello stesso punto dove oggi vive
+l'adiacenza (`GAIA Brain`, Node-RED). Retrocompatibile per costruzione:
+una stanza senza `neighbors` dichiarati si comporta esattamente come
+oggi (solo adiacenza, nessuna direzione) — non è un cambio di schema,
+un'aggiunta.
+
+**C. Un agent qualsiasi può opzionalmente dichiarare la propria
+posizione LOCALE dentro la stanza**, non solo "sono in salotto" ma "sono
+a nord nel salotto, vicino a X" — riuso letterale di
+`position.neighbors`, esteso da "solo mattone↔mattone" a "qualunque
+device↔device nella stessa stanza". Un device che non lo dichiara
+resta come oggi (solo `room`, nessuna posizione locale) — di nuovo
+additivo, non un requisito.
+
+**D. `index.html`/`game.html`**: quando esistono `neighbors` direzionali
+per le stanze, usarli per un layout spaziale REALE invece del BFS
+approssimato attuale (`computeRoomLayout`) — con fallback identico a
+oggi per il grafo senza direzioni. Non cambia nulla per l'utente finché
+nessuna stanza ha `neighbors` dichiarati.
+
+**E. `web/mattoni.html` e la scena 3D restano DUE viste diverse dello
+stesso mondo**, non da fondere in una sola pagina — ma un mattone con
+`room` valorizzato potrebbe comparire anche in `index.html`/`game.html`
+come oggetto nella sua stanza, stesso pattern già in produzione oggi per
+i device TD e le piante (stessa sessione, vedi [[project-gaia-web]] in
+memoria).
+
+### Domande aperte, da rispondere PRIMA di scrivere codice
+
+- Chi scrive i `neighbors` direzionali delle STANZE (punto B)? A mano nel
+  `roomGraph` come l'adiacenza esistente, o serve un editor dedicato in
+  Admin? Il `roomGraph` oggi è scritto direttamente nel codice di `GAIA
+  Brain` — un errore lì è "silenzioso" finché qualcuno non nota il layout
+  storto (è già successo, vedi correzioni di questa sessione).
+- Punto C ha senso PRIMA di avere un secondo device (oltre ai mattoni) che
+  lo dichiari davvero, o è prematuro senza un caso d'uso reale?
+- Punto E: collegare SUBITO i mattoni alla scena 3D, o prima chiudere il
+  contratto generale (A-C) così i mattoni non restano l'unico caso che lo
+  usa per davvero?
+- Il vocabolario `nord`/`sud`/`est`/`ovest` presuppone un orientamento
+  reale della casa (rispetto a cosa? bussola vera, o solo "convenzione
+  interna coerente")? I mattoni oggi non lo specificano — va chiarito
+  prima di scriverlo anche per le stanze, altrimenti "nord" significa
+  cose diverse in punti diversi del sistema.
+
 ## Robustezza (2026-07-15)
 
 - **Backup notturno** (cron core 03:30, `minipc/script/gaia_backup.sh`):
