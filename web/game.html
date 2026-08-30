@@ -322,12 +322,15 @@ function renderArch(d){
 // ── Diario delle imprese (eventi → linguaggio di gioco) ────────────────────
 // Toggle da Admin -> Automazioni ("Gioco -- mostra il diario testuale"),
 // stesso pannello generico già usato per il resto (nessuna UI nuova serve
-// lì) -- letto una volta al caricamento, non via WS: è una preferenza di
-// visualizzazione rara da cambiare, non uno stato che deve arrivare in
-// tempo reale. feedDiary() continua comunque ad accumulare eventi anche a
-// card nascosta, così riattivandola i dati sono già pronti.
+// lì). feedDiary() continua comunque ad accumulare eventi anche a card
+// nascosta, così riattivandola i dati sono già pronti.
+// Prima letto una sola volta al caricamento: chi cambiava il toggle in
+// Admin e tornava sulla tab Gioco già aperta non vedeva alcuna differenza
+// (segnalato dal vivo 2026-08-30) -- ora si ricontrolla anche al
+// visibilitychange, stesso pattern già usato dalle pagine device (patchdeck/
+// mixeraudio/dmx.html) per lo stesso motivo.
 let _showDiaryText = true;
-(async () => {
+async function _syncDiaryToggle() {
   try {
     const r = await fetch('/gaia/automations', {signal: AbortSignal.timeout(3000)});
     const d = await r.json();
@@ -335,7 +338,9 @@ let _showDiaryText = true;
     _showDiaryText = a ? a.enabled !== false : true;
   } catch { _showDiaryText = true; }
   document.getElementById('diary-card').style.display = _showDiaryText ? '' : 'none';
-})();
+}
+_syncDiaryToggle();
+document.addEventListener('visibilitychange', () => { if (!document.hidden) _syncDiaryToggle(); });
 
 const _diary = [];        // {ts, html} — accumulato lato client
 let _lastEvTs = 0, _lastVoiceTs = 0, _lastThought = '';
