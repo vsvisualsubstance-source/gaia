@@ -33,6 +33,7 @@ import socket
 import subprocess
 import threading
 import time
+from urllib.parse import urlsplit, urlunsplit
 
 import paho.mqtt.client as mqtt
 
@@ -205,6 +206,47 @@ def _advance_queue():
         _load_queue_index(idx)
 
 
+def _my_local_ips() -> set[str]:
+    """IP locali di questa macchina — trucco classico e offline-safe: un
+    socket UDP "connesso" non manda nessun pacchetto, serve solo a far
+    scegliere al sistema operativo l'interfaccia/IP con cui uscirebbe."""
+    ips = set()
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ips.add(s.getsockname()[0])
+        s.close()
+    except OSError:
+        pass
+    try:
+        ips.add(socket.gethostbyname(socket.gethostname()))
+    except OSError:
+        pass
+    return ips
+
+
+def _localize_url(url: str) -> str:
+    """Se l'URL punta al proprio stesso IP, riscrive l'host su `localhost`
+    (2026-08-31, trovato dal vivo dopo lo spostamento di OPS su WiFi):
+    MusicLibrary (Node-RED) genera URL dall'host con cui il BROWSER l'ha
+    raggiunta, per design (vedi commento lì) -- se quell'host è lo stesso
+    IP di QUESTA macchina, mpv che prova a riscaricarlo dal proprio IP
+    LAN esterno può fallire in silenzio: molti AP WiFi non riflettono
+    indietro il traffico che un device manda verso se stesso (self-
+    hairpin), a differenza di un cavo su uno switch -- lo stato mpv
+    continuava a dire "playing" ma l'audio non arrivava mai. `localhost`
+    bypassa la rete del tutto. URL verso ALTRE macchine (Core/Pi) restano
+    intatti -- il controllo è solo sull'host, non tocca porta/path."""
+    try:
+        parts = urlsplit(url)
+        if parts.hostname and parts.hostname in _my_local_ips():
+            netloc = "localhost" if not parts.port else f"localhost:{parts.port}"
+            return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
+    except ValueError:
+        pass
+    return url
+
+
 def _handle_command(payload: bytes):
     global _last_url, _queue, _queue_mode, _audio_output
     try:
@@ -216,12 +258,12 @@ def _handle_command(payload: bytes):
     print(f"[Media] Comando: {action} {cmd.get('url') or cmd.get('value') or ''}")
     if action == "play" and cmd.get("url"):
         _clear_queue()
-        _last_url = cmd["url"]
-        _ipc(["loadfile", cmd["url"], "replace"])
+        _last_url = _localize_url(cmd["url"])
+        _ipc(["loadfile", _last_url, "replace"])
         _ipc(["set_property", "pause", False])
     elif action == "queue" and cmd.get("urls"):
         _clear_queue()
-        _queue = list(cmd["urls"])
+        _queue = [_localize_url(u) for u in cmd["urls"]]
         _queue_mode = "sequential" if cmd.get("mode") == "sequential" else "shuffle"
         start = cmd.get("start_index")
         idx = start if isinstance(start, int) and 0 <= start < len(_queue) else _pick_next_index()
