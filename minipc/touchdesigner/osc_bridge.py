@@ -321,7 +321,7 @@ class TDDeviceRegistry:
             self._targets[device_id] = {
                 "ip": ip, "name": d.get("name") or device_id,
                 "stanza": d.get("stanza"), "last_seen": last_seen,
-                "paused": paused,
+                "paused": paused, "family": (d.get("family") or "").lower(),
             }
         if is_new:
             print(f"[TD-Bridge] Nuova istanza TD scoperta: {device_id} → {ip}")
@@ -348,18 +348,32 @@ class TDDeviceRegistry:
             targets = {
                 device_id: {
                     "ip": t["ip"], "name": t["name"], "stanza": t["stanza"],
-                    "paused": t["paused"],
+                    "paused": t["paused"], "family": t.get("family") or "",
                     "offline": (now - t["last_seen"]) > self.OFFLINE_AFTER_S,
                 }
                 for device_id, t in self._targets.items()
             }
         self._mqtt.publish(self.STATUS_TOPIC, json.dumps({"targets": targets}), retain=True)
 
+    # Il feed OSC (canale 1, il flatten grezzo consumato via oscin1 --
+    # legenda persone/oggetti, sfera reattiva) ha senso solo per istanze TD
+    # che RENDERIZZANO qualcosa di visivo -- ControllerV7/mixeraudio è
+    # audio-only per design, non ha nessun oscin1 nel progetto e non lo
+    # avrà mai (richiesto esplicitamente 2026-08-31: "non ha senso inviare
+    # dati OSC al controller... intasiamo la rete per nulla"). DMX resta
+    # incluso -- oggi non lo consuma (riceve solo palette via MQTT
+    # gaia/device/*/command, non OSC), ma l'utente ha lasciato la porta
+    # aperta ("potrebbe avere senso in futuro" per luci reattive via OSC),
+    # quindi non va escluso a priori come mixeraudio.
+    _OSC_EXCLUDED_FAMILIES = {"mixeraudio"}
+
     def live_ips(self):
         now = time.time()
         with self._lock:
             return sorted({t["ip"] for t in self._targets.values()
-                            if not t["paused"] and now - t["last_seen"] < self.OFFLINE_AFTER_S})
+                            if not t["paused"]
+                            and t.get("family") not in self._OSC_EXCLUDED_FAMILIES
+                            and now - t["last_seen"] < self.OFFLINE_AFTER_S})
 
 
 class TDFanoutClient:

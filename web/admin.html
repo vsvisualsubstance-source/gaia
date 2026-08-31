@@ -2429,13 +2429,26 @@ function pmEsc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt
 function pmFmtUp(sec) { if(!sec)return''; const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60); return h?`${h}h ${m}m`:`${m}m`; }
 
 // ── TouchDesigner — pausa/ripresa flussi OSC (gaia/td-bridge/status|command) ──
+// Il feed OSC (canale 1, flatten grezzo -- legenda persone/oggetti, sfera
+// reattiva) ha senso solo per istanze TD che RENDERIZZANO qualcosa di
+// visivo -- ControllerV7/mixeraudio è audio-only per design, non ha nessun
+// oscin1 nel progetto (richiesto esplicitamente 2026-08-31: "non ha senso
+// inviare dati OSC al controller... la UI lo permette, intasiamo la rete
+// per nulla"). Il bridge (osc_bridge.py, live_ips()) ora esclude già
+// mixeraudio dal fanout reale -- qui è solo per non offrire un pulsante
+// pausa/ripresa privo di senso, stesso principio di pmMocapIsRelevant.
+// DMX resta visibile (non lo consuma oggi, ma l'utente ha lasciato la
+// porta aperta per il futuro), a differenza del mocap dove è escluso.
+function pmTdOscIsRelevant(family) { return family !== 'mixeraudio'; }
+
 function pmTdRender(targets) {
   const wrap  = document.getElementById('pm-td-targets');
   const empty = document.getElementById('pm-td-no-targets');
   // Offline tolto dalla vista, non solo affievolito -- stesso principio
   // gia' applicato alla griglia Pi Manager (segnalato dal vivo 2026-08-25:
   // qui restavano tracce anche dopo il fix del box principale).
-  const entries = Object.entries(targets || {}).filter(([, t]) => !t.offline);
+  const entries = Object.entries(targets || {})
+    .filter(([, t]) => !t.offline && pmTdOscIsRelevant(t.family));
   if (!entries.length) { empty.style.display = ''; wrap.style.display = 'none'; return; }
   empty.style.display = 'none';
   wrap.style.display = '';
