@@ -737,6 +737,7 @@ button.small{padding:3px 9px;font-size:.78rem;margin:0}
     <span id="pm-conn-label" style="font-size:.8rem;color:var(--muted)">Disconnesso</span>
     <span id="pm-offline-count" style="font-size:.78rem;color:var(--muted);display:none"></span>
     <button class="secondary small" onclick="pmCleanRooms()" title="Rimuove le stanze senza device e fuori mappa (dati live + topic retained)">🧹 Stanze orfane</button>
+    <button class="secondary small" onclick="pmCleanOfflineDevices()" title="Dimentica i device muti da 10+ minuti (registry + topic retained) — non tocca chi è ancora vivo">🧹 Device offline</button>
   </div>
   <div id="pm-welcome-menu" style="display:none;flex-wrap:wrap;gap:6px;margin-bottom:10px"></div>
   <div id="pm-no-devices" style="text-align:center;padding:40px 20px;color:var(--muted);font-size:.9rem">
@@ -2244,6 +2245,37 @@ async function pmCleanRooms() {
         headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ room }) });
     alert('Pulite: ' + orphans.join(', '));
   } catch (e) { alert('Errore pulizia: ' + e.message); }
+}
+
+// Complemento di pmCleanRooms() (2026-08-31, richiesto esplicitamente):
+// quella pulisce solo le STANZE senza device -- un device zombie ancora
+// "assegnato" a una stanza (es. un vecchio nome TD morto da ore) non la
+// rende orfana, la lascia sporca finché il device stesso non viene
+// dimenticato. Stessa soglia di sicurezza già nel backend (DeviceForget
+// rifiuta <10 min senza force) -- filtrato qui PRIMA di mostrare la lista,
+// così quello che si conferma è sempre quello che verrà davvero rimosso,
+// mai un tentativo che il backend rifiuterebbe silenziosamente.
+async function pmCleanOfflineDevices() {
+  try {
+    const base = `http://${location.hostname}:1880`;
+    const devices = (await (await fetch(`${base}/gaia/devices`)).json()).devices || [];
+    const now = Date.now();
+    const stale = devices
+      .filter(d => d.online === false && typeof d.lastSeen === 'number' && (now - d.lastSeen) >= 10 * 60000)
+      .map(d => ({ id: d.id, ageMin: Math.round((now - d.lastSeen) / 60000) }));
+    if (!stale.length) { alert('Nessun device offline da 10+ minuti — tutto pulito ✓'); return; }
+    const list = stale.map(d => `${d.id} (muto da ${d.ageMin} min)`).join('\n');
+    if (!confirm(`Device offline da dimenticare:\n${list}\n\nPulisco registry e topic retained?`)) return;
+    const failed = [];
+    for (const d of stale) {
+      const r = await fetch(`${base}/gaia/device/forget`, { method: 'POST',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ device_id: d.id }) });
+      if (!r.ok) failed.push(d.id);
+    }
+    alert(failed.length
+      ? `Dimenticati: ${stale.map(d=>d.id).filter(id=>!failed.includes(id)).join(', ') || '(nessuno)'}\nFalliti: ${failed.join(', ')}`
+      : 'Dimenticati: ' + stale.map(d => d.id).join(', '));
+  } catch (e) { alert('Errore pulizia device: ' + e.message); }
 }
 
 function initPiManager() {
