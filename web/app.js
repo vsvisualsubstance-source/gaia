@@ -564,6 +564,32 @@ const DMX_PALETTE_COLORS = {
 };
 function dmxPaletteColor(name) { return name && DMX_PALETTE_COLORS[name] !== undefined ? DMX_PALETTE_COLORS[name] : null; }
 
+// Colore Hue medio delle luci ACCESE di una stanza (2026-08-31, richiesto
+// esplicitamente -- brain.lights[].room ora popolato lato Node-RED da
+// hueLightRoom(), prefisso item -> stanza reale, verificato col modello
+// semantico OpenHAB). Media RGB semplice, non pesata per luminosità --
+// con 1-2 luci per stanza (il caso comune qui) non fa differenza
+// percepibile e resta molto più semplice da leggere.
+function _roomHueColor(roomId) {
+    // Ogni gruppo Hue è spezzato in item SEPARATI per Potenza/Luminosita/
+    // Colore/... (trovato dal vivo: stessa stanza, chiavi diverse in
+    // state.lights, "power" e "color" quasi mai sulla STESSA entry) --
+    // "accesa" e "che colore" vanno cercati su tutte le entry della
+    // stanza, non sulla singola entry. '#ffffff' è il placeholder di
+    // rgbToHex() per "nessun colore ricevuto ancora", non un vero bianco.
+    const entries = (state.lights || []).filter(l => l.room === roomId);
+    if (!entries.length || !entries.some(l => l.power === true)) return null;
+    const colored = entries.filter(l => l.color && l.color.toLowerCase() !== '#ffffff');
+    if (!colored.length) return null;
+    let r = 0, g = 0, b = 0;
+    colored.forEach(l => {
+        const c = new THREE.Color(l.color);
+        r += c.r; g += c.g; b += c.b;
+    });
+    const avg = new THREE.Color(r / colored.length, g / colored.length, b / colored.length);
+    return avg.getHex();
+}
+
 function _makeRoomLabel(name) {
     const cv = document.createElement('canvas');
     cv.width = 256; cv.height = 48;
@@ -666,6 +692,18 @@ function updateRoomMarkers() {
                 if (pal !== null) {
                     marker.material.color.setHex(pal);
                     marker.material.opacity = Math.max(marker.material.opacity, 0.6);
+                }
+            } else {
+                // Colore luce Hue reale per stanza (2026-08-31, richiesto
+                // esplicitamente): solo se NON c'è già un rig TD attivo lì
+                // -- il DMX/TD ha la precedenza (show in corso), l'ambiente
+                // domestico normale tinge di suo altrimenti. Media RGB delle
+                // luci ACCESE della stanza (una spenta non deve tingere di
+                // un colore che in realtà non sta illuminando nulla).
+                const hueColor = _roomHueColor(id);
+                if (hueColor !== null) {
+                    marker.material.color.setHex(hueColor);
+                    marker.material.opacity = Math.max(marker.material.opacity, 0.55);
                 }
             }
             // Kick audio: riattiva ad ogni tick sopra soglia (non solo al
