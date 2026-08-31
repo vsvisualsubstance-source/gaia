@@ -80,12 +80,21 @@ const cur = {
 // ── Stato dai dati WS (lerped) ────────────────────────────────────────────────
 const S = {
     mood: 'neutra', energy: 50, stress: 0, calm: 0, social: 0, curiosity: 0,
-    lifeIndex: 50, lightsOn: 0, voice: 'idle',
+    lifeIndex: 50, voice: 'idle',
 };
 let people = [];          // [{name, emotion}]
 let thoughtTarget = '';   // ultimo pensiero ricevuto
 let lastLevel = null;
 let lastDreamTs = 0;
+
+// Luci raggruppate per stanza (2026-08-31) -- lightsByRoom = ultimo payload
+// grezzo (per leggere il colore in roomHueColor), roomLightsTarget/-Lerp =
+// conteggio accese per stanza, lerped come faceva S.lightsOn prima, ma per
+// stanza invece che in blocco unico (le braci ora nascono/muoiono stanza
+// per stanza, non tutte insieme).
+let lightsByRoom = new Map();      // room -> [{power, color}, ...]
+let roomLightsTarget = new Map();  // room -> count accese (ultimo payload)
+const roomLightsLerp = new Map();  // room -> count lerped (fade in/out)
 
 // Stesso algoritmo FNV-1a del vocabolario asemico (web/asemic.js) e del
 // feed TouchDesigner (/gaia/canvas/.../seed) — "sedia" produce sempre lo
@@ -135,7 +144,14 @@ function connectWS() {
             S.lifeTarget      = soul.lifeIndex ?? 50;
             S.voice           = d.voiceStatus?.status || 'idle';
             const lights = Array.isArray(d.lights) ? d.lights : [];
-            S.lightsTarget = lights.filter(l => l.power).length;
+            lightsByRoom = new Map();
+            roomLightsTarget = new Map();
+            lights.forEach(l => {
+                if (!l.room) return; // luce non mappata a una stanza -- niente ancora, ignorata (stesso criterio di app.js)
+                if (!lightsByRoom.has(l.room)) lightsByRoom.set(l.room, []);
+                lightsByRoom.get(l.room).push(l);
+                if (l.power === true) roomLightsTarget.set(l.room, (roomLightsTarget.get(l.room) || 0) + 1);
+            });
             // gesture/smile aggiunti (2026-08-30, richiesto esplicitamente):
             // erano già nel payload (stessa struttura people[] di index.html/
             // app.js) ma scartati qui -- solo emotion+room venivano letti.
@@ -420,7 +436,11 @@ function drawCore(t) {
     const cx = W / 2 + Math.sin(t * 0.13) * W * 0.012;
     const cy = H / 2 + Math.cos(t * 0.10) * H * 0.010;
     const bR = Math.min(W, H) * (0.10 + life * 0.05);
-    const amp = bR * 0.28 * (0.4 + life * 0.6);
+    // energia pesa l'intensità del respiro -- stesso principio già usato
+    // dal VJ per DMX/FX (effectiveEnergy), qui applicato all'ampiezza del
+    // nucleo per coerenza visiva, nessun canale nuovo (S.energy già arriva)
+    const energyBoost = 0.7 + (S.energy / 100) * 0.6;
+    const amp = bR * 0.28 * (0.4 + life * 0.6) * energyBoost;
 
     // Ammorbidito su richiesta (2026-08-29): il nucleo, per quanto piccolo,
     // leggeva troppo "grafico/invadente" -- meno opacità sui tratti, righe
@@ -543,37 +563,109 @@ function drawOnePerson(p, i, groupSize, anchor, t, core) {
     ctx.fillText(p.name.toUpperCase(), x, y + 24);
 }
 
-// ── Braci (luci accese) ───────────────────────────────────────────────────────
-const embers = [];
-function stepEmbers() {
-    const want = Math.min(24, Math.round(S.lightsOn) * 3);
-    while (embers.length < want)
-        embers.push({ x: Math.random() * W, y: H + Math.random() * 40,
-                      v: 0.15 + Math.random() * 0.35, ph: Math.random() * 9 });
-    if (embers.length > want) embers.length = want;
-    for (const e of embers) {
-        e.y -= e.v;
-        e.x += Math.sin(e.y * 0.01 + e.ph) * 0.3;
-        if (e.y < -10) { e.y = H + 10; e.x = Math.random() * W; }
-    }
+// ── Braci (luci accese, colore Hue reale per stanza) ────────────────────────
+// 2026-08-31: prima erano ambra fisso sparse su tutto il canvas, contate ma
+// slegate da ogni stanza -- ora ancorate a roomAnchor() come persone/
+// oggetti/note (stessa identità visiva "una stanza = un posto stabile
+// nella scena"), colorate col vero colore Hue medio della stanza. Porting
+// a mano di app.js._roomHueColor (qui niente THREE.js, canvas 2D puro):
+// media RGB delle entry con colore valido, esclude '#ffffff' -- placeholder
+// di rgbToHex() per "nessun colore ricevuto ancora", non un bianco vero.
+// Stanze senza colore noto (o non ancora arrivato) restano ambra come
+// prima -- mai un buco visivo per una stanza accesa ma senza dato colore.
+const AMBER = { r: 255, g: 226, b: 170 };
+const emberClusters = new Map(); // room -> [{x,y,v,ph,anchorX,anchorY}]
+
+function hexToRgb(hex) {
+    const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+    if (!m) return null;
+    const n = parseInt(m[1], 16);
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
 }
+
+function roomHueColor(room) {
+    const entries = lightsByRoom.get(room) || [];
+    const colored = entries.filter(l => l.color && l.color.toLowerCase() !== '#ffffff');
+    if (!colored.length) return null;
+    let r = 0, g = 0, b = 0, n = 0;
+    colored.forEach(l => { const c = hexToRgb(l.color); if (c) { r += c.r; g += c.g; b += c.b; n++; } });
+    if (!n) return null;
+    return { r: Math.round(r / n), g: Math.round(g / n), b: Math.round(b / n) };
+}
+
+function newEmber(anchor) {
+    return {
+        anchorX: anchor.x, anchorY: anchor.y,
+        x: anchor.x + (Math.random() - 0.5) * 140,
+        y: anchor.y + 60 + Math.random() * 80,
+        v: 0.15 + Math.random() * 0.35, ph: Math.random() * 9,
+    };
+}
+
+// core = posizione del nucleo del FRAME PRECEDENTE (stepEmbers gira prima di
+// drawCore nel loop principale, un frame di ritardo è impercettibile dato
+// il piccolo oscillare del nucleo -- evita di riordinare il blending del
+// nucleo stesso, che dipende dal globalCompositeOperation impostato da chi
+// lo chiama).
+function stepEmbers(core) {
+    roomLightsTarget.forEach((count, room) => {
+        const cur = roomLightsLerp.get(room) || 0;
+        roomLightsLerp.set(room, lerp(cur, count, 0.03));
+    });
+    roomLightsLerp.forEach((v, room) => {
+        if (roomLightsTarget.has(room)) return;
+        const nv = lerp(v, 0, 0.03);
+        if (nv < 0.05) roomLightsLerp.delete(room); else roomLightsLerp.set(room, nv);
+    });
+
+    roomLightsLerp.forEach((v, room) => {
+        const want = Math.min(9, Math.round(v) * 3);
+        let pool = emberClusters.get(room);
+        if (!pool) { pool = []; emberClusters.set(room, pool); }
+        const anchor = roomAnchor(room, core);
+        while (pool.length < want) pool.push(newEmber(anchor));
+        if (pool.length > want) pool.length = want;
+    });
+    emberClusters.forEach((_, room) => { if (!roomLightsLerp.has(room)) emberClusters.delete(room); });
+
+    // energia pesa il tremolio (coerenza con "energia pesa l'intensità" già
+    // usato dal VJ per DMX/FX -- niente canale nuovo, riusa S.energy che
+    // gaia-art riceve già)
+    const vK = 0.7 + (S.energy / 100) * 0.6;
+    emberClusters.forEach(pool => {
+        for (const e of pool) {
+            e.y -= e.v * vK;
+            e.x += Math.sin(e.y * 0.01 + e.ph) * 0.3;
+            if (e.y < e.anchorY - 100) {
+                e.y = e.anchorY + 60 + Math.random() * 80;
+                e.x = e.anchorX + (Math.random() - 0.5) * 140;
+            }
+        }
+    });
+}
+
 function drawEmbers(t) {
-    for (const e of embers) {
-        const tw = 0.10 + 0.08 * Math.sin(t * 2 + e.ph);
-        const g = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, 14);
-        g.addColorStop(0, `rgba(255,226,170,${tw})`);
-        g.addColorStop(1, 'rgba(255,226,170,0)');
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.arc(e.x, e.y, 14, 0, Math.PI * 2);
-        ctx.fill();
-    }
+    const vK = 0.7 + (S.energy / 100) * 0.6;
+    emberClusters.forEach((pool, room) => {
+        const col = roomHueColor(room) || AMBER;
+        for (const e of pool) {
+            const tw = (0.10 + 0.08 * Math.sin(t * 2 * vK + e.ph));
+            const g = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, 14);
+            g.addColorStop(0, `rgba(${col.r},${col.g},${col.b},${tw})`);
+            g.addColorStop(1, `rgba(${col.r},${col.g},${col.b},0)`);
+            ctx.fillStyle = g;
+            ctx.beginPath();
+            ctx.arc(e.x, e.y, 14, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    });
 }
 
 // ── Loop principale ───────────────────────────────────────────────────────────
 let time = 0;
 let lastTs = 0;
 let slowFrames = 0;
+let lastCore = { cx: 0, cy: 0, bR: 40 }; // aggiornato a fine frame, usato da stepEmbers() del frame successivo
 
 function frame(ts) {
     requestAnimationFrame(frame);
@@ -593,7 +685,6 @@ function frame(ts) {
     S.calm      = lerp(S.calm,      S.calmTarget      ?? S.calm,      F);
     S.curiosity = lerp(S.curiosity, S.curiosityTarget ?? S.curiosity, F);
     S.lifeIndex = lerp(S.lifeIndex, S.lifeTarget      ?? S.lifeIndex, F);
-    S.lightsOn  = lerp(S.lightsOn,  S.lightsTarget    ?? S.lightsOn,  F);
     S.mood = S.moodTarget || S.mood;
 
     // ── lerp palette ──
@@ -668,10 +759,11 @@ function frame(ts) {
     ctx.globalCompositeOperation = 'source-over';
 
     // ── braci · nucleo · oggetti · persone · pensiero · sogno · burst ──
-    stepEmbers();
+    stepEmbers(lastCore);
     ctx.globalCompositeOperation = 'lighter';
     drawEmbers(t);
     const core = drawCore(t);
+    lastCore = core;
     drawLevelBurst(nowMs, core);
     ctx.globalCompositeOperation = 'source-over';
     drawObjectMotes(t, core);
