@@ -154,7 +154,16 @@ button.small{padding:4px 10px;font-size:.78rem}
 <script>
 // Stesso pattern MQTT-over-WS di admin.html/patchdeck.html.
 const MX_BROKER = '192.168.1.142';
-const MX_DEVICE_ID = 'td-controllerv7-macbook-air-di-mauro';
+// Device_id scoperto dal vivo (2026-08-30, era fisso -- "td-controllerv7-
+// macbook-air-di-mauro" -- e non seguiva un rename lato TD, segnalato dal
+// vivo: "se cambio DeviceID/name non lo vedo più via Web"). Identificato
+// per `family === 'mixeraudio'` sullo status, non serve la conferma via
+// matrice come PatchDeck (ControllerV7 non ne pubblica una, vedi
+// GAIA_INTERFACE.md) -- e a differenza di PatchDeck qui non c'è uno stato
+// persistito in localStorage da "avvelenare": si riparte da null ad ogni
+// caricamento pagina, quindi Core (che non pubblica mai `family`) non può
+// mai essere scambiato per il device giusto.
+let MX_DEVICE_ID = null;
 
 // Ordine noto dei suffissi per canale (GAIA_INTERFACE.md / TD4Gaia
 // 2026-08-24,3) -- raggruppati per banda. Un canale puo' non avere tutti
@@ -197,12 +206,12 @@ function mxSetConn(ok) {
 }
 
 function mxSendAction(service, action) {
-  if (!mxClient || !mxClient.connected) return;
+  if (!mxClient || !mxClient.connected || !MX_DEVICE_ID) return;
   mxClient.publish(`gaia/device/${MX_DEVICE_ID}/command`, JSON.stringify({ action, service }));
 }
 
 function mxSendParam(param, value) {
-  if (!mxClient || !mxClient.connected) return;
+  if (!mxClient || !mxClient.connected || !MX_DEVICE_ID) return;
   mxClient.publish(`gaia/device/${MX_DEVICE_ID}/command`, JSON.stringify({ action: 'set', param, value }));
 }
 
@@ -217,12 +226,12 @@ let mxPollTimer = null;
 function mxStartPolling() {
   if (mxPollTimer) return;
   mxPollTimer = setInterval(() => {
-    if (document.hidden || !mxClient?.connected) return;
+    if (document.hidden || !mxClient?.connected || !MX_DEVICE_ID) return;
     mxClient.publish(`gaia/device/${MX_DEVICE_ID}/command`, JSON.stringify({ action: 'status', service: '_poll' }));
   }, 1000);
 }
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && mxClient?.connected) {
+  if (!document.hidden && mxClient?.connected && MX_DEVICE_ID) {
     mxClient.publish(`gaia/device/${MX_DEVICE_ID}/command`, JSON.stringify({ action: 'status', service: '_poll' }));
   }
 });
@@ -452,22 +461,20 @@ function mxInit() {
     mxClient.on('connect', () => {
       mxSetConn(true);
       mxClient.subscribe('gaia/device/+/status');
-      // NON retained, ~1s reale (GAIA_INTERFACE.md / TD4Gaia 2026-08-24,4)
-      // -- valori reattivi per canale, canale separato dallo status/heartbeat.
-      mxClient.subscribe(`gaia/device/${MX_DEVICE_ID}/audio_levels`);
-      // Retained: tutti i preset di tutti i canali arrivano subito alla
-      // subscribe, cosi' i pallini "slot pieno/vuoto" sono corretti anche
-      // prima di aver mai selezionato quel canale in questa sessione.
-      mxClient.subscribe(`gaia/mixeraudio/preset/${MX_DEVICE_ID}/+/+`);
+      // Wildcard invece di un topic per-device fisso (2026-08-30, vedi nota
+      // su MX_DEVICE_ID sopra) -- filtrati nel message handler una volta
+      // noto il device_id reale.
+      mxClient.subscribe('gaia/device/+/audio_levels');
+      mxClient.subscribe('gaia/mixeraudio/preset/+/+/+');
       mxStartPolling();
     });
     mxClient.on('error',   () => mxSetConn(false));
     mxClient.on('offline', () => mxSetConn(false));
     mxClient.on('message', (topic, raw) => {
-      if (topic.startsWith(`gaia/mixeraudio/preset/${MX_DEVICE_ID}/`)) {
-        const m = topic.match(/\/ch(\d+)\/([A-Z])$/);
-        if (!m) return;
-        const chan = parseInt(m[1], 10), slot = m[2];
+      if (topic.startsWith('gaia/mixeraudio/preset/')) {
+        const m = topic.match(/^gaia\/mixeraudio\/preset\/([^/]+)\/ch(\d+)\/([A-Z])$/);
+        if (!m || m[1] !== MX_DEVICE_ID) return;
+        const chan = parseInt(m[2], 10), slot = m[3];
         if (!raw || !raw.length) { delete mxPresets[chan]?.[slot]; }
         else {
           try {
@@ -492,6 +499,16 @@ function mxInit() {
       }
       try {
         const d = JSON.parse(raw.toString());
+        // Adozione (2026-08-30): il PRIMO status con family "mixeraudio"
+        // visto in questa sessione diventa il device -- sticky da lì in
+        // poi. Nessun rischio di agganciare Core per errore: Core non
+        // pubblica mai `family`, a differenza del bug storico di
+        // PatchDeck (quello sì confondibile, serviva la matrice come
+        // prova) questo filtro categorico basta da solo.
+        if (MX_DEVICE_ID === null) {
+          if ((d.family || '').toLowerCase() !== 'mixeraudio') return;
+          MX_DEVICE_ID = d.device_id;
+        }
         if (d.device_id !== MX_DEVICE_ID) return;
         // Usa il ts INCORPORATO nel messaggio, non l'orario di ricezione --
         // un retained vecchio arriva "ora" ma non e' fresco (bug gia' noto,
