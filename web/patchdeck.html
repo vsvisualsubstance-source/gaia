@@ -50,6 +50,10 @@ button.small{padding:4px 10px;font-size:.78rem}
 .deck-hdr .deck-state.active{color:var(--accent)}
 
 .patch-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:8px;margin-bottom:12px}
+.fx-row{display:flex;align-items:center;gap:10px;padding:6px 0}
+.fx-row .fx-label{min-width:110px;font-size:.85rem;color:var(--text);text-transform:capitalize}
+.fx-row input[type=range]{flex:1}
+.fx-row .fx-val{min-width:44px;text-align:right;font-size:.8rem;color:var(--muted)}
 .patch-cell{
   aspect-ratio:1.1;background:var(--bg);border:1px solid var(--border);border-radius:8px;
   color:var(--text);font-size:.82rem;font-weight:600;cursor:pointer;
@@ -120,6 +124,16 @@ button.small{padding:4px 10px;font-size:.78rem}
   </div>
 </div>
 
+<!-- FX (2026-08-31): nascosta di default -- si mostra da sola solo quando
+     pdMatrix.params contiene voci kind:'fx_param' (proposta per TD/Mac in
+     GAIA_INTERFACE.md, non ancora implementata lato TD al momento di
+     scrivere questo). Nessun nome hardcoded, tutto costruito dalla
+     matrice reale -- vedi pdRenderFx(). -->
+<div class="card" id="fx-card" style="display:none">
+  <div class="deck-hdr"><span class="deck-title">FX</span></div>
+  <div id="fx-controls"></div>
+</div>
+
 <script>
 // Stesso pattern MQTT-over-WS di admin.html (pmSend/gaia/device/+/status) --
 // mosquitto resta su Core anche se Node-RED gira altrove, non segue
@@ -185,6 +199,52 @@ function pdSend(service, action) {
   pdClient.publish(`gaia/device/${PD_DEVICE_ID}/command`, JSON.stringify({ action, service }));
 }
 
+function pdSendParam(param, value) {
+  if (!pdClient || !pdClient.connected) return;
+  pdClient.publish(`gaia/device/${PD_DEVICE_ID}/command`, JSON.stringify({ action: 'set', param, value }));
+}
+
+// FX (2026-08-31, proposta non ancora implementata lato TD -- vedi
+// GAIA_INTERFACE.md): genera gli slider dalla matrice reale, nessun nome
+// hardcoded -- resta a display:none finché non arriva almeno un
+// kind:'fx_param'. Skip-se-focus per non interrompere il drag dell'utente
+// mentre un valore live continua ad aggiornare (stesso principio già in
+// produzione su mixeraudio.html/dmx.html).
+function pdRenderFx() {
+  const card = document.getElementById('fx-card');
+  const wrap = document.getElementById('fx-controls');
+  const params = Object.entries(pdMatrix?.params || {}).filter(([, p]) => p.kind === 'fx_param');
+  if (!params.length) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  const live = pdDevice?.params || {};
+  for (const [name, meta] of params) {
+    const inputId = `fx-inp-${name}`;
+    let row = document.getElementById(`fx-row-${name}`);
+    if (!row) {
+      row = document.createElement('div');
+      row.id = `fx-row-${name}`;
+      row.className = 'fx-row';
+      const label = meta.label || name.replace(/^fx_/, '').replace(/_/g, ' ');
+      row.innerHTML = `<span class="fx-label"></span>
+        <input type="range" id="${inputId}">
+        <span class="fx-val" id="fx-val-${name}"></span>`;
+      row.querySelector('.fx-label').textContent = label;
+      const inp = row.querySelector('input');
+      const [min, max] = Array.isArray(meta.range) ? meta.range : [0, 1];
+      inp.min = min; inp.max = max; inp.step = (max - min) / 100 || 0.01;
+      inp.oninput = () => { document.getElementById(`fx-val-${name}`).textContent = (+inp.value).toFixed(2); };
+      inp.onchange = () => pdSendParam(name, +inp.value);
+      wrap.appendChild(row);
+    }
+    const inp = document.getElementById(inputId);
+    if (document.activeElement !== inp) {
+      const val = typeof live[name] === 'number' ? live[name] : (meta.default ?? 0);
+      inp.value = val;
+      document.getElementById(`fx-val-${name}`).textContent = (+val).toFixed(2);
+    }
+  }
+}
+
 function pdFlash(el) {
   el.classList.add('flash');
   setTimeout(() => el.classList.remove('flash'), 350);
@@ -238,6 +298,7 @@ function pdRenderDevice() {
   pdRenderDeckState('b');
   pdRenderGrid('a');
   pdRenderGrid('b');
+  pdRenderFx();
 }
 
 // Adotta un device_id come quello attivo, applicando subito qualunque
@@ -317,6 +378,7 @@ function pdInit() {
             pdDevice = d;
             pdConfirmed = true;
           }
+          pdRenderFx();
           if (pdDevice) pdRenderDevice(); else { pdRenderGrid('a'); pdRenderGrid('b'); }
         } catch (e) {}
         return;
