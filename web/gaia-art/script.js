@@ -174,6 +174,7 @@ function connectWS() {
 
             stepObjectSources(d);
             stepHerbNotes(d);
+            stepDmxRooms(d);
         } catch (_) {}
     };
 }
@@ -563,6 +564,67 @@ function drawOnePerson(p, i, groupSize, anchor, t, core) {
     ctx.fillText(p.name.toUpperCase(), x, y + 24);
 }
 
+// ── Impulsi DMX (palette + kick, richiesto esplicitamente 2026-08-31) ──────
+// Le stanze con un device DMX TD attivo riportano già nel payload la loro
+// palette REALE (rooms[].dmxPaletteA, auto-riportata dal device stesso in
+// td_room_presence_fn -- riflette anche un cambio manuale da patchdeck.html,
+// non solo le scelte del VJ) e il kick del mixer (rooms[].audioKick, già
+// nel payload da 2026-08-30 ma finora inutilizzato qui). Porting a mano
+// della stessa mappa nome→colore di app.js (DMX_PALETTE_COLORS).
+const DMX_PALETTE_COLORS = {
+    'Fire': [255,85,34], 'Fire Inverted': [255,136,0], 'Sunset': [255,119,68],
+    'Amber': [255,170,34], 'Warm': [255,204,102], 'Yellow': [255,238,68], 'Red': [255,51,51],
+    'Ocean': [34,153,221], 'Cool': [68,187,238], 'Blue': [51,102,255],
+    'Plasma': [204,68,255], 'Deep Purple': [119,34,204], 'Magenta-Cyan': [255,51,204],
+    'Forest': [51,170,85], 'Neon Party': [255,34,170], 'Rainbow (Daslight)': [221,68,255],
+    'Basic': [0,255,204], 'Basic 2': [0,221,170],
+};
+function dmxPaletteRgb(name) { return DMX_PALETTE_COLORS[name] || null; }
+
+const roomDmx = new Map(); // room -> {kick} (ultimo giro, per il fronte di salita)
+const dmxPulses = [];
+const MAX_DMX_PULSES = 16;
+
+// Fronte di salita, non ogni giro col kick alto: l'aggiornamento del WS non
+// è a frequenza audio (dipende da qualunque evento faccia ripartire
+// ThreeViewEngineGAME, non solo dal kick) -- un impulso per ogni volta che
+// il kick SALE sopra soglia rispetto al giro precedente, come una vera
+// batteria che colpisce invece di un valore continuo che resta alto.
+function stepDmxRooms(d) {
+    const rooms = Array.isArray(d.rooms) ? d.rooms : [];
+    rooms.forEach(r => {
+        const room = r.id || r.name;
+        if (!room) return;
+        const kick = r.audioKick || 0;
+        const prevKick = (roomDmx.get(room) || {}).kick || 0;
+        if (kick > 0.35 && prevKick <= 0.35 && dmxPulses.length < MAX_DMX_PULSES) {
+            dmxPulses.push({
+                room, t0: performance.now(), vel: Math.min(1, kick),
+                rgb: dmxPaletteRgb(r.dmxPaletteA) || dmxPaletteRgb(r.dmxPaletteB),
+            });
+        }
+        roomDmx.set(room, { kick });
+    });
+}
+
+function drawDmxPulses(nowMs, core) {
+    for (let i = dmxPulses.length - 1; i >= 0; i--) {
+        const p = dmxPulses[i];
+        const age = (nowMs - p.t0) / 1000;
+        if (age > 0.9) { dmxPulses.splice(i, 1); continue; }
+        const prog = age / 0.9;
+        const anchor = roomAnchor(p.room, core);
+        const r = core.bR * (0.5 + prog * (2.2 + p.vel * 1.5));
+        const alpha = (1 - prog) * 0.6 * (0.4 + p.vel * 0.6);
+        const rgb = p.rgb || cur.accent;
+        ctx.beginPath();
+        ctx.arc(anchor.x, anchor.y, r, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(${rgb[0]|0},${rgb[1]|0},${rgb[2]|0},${alpha})`;
+        ctx.lineWidth = 2.5 * (1 - prog) + 0.5;
+        ctx.stroke();
+    }
+}
+
 // ── Braci (luci accese, colore Hue reale per stanza) ────────────────────────
 // 2026-08-31: prima erano ambra fisso sparse su tutto il canvas, contate ma
 // slegate da ogni stanza -- ora ancorate a roomAnchor() come persone/
@@ -768,6 +830,7 @@ function frame(ts) {
     ctx.globalCompositeOperation = 'source-over';
     drawObjectMotes(t, core);
     drawNoteSparks(nowMs, core);
+    drawDmxPulses(nowMs, core);
     drawPeople(t, core);
     stepThought();
     drawThought(t);
