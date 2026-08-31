@@ -125,9 +125,9 @@ button.small{padding:4px 10px;font-size:.78rem}
 </div>
 
 <!-- FX (2026-08-31): nascosta di default -- si mostra da sola solo quando
-     pdMatrix.params contiene voci kind:'fx_param' (proposta per TD/Mac in
-     GAIA_INTERFACE.md, non ancora implementata lato TD al momento di
-     scrivere questo). Nessun nome hardcoded, tutto costruito dalla
+     pdMatrix.fx_params non è vuoto (schema reale pubblicato da TD/Mac,
+     diverso dalla proposta iniziale in GAIA_INTERFACE.md -- corretto dopo
+     averlo visto dal vivo). Nessun nome hardcoded, tutto costruito dalla
      matrice reale -- vedi pdRenderFx(). -->
 <div class="card" id="fx-card" style="display:none">
   <div class="deck-hdr"><span class="deck-title">FX</span></div>
@@ -204,16 +204,21 @@ function pdSendParam(param, value) {
   pdClient.publish(`gaia/device/${PD_DEVICE_ID}/command`, JSON.stringify({ action: 'set', param, value }));
 }
 
-// FX (2026-08-31, proposta non ancora implementata lato TD -- vedi
-// GAIA_INTERFACE.md): genera gli slider dalla matrice reale, nessun nome
-// hardcoded -- resta a display:none finché non arriva almeno un
-// kind:'fx_param'. Skip-se-focus per non interrompere il drag dell'utente
-// mentre un valore live continua ad aggiornare (stesso principio già in
+// FX (2026-08-31): genera gli slider dalla matrice reale, nessun nome
+// hardcoded -- resta a display:none finché pdMatrix.fx_params è vuoto.
+// Schema REALE come pubblicato da TD/Mac (diverso dalla mia proposta
+// iniziale in GAIA_INTERFACE.md -- corretto qui dopo averlo visto dal
+// vivo, non a occhio): chiave top-level `fx_params` (non `params`), ogni
+// voce ha `label`/`min`/`max` diretti (non `range`/`default`/`kind`),
+// nomi param SENZA prefisso `fx_` (es. "edge", non "fx_edge") -- il
+// comando MQTT usa il nome esatto della chiave, qualunque esso sia.
+// Skip-se-focus per non interrompere il drag dell'utente mentre un
+// valore live continua ad aggiornare (stesso principio già in
 // produzione su mixeraudio.html/dmx.html).
 function pdRenderFx() {
   const card = document.getElementById('fx-card');
   const wrap = document.getElementById('fx-controls');
-  const params = Object.entries(pdMatrix?.params || {}).filter(([, p]) => p.kind === 'fx_param');
+  const params = Object.entries(pdMatrix?.fx_params || {});
   if (!params.length) { card.style.display = 'none'; return; }
   card.style.display = '';
   const live = pdDevice?.params || {};
@@ -224,13 +229,14 @@ function pdRenderFx() {
       row = document.createElement('div');
       row.id = `fx-row-${name}`;
       row.className = 'fx-row';
-      const label = meta.label || name.replace(/^fx_/, '').replace(/_/g, ' ');
+      const label = meta.label || name.replace(/_/g, ' ');
       row.innerHTML = `<span class="fx-label"></span>
         <input type="range" id="${inputId}">
         <span class="fx-val" id="fx-val-${name}"></span>`;
       row.querySelector('.fx-label').textContent = label;
       const inp = row.querySelector('input');
-      const [min, max] = Array.isArray(meta.range) ? meta.range : [0, 1];
+      const min = typeof meta.min === 'number' ? meta.min : 0;
+      const max = typeof meta.max === 'number' ? meta.max : 1;
       inp.min = min; inp.max = max; inp.step = (max - min) / 100 || 0.01;
       inp.oninput = () => { document.getElementById(`fx-val-${name}`).textContent = (+inp.value).toFixed(2); };
       inp.onchange = () => pdSendParam(name, +inp.value);
@@ -238,7 +244,8 @@ function pdRenderFx() {
     }
     const inp = document.getElementById(inputId);
     if (document.activeElement !== inp) {
-      const val = typeof live[name] === 'number' ? live[name] : (meta.default ?? 0);
+      const min = typeof meta.min === 'number' ? meta.min : 0;
+      const val = typeof live[name] === 'number' ? live[name] : min;
       inp.value = val;
       document.getElementById(`fx-val-${name}`).textContent = (+val).toFixed(2);
     }
