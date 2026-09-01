@@ -93,8 +93,13 @@ aggiunto insieme agli altri servizi toggleabili.
 ## Deploy e verifica end-to-end (una volta online)
 
 1. Deploy dei file (`minipc/installation/`, `minipc/madmapper/`) sulla
-   macchina, venv condiviso `C:\gaia\venv` (`pip install -r
-   requirements.txt` in entrambe le cartelle).
+   macchina, dipendenze installate direttamente nel Python di sistema
+   (`pip install -r requirements.txt` in entrambe le cartelle) — **niente
+   venv**: verificato dal vivo 2026-09-01 che con un interprete copiato in
+   un venv, Windows Defender (real-time protection) rilanciava una
+   seconda copia di ogni processo tramite l'installazione Python "reale",
+   duplicando agent.py e il bridge con lo stesso `device_id` in conflitto
+   su MQTT. Vedi `_nota` in `minipc/installation/services.json`.
 2. Avvio agent, verifica che compaia in `GET /gaia/devices/profiles` con
    `role: "installation"`.
 3. Kill manuale di `MadMapper.exe` da Task Manager → il watchdog lo

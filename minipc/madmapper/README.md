@@ -72,8 +72,14 @@ per override).
 
 ## Setup
 
+Niente venv su questa macchina (vedi `_nota` in
+`minipc/installation/services.json`: Windows Defender rilanciava una
+seconda copia di ogni processo lanciato da un interprete copiato in un
+venv — doppio bridge, stesso `device_id` in conflitto su MQTT). Si
+installa direttamente nel Python di sistema (winget, utente `vs`):
+
 ```
-C:\gaia\venv\Scripts\pip.exe install -r requirements.txt
+C:\Users\vs\AppData\Local\Programs\Python\Python312\python.exe -m pip install -r requirements.txt
 ```
 
 Lanciato da `installation/agent.py` come servizio (`madmapper_bridge` in
@@ -81,7 +87,7 @@ Lanciato da `installation/agent.py` come servizio (`madmapper_bridge` in
 in produzione, solo per test manuale:
 
 ```
-C:\gaia\venv\Scripts\python.exe madmapper_bridge.py
+C:\Users\vs\AppData\Local\Programs\Python\Python312\python.exe madmapper_bridge.py
 ```
 
 ## Da fare al primo giorno online (AnyDesk)

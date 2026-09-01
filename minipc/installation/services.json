@@ -1,5 +1,5 @@
 {
-  "_nota": "Manifest servizi per l'agent Windows della macchina touring/installazione (2026-09, Palazzo Ducale Genova, 1 mese, video-mapping via MadMapper). Stesso schema di ops/agent/services.json. device_id costruito sull'hostname Tailscale reale (vs-mini-silver, MagicDNS vs-mini-silver.tail62079e.ts.net, IP Tailscale 100.99.176.100), confermato dal vivo via SSH (GET /gaia/devices/profiles su OPS mostra il device online, discovery Tailscale funzionante). Path MadMapper.exe confermato dal vivo 2026-09-01: 'C:\\Program Files\\MadMapper 6.1.5\\MadMapper.exe' (versione 6.1.5, non lo standard 'Program Files\\MadMapper' che era solo un placeholder). Non e' ancora documentato se esista un modo per auto-caricare l'ultimo progetto via riga di comando -- verificare le preferenze di MadMapper stesso.",
+  "_nota": "Manifest servizi per l'agent Windows della macchina touring/installazione (2026-09, Palazzo Ducale Genova, 1 mese, video-mapping via MadMapper). Stesso schema di ops/agent/services.json. device_id costruito sull'hostname Tailscale reale (vs-mini-silver, MagicDNS vs-mini-silver.tail62079e.ts.net, IP Tailscale 100.99.176.100), confermato dal vivo via SSH (GET /gaia/devices/profiles su OPS mostra il device online, discovery Tailscale funzionante). Path MadMapper.exe confermato dal vivo 2026-09-01: 'C:\\Program Files\\MadMapper 6.1.5\\MadMapper.exe' (versione 6.1.5, non lo standard 'Program Files\\MadMapper' che era solo un placeholder). Non e' ancora documentato se esista un modo per auto-caricare l'ultimo progetto via riga di comando -- verificare le preferenze di MadMapper stesso. NIENTE VENV su questa macchina (deciso dal vivo 2026-09-01): con l'interprete copiato in C:\\gaia\\venv\\Scripts\\python.exe, Windows Defender (real-time protection attivo, confermato via Get-MpComputerStatus) rilanciava una SECONDA copia del processo tramite l'installazione Python 'reale' e conosciuta (C:\\Users\\vs\\...\\Python312\\python.exe) -- osservato live: agent.py E madmapper_bridge.py duplicati identicamente, con la copia venv sempre genitore della copia reale, sistematico e riproducibile ad ogni avvio, mai nei primi ~10s ma dopo. Non approfondito oltre (RCA esatta in Defender non confermata, solo l'ipotesi piu' plausibile) perche' il sintomo concreto -- una finestra di troppo che lampeggia, doppio processo che parla su MQTT con lo stesso device_id -- si risolve alla radice eliminando la copia venv: pip install diretto sul Python reale, cmd nei servizi puntano li'.",
   "machine_role": "installation",
   "device_id": "installation-vs-mini-silver",
   "stanza": "palazzo-ducale",
@@ -14,7 +14,7 @@
     },
     "madmapper_bridge": {
       "cmd": [
-        "C:\\gaia\\venv\\Scripts\\python.exe",
+        "C:\\Users\\vs\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
         "madmapper_bridge.py"
       ],
       "cwd": "C:\\gaia\\minipc\\madmapper",

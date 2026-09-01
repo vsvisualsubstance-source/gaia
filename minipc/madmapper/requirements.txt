@@ -1,8 +1,9 @@
-# Venv della macchina installazione — C:\gaia\venv, condiviso con
-# minipc/installation/ (stesso schema di minipc/touchdesigner/requirements.txt,
-# ma qui è lo stesso venv del resto della macchina, non uno dedicato).
-# Installa con:
-#   C:\gaia\venv\Scripts\pip.exe install -r requirements.txt
+# NIENTE venv su questa macchina (deciso dal vivo 2026-09-01, vedi _nota in
+# minipc/installation/services.json — Windows Defender rilanciava una
+# seconda copia di ogni processo lanciato da un interprete copiato in un
+# venv). Si installa direttamente nel Python di sistema condiviso con
+# minipc/installation/ (winget, utente vs):
+#   C:\Users\vs\AppData\Local\Programs\Python\Python312\python.exe -m pip install -r requirements.txt
 
 paho-mqtt
 python-osc

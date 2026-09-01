@@ -1,10 +1,15 @@
-# Venv della macchina installazione — C:\gaia\venv (stesso schema di
-# minipc/touchdesigner/requirements.txt). Installa con:
-#   C:\gaia\venv\Scripts\pip.exe install -r requirements.txt
+# NIENTE venv su questa macchina (deciso dal vivo 2026-09-01): con
+# l'interprete copiato in un venv, Windows Defender (real-time protection
+# attivo) rilanciava una seconda copia di ogni processo tramite
+# l'installazione Python "reale" -- doppio agent.py, doppio bridge, stesso
+# device_id in conflitto su MQTT, finestre che lampeggiano. Vedi _nota in
+# services.json per i dettagli. Si installa direttamente nel Python di
+# sistema (winget, utente vs):
+#   C:\Users\vs\AppData\Local\Programs\Python\Python312\python.exe -m pip install -r requirements.txt
 #
 # Solo agent.py gira da qui (discovery/watchdog/comandi MQTT, niente OSC).
 # Il bridge OSC per MadMapper è un modulo separato, vedi
-# minipc/madmapper/requirements.txt (stesso venv condiviso, dipendenze
-# proprie elencate lì).
+# minipc/madmapper/requirements.txt (stesso Python di sistema condiviso,
+# dipendenze proprie elencate lì).
 
 paho-mqtt
