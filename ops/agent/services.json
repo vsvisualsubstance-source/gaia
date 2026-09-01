@@ -84,6 +84,15 @@
       },
       "_nota": "musica/radio per stanza — mpv IPC su named pipe (vedi pi/mediaplayer)"
     },
+    "touchdesigner": {
+      "cmd": [
+        "C:\\Program Files\\Derivative\\TouchDesigner\\bin\\TouchDesigner.exe",
+        "C:/Users/vsvis/Documents/td/DMX/dmx.toe"
+      ],
+      "cwd": "C:\\Program Files\\Derivative\\TouchDesigner\\bin",
+      "check_script": false,
+      "_nota": "Path/progetto confermati dal vivo 2026-09-01 (PID reale ispezionato via Get-CimInstance). check_script:false perche' l'ultimo elemento di cmd non e' l'eseguibile ma un argomento (il .toe) -- stesso pattern di 'kiosk' sopra: e' l'eseguibile stesso ad essere lanciato, non uno script Python nella cwd dell'agent. Da' un vero controllo start/stop/restart ('chiudi/riapri TD') su questa istanza -- prima non esisteva alcun modo per farlo da remoto, solo i toggle granulari interni (dmx_a_kick_enable, ecc, pubblicati DA TD stesso via td_internal_agent.py con role:'touchdesigner', family:'dmx', device_id 'td-dmx-ops') che sono un'altra cosa e restano nascosti da Pi Manager per design (vedi pmIsHiddenFromGrid in web/admin.html) -- questo servizio invece vive dentro il device ops-silvermini2 (role:'ops'), quindi appare regolarmente in Pi Manager. Nessun watchdog automatico (ops/agent.py non ne ha, per design -- solo installation/agent.py ce l'ha, macchina non presidiata): se TD crasha resta giu' finche' non lo si riavvia a mano da Pi Manager/Telegram, stesso comportamento di kiosk/mediaplayer."
+    },
     "ollama": {
       "type": "http_check",
       "check_url": "http://localhost:11434/api/tags",
