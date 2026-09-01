@@ -18,6 +18,9 @@ core-node-0/
 │   ├── script/            voice pipeline (gaia_listener.py), enrollment, gaia_admin
 │   ├── beacon/            gaia-beacon: risponditore UDP discovery + annuncio mDNS
 │   ├── camera/            camera_server locale (shared memory + stream MJPEG :8766)
+│   ├── touchdesigner/     bridge OSC↔MQTT per TouchDesigner (family dmx/patchdeck/controller)
+│   ├── installation/      kit agent per macchine Windows touring (ruolo "installation", vedi docs/installation-touring.md)
+│   ├── madmapper/         bridge OSC↔MQTT per MadMapper (family madmapper, usato da installation/)
 │   ├── local_agent.py     agente locale (emula Pi per test OTA e Pi Manager)
 │   ├── gaia-local-agent.service  systemd unit per local_agent
 │   ├── wakeword_models/   modelli wakeword (gitignored)
@@ -25,7 +28,7 @@ core-node-0/
 │   └── transcribe_audio.sh STT da file audio
 ├── node-red/              ← flows git-tracked
 │   └── flows.json         flussi principali (copia del live)
-├── docs/                  ← contratti e protocolli (discovery-protocol.md)
+├── docs/                  ← contratti e protocolli (discovery-protocol.md, installation-touring.md)
 ├── mosquitto/             config broker MQTT
 └── docker-compose.yaml    servizi Docker (mosquitto, openhab, ollama, qdrant)
 ```

@@ -17,11 +17,11 @@
         "C:\\gaia\\venv\\Scripts\\python.exe",
         "madmapper_bridge.py"
       ],
-      "cwd": "C:\\gaia\\minipc\\installation",
+      "cwd": "C:\\gaia\\minipc\\madmapper",
       "env_extra": {
         "PYTHONUNBUFFERED": "1"
       },
-      "_nota": "Bridge OSC<->MQTT, processo SEPARATO da MadMapper.exe stesso (stesso principio del watchdog TD gia' in produzione: un self-check dentro l'app controllata condividerebbe il suo stesso destino se si blocca). Si annuncia da solo su gaia/device/madmapper-{host}/status con family=madmapper -- vedi web/madmapper.html."
+      "_nota": "Bridge OSC<->MQTT, processo SEPARATO da MadMapper.exe stesso (stesso principio del watchdog TD gia' in produzione: un self-check dentro l'app controllata condividerebbe il suo stesso destino se si blocca). Si annuncia da solo su gaia/device/madmapper-{host}/status con family=madmapper -- vedi web/madmapper.html. Modulo a parte in minipc/madmapper/ (stesso schema di minipc/touchdesigner/), non dentro minipc/installation/: quel modulo e' il kit generico riusabile per qualunque venue futura, questo e' specifico della family madmapper -- vedi minipc/madmapper/README.md."
     }
   }
 }

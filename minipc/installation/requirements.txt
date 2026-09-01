@@ -1,6 +1,10 @@
 # Venv della macchina installazione — C:\gaia\venv (stesso schema di
 # minipc/touchdesigner/requirements.txt). Installa con:
 #   C:\gaia\venv\Scripts\pip.exe install -r requirements.txt
+#
+# Solo agent.py gira da qui (discovery/watchdog/comandi MQTT, niente OSC).
+# Il bridge OSC per MadMapper è un modulo separato, vedi
+# minipc/madmapper/requirements.txt (stesso venv condiviso, dipendenze
+# proprie elencate lì).
 
 paho-mqtt
-python-osc
