@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GAIA MadMapper</title>
+<style>
+:root {
+  --bg:#08090f; --card:#0e1221; --border:#1e2840;
+  --accent:#00ffcc; --blue:#58a6ff; --green:#3fb950; --red:#f85149;
+  --yellow:#e3b341; --cyan:#39c5cf;
+  --text:#c9d1d9; --muted:#6b7a99;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;padding:24px;max-width:960px;margin:0 auto}
+h1{color:var(--accent);font-size:1.6rem;margin-bottom:4px}
+.subtitle{color:var(--muted);font-size:.9rem;margin-bottom:24px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:16px}
+h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:8px}
+button{
+  background:var(--accent);color:#000;border:none;border-radius:6px;
+  padding:8px 16px;cursor:pointer;font-size:.85rem;font-weight:600;
+  transition:opacity .15s;
+}
+button:hover{opacity:.85}
+button:disabled{opacity:.3;cursor:default}
+button.secondary{background:var(--card);color:var(--text);border:1px solid var(--border)}
+button.red{background:var(--red);color:#fff}
+button.small{padding:4px 10px;font-size:.78rem}
+
+.topnav{display:flex;align-items:center;gap:10px;padding-bottom:10px;margin-bottom:20px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.topnav-title{font-size:1.1rem;font-weight:700;color:var(--accent);margin-right:4px}
+.topnav-link{color:var(--muted);text-decoration:none;font-size:.8rem;padding:3px 9px;border-radius:6px;border:1px solid transparent}
+.topnav-link:hover{color:var(--text);border-color:var(--border)}
+.mqtt-dot{width:8px;height:8px;border-radius:50%;background:#444;display:inline-block;transition:background .3s;flex-shrink:0;margin-left:auto}
+.mqtt-dot.ok{background:var(--green);box-shadow:0 0 5px var(--green)}
+.mqtt-dot.err{background:var(--red)}
+
+.dev-status{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.dev-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;font-size:.8rem;font-weight:600}
+.dev-badge.online{background:#0f2418;color:var(--green)}
+.dev-badge.offline{background:#2a0f0f;color:var(--red)}
+.dev-meta{color:var(--muted);font-size:.8rem}
+
+.osc-row{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.osc-row input{
+  flex:1;min-width:160px;background:var(--bg);border:1px solid var(--border);border-radius:6px;
+  color:var(--text);padding:8px 10px;font-size:.85rem;font-family:monospace;
+}
+.osc-row input:focus{border-color:var(--accent);outline:none}
+
+.osc-log{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;
+  height:260px;overflow-y:auto;font-family:monospace;font-size:.78rem;color:var(--muted)}
+.osc-log-row{padding:2px 0;border-bottom:1px solid #12182a}
+.osc-log-row .addr{color:var(--cyan)}
+.osc-log-row .val{color:var(--text)}
+.osc-log-row .ts{color:var(--muted);float:right}
+.osc-empty{color:var(--muted);font-size:.85rem;padding:8px 0;text-align:center}
+
+.warn-box{background:#2a1f0a;border:1px solid #4a3814;border-radius:8px;padding:12px 14px;
+  color:var(--yellow);font-size:.82rem;margin-bottom:16px;line-height:1.5}
+</style>
+</head>
+<body>
+
+<div class="topnav">
+  <div class="topnav-title">GAIA MadMapper</div>
+  <a href="portal.html" class="topnav-link">⌂ Portal</a>
+  <a href="admin.html" class="topnav-link">Admin</a>
+  <span id="mqtt-dot" class="mqtt-dot"></span>
+</div>
+
+<h1>🗺 MadMapper</h1>
+<div class="subtitle">Bridge OSC↔MQTT — installazione touring (Palazzo Ducale)</div>
+
+<div class="warn-box">
+  ⚠ Pannello generico: gli indirizzi OSC del progetto reale non sono ancora
+  noti da questa sessione (vedi Help → OSC Channels List in MadMapper).
+  Il blackout è documentato ufficialmente ed è sicuro; per tutto il resto
+  usa il pannello "Invio grezzo" sotto o guarda cosa arriva nel log — è
+  così che si scopre l'elenco vero, senza inventare controlli a caso.
+</div>
+
+<div class="card">
+  <h2>Stato device</h2>
+  <div class="dev-status">
+    <span id="dev-badge" class="dev-badge offline">● offline</span>
+    <span class="dev-meta" id="dev-meta">nessun dato ricevuto</span>
+  </div>
+  <div class="dev-meta" id="dev-osc-meta" style="margin-top:8px"></div>
+  <div class="osc-row">
+    <button class="red" id="btn-blackout">⬛ Blackout (tutte le superfici)</button>
+    <button class="secondary small" id="btn-refresh">↻ Aggiorna stato</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Invio grezzo (qualunque indirizzo OSC)</h2>
+  <div class="osc-row">
+    <input type="text" id="osc-addr" placeholder="/surfaces/Quad-1/opacity" spellcheck="false">
+    <input type="text" id="osc-val" placeholder="valore (es. 0.5)" style="max-width:160px" spellcheck="false">
+    <button id="btn-send">Invia</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Log OSC in arrivo da MadMapper</h2>
+  <div id="osc-log" class="osc-log">
+    <div class="osc-empty">In attesa di messaggi…</div>
+  </div>
+</div>
+
+<script>
+const MM_BROKER = '192.168.1.142';
+// Stesso principio di mixeraudio.html: nessun device_id fisso, adozione
+// del primo status con family "madmapper" visto in questa sessione.
+// Core non pubblica mai `family`, zero rischio di agganciare il device
+// sbagliato.
+let MM_DEVICE_ID = null;
+let mmClient = null;
+let mmDevice = null;
+const MM_LOG_MAX = 80;
+let mmLogRows = [];
+
+function mmSetConn(ok) {
+  document.getElementById('mqtt-dot').className = 'mqtt-dot ' + (ok ? 'ok' : 'err');
+}
+
+function mmSendCommand(cmd) {
+  if (!mmClient || !mmClient.connected || !MM_DEVICE_ID) return;
+  mmClient.publish(`gaia/device/${MM_DEVICE_ID}/command`, JSON.stringify(cmd));
+}
+
+function mmRenderStatus() {
+  const badge = document.getElementById('dev-badge');
+  const meta = document.getElementById('dev-meta');
+  const oscMeta = document.getElementById('dev-osc-meta');
+  if (!mmDevice) return;
+  const offline = mmDevice._offline;
+  badge.className = 'dev-badge ' + (offline ? 'offline' : 'online');
+  badge.textContent = offline ? '● offline' : '● online';
+  meta.textContent = `${mmDevice.name || MM_DEVICE_ID} · stanza ${mmDevice.stanza || '?'} · uptime ${mmDevice.uptime || 0}s`;
+  const age = mmDevice.last_osc_in_age_s;
+  oscMeta.textContent = age != null
+    ? `Ultimo OSC ricevuto ${age}s fa (${mmDevice.last_osc_in_address || '?'}) · target invio: ${mmDevice.osc_out_target || '?'}`
+    : `Nessun OSC ricevuto ancora da MadMapper · target invio: ${mmDevice.osc_out_target || '?'}`;
+}
+
+function mmAddLogRow(address, value) {
+  mmLogRows.unshift({ address, value, ts: Date.now() });
+  if (mmLogRows.length > MM_LOG_MAX) mmLogRows.length = MM_LOG_MAX;
+  const log = document.getElementById('osc-log');
+  log.innerHTML = mmLogRows.map(r => `
+    <div class="osc-log-row">
+      <span class="ts">${new Date(r.ts).toLocaleTimeString('it-IT')}</span>
+      <span class="addr">${r.address}</span> <span class="val">${JSON.stringify(r.value)}</span>
+    </div>`).join('');
+}
+
+function mmInit() {
+  const mqttUrl = `ws://${MM_BROKER}:9001`;
+  function start() {
+    mmClient = mqtt.connect(mqttUrl);
+    mmClient.on('connect', () => {
+      mmSetConn(true);
+      mmClient.subscribe('gaia/device/+/status');
+      mmClient.subscribe('gaia/device/+/osc_in/+');
+    });
+    mmClient.on('error',   () => mmSetConn(false));
+    mmClient.on('offline', () => mmSetConn(false));
+    mmClient.on('message', (topic, raw) => {
+      if (!raw || !raw.length) return;
+      if (topic.includes('/osc_in/')) {
+        const m = topic.match(/^gaia\/device\/([^/]+)\/osc_in\/(.+)$/);
+        if (!m || m[1] !== MM_DEVICE_ID) return;
+        try { mmAddLogRow('/' + m[2].replace(/_/g, '/'), JSON.parse(raw.toString())); } catch (e) {}
+        return;
+      }
+      try {
+        const d = JSON.parse(raw.toString());
+        if (MM_DEVICE_ID === null) {
+          if ((d.family || '').toLowerCase() !== 'madmapper') return;
+          MM_DEVICE_ID = d.device_id;
+        }
+        if (d.device_id !== MM_DEVICE_ID) return;
+        d._lastSeen = d.ts || Date.now();
+        d._offline = (Date.now() - d._lastSeen) > 90000;
+        mmDevice = d;
+        mmRenderStatus();
+      } catch (e) {}
+    });
+    setInterval(() => {
+      if (mmDevice && Date.now() - mmDevice._lastSeen > 90000 && !mmDevice._offline) {
+        mmDevice._offline = true;
+        mmRenderStatus();
+      }
+    }, 10000);
+  }
+  if (typeof mqtt !== 'undefined') {
+    start();
+  } else {
+    const s = document.createElement('script');
+    s.src = 'vendor/mqtt.min.js';
+    s.onload = start;
+    document.head.appendChild(s);
+  }
+}
+
+document.getElementById('btn-blackout').onclick = () => mmSendCommand({ action: 'blackout' });
+document.getElementById('btn-refresh').onclick  = () => mmSendCommand({ action: 'status' });
+document.getElementById('btn-send').onclick = () => {
+  const address = document.getElementById('osc-addr').value.trim();
+  const raw = document.getElementById('osc-val').value.trim();
+  if (!address) return;
+  // numero se possibile, altrimenti stringa grezza -- l'utente sa cosa
+  // aspetta MadMapper per quell'indirizzo, questo pannello non lo indovina.
+  const num = parseFloat(raw);
+  const value = (raw !== '' && !Number.isNaN(num) && String(num) === raw) ? num : raw;
+  mmSendCommand({ action: 'osc_set', address, value });
+};
+
+mmInit();
+</script>
+</body>
+</html>

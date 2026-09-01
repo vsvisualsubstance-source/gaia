@@ -1,0 +1,6 @@
+# Venv della macchina installazione — C:\gaia\venv (stesso schema di
+# minipc/touchdesigner/requirements.txt). Installa con:
+#   C:\gaia\venv\Scripts\pip.exe install -r requirements.txt
+
+paho-mqtt
+python-osc

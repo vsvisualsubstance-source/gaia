@@ -1,0 +1,27 @@
+{
+  "_nota": "Manifest servizi per l'agent Windows della macchina touring/installazione (2026-09, Palazzo Ducale Genova, 1 mese, video-mapping via MadMapper). Stesso schema di ops/agent/services.json. device_id/stanza sono PLACEHOLDER -- aggiornare con l'hostname reale appena la macchina e' online (AnyDesk). Path/argomenti MadMapper.exe da confermare dal vivo: potrebbe essere in 'Program Files (x86)', e non e' documentato pubblicamente se esista un modo per auto-caricare l'ultimo progetto via riga di comando -- verificare le preferenze di MadMapper stesso una volta connessi.",
+  "machine_role": "installation",
+  "device_id": "installation-CHANGEME",
+  "stanza": "palazzo-ducale",
+  "services": {
+    "madmapper": {
+      "cmd": [
+        "C:\\Program Files\\MadMapper\\MadMapper.exe"
+      ],
+      "cwd": "C:\\Program Files\\MadMapper",
+      "check_script": false,
+      "_nota": "PLACEHOLDER -- path/cwd da confermare dal vivo. check_script:false perche' l'ultimo elemento di cmd e' l'eseguibile stesso, non uno script Python nella cwd dell'agent (stesso pattern di 'kiosk' in ops/agent/services.json). Il riavvio e' gestito dal watchdog del nuovo agent.py (WATCHDOG_INTERVAL) + dal liveness check OSC del bridge (vedi madmapper_bridge.py) che chiede un restart via MQTT se il processo sembra vivo ma non risponde."
+    },
+    "madmapper_bridge": {
+      "cmd": [
+        "C:\\gaia\\venv\\Scripts\\python.exe",
+        "madmapper_bridge.py"
+      ],
+      "cwd": "C:\\gaia\\minipc\\installation",
+      "env_extra": {
+        "PYTHONUNBUFFERED": "1"
+      },
+      "_nota": "Bridge OSC<->MQTT, processo SEPARATO da MadMapper.exe stesso (stesso principio del watchdog TD gia' in produzione: un self-check dentro l'app controllata condividerebbe il suo stesso destino se si blocca). Si annuncia da solo su gaia/device/madmapper-{host}/status con family=madmapper -- vedi web/madmapper.html."
+    }
+  }
+}
