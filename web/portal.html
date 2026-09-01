@@ -5,12 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>GAIA · Portale</title>
   <style>
-    :root { --mood: #4477ff; }
+    :root {
+      /* Token GAIA condivisi (stessa famiglia di dashboard/admin/patchdeck/
+         mixeraudio/dmx/madmapper) -- portal.html non li usava ancora
+         (trovato verificando la richiesta di coerenza tra le pagine web,
+         2026-09-01), solo i valori che coincidevano esattamente con quelli
+         gia' in uso altrove sono stati convertiti a var(), nessun colore
+         nuovo introdotto. --mood resta specifico di questa pagina (aurora
+         reattiva all'umore). */
+      --bg:#050810; --text:#c9d1d9; --muted:#6b7a99;
+      --mood: #4477ff;
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
-      background: #050810;
-      color: #c9d1d9;
+      background: var(--bg);
+      color: var(--text);
       font-family: 'Segoe UI', system-ui, sans-serif;
       min-height: 100vh;
       display: flex;
@@ -68,7 +78,7 @@
     .metric .lbl {
       font-size: 0.5rem;
       letter-spacing: 0.2em;
-      color: #6b7a99;
+      color: var(--muted);
     }
 
     .metric .val {
@@ -86,7 +96,7 @@
       justify-content: center;
       margin: 6px 0 10px;
       font-size: 0.6rem;
-      color: #6b7a99;
+      color: var(--muted);
     }
 
     .xp-bar {
@@ -122,13 +132,13 @@
     .presence {
       font-size: 0.6rem;
       letter-spacing: 0.1em;
-      color: #6b7a99;
+      color: var(--muted);
       text-align: center;
       margin-bottom: 32px;
       min-height: 1em;
     }
 
-    .presence span { color: #c9d1d9; }
+    .presence span { color: var(--text); }
 
     /* Cards modalità */
     .modes {
@@ -165,7 +175,7 @@
 
     .card-desc {
       font-size: 0.65rem;
-      color: #6b7a99;
+      color: var(--muted);
       line-height: 1.7;
       flex: 1;
     }
@@ -189,7 +199,7 @@
       align-items: center;
       gap: 7px;
       font-size: 0.6rem;
-      color: #6b7a99;
+      color: var(--muted);
       z-index: 10;
     }
 
@@ -208,7 +218,7 @@
       top: 18px;
       left: 20px;
       font-size: 0.6rem;
-      color: #6b7a99;
+      color: var(--muted);
       letter-spacing: 0.1em;
     }
 

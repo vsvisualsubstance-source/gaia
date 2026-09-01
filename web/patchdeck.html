@@ -32,8 +32,9 @@ button.small{padding:4px 10px;font-size:.78rem}
 
 .topnav{display:flex;align-items:center;gap:10px;padding-bottom:10px;margin-bottom:20px;border-bottom:1px solid var(--border);flex-wrap:wrap}
 .topnav-title{font-size:1.1rem;font-weight:700;color:var(--accent);margin-right:4px}
-.topnav-link{color:var(--muted);text-decoration:none;font-size:.8rem;padding:3px 9px;border-radius:6px;border:1px solid transparent}
+.topnav-link{color:var(--muted);text-decoration:none;font-size:.8rem;padding:4px 10px;border-radius:6px;border:1px solid transparent}
 .topnav-link:hover{color:var(--text);border-color:var(--border)}
+.topnav-link.active{color:var(--accent);background:rgba(0,255,204,.06);border-color:var(--border)}
 .mqtt-dot{width:8px;height:8px;border-radius:50%;background:#444;display:inline-block;transition:background .3s;flex-shrink:0;margin-left:auto}
 .mqtt-dot.ok{background:var(--green);box-shadow:0 0 5px var(--green)}
 .mqtt-dot.err{background:var(--red)}

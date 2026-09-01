@@ -24,7 +24,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 .voice-pill.processing{color:var(--blue);border-color:var(--blue);background:#0a1220}
 @keyframes pulse-mic{0%,100%{opacity:1}50%{opacity:.5}}
 
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;align-items:start}
 .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;min-height:80px}
 .card-title{font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:12px;display:flex;align-items:center;gap:6px}
 .card-title span{font-size:1rem}
@@ -48,7 +48,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 /* Rooms */
 .room-card{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px}
 .room-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
-.room-name{font-weight:600;font-size:.9rem}
+.room-name{font-weight:600;font-size:.9rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .room-activity{font-size:.75rem;color:var(--muted)}
 .objects-grid{display:flex;flex-wrap:wrap;gap:4px}
 .obj-tag{background:#0a1520;border:1px solid #1e3050;border-radius:6px;padding:2px 8px;font-size:.72rem;color:var(--blue)}
