@@ -26,8 +26,15 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
-      overflow: hidden;
+      /* "safe center": centra quando il contenuto entra in una schermata
+         (il caso comune su desktop), ma torna ad allinearsi dall'alto
+         quando il contenuto e' piu' alto del viewport -- senza "safe",
+         un flex container centrato con overflow taglia l'inizio del
+         contenuto e lo scroll verso l'alto non riesce a raggiungerlo mai
+         (bug CSS noto, non risolto dal solo overflow-y:auto sotto). */
+      justify-content: safe center;
+      overflow-x: hidden;
+      overflow-y: auto;
     }
 
     /* Aurora di sfondo reattiva all'umore */
