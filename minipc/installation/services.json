@@ -1,16 +1,16 @@
 {
-  "_nota": "Manifest servizi per l'agent Windows della macchina touring/installazione (2026-09, Palazzo Ducale Genova, 1 mese, video-mapping via MadMapper). Stesso schema di ops/agent/services.json. device_id costruito sull'hostname Tailscale riportato dall'utente (vs-mini-silver, MagicDNS vs-mini-silver.tail62079e.ts.net, IP Tailscale 100.99.176.100) -- macchina non ancora online al momento di questa modifica, da riconfermare contro l'hostname Windows reale appena raggiungibile (AnyDesk/SSH). Path/argomenti MadMapper.exe da confermare dal vivo: potrebbe essere in 'Program Files (x86)', e non e' documentato pubblicamente se esista un modo per auto-caricare l'ultimo progetto via riga di comando -- verificare le preferenze di MadMapper stesso una volta connessi.",
+  "_nota": "Manifest servizi per l'agent Windows della macchina touring/installazione (2026-09, Palazzo Ducale Genova, 1 mese, video-mapping via MadMapper). Stesso schema di ops/agent/services.json. device_id costruito sull'hostname Tailscale reale (vs-mini-silver, MagicDNS vs-mini-silver.tail62079e.ts.net, IP Tailscale 100.99.176.100), confermato dal vivo via SSH (GET /gaia/devices/profiles su OPS mostra il device online, discovery Tailscale funzionante). Path MadMapper.exe confermato dal vivo 2026-09-01: 'C:\\Program Files\\MadMapper 6.1.5\\MadMapper.exe' (versione 6.1.5, non lo standard 'Program Files\\MadMapper' che era solo un placeholder). Non e' ancora documentato se esista un modo per auto-caricare l'ultimo progetto via riga di comando -- verificare le preferenze di MadMapper stesso.",
   "machine_role": "installation",
   "device_id": "installation-vs-mini-silver",
   "stanza": "palazzo-ducale",
   "services": {
     "madmapper": {
       "cmd": [
-        "C:\\Program Files\\MadMapper\\MadMapper.exe"
+        "C:\\Program Files\\MadMapper 6.1.5\\MadMapper.exe"
       ],
-      "cwd": "C:\\Program Files\\MadMapper",
+      "cwd": "C:\\Program Files\\MadMapper 6.1.5",
       "check_script": false,
-      "_nota": "PLACEHOLDER -- path/cwd da confermare dal vivo. check_script:false perche' l'ultimo elemento di cmd e' l'eseguibile stesso, non uno script Python nella cwd dell'agent (stesso pattern di 'kiosk' in ops/agent/services.json). Il riavvio e' gestito dal watchdog del nuovo agent.py (WATCHDOG_INTERVAL) + dal liveness check OSC del bridge (vedi madmapper_bridge.py) che chiede un restart via MQTT se il processo sembra vivo ma non risponde."
+      "_nota": "Path confermato dal vivo 2026-09-01 (versione 6.1.5 installata). check_script:false perche' l'ultimo elemento di cmd e' l'eseguibile stesso, non uno script Python nella cwd dell'agent (stesso pattern di 'kiosk' in ops/agent/services.json). Il riavvio e' gestito dal watchdog del nuovo agent.py (WATCHDOG_INTERVAL) + dal liveness check OSC del bridge (vedi madmapper_bridge.py) che chiede un restart via MQTT se il processo sembra vivo ma non risponde. Non confermato se esista un modo per auto-caricare l'ultimo progetto via riga di comando -- MadMapper riparte a vuoto finche' non lo si verifica."
     },
     "madmapper_bridge": {
       "cmd": [
