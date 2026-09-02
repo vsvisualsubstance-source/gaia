@@ -2284,14 +2284,25 @@ async function pmCleanOfflineDevices() {
 function initPiManager() {
   // mosquitto resta su Core anche se Node-RED gira altrove (2026-08-08,
   // migrazione OPS) -- stesso principio di API/MJPEG_URL sopra, il broker
-  // non segue location.hostname.
-  const host = '192.168.1.142';
-  document.getElementById('pm-broker-label').textContent = host;
-  const mqttUrl = `ws://${host}:9001`;
+  // non segue location.hostname. Prova prima la LAN (piu' diretta quando
+  // disponibile), poi l'IP Tailscale di Core come fallback -- senza
+  // questo, aprire Pi Manager da fuori la LAN di casa (rete mobile, WiFi
+  // diverso) lasciava per sempre "Disconnesso" e la griglia vuota anche
+  // con tutto il backend perfettamente sano (bug reale, trovato dal vivo
+  // 2026-09-02: "API non connesse" da fuori casa mentre ogni controllo
+  // lato server risultava pulito -- stesso identico gap di IP fisso senza
+  // fallback gia' trovato e fissato per l'agent della macchina touring).
+  const LAN_HOST       = '192.168.1.142';
+  const TAILSCALE_HOST = '100.94.220.65';
+  let triedFallback = false;
 
-  // Dynamic load of mqtt.js if not already available
-  function startMqtt() {
-    _pmClient = mqtt.connect(mqttUrl);
+  function startMqtt(host, isFallback) {
+    document.getElementById('pm-broker-label').textContent = host;
+    const mqttUrl = `ws://${host}:9001`;
+    // reconnectPeriod:0 sul primo tentativo (LAN) -- fallisce in fretta
+    // invece di ritentare all'infinito su un IP irraggiungibile da fuori
+    // rete, cosi' il fallback Tailscale scatta subito.
+    _pmClient = mqtt.connect(mqttUrl, isFallback ? {} : { reconnectPeriod: 0, connectTimeout: 4000 });
     _pmClient.on('connect', () => {
       pmSetConn(true);
       _pmClient.subscribe('gaia/device/+/status');
@@ -2301,8 +2312,15 @@ function initPiManager() {
       _pmClient.subscribe('gaia/mocap-bridge/+/status');
       pmLog('in', `Connesso a ${mqttUrl}`);
     });
-    _pmClient.on('error',   e  => { pmSetConn(false); pmLog('err', e.message || 'Errore MQTT'); });
-    _pmClient.on('offline', () => pmSetConn(false));
+    function tryFallback() {
+      if (isFallback || triedFallback) return;
+      triedFallback = true;
+      pmLog('err', `LAN (${host}) irraggiungibile, provo Tailscale…`);
+      _pmClient.end(true);
+      startMqtt(TAILSCALE_HOST, true);
+    }
+    _pmClient.on('error',   e  => { pmSetConn(false); pmLog('err', e.message || 'Errore MQTT'); tryFallback(); });
+    _pmClient.on('offline', () => { pmSetConn(false); tryFallback(); });
     _pmClient.on('reconnect', () => pmLog('err', 'Riconnessione…'));
     _pmClient.on('message', (topic, raw) => {
       if (!raw || !raw.length) return;
@@ -2397,24 +2415,27 @@ function initPiManager() {
         pmRenderOfflineCount();
       } catch(e) { pmLog('err', 'Parse: ' + e.message); }
     });
-    setInterval(() => {
-      const now = Date.now();
-      let changed = false;
-      for (const [id, d] of Object.entries(_pmDevices)) {
-        const was = d._offline;
-        d._offline = (now - d._lastSeen) > 90000;
-        if (was !== d._offline) { pmApplyCardVisibility(id, d); changed = true; }
-      }
-      if (changed) { pmWelcomeMenuRender(); pmRenderOfflineCount(); }
-    }, 10000);
   }
 
+  // Fuori da startMqtt apposta: non va duplicato se scatta il fallback
+  // Tailscale (altrimenti due interval identici in corsa).
+  setInterval(() => {
+    const now = Date.now();
+    let changed = false;
+    for (const [id, d] of Object.entries(_pmDevices)) {
+      const was = d._offline;
+      d._offline = (now - d._lastSeen) > 90000;
+      if (was !== d._offline) { pmApplyCardVisibility(id, d); changed = true; }
+    }
+    if (changed) { pmWelcomeMenuRender(); pmRenderOfflineCount(); }
+  }, 10000);
+
   if (typeof mqtt !== 'undefined') {
-    startMqtt();
+    startMqtt(LAN_HOST, false);
   } else {
     const s = document.createElement('script');
     s.src = 'vendor/mqtt.min.js';
-    s.onload = startMqtt;
+    s.onload = () => startMqtt(LAN_HOST, false);
     s.onerror = () => pmLog('err', 'Impossibile caricare mqtt.js');
     document.head.appendChild(s);
   }
