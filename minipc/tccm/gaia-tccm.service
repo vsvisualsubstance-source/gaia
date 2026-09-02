@@ -1,0 +1,21 @@
+[Unit]
+Description=GAIA TCC M Agent (Sennheiser TeamConnect Ceiling Medium)
+After=network.target mosquitto.service
+
+[Service]
+Type=simple
+User=core
+WorkingDirectory=/home/core/core-node-0/minipc/tccm
+ExecStart=/home/core/core-node-0/venv/bin/python3 /home/core/core-node-0/minipc/tccm/tccm_agent.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+Environment=PYTHONUNBUFFERED=1
+Environment=HOME=/home/core
+# TCCM_PASSWORD e' obbligatoria e va in /etc/gaia/tccm.conf (mai in git,
+# mai qui) -- vedi config.py per l'elenco completo delle variabili.
+
+[Install]
+WantedBy=multi-user.target
