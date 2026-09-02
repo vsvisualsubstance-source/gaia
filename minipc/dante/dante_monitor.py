@@ -2,15 +2,30 @@
 """
 GAIA Dante Monitor — rileva se la rete audio Dante (Solaro QR1-UC + TCCM
 Sennheiser) e' attiva osservando il traffico UDP del driver esterno
-dell'utente (H/V Angle, Mic Level, Far End Audio, Camera Preset — vedi
-config.DANTE_PORTS). Non decodifica il contenuto: e' solo un rilevatore di
-presenza/vita della rete, usato da altri servizi (es. mediaplayer) per
-decidere se ha senso instradare l'audio su Dante.
+dell'utente (H/V Angle, Mic Level, Far End Audio, Camera Preset, Heartbeat
+— vedi config.DANTE_PORTS). Pubblica DUE cose distinte:
 
-MQTT: gaia/dante/status (retained) -> {active, last_seen_ts, ports_seen, ts}
-Pubblica SEMPRE ogni STATUS_INTERVAL_S, anche quando inattivo (stesso
-pattern di mediapipe/mediaplayer: chi consuma non deve gestire un proprio
-timeout).
+  1. gaia/dante/status — blob generico invariato (solo presenza/vita della
+     rete, nessuna decodifica), usato da mediaplayer/musica.html per
+     decidere se l'uscita Dante ha senso. NON toccare lo schema, ha
+     consumatori esistenti.
+  2. gaia/device/{SOLARO_DEVICE_ID}/status — device vero nel registro
+     standard (role:"device", family:"solaro", stesso schema di
+     madmapper/dmx/patchdeck), COSI' compare in Pi Manager/admin.html
+     come qualunque altro device invece di restare invisibile nel blob
+     generico. Qui SI decodifica: ogni canale e' un numero ASCII puro
+     senza framing (deciso 2026-07-30, vedi memoria project-solaro-dsp),
+     un pacchetto = un valore intero, banale da leggere con int().
+     Heartbeat (porta 4559) e' liveness pura del DSP stesso, separata
+     dai canali di telemetria dell'array mic (4554-4558) -- un DSP
+     "vivo" (heartbeat regolare) puo' comunque non avere nessuno che
+     parla (H/V Angle fermi da secondi), sono due segnali diversi.
+
+Nessun comando inviato AL Solaro in questo modulo -- solo ascolto. I
+controlli reali (quali comandi accetta, es. via VISCA-over-IP 52381 gia'
+confermato funzionante per i preset camera) vanno derivati dalla UI di
+controllo del Solaro stesso quando si arriva a costruirli, non indovinati
+qui (stessa regola gia' seguita per MadMapper/PatchDeck questa sessione).
 """
 import json
 import selectors
@@ -24,6 +39,8 @@ import config
 _running = True
 _last_seen_ts = 0.0
 _ports_seen: dict[int, float] = {}   # porta -> ultimo timestamp visto
+_channel_raw: dict[int, tuple[int | None, float]] = {}  # porta -> (valore int o None se non decodificabile, ts)
+_heartbeat_last_ts = 0.0
 
 
 def _open_sockets():
@@ -64,8 +81,54 @@ def _publish_status():
     _mqtt.publish("gaia/dante/status", json.dumps(payload), retain=True)
 
 
+def _decode_ascii_int(raw: bytes) -> int | None:
+    """Un pacchetto = un numero decimale ASCII puro, nessun framing (vedi
+    docstring modulo). None se non e' quello che ci si aspetta -- il driver
+    esterno e' ancora in sviluppo, un payload inatteso non deve far
+    crashare il monitor, solo restare non decodificato per quel pacchetto."""
+    try:
+        return int(raw.decode("ascii").strip())
+    except (UnicodeDecodeError, ValueError):
+        return None
+
+
+def _publish_solaro_device():
+    now = time.time()
+    heartbeat_age = round(now - _heartbeat_last_ts, 1) if _heartbeat_last_ts else None
+    channels = {}
+    for port, name in config.SOLARO_CHANNELS.items():
+        val, ts = _channel_raw.get(port, (None, 0.0))
+        if val is not None and (now - ts) < config.DANTE_TIMEOUT_S:
+            channels[name] = val
+    payload = {
+        "device_id": config.SOLARO_DEVICE_ID,
+        "name": "Solaro QR1-UC",
+        "role": "device",
+        "family": "solaro",
+        "stanza": config.SOLARO_STANZA,
+        # Liveness del DSP stesso (heartbeat, porta 4559) -- distinta dalla
+        # telemetria dell'array mic sotto: il DSP puo' essere vivo e
+        # silenzioso (nessuno parla) allo stesso tempo, sono due segnali
+        # diversi (vedi docstring modulo).
+        "last_heartbeat_age_s": heartbeat_age,
+        "alive": heartbeat_age is not None and heartbeat_age < config.DANTE_TIMEOUT_S,
+        # Telemetria array mic TCCM, solo i canali freschi (vedi filtro
+        # sopra) -- assenti dal payload se scaduti, mai un valore stantio
+        # spacciato per attuale.
+        "channels": channels,
+        # Confermato funzionante (memoria project-solaro-dsp, 2026-07-30):
+        # comandi VISCA "Camera Memory Recall" verso la telecamera FollowMe.
+        # Nessun comando inviato da qui -- solo dichiarato come capacita'
+        # nota del sistema, i comandi reali restano da costruire quando
+        # servono (vedi docstring modulo).
+        "capabilities": {"ptz_visca_recall": True},
+        "ts": int(now * 1000),
+    }
+    _mqtt.publish(f"gaia/device/{config.SOLARO_DEVICE_ID}/status", json.dumps(payload), retain=True)
+
+
 def main():
-    global _last_seen_ts
+    global _last_seen_ts, _heartbeat_last_ts
     sel = _open_sockets()
     _mqtt.connect_async(config.MQTT_HOST, config.MQTT_PORT, 60)
     _mqtt.loop_start()
@@ -76,17 +139,21 @@ def main():
             sock = key.fileobj
             port = key.data
             try:
-                sock.recvfrom(4096)
+                raw, _addr = sock.recvfrom(4096)
             except OSError:
                 continue
             now = time.time()
             _last_seen_ts = now
             _ports_seen[port] = now
+            _channel_raw[port] = (_decode_ascii_int(raw), now)
+            if port == config.SOLARO_HEARTBEAT_PORT:
+                _heartbeat_last_ts = now
 
         now = time.time()
         if now - last_status >= config.STATUS_INTERVAL_S:
             last_status = now
             _publish_status()
+            _publish_solaro_device()
 
 
 if __name__ == "__main__":
