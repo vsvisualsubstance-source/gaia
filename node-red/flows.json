@@ -6516,6 +6516,102 @@
         "wires": []
     },
     {
+        "id": "dm_http_get",
+        "type": "http in",
+        "z": "tab_device_registry",
+        "name": "GET /gaia/dante-matrix",
+        "url": "/gaia/dante-matrix",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 175,
+        "y": 640,
+        "wires": [
+            [
+                "dm_fn_get"
+            ]
+        ]
+    },
+    {
+        "id": "dm_fn_get",
+        "type": "function",
+        "z": "tab_device_registry",
+        "name": "DanteMatrixGet",
+        "func": "// GET /gaia/dante-matrix -> schema attuale di assegnazione canali Dante\n// per zona/stanza (2026-09-02, richiesto esplicitamente dall'utente).\n// SOLO conoscenza/riferimento per i nostri servizi -- non tocca ne'\n// legge la matrice di routing reale della rete Dante (quella vive\n// dentro la XC-SUB/Solaro, controllata da Dante Controller o dalla UI\n// del Solaro stessa, fuori dalla nostra visibilita'). Un device Gaia\n// che vuole usare Dante deve leggere QUESTO endpoint all'avvio per\n// sapere quale canale mic/speaker usare per la propria zona, invece di\n// avere valori sparsi/hardcoded in ogni servizio.\nconst brain = global.get('gaiaBrain') || {};\nconst zones = brain.danteMatrix || {};\nmsg.statusCode = 200;\nmsg.headers = { 'Access-Control-Allow-Origin': '*' };\nmsg.payload = { zones, ts: Date.now() };\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 415,
+        "y": 640,
+        "wires": [
+            [
+                "dm_http_get_response"
+            ]
+        ]
+    },
+    {
+        "id": "dm_http_get_response",
+        "type": "http response",
+        "z": "tab_device_registry",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 650,
+        "y": 640,
+        "wires": []
+    },
+    {
+        "id": "dm_http_set",
+        "type": "http in",
+        "z": "tab_device_registry",
+        "name": "POST /gaia/dante-matrix/:zone",
+        "url": "/gaia/dante-matrix/:zone",
+        "method": "post",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 200,
+        "y": 690,
+        "wires": [
+            [
+                "dm_fn_set"
+            ]
+        ]
+    },
+    {
+        "id": "dm_fn_set",
+        "type": "function",
+        "z": "tab_device_registry",
+        "name": "DanteMatrixSet",
+        "func": "// POST /gaia/dante-matrix/:zone  {dante_enabled, mic_channel, speaker_channels, note}\n// Crea/aggiorna la voce di UNA zona nello schema Dante -- editabile a\n// mano da Admin (vedi web/admin.html), mai scritto da un device\n// automaticamente: e' una dichiarazione di intento/riferimento, non lo\n// stato letto dal vivo dalla rete Dante (che non e' interrogabile da\n// qui, vedi nota in danteMatrix_fn_get). \"zona\" e' testo libero (puo'\n// essere una stanza singola del roomGraph o una zona multi-stanza come\n// \"zona-giorno\" -- il TCC M copre 4 stanze insieme, non ha senso\n// restringere alle 13 stanze canoniche qui).\nconst brain = global.get('gaiaBrain') || {};\nconst zone = (msg.req.params.zone || '').trim();\nconst body = msg.payload || {};\n\nif (!zone) { msg.statusCode = 400; msg.payload = { ok: false, error: 'zona mancante' }; return msg; }\n\nbrain.danteMatrix = brain.danteMatrix || {};\nconst entry = brain.danteMatrix[zone] || {};\nif (typeof body.dante_enabled === 'boolean') entry.dante_enabled = body.dante_enabled;\nif (typeof body.mic_channel === 'string') entry.mic_channel = body.mic_channel.trim();\nif (Array.isArray(body.speaker_channels)) {\n    entry.speaker_channels = body.speaker_channels\n        .map(v => parseInt(v, 10))\n        .filter(v => Number.isInteger(v));\n}\nif (typeof body.note === 'string') entry.note = body.note.trim();\nentry.updated = Date.now();\nbrain.danteMatrix[zone] = entry;\nglobal.set('gaiaBrain', brain);\nnode.warn(`[DanteMatrix] ${zone} -> ${JSON.stringify(entry)} (manuale, Admin)`);\n\nmsg.statusCode = 200;\nmsg.headers = { 'Access-Control-Allow-Origin': '*' };\nmsg.payload = { ok: true, zone, entry };\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 450,
+        "y": 690,
+        "wires": [
+            [
+                "dm_http_set_response"
+            ]
+        ]
+    },
+    {
+        "id": "dm_http_set_response",
+        "type": "http response",
+        "z": "tab_device_registry",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 710,
+        "y": 690,
+        "wires": []
+    },
+    {
         "id": "ollama_health_inject",
         "type": "inject",
         "z": "tab_device_registry",

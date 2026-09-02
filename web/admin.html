@@ -774,6 +774,26 @@ button.small{padding:3px 9px;font-size:.78rem;margin:0}
     <div id="pm-plants-list" style="display:none"></div>
   </div>
 
+  <!-- ── Matrice Dante — schema di riferimento per zona, SOLO conoscenza:
+       non tocca/legge il routing reale della rete Dante (quello vive
+       nella XC-SUB/Solaro, fuori da qui) — dichiara quale canale mic/
+       speaker un device Gaia dovrebbe usare per una zona, letto da chi
+       vuole usare Dante invece di avere valori sparsi/hardcoded. ── -->
+  <div style="margin-top:24px">
+    <h3 style="margin-bottom:8px">🔊 Matrice Dante — schema per zona</h3>
+    <div style="color:var(--muted);font-size:.8rem;margin-bottom:10px">
+      Riferimento manuale, non controlla la rete Dante reale (quella la gestisce il Solaro).
+    </div>
+    <div id="pm-dante-no-items" style="text-align:center;padding:20px;color:var(--muted);font-size:.85rem">
+      Caricamento…
+    </div>
+    <div id="pm-dante-list" style="display:none"></div>
+    <div class="pi-card" style="display:flex;align-items:center;gap:12px;padding:12px 16px;margin-top:8px">
+      <input class="pm-inp-stanza" id="pm-dante-new-zone" placeholder="nuova zona (es. zona-giorno)" style="flex:1">
+      <button class="pm-btn blue" onclick="pmDanteMatrixAddZone()">➕ Aggiungi zona</button>
+    </div>
+  </div>
+
   <div class="pm-log-wrap">
     <h3>Log MQTT</h3>
     <div id="pm-log-lines"></div>
@@ -2057,7 +2077,7 @@ function showTab(id, btn) {
   history.replaceState(null, '', '#' + id);   // deep-link condivisibile
   if (id === 'pi' && !_pmClient) initPiManager();
   if (id === 'pi') loadProvision();
-  if (id === 'pi') pmLoadPlants();
+  if (id === 'pi') { pmLoadPlants(); pmLoadDanteMatrix(); }
 }
 
 // Deep-link: admin.html#pi apre direttamente il tab (usato dal redirect
@@ -2601,6 +2621,72 @@ async function pmPlantSaveRoom(id) {
   } catch (e) {
     pmLog('err', 'Salvataggio luogo pianta: ' + e.message);
   }
+}
+
+// ── Matrice Dante — schema per zona (solo riferimento, vedi HTML sopra) ──
+async function pmLoadDanteMatrix() {
+  try {
+    const r = await fetch('/gaia/dante-matrix');
+    const data = await r.json();
+    pmDanteMatrixRender(data.zones || {});
+  } catch (e) {
+    pmLog('err', 'Caricamento matrice Dante: ' + e.message);
+  }
+}
+
+function pmDanteMatrixRender(zones) {
+  const wrap  = document.getElementById('pm-dante-list');
+  const empty = document.getElementById('pm-dante-no-items');
+  const entries = Object.entries(zones);
+  if (!entries.length) { empty.textContent = 'Nessuna zona configurata.'; empty.style.display = ''; wrap.style.display = 'none'; return; }
+  empty.style.display = 'none';
+  wrap.style.display = '';
+  wrap.innerHTML = entries.map(([zone, z]) => `
+    <div class="pi-card" style="display:flex;align-items:center;gap:10px;padding:12px 16px;margin-bottom:8px;flex-wrap:wrap">
+      <div style="flex:1;min-width:140px">
+        <div class="pi-display-name">${pmEsc(zone)}</div>
+        <div class="pi-device-id">${z.updated ? new Date(z.updated).toLocaleString('it-IT') : 'mai salvata'}</div>
+      </div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:.8rem;color:var(--muted)">
+        <input type="checkbox" id="pm-dante-enabled-${pmEsc(zone)}" ${z.dante_enabled?'checked':''}> Dante attivo
+      </label>
+      <input class="pm-inp-name" id="pm-dante-mic-${pmEsc(zone)}" placeholder="canale mic (es. tccm(1))"
+        value="${pmEsc(z.mic_channel||'')}" style="width:160px">
+      <input class="pm-inp-name" id="pm-dante-speakers-${pmEsc(zone)}" placeholder="speaker (es. 1,2,3,4)"
+        value="${pmEsc((z.speaker_channels||[]).join(','))}" style="width:140px">
+      <button class="pm-btn blue" onclick="pmDanteMatrixSave('${pmEsc(zone)}')">💾 Salva</button>
+    </div>
+  `).join('');
+}
+
+async function pmDanteMatrixSave(zone) {
+  const enabled  = document.getElementById(`pm-dante-enabled-${zone}`).checked;
+  const mic      = document.getElementById(`pm-dante-mic-${zone}`).value.trim();
+  const speakers = document.getElementById(`pm-dante-speakers-${zone}`).value
+    .split(',').map(s => s.trim()).filter(s => s !== '');
+  try {
+    const r = await fetch(`/gaia/dante-matrix/${encodeURIComponent(zone)}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dante_enabled: enabled, mic_channel: mic, speaker_channels: speakers })
+    });
+    const data = await r.json();
+    if (!data.ok) { pmLog('err', `Matrice Dante ${zone}: ${data.error}`); return; }
+    pmLog('out', `matrice Dante ${zone} -> ${JSON.stringify(data.entry)}`);
+    pmLoadDanteMatrix();
+  } catch (e) {
+    pmLog('err', 'Salvataggio matrice Dante: ' + e.message);
+  }
+}
+
+function pmDanteMatrixAddZone() {
+  const input = document.getElementById('pm-dante-new-zone');
+  const zone = input.value.trim();
+  if (!zone) return;
+  input.value = '';
+  fetch(`/gaia/dante-matrix/${encodeURIComponent(zone)}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dante_enabled: false, mic_channel: '', speaker_channels: [] })
+  }).then(() => pmLoadDanteMatrix()).catch(e => pmLog('err', 'Aggiunta zona Dante: ' + e.message));
 }
 
 function pmSvcKeys(d) {
