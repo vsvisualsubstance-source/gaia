@@ -102,3 +102,47 @@ semplice da validare il pattern (probabilmente **2. Ducking centralizzato**
 o **1. Sting sincronizzato** — entrambi solo OSC out, nessun bisogno di
 leggere dati dal DSP), poi eventualmente telemetria/PTZ una volta rodato il
 bridge di base.
+
+## Aggiornamento 2026-09-02 — telemetria in produzione, TCC M integrato, wake-word su Dante reale
+
+Scenario 5 (telemetria DSP → brain) **parzialmente in produzione ora**,
+non più solo design:
+
+- **Solaro QR1-UC**: `minipc/dante/dante_monitor.py` (già esistente,
+  esteso) ascolta 6 porte UDP (H/V Angle, Mic Level, Far End, Camera
+  Preset, più il nuovo canale **Heartbeat** sulla 4559, liveness del DSP
+  separata dalla telemetria dell'array mic) e pubblica un device
+  standard `gaia/device/solaro-qr1/status` (`role:"device"`,
+  `family:"solaro"`) accanto al blob generico invariato
+  `gaia/dante/status`. Nessun comando inviato al Solaro, solo ascolto.
+- **TCC M Sennheiser** (nuovo, `minipc/tccm/`): a differenza del Solaro
+  parla la sua API nativa (SSCv2, HTTPS+SSE, Basic Auth) — dati diretti
+  (beam azimuth/elevazione, room activity, mute), non dedotti da UDP.
+  Pagina dedicata `web/tccm.html`, nodo Node-RED "TCC M Presence" che
+  marca `brain.rooms['zona-giorno']` attiva quando qualcuno parla
+  (risoluzione per singola stanza non ancora possibile — serve
+  calibrare quale range di azimuth corrisponde a quale stanza reale
+  dentro la zona, tabella lasciata vuota apposta nel codice).
+- **Matrice Dante** (`GET/POST /gaia/dante-matrix`, pannello in
+  `admin.html`): schema di riferimento manuale (zona → canale mic/
+  speaker Dante) — **non controlla il routing reale**, che resta
+  gestito dal Solaro/Dante Controller. Serve solo a dare ai servizi
+  Gaia un posto unico dove leggere "che canale uso" invece di valori
+  sparsi/hardcoded.
+- **Hardware confermato**: Core è collegato alla rete Dante via
+  un'interfaccia USB fisica reale, **XILICA AUDIO XC-SUB**. Il wake-word
+  di Core (`minipc/script/gaia_listener.py`) usa il default di sistema
+  PipeWire per il microfono — verificato dal vivo che quel default è
+  già la XC-SUB, quindi **il riconoscimento vocale di Core passa
+  davvero dalla rete Dante**, non da un mic locale. Decisione presa:
+  Core è il device "master" per il wake-word via Dante (pipeline vocale
+  più matura + hardware Dante fisicamente collegato lì).
+- **In corso, non finito**: bridge Bluetooth per collegare il Pi
+  ingresso a un endpoint Dante via BT ("Gio.BT" — nome/modello non
+  ancora confermato). Bloccato sull'accesso SSH al Pi (IP LAN cambiato,
+  chiave da riconfermare).
+- **Nota per il prossimo giro**: il driver esterno del Solaro (fuori da
+  questo repo) avrà anche un'uscita MQTT nativa in futuro, non solo le
+  porte UDP grezze attuali — quando arriva, verificare i topic reali dal
+  vivo prima di scrivere codice di consumo (stessa regola già seguita
+  per OSC/TCC M: mai un'API mai vista rispondere).
