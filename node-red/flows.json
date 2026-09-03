@@ -394,6 +394,73 @@
         ]
     },
     {
+        "id": "shutdown_check_inject",
+        "type": "inject",
+        "z": "082363fa8be6eb11",
+        "name": "Verifica spegnimento (20:35)",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "35 20 * * *",
+        "once": false,
+        "onceDelay": "",
+        "topic": "",
+        "payload": "",
+        "payloadType": "str",
+        "x": 210,
+        "y": 220,
+        "wires": [
+            [
+                "shutdown_check_fn"
+            ]
+        ]
+    },
+    {
+        "id": "shutdown_check_fn",
+        "type": "function",
+        "z": "082363fa8be6eb11",
+        "name": "Verifica spegnimento installazione",
+        "func": "// Verifica spegnimento programmato (20:30, GAIA-Scheduled-Shutdown su\n// Windows -- task nativo, indipendente da Gaia apposta). Questo controllo\n// gira 5 minuti dopo (20:35) e guarda SOLO lo stato che Gaia gia' ha (nessun\n// ping attivo): se una macchina role:\"installation\" risulta ancora online\n// a quest'ora, lo spegnimento e' fallito -- avvisa su Telegram. Silenzio\n// se tutto e' andato bene (nessun messaggio \"tutto ok\" ogni sera).\nconst brain = global.get('gaiaBrain') || {};\nconst now = Date.now();\nconst stillOn = Object.values(brain.devices || {}).filter(d =>\n    d.profile && d.role === 'installation' && d.online !== false && (now - (d.lastSeen || 0)) < 180000);\n\nif (!stillOn.length) return null;\n\nconst names = stillOn.map(d => d.room || d.id).join(', ');\nmsg.topic = 'gaia/notify/telegram';\nmsg.payload = JSON.stringify({ text: `⚠️ Spegnimento programmato (20:30) non riuscito: ${names} risulta ancora acceso.` });\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 470,
+        "y": 220,
+        "wires": [
+            [
+                "shutdown_check_mqtt"
+            ]
+        ]
+    },
+    {
+        "id": "shutdown_check_mqtt",
+        "type": "mqtt out",
+        "z": "082363fa8be6eb11",
+        "name": "→ notify/telegram",
+        "topic": "",
+        "qos": "0",
+        "retain": "false",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "29b6d5926d1a95ec",
+        "x": 720,
+        "y": 220,
+        "wires": []
+    },
+    {
         "id": "c3fbc5661b5b4867",
         "type": "function",
         "z": "082363fa8be6eb11",
