@@ -87,6 +87,14 @@ let thoughtTarget = '';   // ultimo pensiero ricevuto
 let lastLevel = null;
 let lastDreamTs = 0;
 
+// TCC M (Sennheiser, 2026-09-03): direzione di chi sta parlando in
+// zona-giorno (soggiorno+salotto+cucina+ingresso) -- solo direzione, non
+// vera posizione (un array a soffitto singolo non misura la distanza,
+// vedi memoria project-solaro-dsp). Nessuna calibrazione stanza fatta
+// ancora: e' un indicatore grezzo, non "chi parla in cucina".
+let tccm = null;             // {online, azimuth, elevation, room_active, muted} o null
+let tccmAngleSmooth = null;  // radianti, interpolato lungo il percorso piu' corto (evita lo scatto 359°→1°)
+
 // Luci raggruppate per stanza (2026-08-31) -- lightsByRoom = ultimo payload
 // grezzo (per leggere il colore in roomHueColor), roomLightsTarget/-Lerp =
 // conteggio accese per stanza, lerped come faceva S.lightsOn prima, ma per
@@ -171,6 +179,8 @@ function connectWS() {
             const lvl = d.progression?.level;
             if (lastLevel !== null && lvl != null && lvl > lastLevel) triggerLevelBurst();
             if (lvl != null) lastLevel = lvl;
+
+            tccm = d.tccm || null;
 
             stepObjectSources(d);
             stepHerbNotes(d);
@@ -564,6 +574,48 @@ function drawOnePerson(p, i, groupSize, anchor, t, core) {
     ctx.fillText(p.name.toUpperCase(), x, y + 24);
 }
 
+// ── Raggio direzione TCC M (azimuth, richiesto esplicitamente 2026-09-03) ──
+// Un raggio dal nucleo verso la direzione di chi sta parlando -- stesso
+// raggio/ellisse di roomAnchor cosi' il segno resta coerente in scena con
+// dove finiscono le persone. Interpolazione ad angolo piu' corto (non un
+// lerp lineare sui gradi grezzi) per non far scattare il raggio all'indietro
+// ogni volta che l'azimuth attraversa lo zero (es. 359°→1°).
+function stepTccmAngle() {
+    if (!tccm || tccm.azimuth == null) return;
+    const target = (tccm.azimuth * Math.PI) / 180;
+    if (tccmAngleSmooth == null) { tccmAngleSmooth = target; return; }
+    let diff = target - tccmAngleSmooth;
+    diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+    tccmAngleSmooth += diff * 0.12;
+}
+
+function drawTccmBeam(t, core) {
+    if (!tccm || !tccm.online || tccmAngleSmooth == null) return;
+    const R = Math.min(core.bR * 5.5, Math.min(W, H) * 0.34); // stesso raggio di roomAnchor
+    const active = !!tccm.room_active;
+    const ex = core.cx + Math.cos(tccmAngleSmooth) * R;
+    const ey = core.cy + Math.sin(tccmAngleSmooth) * R * 0.62;
+    const pulse = active ? (0.55 + 0.35 * Math.sin(t * 4)) : 0.16;
+
+    ctx.save();
+    ctx.strokeStyle = `rgba(${cur.accent[0]|0},${cur.accent[1]|0},${cur.accent[2]|0},${pulse * 0.5})`;
+    ctx.lineWidth = active ? 1.6 : 1.0;
+    ctx.beginPath();
+    ctx.moveTo(core.cx, core.cy);
+    ctx.lineTo(ex, ey);
+    ctx.stroke();
+
+    const dotR = active ? 6 + 2 * Math.sin(t * 4) : 4;
+    const g = ctx.createRadialGradient(ex, ey, 0, ex, ey, dotR * 2.2);
+    g.addColorStop(0, `rgba(${cur.accent[0]|0},${cur.accent[1]|0},${cur.accent[2]|0},${pulse})`);
+    g.addColorStop(1, `rgba(${cur.accent[0]|0},${cur.accent[1]|0},${cur.accent[2]|0},0)`);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(ex, ey, dotR * 2.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+}
+
 // ── Impulsi DMX (palette + kick, richiesto esplicitamente 2026-08-31) ──────
 // Le stanze con un device DMX TD attivo riportano già nel payload la loro
 // palette REALE (rooms[].dmxPaletteA, auto-riportata dal device stesso in
@@ -832,6 +884,8 @@ function frame(ts) {
     drawNoteSparks(nowMs, core);
     drawDmxPulses(nowMs, core);
     drawPeople(t, core);
+    stepTccmAngle();
+    drawTccmBeam(t, core);
     stepThought();
     drawThought(t);
     stepDream(nowMs);
