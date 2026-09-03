@@ -71,9 +71,16 @@ codice.
 
 - `device_id` (`installation-CHANGEME`) e `stanza` — hostname reale letto
   quando la macchina è online.
-- Path/argomenti reali di `MadMapper.exe` (potrebbe essere in
-  `Program Files (x86)`; non documentato pubblicamente se esista un modo
-  per auto-caricare l'ultimo progetto da riga di comando).
+- ~~Path/argomenti reali di `MadMapper.exe`~~ **RISOLTO 2026-09-03**:
+  `C:\Program Files\MadMapper 6.1.5\MadMapper.exe`. Auto-caricamento
+  progetto CONFERMATO possibile passando il file come secondo argomento
+  — ma attenzione, `.madproject` è una **cartella pacchetto**
+  (Backup/FX/Info/Media/Modules/Scratch + più file `.mad` dentro, non
+  un file singolo): passare la cartella riparte a vuoto, serve il path
+  del file `.mad` specifico dentro (per questa installazione:
+  `...\npoe26.madproject\npoe26-1.mad`). Verificato dal vivo:
+  kill+riavvio del watchdog ricarica il progetto vero (memoria di
+  processo ~1.9-2GB, non ~1.1GB come con avvio vuoto).
 - Porte OSC reali (`MADMAPPER_OSC_OUT_PORT`/`IN_PORT`) — vedi
   [`minipc/madmapper/README.md`](../minipc/madmapper/README.md).
 - `GAIA_CORE_TAILSCALE_HOST` in `run_agent.bat` — IP noto da lavoro
@@ -102,8 +109,10 @@ aggiunto insieme agli altri servizi toggleabili.
    su MQTT. Vedi `_nota` in `minipc/installation/services.json`.
 2. Avvio agent, verifica che compaia in `GET /gaia/devices/profiles` con
    `role: "installation"`.
-3. Kill manuale di `MadMapper.exe` da Task Manager → il watchdog lo
-   rilancia entro il giro successivo (30-60s) senza intervento.
+3. **VERIFICATO DAL VIVO 2026-09-03** (sulla macchina in uso reale a
+   Palazzo Ducale): kill manuale di `MadMapper.exe` → il watchdog lo
+   rilancia entro il giro successivo (30-60s) senza intervento, **e
+   ricarica il progetto giusto** (vedi nota sul path `.mad` sopra).
 4. Kill del bridge stesso → riavviato dallo stesso watchdog (è un
    servizio come un altro).
 5. Blackout da `web/madmapper.html` → conferma visiva sull'output video.
