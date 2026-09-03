@@ -323,7 +323,12 @@ let _vtimer  = null;
 // Gaia scrive nella sua lingua ciò che dice (tts/pensieri, banda alta, ciano)
 // e ciò che sente (comandi vocali, banda bassa, blu). Stessa parola = stesso
 // glifo, sempre: un vocabolario che si impara guardando. Engine: asemic.js.
-const _asemic = new AsemicField(document.getElementById('asemic-canvas'));
+// cell = dimensione del glifo in px, responsive sulla larghezza schermo --
+// segnalato dal vivo troppo piccolo sui display piccoli (kiosk DSI): la
+// formula di default in asemic.js (26-44px) qui è alzata (34-54px, +~30%).
+const _asemic = new AsemicField(document.getElementById('asemic-canvas'), {
+  cell: Math.max(34, Math.min(54, window.innerWidth / 20)),
+});
 // v2: ?mood=stress forza l'inchiostro per test/demo (ignora il mood live)
 const _asemicMoodForced = _params.get('mood');
 if (_asemicMoodForced) _asemic.setMood(_asemicMoodForced);
