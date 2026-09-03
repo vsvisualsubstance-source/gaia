@@ -136,7 +136,7 @@ class TCCMAgent:
             url,
             headers={"Accept": "text/event-stream", "Cache-Control": "no-cache"},
             stream=True,
-            timeout=(10, None),
+            timeout=(config.SSE_CONNECT_TIMEOUT, config.SSE_IDLE_TIMEOUT),
         )
         response.raise_for_status()
         # Il sessionUUID arriva anche via header Content-Location (spec
@@ -326,10 +326,28 @@ class TCCMAgent:
         self.publish(f"gaia/device/{config.TCCM_DEVICE_ID}/status", payload)
 
     def status_loop(self):
+        stale_warned = False
         while self.running:
             try:
                 self.publish_status()
                 self.publish_solaro_style_device()
+                # 2026-09-03: rileva uno stream "zombie" (sse_connected=True
+                # ma nessun evento reale da tempo) -- il bug reale che ha
+                # motivato SSE_IDLE_TIMEOUT sopra e' passato inosservato 17
+                # ore proprio perche' nessun log segnalava la discrepanza.
+                # Soglia doppia rispetto a SSE_IDLE_TIMEOUT: col fix quello
+                # dovrebbe gia' auto-riconnettere prima che scatti questo.
+                if self.sse_connected and self.last_seen:
+                    age = time.time() - self.last_seen
+                    if age > config.SSE_IDLE_TIMEOUT * 2:
+                        if not stale_warned:
+                            log.warning(
+                                "Nessun evento SSE da %.0fs pur risultando connesso "
+                                "(possibile stream bloccato)", age
+                            )
+                            stale_warned = True
+                    else:
+                        stale_warned = False
             except Exception as exc:
                 log.warning("Aggiornamento status fallito: %s", exc)
             time.sleep(config.STATUS_INTERVAL)

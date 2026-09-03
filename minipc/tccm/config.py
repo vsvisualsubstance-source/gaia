@@ -47,6 +47,19 @@ TCCM_DEVICE_ID = _get("TCCM_DEVICE_ID", "tccm-ceiling")
 TCCM_STANZA    = _get("TCCM_STANZA", "")   # vuoto = non assegnata, non indovinare
 
 SSE_CONNECT_TIMEOUT = int(_get("TCCM_SSE_CONNECT_TIMEOUT", "15"))
+# 2026-09-03: la spec SSCv2 non garantisce ne' un close-event ne' un
+# heartbeat quando la subscription muore lato server/rete (verificato
+# contro la spec ufficiale prima di aggiungere questo timeout) -- trovato
+# dal vivo un caso reale: sse_connected restava true per 17+ ore con
+# ZERO eventi ricevuti (nemmeno su roomInUse, che in 17 ore dovrebbe
+# cambiare) mentre una GET diretta sulla stessa risorsa mostrava valori
+# live che cambiavano ogni secondo. requests.iter_lines() con timeout
+# read=None resta bloccato per sempre su una connessione morta senza
+# FIN/RST esplicito. Un timeout di lettura finito forza requests a
+# sollevare ReadTimeout se non arriva NESSUNA riga (nemmeno un commento
+# ":" di keep-alive, se il device li manda) entro questa soglia --
+# il loop di reconnect esistente (gia' con backoff) se ne occupa da solo.
+SSE_IDLE_TIMEOUT = int(_get("TCCM_SSE_IDLE_TIMEOUT", "90"))
 RECONNECT_MIN = int(_get("TCCM_RECONNECT_MIN", "2"))
 RECONNECT_MAX = int(_get("TCCM_RECONNECT_MAX", "60"))
 STATUS_INTERVAL = int(_get("TCCM_STATUS_INTERVAL", "5"))
