@@ -90,15 +90,15 @@ html,body{width:100%;height:100%;overflow:hidden;user-select:none;-webkit-user-s
    ambientale in un angolo, mai il centro dell'attenzione del kiosk.
    In alto a destra (sotto ws-dot): in basso a destra finiva coperto dal
    riquadro della telecamera -- trovato dal vivo 2026-09-03. */
-#tccm-radar{position:absolute;top:44px;right:22px;width:56px;height:56px;
-  border-radius:50%;border:1px solid #1e2840;z-index:10;pointer-events:none;
+#tccm-radar{position:absolute;top:44px;right:22px;width:78px;height:78px;
+  border-radius:50%;border:1px solid #1c4a2e;z-index:10;pointer-events:none;
   opacity:0;transition:opacity .4s}
-#tccm-radar.show{opacity:.5}
-#tccm-radar-needle{position:absolute;left:50%;top:50%;width:2px;height:26px;
-  background:linear-gradient(to top,#5a6684,transparent);
+#tccm-radar.show{opacity:.85}
+#tccm-radar-needle{position:absolute;left:50%;top:50%;width:3px;height:36px;
+  background:linear-gradient(to top,#00ff66,transparent);
   transform-origin:top center;transition:transform .3s ease-out}
-#tccm-radar-dot{position:absolute;left:50%;top:50%;width:5px;height:5px;margin:-2.5px;
-  border-radius:50%;background:#5a6684}
+#tccm-radar-dot{position:absolute;left:50%;top:50%;width:8px;height:8px;margin:-4px;
+  border-radius:50%;background:#00ff66;box-shadow:0 0 10px #00ff66}
 
 /* ── Wizard modal ─────────────────────────────────────────────────── */
 #wizard{position:absolute;inset:0;background:rgba(5,8,16,.97);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;padding:32px 24px;gap:24px}
