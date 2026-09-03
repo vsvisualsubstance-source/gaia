@@ -7,7 +7,7 @@
     "madmapper": {
       "cmd": [
         "C:\\Program Files\\MadMapper 6.1.5\\MadMapper.exe",
-        "C:\\Users\\vs\\Desktop\\npoe26.madproject"
+        "C:\\Users\\vs\\Desktop\\npoe26.madproject\\npoe26-1.mad"
       ],
       "cwd": "C:\\Program Files\\MadMapper 6.1.5",
       "check_script": false,
