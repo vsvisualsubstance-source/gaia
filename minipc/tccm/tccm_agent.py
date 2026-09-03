@@ -52,13 +52,19 @@ logging.basicConfig(
 log = logging.getLogger("gaia-tccm")
 
 # Path confermati contro github.com/chetan-prime/sennheiser-tcc-m-api
-# (binding Go generato da OpenAPI per il TCC M) prima di usarli qui.
+# (binding Go generato da OpenAPI per il TCC M) E con una GET diretta dal
+# vivo sul device prima di usarli (2026-09-03, farEnd/local aggiunti su
+# richiesta esplicita "più info da API, mic level, gain farend/local"):
+#   /api/audio/outputs/dante/farEnd -> {"gain":12,"noiseGateEnabled":false,"equalizerEnabled":false,"delay":0}
+#   /api/audio/outputs/dante/local  -> {"gain":12,"noiseGateEnabled":true,"equalizerEnabled":false,"voiceLiftEnabled":false,"delay":0}
 RESOURCES = [
     "/api/audio/inputs/microphone/beam/direction",
     "/api/audio/inputs/microphone/level",
     "/api/audio/roomInUse",
     "/api/audio/roomInUse/activityLevel",
     "/api/audio/outputs/global/mute",
+    "/api/audio/outputs/dante/farEnd",
+    "/api/audio/outputs/dante/local",
 ]
 
 
@@ -86,6 +92,10 @@ class TCCMAgent:
         self.last_beam = None
         self.last_room_active = None
         self.last_mute = None
+        self.last_mic_level_db = None
+        self.last_room_activity = None
+        self.last_farend_gain = None
+        self.last_local_gain = None
 
         self.status_thread = threading.Thread(target=self.status_loop, daemon=True)
 
@@ -272,12 +282,20 @@ class TCCMAgent:
             self.last_beam = payload
             self.publish(f"{config.MQTT_BASE_TOPIC}/beam", payload)
         elif path.endswith("/microphone/level"):
+            self.last_mic_level_db = value.get("peak") if isinstance(value, dict) else None
             self.publish(f"{config.MQTT_BASE_TOPIC}/audio", payload)
         elif path.endswith("/roomInUse/activityLevel"):
+            self.last_room_activity = value.get("peak") if isinstance(value, dict) else None
             self.publish(f"{config.MQTT_BASE_TOPIC}/room/activity", payload)
         elif path.endswith("/roomInUse"):
             self.last_room_active = value.get("active") if isinstance(value, dict) else None
             self.publish(f"{config.MQTT_BASE_TOPIC}/room", payload)
+        elif path.endswith("/outputs/dante/farEnd"):
+            self.last_farend_gain = value.get("gain") if isinstance(value, dict) else None
+            self.publish(f"{config.MQTT_BASE_TOPIC}/gain/farend", payload)
+        elif path.endswith("/outputs/dante/local"):
+            self.last_local_gain = value.get("gain") if isinstance(value, dict) else None
+            self.publish(f"{config.MQTT_BASE_TOPIC}/gain/local", payload)
         elif path.endswith("/outputs/global/mute"):
             self.last_mute = value.get("enabled") if isinstance(value, dict) else None
             self.publish(f"{config.MQTT_BASE_TOPIC}/mute", payload)
@@ -320,6 +338,10 @@ class TCCMAgent:
             "beam": self.last_beam,
             "room_active": self.last_room_active,
             "muted": self.last_mute,
+            "mic_level_db": self.last_mic_level_db,
+            "room_activity": self.last_room_activity,
+            "farend_gain_db": self.last_farend_gain,
+            "local_gain_db": self.last_local_gain,
             "capabilities": {"beam_direction": True, "room_activity": True},
             "ts": int(now * 1000),
         }

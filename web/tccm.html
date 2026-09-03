@@ -115,6 +115,24 @@ input[type=number]{background:var(--bg);border:1px solid var(--border);border-ra
 </div>
 
 <div class="card">
+  <h2>Audio</h2>
+  <div class="stat-row">
+    <span>Livello microfono</span><span class="stat-val" id="stat-mic-level">—</span>
+  </div>
+  <div class="meter"><div class="meter-fill" id="meter-mic" style="width:0%"></div></div>
+  <div class="stat-row" style="margin-top:14px">
+    <span>Attività stanza</span><span class="stat-val" id="stat-room-activity">—</span>
+  </div>
+  <div class="meter"><div class="meter-fill" id="meter-activity" style="width:0%"></div></div>
+  <div class="stat-row" style="margin-top:14px">
+    <span>Gain far-end (Dante)</span><span class="stat-val" id="stat-gain-farend">—</span>
+  </div>
+  <div class="stat-row">
+    <span>Gain locale (Dante)</span><span class="stat-val" id="stat-gain-local">—</span>
+  </div>
+</div>
+
+<div class="card">
   <h2>Direzione beam</h2>
   <div class="grid2">
     <div>
@@ -221,6 +239,25 @@ function tcRenderStatus() {
   const muteEl = document.getElementById('stat-mute');
   muteEl.textContent = tcDevice.muted === true ? '🔇 muto' : (tcDevice.muted === false ? '🔊 attivo' : '—');
   muteEl.className = 'stat-val ' + (tcDevice.muted ? 'muted' : 'on');
+
+  // Livello mic in dB (peak, tipicamente -60..0) -- mappato su una
+  // barra 0-100% solo per la resa visiva, il numero esatto resta il dB
+  // reale mostrato accanto.
+  const micDb = tcDevice.mic_level_db;
+  document.getElementById('stat-mic-level').textContent = micDb != null ? micDb + ' dB' : '—';
+  document.getElementById('meter-mic').style.width =
+    (micDb != null ? Math.max(0, Math.min(100, (micDb + 60) / 60 * 100)) : 0) + '%';
+
+  // Attività stanza (roomInUse/activityLevel, già 0-100 dal device)
+  const activity = tcDevice.room_activity;
+  document.getElementById('stat-room-activity').textContent = activity != null ? activity + '%' : '—';
+  document.getElementById('meter-activity').style.width =
+    (activity != null ? Math.max(0, Math.min(100, activity)) : 0) + '%';
+
+  const farendEl = document.getElementById('stat-gain-farend');
+  farendEl.textContent = tcDevice.farend_gain_db != null ? tcDevice.farend_gain_db + ' dB' : '—';
+  const localEl = document.getElementById('stat-gain-local');
+  localEl.textContent = tcDevice.local_gain_db != null ? tcDevice.local_gain_db + ' dB' : '—';
 }
 
 function tcInit() {
