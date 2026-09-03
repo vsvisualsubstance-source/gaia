@@ -6,11 +6,12 @@
   "services": {
     "madmapper": {
       "cmd": [
-        "C:\\Program Files\\MadMapper 6.1.5\\MadMapper.exe"
+        "C:\\Program Files\\MadMapper 6.1.5\\MadMapper.exe",
+        "C:\\Users\\vs\\Desktop\\npoe26.madproject"
       ],
       "cwd": "C:\\Program Files\\MadMapper 6.1.5",
       "check_script": false,
-      "_nota": "Path confermato dal vivo 2026-09-01 (versione 6.1.5 installata). check_script:false perche' l'ultimo elemento di cmd e' l'eseguibile stesso, non uno script Python nella cwd dell'agent (stesso pattern di 'kiosk' in ops/agent/services.json). Il riavvio e' gestito dal watchdog del nuovo agent.py (WATCHDOG_INTERVAL) + dal liveness check OSC del bridge (vedi madmapper_bridge.py) che chiede un restart via MQTT se il processo sembra vivo ma non risponde. Non confermato se esista un modo per auto-caricare l'ultimo progetto via riga di comando -- MadMapper riparte a vuoto finche' non lo si verifica."
+      "_nota": "Path confermato dal vivo 2026-09-01 (versione 6.1.5 installata). check_script:false perche' l'ultimo elemento di cmd e' un argomento (il progetto), non uno script Python nella cwd dell'agent (stesso pattern di 'kiosk' in ops/agent/services.json). Il riavvio e' gestito dal watchdog del nuovo agent.py (WATCHDOG_INTERVAL) + dal liveness check OSC del bridge (vedi madmapper_bridge.py) che chiede un restart via MQTT se il processo sembra vivo ma non risponde. 2026-09-03: CONFERMATO dal vivo che senza argomento MadMapper riparte a vuoto con la schermata menu -- aggiunto il path del progetto reale (C:\\Users\\vs\\Desktop\\npoe26.madproject, trovato via AppData\\Roaming\\MadMapper thumbnails cache) come secondo elemento di cmd. L'utente ha anche disabilitato manualmente 'mostra menu allo startup' nelle preferenze di MadMapper stesso (impostazione lato app, non lato agent)."
     },
     "madmapper_bridge": {
       "cmd": [
