@@ -79,6 +79,15 @@ button.small{padding:4px 10px;font-size:.78rem}
 .log-empty{color:var(--muted);font-size:.85rem;padding:8px 0;text-align:center}
 
 .hint{color:var(--muted);font-size:.8rem;margin-top:10px;line-height:1.5}
+
+.calib-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;
+  border-bottom:1px solid #12182a;font-size:.85rem;gap:10px}
+.calib-row:last-child{border-bottom:none}
+.calib-room{text-transform:capitalize}
+input[type=number]{background:var(--bg);border:1px solid var(--border);border-radius:4px;
+  color:var(--text);padding:4px 6px;font-size:.85rem;width:60px}
+.calib-saved{color:var(--green);font-size:.78rem;margin-left:8px;opacity:0;transition:opacity .2s}
+.calib-saved.show{opacity:1}
 </style>
 </head>
 <body>
@@ -144,6 +153,16 @@ button.small{padding:4px 10px;font-size:.78rem}
   <div id="beam-log" class="log">
     <div class="log-empty">In attesa di dati…</div>
   </div>
+</div>
+
+<div class="card">
+  <h2>Calibrazione azimuth → stanza</h2>
+  <div class="hint" style="margin-top:0;margin-bottom:14px">
+    Cammina in ogni stanza guardando l'azimuth qui sopra, annota il range
+    visto e salvalo qui (gradi 0-359). Min può essere maggiore di max se
+    il range attraversa lo zero (es. 350 → 20).
+  </div>
+  <div id="tc-rooms-form"></div>
 </div>
 
 <script>
@@ -247,6 +266,60 @@ function tcInit() {
 }
 
 tcInit();
+
+// ── Calibrazione azimuth → stanza (2026-09-03) ──────────────────────────
+// Stanze fisse note della zona-giorno (soggiorno+salotto+cucina+ingresso,
+// vedi memoria project-solaro-dsp) -- niente UI per aggiungerne altre,
+// lo scope è già conosciuto, non serve un editor generico.
+const TC_ROOMS = ['soggiorno', 'salotto', 'cucina', 'ingresso'];
+const TC_API = `http://${location.hostname}:1880`;
+
+function tcRoomRowHtml(room) {
+  return `<div class="calib-row">
+    <span class="calib-room">${room}</span>
+    <span>
+      <input type="number" min="0" max="359" id="tc-min-${room}" placeholder="min">
+      – <input type="number" min="0" max="359" id="tc-max-${room}" placeholder="max">°
+      <button class="small" onclick="tcSaveRoom('${room}')">Salva</button>
+      <span class="calib-saved" id="tc-saved-${room}">✓ salvato</span>
+    </span>
+  </div>`;
+}
+
+async function tcLoadRooms() {
+  const form = document.getElementById('tc-rooms-form');
+  form.innerHTML = TC_ROOMS.map(tcRoomRowHtml).join('');
+  try {
+    const r = await fetch(`${TC_API}/gaia/tccm-rooms`, { signal: AbortSignal.timeout(3000) });
+    const d = await r.json();
+    for (const [room, entry] of Object.entries(d.rooms || {})) {
+      const minEl = document.getElementById(`tc-min-${room}`);
+      const maxEl = document.getElementById(`tc-max-${room}`);
+      if (minEl && entry.min != null) minEl.value = entry.min;
+      if (maxEl && entry.max != null) maxEl.value = entry.max;
+    }
+  } catch (e) {}
+}
+
+async function tcSaveRoom(room) {
+  const min = parseFloat(document.getElementById(`tc-min-${room}`).value);
+  const max = parseFloat(document.getElementById(`tc-max-${room}`).value);
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return;
+  try {
+    const r = await fetch(`${TC_API}/gaia/tccm-rooms/${room}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ min, max }),
+    });
+    if (r.ok) {
+      const saved = document.getElementById(`tc-saved-${room}`);
+      saved.classList.add('show');
+      setTimeout(() => saved.classList.remove('show'), 1800);
+    }
+  } catch (e) {}
+}
+
+tcLoadRooms();
 </script>
 </body>
 </html>

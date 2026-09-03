@@ -6837,7 +6837,7 @@
         "type": "function",
         "z": "tab-device-mgr",
         "name": "TCC M Presence",
-        "func": "const _t0 = Date.now();\ntry {\n    const p = msg.payload;\n    if (!p || p.family !== 'tccm') return null;\n\n    let brain = global.get('gaiaBrain') || {};\n    const now = Date.now();\n\n    // Log azimuth/elevazione per calibrazione futura (2026-09-02): non si\n    // sa ancora quale range di azimuth corrisponde a quale stanza reale\n    // dentro \"zona-giorno\" (soggiorno/salotto/cucina/ingresso, mic troppo\n    // potente per una singola stanza -- vedi memoria project-solaro-dsp).\n    // Si traccia solo lo storico grezzo qui, NIENTE mappatura inventata.\n    brain._tccmBeamLog = brain._tccmBeamLog || [];\n    if (p.beam && p.beam.azimuth != null) {\n        brain._tccmBeamLog.unshift({ azimuth: p.beam.azimuth, elevation: p.beam.elevation, ts: now });\n        if (brain._tccmBeamLog.length > 100) brain._tccmBeamLog.length = 100;\n    }\n\n    // AZIMUTH_ROOMS: mappa azimuth -> stanza reale dentro zona-giorno.\n    // VUOTA finche' non arriva la calibrazione dall'utente (cammina in\n    // ogni stanza guardando web/tccm.html, annota il range di azimuth) --\n    // niente indovinato qui. Formato quando compilata:\n    //   [{ room: 'soggiorno', min: 0, max: 90 }, { room: 'cucina', min: 90, max: 180 }, ...]\n    // Ultimo stato compatto, letto da chi vuole \"il valore adesso\" (es.\n    // Build TD Canvas per gaia-art) senza scandire il ring buffer sopra\n    // (pensato per lo storico, non per una lettura singola).\n    brain.tccm = {\n        online: p.online !== false,\n        azimuth: p.beam ? p.beam.azimuth : null,\n        elevation: p.beam ? p.beam.elevation : null,\n        room_active: !!p.room_active,\n        muted: !!p.muted,\n        ts: now,\n    };\n\n    const AZIMUTH_ROOMS = [];\n    let resolvedRoom = null;\n    if (p.beam && p.beam.azimuth != null) {\n        const az = p.beam.azimuth;\n        const match = AZIMUTH_ROOMS.find(r => az >= r.min && az < r.max);\n        if (match) resolvedRoom = match.room;\n    }\n\n    // Presenza a livello di ZONA (zona-giorno) per ora, non di singola\n    // stanza -- onesto rispetto a quello che sappiamo davvero oggi. Se\n    // AZIMUTH_ROOMS sopra viene compilata, resolvedRoom prende il\n    // sopravvento automaticamente senza toccare altro codice.\n    brain.rooms = brain.rooms || {};\n    const zoneKey = resolvedRoom || (p.stanza || 'zona-giorno');\n    const room = brain.rooms[zoneKey] || { people: [], persons_count: 0, objects: {}, lastUpdate: now };\n    let becameActive = false;\n    if (p.room_active) {\n        becameActive = !room._tccmActive;\n        room._tccmActive = true;\n        room.lastTccm = now;\n        room.lastUpdate = now;\n    } else {\n        room._tccmActive = false;\n    }\n    brain.rooms[zoneKey] = room;\n    global.set('gaiaBrain', brain);\n\n    if (becameActive) {\n        msg.event = {\n            ts: now, source: 'tccm', category: 'presence',\n            value: resolvedRoom ? `parla in ${resolvedRoom}` : \"attivita' rilevata in zona-giorno\",\n            person: null, device: zoneKey,\n            azimuth: p.beam ? p.beam.azimuth : null,\n        };\n        return msg;\n    }\n    return null;\n} finally {\n    const _ms = Date.now() - _t0;\n    const _perf = global.get('gaiaPerf') || {};\n    const _p = _perf['tccm_presence_fn'] || { count: 0, totalMs: 0, maxMs: 0, since: Date.now() };\n    _p.count++; _p.totalMs += _ms; if (_ms > _p.maxMs) _p.maxMs = _ms;\n    _perf['tccm_presence_fn'] = _p;\n    global.set('gaiaPerf', _perf);\n}",
+        "func": "const _t0 = Date.now();\ntry {\n    const p = msg.payload;\n    if (!p || p.family !== 'tccm') return null;\n\n    let brain = global.get('gaiaBrain') || {};\n    const now = Date.now();\n\n    // Log azimuth/elevazione per calibrazione futura (2026-09-02): non si\n    // sa ancora quale range di azimuth corrisponde a quale stanza reale\n    // dentro \"zona-giorno\" (soggiorno/salotto/cucina/ingresso, mic troppo\n    // potente per una singola stanza -- vedi memoria project-solaro-dsp).\n    // Si traccia solo lo storico grezzo qui, NIENTE mappatura inventata.\n    brain._tccmBeamLog = brain._tccmBeamLog || [];\n    if (p.beam && p.beam.azimuth != null) {\n        brain._tccmBeamLog.unshift({ azimuth: p.beam.azimuth, elevation: p.beam.elevation, ts: now });\n        if (brain._tccmBeamLog.length > 100) brain._tccmBeamLog.length = 100;\n    }\n\n    // Ultimo stato compatto, letto da chi vuole \"il valore adesso\" (es.\n    // Build TD Canvas per gaia-art) senza scandire il ring buffer sopra\n    // (pensato per lo storico, non per una lettura singola).\n    brain.tccm = {\n        online: p.online !== false,\n        azimuth: p.beam ? p.beam.azimuth : null,\n        elevation: p.beam ? p.beam.elevation : null,\n        room_active: !!p.room_active,\n        muted: !!p.muted,\n        ts: now,\n    };\n\n    // AZIMUTH_ROOMS: mappa azimuth -> stanza reale dentro zona-giorno,\n    // persistita in brain.tccmRooms (2026-09-03, editabile da\n    // web/tccm.html via GET/POST /gaia/tccm-rooms -- niente piu'\n    // hardcoded qui, si aggiorna senza redeploy). Vuota finche' non\n    // arriva la calibrazione dall'utente (cammina in ogni stanza\n    // guardando la bussola live, annota il range di azimuth visto).\n    // min > max e' ammesso: range che attraversa lo zero (es. min:350\n    // max:20).\n    function inRangeAzimuth(az, min, max) {\n        return min <= max ? (az >= min && az < max) : (az >= min || az < max);\n    }\n    const AZIMUTH_ROOMS = Object.entries(brain.tccmRooms || {})\n        .map(([room, r]) => ({ room, min: r.min, max: r.max }));\n    let resolvedRoom = null;\n    if (p.beam && p.beam.azimuth != null) {\n        const az = p.beam.azimuth;\n        const match = AZIMUTH_ROOMS.find(r => inRangeAzimuth(az, r.min, r.max));\n        if (match) resolvedRoom = match.room;\n    }\n\n    // Presenza a livello di ZONA (zona-giorno) per ora, non di singola\n    // stanza -- onesto rispetto a quello che sappiamo davvero oggi. Se\n    // AZIMUTH_ROOMS sopra viene compilata, resolvedRoom prende il\n    // sopravvento automaticamente senza toccare altro codice.\n    brain.rooms = brain.rooms || {};\n    const zoneKey = resolvedRoom || (p.stanza || 'zona-giorno');\n    const room = brain.rooms[zoneKey] || { people: [], persons_count: 0, objects: {}, lastUpdate: now };\n    let becameActive = false;\n    if (p.room_active) {\n        becameActive = !room._tccmActive;\n        room._tccmActive = true;\n        room.lastTccm = now;\n        room.lastUpdate = now;\n    } else {\n        room._tccmActive = false;\n    }\n    brain.rooms[zoneKey] = room;\n    global.set('gaiaBrain', brain);\n\n    if (becameActive) {\n        msg.event = {\n            ts: now, source: 'tccm', category: 'presence',\n            value: resolvedRoom ? `parla in ${resolvedRoom}` : \"attivita' rilevata in zona-giorno\",\n            person: null, device: zoneKey,\n            azimuth: p.beam ? p.beam.azimuth : null,\n        };\n        return msg;\n    }\n    return null;\n} finally {\n    const _ms = Date.now() - _t0;\n    const _perf = global.get('gaiaPerf') || {};\n    const _p = _perf['tccm_presence_fn'] || { count: 0, totalMs: 0, maxMs: 0, since: Date.now() };\n    _p.count++; _p.totalMs += _ms; if (_ms > _p.maxMs) _p.maxMs = _ms;\n    _perf['tccm_presence_fn'] = _p;\n    global.set('gaiaPerf', _perf);\n}",
         "outputs": 1,
         "timeout": 0,
         "noerr": 0,
@@ -7062,6 +7062,102 @@
         "headers": {},
         "x": 550,
         "y": 1400,
+        "wires": []
+    },
+    {
+        "id": "tccm_rooms_http_get",
+        "type": "http in",
+        "z": "tab_device_registry",
+        "name": "GET /gaia/tccm-rooms",
+        "url": "/gaia/tccm-rooms",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 175,
+        "y": 1560,
+        "wires": [
+            [
+                "tccm_rooms_fn_get"
+            ]
+        ]
+    },
+    {
+        "id": "tccm_rooms_fn_get",
+        "type": "function",
+        "z": "tab_device_registry",
+        "name": "TccmRoomsGet",
+        "func": "// GET /gaia/tccm-rooms -> calibrazione azimuth -> stanza per la zona\n// coperta dal TCC M (zona-giorno: soggiorno+salotto+cucina+ingresso).\n// Persistito qui (2026-09-03, richiesto esplicitamente) invece che\n// hardcoded in tccm_presence_fn -- editabile da web/tccm.html senza\n// redeploy.\nconst brain = global.get('gaiaBrain') || {};\nconst rooms = brain.tccmRooms || {};\nmsg.statusCode = 200;\nmsg.headers = { 'Access-Control-Allow-Origin': '*' };\nmsg.payload = { rooms, ts: Date.now() };\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 415,
+        "y": 1560,
+        "wires": [
+            [
+                "tccm_rooms_http_get_response"
+            ]
+        ]
+    },
+    {
+        "id": "tccm_rooms_http_get_response",
+        "type": "http response",
+        "z": "tab_device_registry",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 660,
+        "y": 1560,
+        "wires": []
+    },
+    {
+        "id": "tccm_rooms_http_set",
+        "type": "http in",
+        "z": "tab_device_registry",
+        "name": "POST /gaia/tccm-rooms/:room",
+        "url": "/gaia/tccm-rooms/:room",
+        "method": "post",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 200,
+        "y": 1610,
+        "wires": [
+            [
+                "tccm_rooms_fn_set"
+            ]
+        ]
+    },
+    {
+        "id": "tccm_rooms_fn_set",
+        "type": "function",
+        "z": "tab_device_registry",
+        "name": "TccmRoomsSet",
+        "func": "// POST /gaia/tccm-rooms/:room  {min, max} -- range di azimuth (gradi,\n// 0-360) assegnato a UNA stanza dentro zona-giorno. Editabile a mano da\n// web/tccm.html: si cammina nella stanza guardando l'azimuth live e si\n// annota il range visto. min > max e' ammesso (range che attraversa lo\n// zero, es. min:350 max:20) -- gestito in tccm_presence_fn via\n// inRangeAzimuth().\nconst brain = global.get('gaiaBrain') || {};\nconst room = (msg.req.params.room || '').trim();\nconst body = msg.payload || {};\n\nif (!room) { msg.statusCode = 400; msg.payload = { ok: false, error: 'stanza mancante' }; return msg; }\n\nconst min = parseFloat(body.min);\nconst max = parseFloat(body.max);\nif (!Number.isFinite(min) || !Number.isFinite(max) || min < 0 || min >= 360 || max < 0 || max >= 360) {\n    msg.statusCode = 400;\n    msg.payload = { ok: false, error: 'min/max devono essere gradi 0-360' };\n    return msg;\n}\n\nbrain.tccmRooms = brain.tccmRooms || {};\nbrain.tccmRooms[room] = { min, max, updated: Date.now() };\nglobal.set('gaiaBrain', brain);\nnode.warn(`[TCCMRooms] ${room} -> ${min}-${max} gradi (manuale, Admin)`);\n\nmsg.statusCode = 200;\nmsg.headers = { 'Access-Control-Allow-Origin': '*' };\nmsg.payload = { ok: true, room, entry: brain.tccmRooms[room] };\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 450,
+        "y": 1610,
+        "wires": [
+            [
+                "tccm_rooms_http_set_response"
+            ]
+        ]
+    },
+    {
+        "id": "tccm_rooms_http_set_response",
+        "type": "http response",
+        "z": "tab_device_registry",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 720,
+        "y": 1610,
         "wires": []
     }
 ]
