@@ -436,8 +436,32 @@ _ww_conf_peak     = 0.0
 _gaia_conf_peak   = 0.0
 _STATS_INTERVAL   = 5.0   # secondi tra publish di stats
 
+# Nessuna visibilita' prima (richiesto esplicitamente 2026-09-04: "come
+# faccio a sapere se pi e' connesso al bt?") -- MIC_DEVICE vuoto risolve
+# il device di sistema in modo silenzioso, l'utente non aveva modo di
+# sapere se stava usando Gio-BT o il Polycom di fallback. Stesso principio
+# di resolve_default_source_label() in minipc/script/gaia_listener.py
+# (Core/Dante), qui specializzato per Bluetooth invece che Dante.
+_MIC_BT_HINTS = ("bluez", "gio-bt", "gio_bt")
+
+
+def _resolve_mic_label() -> tuple[str, bool]:
+    """pactl (PipeWire) risale al nodo REALE dietro al default source --
+    'default' da sola non dice se e' Gio-BT o il Polycom. Fallback su
+    'default'/False se pactl non c'e'/fallisce (non deve mai bloccare)."""
+    try:
+        r = subprocess.run(["pactl", "get-default-source"], capture_output=True, timeout=3, text=True)
+        name = r.stdout.strip()
+        if not name:
+            return "default", False
+        is_bt = any(h in name.lower() for h in _MIC_BT_HINTS)
+        return ("Bluetooth (Gio-BT)" if is_bt else name), is_bt
+    except Exception:
+        return "default", False
+
 
 def _publish_pi_stats(vol: float, state: str, ww_conf: float, gaia_conf: float = 0.0):
+    mic_label, mic_is_bt = _resolve_mic_label()
     _mqtt.publish(
         f"gaia/voice/stats/{_current_room}",
         json.dumps({
@@ -450,6 +474,8 @@ def _publish_pi_stats(vol: float, state: str, ww_conf: float, gaia_conf: float =
             "silence_threshold": int(config.SILENCE_THRESHOLD),
             "device_id":         config.DEVICE_ID,
             "room":              _current_room,
+            "mic_device_name":   mic_label,
+            "mic_is_bluetooth":  mic_is_bt,
             "ts":                int(time.time() * 1000),
         }),
         retain=False,

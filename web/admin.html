@@ -2331,6 +2331,7 @@ function initPiManager() {
       _pmClient.subscribe('gaia/livestream/+/state');
       _pmClient.subscribe('gaia/td-bridge/status');
       _pmClient.subscribe('gaia/mocap-bridge/+/status');
+      _pmClient.subscribe('gaia/voice/stats/+');
       pmLog('in', `Connesso a ${mqttUrl}`);
     });
     function tryFallback() {
@@ -2373,6 +2374,23 @@ function initPiManager() {
                 const lbl = inp.parentElement.querySelector('.pm-herbvol-lbl');
                 if (lbl) lbl.textContent = st.drum_volume + '%';
               }});
+          }
+        } catch(e) {}
+        return;
+      }
+      if (topic.startsWith('gaia/voice/stats/')) {
+        try {
+          const st = JSON.parse(raw.toString());
+          const stanza = topic.split('/')[3];
+          if (st && st.mic_device_name) {
+            for (const [devId, dev] of Object.entries(_pmDevices)) {
+              if (dev.stanza !== stanza) continue;
+              const el = document.getElementById(`pm-mic-${devId}`);
+              if (el) {
+                el.innerHTML = pmMicBadgeHtml(st.mic_device_name, !!st.mic_is_bluetooth);
+                el.style.display = '';
+              }
+            }
           }
         } catch(e) {}
         return;
@@ -2726,6 +2744,14 @@ function pmCapBadges(d) {
   return b?`<div style="display:flex;gap:6px;flex-wrap:wrap">${b}</div>`:'';
 }
 
+// Sorgente mic realmente in uso (2026-09-04, richiesto esplicitamente --
+// "come faccio a sapere se pi è connesso al bt?", nessuna visibilità
+// prima): da gaia/voice/stats/{stanza}, non da gaia/device/+/status (il
+// voice-node è un servizio separato dall'agent macchina, non pubblica lì).
+function pmMicBadgeHtml(label, isBt) {
+  return `<span class="pm-badge cap">${isBt ? '🔵' : '🎙'} ${pmEsc(label)}</span>`;
+}
+
 // Menu rapido: un link Welcome per stanza (cam=IP del device con fotocamera
 // in quella stanza, room=stanza) — così si apre qualunque welcome senza
 // dover ricordare IP/parametri a mano (2026-08-13).
@@ -2801,6 +2827,7 @@ function pmBuildCard(id, d) {
   <div class="pi-card-body">
     <div class="pm-td-perf" id="pm-perf-${id}" style="${pmPerfHtml(d)?'':'display:none'}">${pmPerfHtml(d)}</div>
     ${pmCapBadges(d)}
+    <div id="pm-mic-${id}" style="display:none"></div>
     <div>
       <div class="pm-section-label">Stanza / Nome display</div>
       <div class="pm-rename-row">
