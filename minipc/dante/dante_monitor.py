@@ -122,6 +122,14 @@ def _publish_solaro_device():
         # nota del sistema, i comandi reali restano da costruire quando
         # servono (vedi docstring modulo).
         "capabilities": {"ptz_visca_recall": True},
+        # Blocco esplicito (2026-09-04, richiesto da TD/Mac via
+        # GAIA_INTERFACE.md -- gaia_control_window mostrava questo device
+        # con service=""/state="unknown" perche' il blocco mancava del
+        # tutto, indistinguibile da un dato non arrivato): questo device
+        # e' SOLO presenza/telemetria, nessun servizio avviabile/fermabile,
+        # il vuoto qui e' intenzionale non un bug.
+        "services": {},
+        "config": {},
         "ts": int(now * 1000),
     }
     _mqtt.publish(f"gaia/device/{config.SOLARO_DEVICE_ID}/status", json.dumps(payload), retain=True)

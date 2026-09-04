@@ -181,6 +181,16 @@ class MadMapperBridge:
             "last_osc_in_age_s": last_age,
             "last_osc_in_address": self._last_osc_in_address,
             "uptime": int(time.monotonic() - self._start_ts),
+            # Blocco esplicito (2026-09-04, richiesto da TD/Mac via
+            # GAIA_INTERFACE.md -- gaia_control_window mostrava questo
+            # device con service=""/state="unknown" perche' il blocco
+            # mancava del tutto, indistinguibile da un dato non arrivato):
+            # il bridge e' un relay OSC<->MQTT, nessun servizio avviabile/
+            # fermabile a se' -- MadMapper.exe stesso e' un servizio
+            # dell'agent macchina (installation-vs-mini-silver), non di
+            # questo device. Il vuoto qui e' intenzionale non un bug.
+            "services": {},
+            "config": {},
             "ts": int(time.time() * 1000),
         }
         self._mqtt.publish(f"gaia/device/{DEVICE_ID}/status", json.dumps(payload), retain=True)

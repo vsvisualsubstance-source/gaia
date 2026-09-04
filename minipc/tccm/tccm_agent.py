@@ -343,6 +343,14 @@ class TCCMAgent:
             "farend_gain_db": self.last_farend_gain,
             "local_gain_db": self.last_local_gain,
             "capabilities": {"beam_direction": True, "room_activity": True},
+            # Blocco esplicito (2026-09-04, richiesto da TD/Mac via
+            # GAIA_INTERFACE.md -- gaia_control_window mostrava questo
+            # device con service=""/state="unknown" perche' il blocco
+            # mancava del tutto, indistinguibile da un dato non arrivato):
+            # questo device e' SOLO presenza/telemetria, nessun servizio
+            # avviabile/fermabile, il vuoto qui e' intenzionale non un bug.
+            "services": {},
+            "config": {},
             "ts": int(now * 1000),
         }
         self.publish(f"gaia/device/{config.TCCM_DEVICE_ID}/status", payload)
