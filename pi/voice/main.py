@@ -11,6 +11,7 @@ import json
 import os
 import pickle
 import queue
+import re
 import signal
 import socket
 import subprocess
@@ -446,14 +447,21 @@ _MIC_BT_HINTS = ("bluez", "gio-bt", "gio_bt")
 
 
 def _resolve_mic_label() -> tuple[str, bool]:
-    """pactl (PipeWire) risale al nodo REALE dietro al default source --
-    'default' da sola non dice se e' Gio-BT o il Polycom. Fallback su
-    'default'/False se pactl non c'e'/fallisce (non deve mai bloccare)."""
+    """wpctl (PipeWire nativo) risale al nodo REALE dietro al default
+    source -- 'default' da sola non dice se e' Gio-BT o il Polycom.
+    NON pactl: provato dal vivo 2026-09-04 su questo Pi, il tool
+    pulseaudio-compat non e' proprio installato (a differenza di Core,
+    che invece lo usa in minipc/script/gaia_listener.py -- due macchine,
+    due toolchain audio, non assumere che siano intercambiabili).
+    Fallback su 'default'/False se wpctl non c'e'/fallisce/non trova
+    node.description (non deve mai bloccare l'avvio)."""
     try:
-        r = subprocess.run(["pactl", "get-default-source"], capture_output=True, timeout=3, text=True)
-        name = r.stdout.strip()
-        if not name:
+        r = subprocess.run(["wpctl", "inspect", "@DEFAULT_AUDIO_SOURCE@"],
+                            capture_output=True, timeout=3, text=True)
+        m = re.search(r'node\.description\s*=\s*"([^"]+)"', r.stdout)
+        if not m:
             return "default", False
+        name = m.group(1)
         is_bt = any(h in name.lower() for h in _MIC_BT_HINTS)
         return ("Bluetooth (Gio-BT)" if is_bt else name), is_bt
     except Exception:
