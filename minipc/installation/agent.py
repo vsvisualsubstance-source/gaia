@@ -629,6 +629,15 @@ def main():
     _mqtt = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"gaia-installation-agent-{_cfg['device_id']}")
     _mqtt.on_connect = _on_connect
     _mqtt.on_message = _on_message
+    # Senza questo, il reconnect automatico di loop_start() dopo la
+    # connessione iniziale si e' visto bloccarsi indefinitamente al primo
+    # riavvio del broker (trovato dal vivo 2026-09-05: mosquitto riavviato
+    # lato Core, questa macchina -- sola su Tailscale, non LAN -- mai piu'
+    # riconnessa da sola, richiesto un bounce manuale del processo mentre
+    # Core/OPS/Pi sulla stessa LAN del broker si erano ririconnessi senza
+    # problemi). Stesso fix gia' presente in minipc/tccm/tccm_agent.py e
+    # ops/agent/agent.py.
+    _mqtt.reconnect_delay_set(min_delay=2, max_delay=30)
 
     backoff = 5
     while _running:

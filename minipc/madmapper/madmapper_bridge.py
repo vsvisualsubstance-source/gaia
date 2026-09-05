@@ -80,6 +80,10 @@ class MadMapperBridge:
                                   client_id=f"gaia-madmapper-bridge-{DEVICE_ID}")
         self._mqtt.on_connect = self._on_connect
         self._mqtt.on_message = self._on_message
+        # Vedi stesso fix/motivazione in minipc/installation/agent.py --
+        # senza questo, il reconnect dopo un riavvio del broker si e' visto
+        # bloccarsi indefinitamente su questa macchina (Tailscale, non LAN).
+        self._mqtt.reconnect_delay_set(min_delay=2, max_delay=30)
         self._start_ts = time.monotonic()
         self._last_osc_in_ts = None
         self._last_osc_in_address = None
