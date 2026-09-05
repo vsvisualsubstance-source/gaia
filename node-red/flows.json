@@ -7159,5 +7159,101 @@
         "x": 720,
         "y": 1610,
         "wires": []
+    },
+    {
+        "id": "music_fav_http_get",
+        "type": "http in",
+        "z": "tab_media",
+        "name": "GET /gaia/music/favorites",
+        "url": "/gaia/music/favorites",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 200,
+        "y": 1660,
+        "wires": [
+            [
+                "music_fav_fn_get"
+            ]
+        ]
+    },
+    {
+        "id": "music_fav_fn_get",
+        "type": "function",
+        "z": "tab_media",
+        "name": "MusicFavoritesGet",
+        "func": "// GET /gaia/music/favorites -> lista brani preferiti (stellina in\n// web/musica.html, richiesto esplicitamente 2026-09-05). Condivisa tra\n// tutti i dispositivi/stanze, non per-browser -- stesso principio di\n// brain.plants/brain.tccmRooms.\nconst brain = global.get('gaiaBrain') || {};\nconst favorites = brain.musicFavorites || [];\nmsg.statusCode = 200;\nmsg.headers = { 'Access-Control-Allow-Origin': '*' };\nmsg.payload = { favorites, ts: Date.now() };\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 460,
+        "y": 1660,
+        "wires": [
+            [
+                "music_fav_http_get_response"
+            ]
+        ]
+    },
+    {
+        "id": "music_fav_http_get_response",
+        "type": "http response",
+        "z": "tab_media",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 720,
+        "y": 1660,
+        "wires": []
+    },
+    {
+        "id": "music_fav_http_toggle",
+        "type": "http in",
+        "z": "tab_media",
+        "name": "POST /gaia/music/favorites/toggle",
+        "url": "/gaia/music/favorites/toggle",
+        "method": "post",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 220,
+        "y": 1710,
+        "wires": [
+            [
+                "music_fav_fn_toggle"
+            ]
+        ]
+    },
+    {
+        "id": "music_fav_fn_toggle",
+        "type": "function",
+        "z": "tab_media",
+        "name": "MusicFavoritesToggle",
+        "func": "// POST /gaia/music/favorites/toggle  {title, url} -- aggiunge se\n// assente, rimuove se gia' presente (dedup per url, e' la chiave stabile\n// del brano). Nessun limite alla lista: e' una libreria personale, non\n// un dato ad alta frequenza.\nconst brain = global.get('gaiaBrain') || {};\nconst body = msg.payload || {};\nconst url = (body.url || '').trim();\nconst title = (body.title || '').trim();\n\nif (!url) { msg.statusCode = 400; msg.payload = { ok: false, error: 'url mancante' }; return msg; }\n\nbrain.musicFavorites = brain.musicFavorites || [];\nconst idx = brain.musicFavorites.findIndex(f => f.url === url);\nlet favorited;\nif (idx >= 0) {\n    brain.musicFavorites.splice(idx, 1);\n    favorited = false;\n} else {\n    brain.musicFavorites.push({ title: title || url, url, ts: Date.now() });\n    favorited = true;\n}\nglobal.set('gaiaBrain', brain);\n\nmsg.statusCode = 200;\nmsg.headers = { 'Access-Control-Allow-Origin': '*' };\nmsg.payload = { ok: true, favorited, favorites: brain.musicFavorites };\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 480,
+        "y": 1710,
+        "wires": [
+            [
+                "music_fav_http_toggle_response"
+            ]
+        ]
+    },
+    {
+        "id": "music_fav_http_toggle_response",
+        "type": "http response",
+        "z": "tab_media",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 750,
+        "y": 1710,
+        "wires": []
     }
 ]

@@ -47,6 +47,21 @@ h2{font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:var(--mu
 .now-controls input[type=range]{flex:1 1 60px;min-width:60px;accent-color:var(--accent)}
 .empty-hint{color:var(--muted);font-size:.82rem;padding:10px 0}
 
+/* Stellina preferiti */
+.star-btn{background:none;border:none;cursor:pointer;font-size:1rem;color:var(--muted);
+  padding:0;line-height:1;flex-shrink:0;transition:color .15s}
+.star-btn:hover{color:var(--yellow)}
+.star-btn.on{color:var(--yellow)}
+
+/* Preferiti (playlist) */
+.fav-list{max-height:40vh;overflow-y:auto;border:1px solid var(--border);border-radius:12px}
+.fav-track{display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid #131a2c}
+.fav-track:last-child{border-bottom:none}
+.fav-track .t-title{flex:1;font-size:.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+.fav-track .t-title:hover{color:var(--accent)}
+.fav-remove{background:none;border:none;color:var(--muted);cursor:pointer;font-size:.9rem;flex-shrink:0}
+.fav-remove:hover{color:var(--red)}
+
 /* Transport globale */
 .transport{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:6px}
 .btn{background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;
@@ -98,6 +113,12 @@ h2{font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:var(--mu
 <h2>In riproduzione</h2>
 <div class="now-grid" id="nowGrid"><span class="empty-hint">—</span></div>
 
+<h2>⭐ Preferiti (<span id="favTotal">0</span>)</h2>
+<div class="transport">
+  <button class="btn primary" id="btnPlayFav">▶ Avvia preferiti</button>
+</div>
+<div class="fav-list" id="favList"><div class="empty-hint" style="padding:14px">Nessun preferito ancora — clicca la stellina su un brano in riproduzione.</div></div>
+
 <h2>Autoplay</h2>
 <div class="transport">
   <button class="btn primary" id="btnPlayLib">▶ Avvia libreria</button>
@@ -125,6 +146,7 @@ let _client = null;
 const _rooms = {};             // stanza -> {device, service, state, title, volume, queue, ...}
 let _selected = new Set(JSON.parse(localStorage.getItem('gaiaMusicRooms') || '[]'));
 let _library = { tracks: [], folders: [] };
+let _favorites = [];   // [{title, url, ts}], condivisi tra tutti (server-side, non localStorage)
 let _filtered = [];
 let _mode = 'shuffle';
 let _danteActive = false;   // rete Dante viva? (gaia/dante/status, indipendente dalla stanza)
@@ -197,8 +219,10 @@ function renderNowPlaying(){
         onclick="send('${room}',{action:'audio_output',output:'${nextOutput}'})">
         ${onDante ? '📡 Dante' : '🔈 Locale'}${(!onDante && !_danteActive) ? ' ⚠' : ''}</button>`;
     }
+    const starHtml = p.url ? `<button class="star-btn ${isFavorited(p.url)?'on':''}"
+        title="Preferiti" onclick="toggleFavorite('${room}')">${isFavorited(p.url)?'★':'☆'}</button>` : '';
     return `<div class="now-card ${st}">
-      <div class="now-room"><span>${escHtml(room)}</span><span>${icon}</span></div>
+      <div class="now-room"><span>${escHtml(room)}</span><span>${starHtml}${icon}</span></div>
       <div class="now-title">${escHtml(p.title || (st==='stopped'?'silenzio':'—'))}</div>
       <div class="now-sub">${st}${q}</div>
       <div class="now-controls">
@@ -211,6 +235,76 @@ function renderNowPlaying(){
       </div>
     </div>`;
   }).join('');
+}
+
+// ── Preferiti (condivisi server-side, non per-browser) ──────────────────
+async function loadFavorites(){
+  try{
+    const r = await fetch('/gaia/music/favorites').then(x=>x.json());
+    _favorites = r.favorites || [];
+  } catch(e){ _favorites = []; }
+  renderFavorites();
+  renderNowPlaying();   // aggiorna lo stato delle stelline
+}
+
+function isFavorited(url){
+  return _favorites.some(f => f.url === url);
+}
+
+async function toggleFavorite(room){
+  const p = _rooms[room] || {};
+  if (!p.url) return;
+  try{
+    const r = await fetch('/gaia/music/favorites/toggle', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ title: p.title || p.url, url: p.url }),
+    }).then(x=>x.json());
+    _favorites = r.favorites || _favorites;
+  } catch(e){}
+  renderFavorites();
+  renderNowPlaying();
+}
+
+async function removeFavorite(url){
+  try{
+    const r = await fetch('/gaia/music/favorites/toggle', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ url }),
+    }).then(x=>x.json());
+    _favorites = r.favorites || _favorites.filter(f=>f.url!==url);
+  } catch(e){}
+  renderFavorites();
+  renderNowPlaying();
+}
+
+function renderFavorites(){
+  document.getElementById('favTotal').textContent = _favorites.length;
+  const el = document.getElementById('favList');
+  if (!_favorites.length){
+    el.innerHTML = '<div class="empty-hint" style="padding:14px">Nessun preferito ancora — clicca la stellina su un brano in riproduzione.</div>';
+    return;
+  }
+  // data-url invece di interpolare l'url dentro onclick="...('${url}')" --
+  // una virgoletta nell'url/titolo romperebbe il JS generato (bug reale
+  // trovato scrivendo questo codice, mai un'ipotetica).
+  el.innerHTML = _favorites.map(f => `
+    <div class="fav-track">
+      <span class="t-title" title="${escHtml(f.title)}" data-url="${escHtml(f.url)}" onclick="playFavorite(this.dataset.url)">${escHtml(f.title)}</span>
+      <button class="fav-remove" title="Rimuovi dai preferiti" data-url="${escHtml(f.url)}" onclick="removeFavorite(this.dataset.url)">✕</button>
+    </div>`).join('');
+}
+
+function playFavorite(url){
+  if (!_selected.size){ alert('Seleziona almeno una stanza.'); return; }
+  sendToSelected({ action:'queue', urls:[url], mode:'sequential' });
+}
+
+function playFavorites(){
+  if (!_selected.size){ alert('Seleziona almeno una stanza.'); return; }
+  if (!_favorites.length){ alert('Nessun preferito da riprodurre.'); return; }
+  let urls = _favorites.map(f=>f.url);
+  if (_mode === 'shuffle') urls = shuffleArray(urls);
+  sendToSelected({ action:'queue', urls, mode:'sequential' });
 }
 
 function send(room, payload){
@@ -341,6 +435,7 @@ function setMode(m){
 
 // ── Eventi UI ────────────────────────────────────────────────────────────
 document.getElementById('btnPlayLib').onclick = playLibrary;
+document.getElementById('btnPlayFav').onclick = playFavorites;
 document.getElementById('modeShuffle').onclick = ()=>setMode('shuffle');
 document.getElementById('modeSeq').onclick = ()=>setMode('sequential');
 document.getElementById('btnPrev').onclick   = ()=>sendToSelected({action:'prev'});
@@ -354,6 +449,7 @@ document.getElementById('folderSel').addEventListener('change', applyFilter);
 connectMqtt();
 loadRooms();
 loadLibrary();
+loadFavorites();
 setInterval(loadRooms, 15000);   // riallinea se un player si accende/spegne
 </script>
 </body>
