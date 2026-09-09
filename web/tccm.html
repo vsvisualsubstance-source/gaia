@@ -260,16 +260,27 @@ function tcRenderStatus() {
   localEl.textContent = tcDevice.local_gain_db != null ? tcDevice.local_gain_db + ' dB' : '—';
 }
 
+// Fallback Tailscale (2026-09-09, segnalato dal vivo: "da tailscale non
+// funziona") -- stesso principio gia' in uso in admin.html/startMqtt.
+const TC_BROKER_TAILSCALE = '100.94.220.65';
+let tcTriedFallback = false;
+
 function tcInit() {
-  const mqttUrl = `ws://${TC_BROKER}:9001`;
-  function start() {
-    tcClient = mqtt.connect(mqttUrl);
+  function start(host, isFallback) {
+    const mqttUrl = `ws://${host}:9001`;
+    tcClient = mqtt.connect(mqttUrl, isFallback ? {} : { reconnectPeriod: 0, connectTimeout: 4000 });
     tcClient.on('connect', () => {
       tcSetConn(true);
       tcClient.subscribe('gaia/device/+/status');
     });
-    tcClient.on('error',   () => tcSetConn(false));
-    tcClient.on('offline', () => tcSetConn(false));
+    function tryFallback() {
+      if (isFallback || tcTriedFallback) return;
+      tcTriedFallback = true;
+      tcClient.end(true);
+      start(TC_BROKER_TAILSCALE, true);
+    }
+    tcClient.on('error',   () => { tcSetConn(false); tryFallback(); });
+    tcClient.on('offline', () => { tcSetConn(false); tryFallback(); });
     tcClient.on('message', (topic, raw) => {
       if (!raw || !raw.length) return;
       try {
@@ -285,19 +296,22 @@ function tcInit() {
         tcRenderStatus();
       } catch (e) {}
     });
-    setInterval(() => {
-      if (tcDevice && Date.now() - tcDevice._lastSeen > 90000 && !tcDevice._offline) {
-        tcDevice._offline = true;
-        tcRenderStatus();
-      }
-    }, 10000);
   }
+  // Fuori da start() apposta: start() puo' essere chiamata due volte
+  // (LAN poi fallback Tailscale), un secondo interval duplicherebbe i
+  // controlli di staleness.
+  setInterval(() => {
+    if (tcDevice && Date.now() - tcDevice._lastSeen > 90000 && !tcDevice._offline) {
+      tcDevice._offline = true;
+      tcRenderStatus();
+    }
+  }, 10000);
   if (typeof mqtt !== 'undefined') {
-    start();
+    start(TC_BROKER, false);
   } else {
     const s = document.createElement('script');
     s.src = 'vendor/mqtt.min.js';
-    s.onload = start;
+    s.onload = () => start(TC_BROKER, false);
     document.head.appendChild(s);
   }
 }

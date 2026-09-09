@@ -604,10 +604,19 @@ function dxRegisterStatus(d) {
   dxApplyStatus(d);
 }
 
+// Fallback Tailscale (2026-09-09, segnalato dal vivo: "da tailscale non
+// funziona") -- stesso principio già in uso in admin.html/startMqtt:
+// prova la LAN con timeout breve, se non risponde passa al Tailscale IP
+// di Core. Il setInterval di staleness è FUORI da start() apposta: start()
+// può essere chiamata due volte (LAN poi fallback), un secondo interval
+// duplicherebbe i controlli.
+const DX_BROKER_TAILSCALE = '100.94.220.65';
+let dxTriedFallback = false;
+
 function dxInit() {
-  const mqttUrl = `ws://${DX_BROKER}:9001`;
-  function start() {
-    dxClient = mqtt.connect(mqttUrl);
+  function start(host, isFallback) {
+    const mqttUrl = `ws://${host}:9001`;
+    dxClient = mqtt.connect(mqttUrl, isFallback ? {} : { reconnectPeriod: 0, connectTimeout: 4000 });
     dxClient.on('connect', () => {
       dxSetConn(true);
       dxClient.subscribe('gaia/device/+/status');
@@ -624,8 +633,14 @@ function dxInit() {
         if (dxPersistPending) { dxPersistPending = false; dxRenderTabs(); dxRenderAll(); }
       }, 1500);
     });
-    dxClient.on('error',   () => dxSetConn(false));
-    dxClient.on('offline', () => dxSetConn(false));
+    function tryFallback() {
+      if (isFallback || dxTriedFallback) return;
+      dxTriedFallback = true;
+      dxClient.end(true);
+      start(DX_BROKER_TAILSCALE, true);
+    }
+    dxClient.on('error',   () => { dxSetConn(false); tryFallback(); });
+    dxClient.on('offline', () => { dxSetConn(false); tryFallback(); });
     dxClient.on('message', (topic, raw) => {
       if (!raw || !raw.length) return;
       if (topic.endsWith('/dmx_matrix')) {
@@ -636,21 +651,21 @@ function dxInit() {
         try { dxRegisterStatus(JSON.parse(raw.toString())); } catch (e) {}
       }
     });
-    setInterval(() => {
-      let changed = false;
-      for (const dev of Object.values(dxDevices)) {
-        const st = dev.status;
-        if (st && !st._offline && Date.now() - st._lastSeen > DX_STALE_MS) { st._offline = true; changed = true; }
-      }
-      if (changed) { dxRenderTabs(); dxRenderAll(); }
-    }, 10000);
   }
+  setInterval(() => {
+    let changed = false;
+    for (const dev of Object.values(dxDevices)) {
+      const st = dev.status;
+      if (st && !st._offline && Date.now() - st._lastSeen > DX_STALE_MS) { st._offline = true; changed = true; }
+    }
+    if (changed) { dxRenderTabs(); dxRenderAll(); }
+  }, 10000);
   if (typeof mqtt !== 'undefined') {
-    start();
+    start(DX_BROKER, false);
   } else {
     const s = document.createElement('script');
     s.src = 'vendor/mqtt.min.js';
-    s.onload = start;
+    s.onload = () => start(DX_BROKER, false);
     document.head.appendChild(s);
   }
 }

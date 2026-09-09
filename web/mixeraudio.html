@@ -457,10 +457,15 @@ function mxRenderAll() {
   mxRenderPresetSlots();
 }
 
+// Fallback Tailscale (2026-09-09, segnalato dal vivo: "da tailscale non
+// funziona") -- stesso principio gia' in uso in admin.html/startMqtt.
+const MX_BROKER_TAILSCALE = '100.94.220.65';
+let mxTriedFallback = false;
+
 function mxInit() {
-  const mqttUrl = `ws://${MX_BROKER}:9001`;
-  function start() {
-    mxClient = mqtt.connect(mqttUrl);
+  function start(host, isFallback) {
+    const mqttUrl = `ws://${host}:9001`;
+    mxClient = mqtt.connect(mqttUrl, isFallback ? {} : { reconnectPeriod: 0, connectTimeout: 4000 });
     mxClient.on('connect', () => {
       mxSetConn(true);
       mxClient.subscribe('gaia/device/+/status');
@@ -471,8 +476,14 @@ function mxInit() {
       mxClient.subscribe('gaia/mixeraudio/preset/+/+/+');
       mxStartPolling();
     });
-    mxClient.on('error',   () => mxSetConn(false));
-    mxClient.on('offline', () => mxSetConn(false));
+    function tryFallback() {
+      if (isFallback || mxTriedFallback) return;
+      mxTriedFallback = true;
+      mxClient.end(true);
+      start(MX_BROKER_TAILSCALE, true);
+    }
+    mxClient.on('error',   () => { mxSetConn(false); tryFallback(); });
+    mxClient.on('offline', () => { mxSetConn(false); tryFallback(); });
     mxClient.on('message', (topic, raw) => {
       if (topic.startsWith('gaia/mixeraudio/preset/')) {
         const m = topic.match(/^gaia\/mixeraudio\/preset\/([^/]+)\/ch(\d+)\/([A-Z])$/);
@@ -522,20 +533,22 @@ function mxInit() {
         mxRenderAll();
       } catch (e) {}
     });
-    setInterval(() => { mxRenderInputLevel(); mxRenderLiveBand(); }, 1000);
-    setInterval(() => {
-      if (mxDevice && Date.now() - mxDevice._lastSeen > 90000 && !mxDevice._offline) {
-        mxDevice._offline = true;
-        mxRenderAll();
-      }
-    }, 10000);
   }
+  // Fuori da start() apposta: start() puo' essere chiamata due volte
+  // (LAN poi fallback Tailscale), interval duplicati altrimenti.
+  setInterval(() => { mxRenderInputLevel(); mxRenderLiveBand(); }, 1000);
+  setInterval(() => {
+    if (mxDevice && Date.now() - mxDevice._lastSeen > 90000 && !mxDevice._offline) {
+      mxDevice._offline = true;
+      mxRenderAll();
+    }
+  }, 10000);
   if (typeof mqtt !== 'undefined') {
-    start();
+    start(MX_BROKER, false);
   } else {
     const s = document.createElement('script');
     s.src = 'vendor/mqtt.min.js';
-    s.onload = start;
+    s.onload = () => start(MX_BROKER, false);
     document.head.appendChild(s);
   }
 }

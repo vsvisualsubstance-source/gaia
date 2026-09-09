@@ -821,8 +821,24 @@ button.small{padding:3px 9px;font-size:.78rem;margin:0}
 // Node-RED gira altrove (2026-08-07, migrazione OPS) -- non seguono
 // location.hostname come il resto della pagina (:1880), sono ancorati
 // all'hardware/filesystem di Core (voice_db, faces, camera fisica).
-const API = `http://192.168.1.142:8765`;
-const MJPEG_URL = `http://192.168.1.142:8766/video`;
+// Fallback Tailscale (2026-09-09, segnalato dal vivo: "da tailscale non
+// funziona") -- questi due, a differenza del resto della pagina (MQTT,
+// che ha già startMqtt/tryFallback sotto), restavano fissi sulla LAN
+// senza nessun ripiego: da fuori casa via Tailscale la pagina si carica
+// ma status/volti/camera restano vuoti in silenzio. Stesso principio:
+// prova LAN, se non risponde passa al Tailscale IP di Core -- `let`
+// non `const`, poll() (già in loop ogni 2s) rilegge il valore aggiornato
+// da sé senza bisogno di riavviare nulla.
+let API = `http://192.168.1.142:8765`;
+let MJPEG_URL = `http://192.168.1.142:8766/video`;
+(async function resolveAdminApiHost() {
+  try {
+    await fetch(`${API}/api/status`, { signal: AbortSignal.timeout(2500) });
+  } catch (e) {
+    API = `http://100.94.220.65:8765`;
+    MJPEG_URL = `http://100.94.220.65:8766/video`;
+  }
+})();
 let _calSuggested = null;
 let _enrolling      = false;
 let _lastConfig     = {};

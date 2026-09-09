@@ -332,10 +332,15 @@ function pdAdopt(id) {
   pdRenderDevice();
 }
 
+// Fallback Tailscale (2026-09-09, segnalato dal vivo: "da tailscale non
+// funziona") -- stesso principio gia' in uso in admin.html/startMqtt.
+const PD_BROKER_TAILSCALE = '100.94.220.65';
+let pdTriedFallback = false;
+
 function pdInit() {
-  const mqttUrl = `ws://${PD_BROKER}:9001`;
-  function start() {
-    pdClient = mqtt.connect(mqttUrl);
+  function start(host, isFallback) {
+    const mqttUrl = `ws://${host}:9001`;
+    pdClient = mqtt.connect(mqttUrl, isFallback ? {} : { reconnectPeriod: 0, connectTimeout: 4000 });
     pdClient.on('connect', () => {
       pdSetConn(true);
       pdClient.subscribe('gaia/device/+/status');
@@ -361,8 +366,14 @@ function pdInit() {
         if (any) { pdAdopt(any[0]); } else { PD_DEVICE_ID = null; pdMatrix = null; pdDevice = null; pdRenderDevice(); }
       }, 1500);
     });
-    pdClient.on('error',   () => pdSetConn(false));
-    pdClient.on('offline', () => pdSetConn(false));
+    function tryFallback() {
+      if (isFallback || pdTriedFallback) return;
+      pdTriedFallback = true;
+      pdClient.end(true);
+      start(PD_BROKER_TAILSCALE, true);
+    }
+    pdClient.on('error',   () => { pdSetConn(false); tryFallback(); });
+    pdClient.on('offline', () => { pdSetConn(false); tryFallback(); });
     pdClient.on('message', (topic, raw) => {
       if (!raw || !raw.length) return;
       if (topic.endsWith('/patchdeck_matrix')) {
@@ -432,19 +443,22 @@ function pdInit() {
         pdRenderDevice();
       } catch (e) {}
     });
-    setInterval(() => {
-      if (pdDevice && Date.now() - pdDevice._lastSeen > 90000 && !pdDevice._offline) {
-        pdDevice._offline = true;
-        pdRenderDevice();
-      }
-    }, 10000);
   }
+  // Fuori da start() apposta: start() puo' essere chiamata due volte
+  // (LAN poi fallback Tailscale), un secondo interval duplicherebbe i
+  // controlli di staleness.
+  setInterval(() => {
+    if (pdDevice && Date.now() - pdDevice._lastSeen > 90000 && !pdDevice._offline) {
+      pdDevice._offline = true;
+      pdRenderDevice();
+    }
+  }, 10000);
   if (typeof mqtt !== 'undefined') {
-    start();
+    start(PD_BROKER, false);
   } else {
     const s = document.createElement('script');
     s.src = 'vendor/mqtt.min.js';
-    s.onload = start;
+    s.onload = () => start(PD_BROKER, false);
     document.head.appendChild(s);
   }
 }
