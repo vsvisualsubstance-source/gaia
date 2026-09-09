@@ -261,35 +261,37 @@ function tcRenderStatus() {
 }
 
 // Fallback Tailscale (2026-09-09, segnalato dal vivo: "da tailscale non
-// funziona") -- bidirezionale (2026-09-09, secondo giro: il primo fix
-// passava a Tailscale su qualunque intoppo iniziale ma non tornava MAI
-// piu' sulla LAN, nemmeno se questa era perfettamente funzionante --
-// segnalato dal vivo su altre pagine gemelle da un client SULLA LAN,
-// rimasta agganciata a un tentativo Tailscale fallito. Ora ogni lato,
-// se cade, prova SEMPRE l'altro -- converge da solo su quello che
-// funziona, senza bisogno di ricaricare.
+// funziona", poi "non sembra funzionare" -- TERZO giro). Il secondo giro
+// (bidirezionale ma con reconnectPeriod:0 su ogni tentativo) era PEGGIO
+// del previsto: disattivava il riconnect automatico di mqtt.js anche
+// sullo stesso host, quindi un blip di rete normalissimo (che prima si
+// autorisolveva da solo in background) ora faceva scattare un cambio
+// LAN<->Tailscale completo ad ogni piccola interruzione -- la pagina
+// passava piu' tempo a "switchare" che connessa davvero.
+// Fix corretto: reconnect automatico di mqtt.js LASCIATO ATTIVO (nessun
+// reconnectPeriod:0) -- i blip brevi si autorisolvono da soli sullo
+// stesso host, senza nessun intervento nostro. Un watchdog ESTERNO
+// (unico, fuori da start()) controlla solo se siamo scollegati da PIU'
+// di 10s consecutivi (non un blip, un'assenza vera) e SOLO in quel caso
+// prova l'altro lato -- funziona sia al primo tentativo fallito sia se
+// la rete cambia a metà sessione (es. utente disconnette Tailscale).
 const TC_BROKER_TAILSCALE = '100.94.220.65';
 let tcSwitching = false;
+let tcOfflineSince = null;
+let tcCurrentIsFallback = false;
 
 function tcInit() {
   function start(host, isFallback) {
+    tcCurrentIsFallback = isFallback;
     const mqttUrl = `ws://${host}:9001`;
-    tcClient = mqtt.connect(mqttUrl, { reconnectPeriod: 0, connectTimeout: 4000 });
+    tcClient = mqtt.connect(mqttUrl, { connectTimeout: 4000 });
     tcClient.on('connect', () => {
+      tcOfflineSince = null;
       tcSetConn(true);
       tcClient.subscribe('gaia/device/+/status');
     });
-    function trySwitch() {
-      if (tcSwitching) return;
-      tcSwitching = true;
-      tcClient.end(true);
-      setTimeout(() => {
-        tcSwitching = false;
-        start(isFallback ? TC_BROKER : TC_BROKER_TAILSCALE, !isFallback);
-      }, 2000);
-    }
-    tcClient.on('error',   () => { tcSetConn(false); trySwitch(); });
-    tcClient.on('offline', () => { tcSetConn(false); trySwitch(); });
+    tcClient.on('error',   () => { tcSetConn(false); if (tcOfflineSince === null) tcOfflineSince = Date.now(); });
+    tcClient.on('offline', () => { tcSetConn(false); if (tcOfflineSince === null) tcOfflineSince = Date.now(); });
     tcClient.on('message', (topic, raw) => {
       if (!raw || !raw.length) return;
       try {
@@ -306,6 +308,22 @@ function tcInit() {
       } catch (e) {}
     });
   }
+  // Watchdog LAN/Tailscale, unico, fuori da start() -- controlla ogni 3s
+  // se siamo scollegati da piu' di 10s consecutivi (non un blip breve,
+  // quello lo risolve gia' da solo il reconnect automatico di mqtt.js
+  // sullo stesso host) e solo allora prova l'altro lato.
+  setInterval(() => {
+    if (tcOfflineSince !== null && !tcSwitching && Date.now() - tcOfflineSince > 10000) {
+      tcSwitching = true;
+      const wasFallback = tcCurrentIsFallback;
+      tcClient.end(true);
+      setTimeout(() => {
+        tcSwitching = false;
+        tcOfflineSince = null;
+        start(wasFallback ? TC_BROKER : TC_BROKER_TAILSCALE, !wasFallback);
+      }, 500);
+    }
+  }, 3000);
   // Fuori da start() apposta: start() puo' essere chiamata due volte
   // (LAN poi fallback Tailscale), un secondo interval duplicherebbe i
   // controlli di staleness.

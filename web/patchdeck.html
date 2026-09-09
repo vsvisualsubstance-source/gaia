@@ -332,22 +332,27 @@ function pdAdopt(id) {
   pdRenderDevice();
 }
 
-// Fallback Tailscale (2026-09-09, segnalato dal vivo: "da tailscale non
-// funziona") -- bidirezionale (2026-09-09, secondo giro: il primo fix
-// passava a Tailscale su qualunque intoppo iniziale ma non tornava MAI
-// piu' sulla LAN, nemmeno se questa era perfettamente funzionante --
-// segnalato dal vivo "patchdeck non si vede"/"mixeraudio offline" da un
-// client SULLA LAN, dove la pagina era rimasta agganciata a un tentativo
-// Tailscale fallito. Ora ogni lato, se cade, prova SEMPRE l'altro --
-// converge da solo su quello che funziona, senza bisogno di ricaricare.
+// Fallback Tailscale (2026-09-09, TERZO giro). Il secondo giro
+// (bidirezionale ma con reconnectPeriod:0 su ogni tentativo) disattivava
+// il riconnect automatico di mqtt.js anche sullo stesso host -- un blip
+// di rete normalissimo (prima autorisolto in background) faceva scattare
+// un cambio LAN<->Tailscale completo ad ogni piccola interruzione,
+// segnalato dal vivo "non sembra funzionare" su una pagina gemella. Fix
+// corretto: reconnect automatico LASCIATO ATTIVO, un watchdog ESTERNO
+// (fuori da start()) prova l'altro lato solo dopo 10s consecutivi
+// scollegato (non un blip).
 const PD_BROKER_TAILSCALE = '100.94.220.65';
 let pdSwitching = false;
+let pdOfflineSince = null;
+let pdCurrentIsFallback = false;
 
 function pdInit() {
   function start(host, isFallback) {
+    pdCurrentIsFallback = isFallback;
     const mqttUrl = `ws://${host}:9001`;
-    pdClient = mqtt.connect(mqttUrl, { reconnectPeriod: 0, connectTimeout: 4000 });
+    pdClient = mqtt.connect(mqttUrl, { connectTimeout: 4000 });
     pdClient.on('connect', () => {
+      pdOfflineSince = null;
       pdSetConn(true);
       pdClient.subscribe('gaia/device/+/status');
       // Wildcard, non piu' un device_id fisso (2026-08-28) -- vedi nota su
@@ -372,17 +377,8 @@ function pdInit() {
         if (any) { pdAdopt(any[0]); } else { PD_DEVICE_ID = null; pdMatrix = null; pdDevice = null; pdRenderDevice(); }
       }, 1500);
     });
-    function trySwitch() {
-      if (pdSwitching) return;
-      pdSwitching = true;
-      pdClient.end(true);
-      setTimeout(() => {
-        pdSwitching = false;
-        start(isFallback ? PD_BROKER : PD_BROKER_TAILSCALE, !isFallback);
-      }, 2000);
-    }
-    pdClient.on('error',   () => { pdSetConn(false); trySwitch(); });
-    pdClient.on('offline', () => { pdSetConn(false); trySwitch(); });
+    pdClient.on('error',   () => { pdSetConn(false); if (pdOfflineSince === null) pdOfflineSince = Date.now(); });
+    pdClient.on('offline', () => { pdSetConn(false); if (pdOfflineSince === null) pdOfflineSince = Date.now(); });
     pdClient.on('message', (topic, raw) => {
       if (!raw || !raw.length) return;
       if (topic.endsWith('/patchdeck_matrix')) {
@@ -453,6 +449,21 @@ function pdInit() {
       } catch (e) {}
     });
   }
+  // Watchdog LAN/Tailscale, unico, fuori da start() -- prova l'altro lato
+  // solo dopo 10s consecutivi scollegato (non un blip breve, quello lo
+  // risolve gia' da solo il reconnect automatico di mqtt.js).
+  setInterval(() => {
+    if (pdOfflineSince !== null && !pdSwitching && Date.now() - pdOfflineSince > 10000) {
+      pdSwitching = true;
+      const wasFallback = pdCurrentIsFallback;
+      pdClient.end(true);
+      setTimeout(() => {
+        pdSwitching = false;
+        pdOfflineSince = null;
+        start(wasFallback ? PD_BROKER : PD_BROKER_TAILSCALE, !wasFallback);
+      }, 500);
+    }
+  }, 3000);
   // Fuori da start() apposta: start() puo' essere chiamata due volte
   // (LAN poi fallback Tailscale), un secondo interval duplicherebbe i
   // controlli di staleness.

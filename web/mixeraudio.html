@@ -457,22 +457,27 @@ function mxRenderAll() {
   mxRenderPresetSlots();
 }
 
-// Fallback Tailscale (2026-09-09, segnalato dal vivo: "da tailscale non
-// funziona") -- bidirezionale (2026-09-09, secondo giro: il primo fix
-// passava a Tailscale su qualunque intoppo iniziale ma non tornava MAI
-// piu' sulla LAN, nemmeno se questa era perfettamente funzionante --
-// segnalato dal vivo "mixeraudio offline" da un client SULLA LAN, dove
-// la pagina era rimasta agganciata a un tentativo Tailscale fallito.
-// Ora ogni lato, se cade, prova SEMPRE l'altro -- converge da solo su
-// quello che funziona, senza bisogno di ricaricare.
+// Fallback Tailscale (2026-09-09, TERZO giro). Il secondo giro
+// (bidirezionale ma con reconnectPeriod:0 su ogni tentativo) disattivava
+// il riconnect automatico di mqtt.js anche sullo stesso host -- un blip
+// di rete normalissimo (prima autorisolto in background) faceva scattare
+// un cambio LAN<->Tailscale completo ad ogni piccola interruzione,
+// segnalato dal vivo "non sembra funzionare" su una pagina gemella. Fix
+// corretto: reconnect automatico LASCIATO ATTIVO, un watchdog ESTERNO
+// (fuori da start()) prova l'altro lato solo dopo 10s consecutivi
+// scollegato (non un blip).
 const MX_BROKER_TAILSCALE = '100.94.220.65';
 let mxSwitching = false;
+let mxOfflineSince = null;
+let mxCurrentIsFallback = false;
 
 function mxInit() {
   function start(host, isFallback) {
+    mxCurrentIsFallback = isFallback;
     const mqttUrl = `ws://${host}:9001`;
-    mxClient = mqtt.connect(mqttUrl, { reconnectPeriod: 0, connectTimeout: 4000 });
+    mxClient = mqtt.connect(mqttUrl, { connectTimeout: 4000 });
     mxClient.on('connect', () => {
+      mxOfflineSince = null;
       mxSetConn(true);
       mxClient.subscribe('gaia/device/+/status');
       // Wildcard invece di un topic per-device fisso (2026-08-30, vedi nota
@@ -482,17 +487,8 @@ function mxInit() {
       mxClient.subscribe('gaia/mixeraudio/preset/+/+/+');
       mxStartPolling();
     });
-    function trySwitch() {
-      if (mxSwitching) return;
-      mxSwitching = true;
-      mxClient.end(true);
-      setTimeout(() => {
-        mxSwitching = false;
-        start(isFallback ? MX_BROKER : MX_BROKER_TAILSCALE, !isFallback);
-      }, 2000);
-    }
-    mxClient.on('error',   () => { mxSetConn(false); trySwitch(); });
-    mxClient.on('offline', () => { mxSetConn(false); trySwitch(); });
+    mxClient.on('error',   () => { mxSetConn(false); if (mxOfflineSince === null) mxOfflineSince = Date.now(); });
+    mxClient.on('offline', () => { mxSetConn(false); if (mxOfflineSince === null) mxOfflineSince = Date.now(); });
     mxClient.on('message', (topic, raw) => {
       if (topic.startsWith('gaia/mixeraudio/preset/')) {
         const m = topic.match(/^gaia\/mixeraudio\/preset\/([^/]+)\/ch(\d+)\/([A-Z])$/);
@@ -543,6 +539,21 @@ function mxInit() {
       } catch (e) {}
     });
   }
+  // Watchdog LAN/Tailscale, unico, fuori da start() -- prova l'altro lato
+  // solo dopo 10s consecutivi scollegato (non un blip breve, quello lo
+  // risolve gia' da solo il reconnect automatico di mqtt.js).
+  setInterval(() => {
+    if (mxOfflineSince !== null && !mxSwitching && Date.now() - mxOfflineSince > 10000) {
+      mxSwitching = true;
+      const wasFallback = mxCurrentIsFallback;
+      mxClient.end(true);
+      setTimeout(() => {
+        mxSwitching = false;
+        mxOfflineSince = null;
+        start(wasFallback ? MX_BROKER : MX_BROKER_TAILSCALE, !wasFallback);
+      }, 500);
+    }
+  }, 3000);
   // Fuori da start() apposta: start() puo' essere chiamata due volte
   // (LAN poi fallback Tailscale), interval duplicati altrimenti.
   setInterval(() => { mxRenderInputLevel(); mxRenderLiveBand(); }, 1000);

@@ -604,24 +604,26 @@ function dxRegisterStatus(d) {
   dxApplyStatus(d);
 }
 
-// Fallback Tailscale (2026-09-09, segnalato dal vivo: "da tailscale non
-// funziona") -- bidirezionale (2026-09-09, secondo giro: il primo fix
-// passava a Tailscale su qualunque intoppo iniziale ma non tornava MAI
-// piu' sulla LAN, nemmeno se questa era perfettamente funzionante --
-// segnalato dal vivo su altre pagine gemelle da un client SULLA LAN,
-// rimasta agganciata a un tentativo Tailscale fallito. Ora ogni lato,
-// se cade, prova SEMPRE l'altro -- converge da solo su quello che
-// funziona, senza bisogno di ricaricare. Il setInterval di staleness
-// resta FUORI da start() apposta: start() puo' essere chiamata piu'
-// volte, un secondo interval duplicherebbe i controlli.
+// Fallback Tailscale (2026-09-09, TERZO giro). Il secondo giro
+// (bidirezionale ma con reconnectPeriod:0 su ogni tentativo) disattivava
+// il riconnect automatico di mqtt.js anche sullo stesso host -- un blip
+// di rete normalissimo (prima autorisolto in background) faceva scattare
+// un cambio LAN<->Tailscale completo ad ogni piccola interruzione,
+// segnalato dal vivo "non sembra funzionare". Fix corretto: reconnect
+// automatico LASCIATO ATTIVO, un watchdog ESTERNO (fuori da start())
+// prova l'altro lato solo dopo 10s consecutivi scollegato (non un blip).
 const DX_BROKER_TAILSCALE = '100.94.220.65';
 let dxSwitching = false;
+let dxOfflineSince = null;
+let dxCurrentIsFallback = false;
 
 function dxInit() {
   function start(host, isFallback) {
+    dxCurrentIsFallback = isFallback;
     const mqttUrl = `ws://${host}:9001`;
-    dxClient = mqtt.connect(mqttUrl, { reconnectPeriod: 0, connectTimeout: 4000 });
+    dxClient = mqtt.connect(mqttUrl, { connectTimeout: 4000 });
     dxClient.on('connect', () => {
+      dxOfflineSince = null;
       dxSetConn(true);
       dxClient.subscribe('gaia/device/+/status');
       dxClient.subscribe('gaia/devices/+/dmx_matrix');
@@ -637,17 +639,8 @@ function dxInit() {
         if (dxPersistPending) { dxPersistPending = false; dxRenderTabs(); dxRenderAll(); }
       }, 1500);
     });
-    function trySwitch() {
-      if (dxSwitching) return;
-      dxSwitching = true;
-      dxClient.end(true);
-      setTimeout(() => {
-        dxSwitching = false;
-        start(isFallback ? DX_BROKER : DX_BROKER_TAILSCALE, !isFallback);
-      }, 2000);
-    }
-    dxClient.on('error',   () => { dxSetConn(false); trySwitch(); });
-    dxClient.on('offline', () => { dxSetConn(false); trySwitch(); });
+    dxClient.on('error',   () => { dxSetConn(false); if (dxOfflineSince === null) dxOfflineSince = Date.now(); });
+    dxClient.on('offline', () => { dxSetConn(false); if (dxOfflineSince === null) dxOfflineSince = Date.now(); });
     dxClient.on('message', (topic, raw) => {
       if (!raw || !raw.length) return;
       if (topic.endsWith('/dmx_matrix')) {
@@ -659,6 +652,21 @@ function dxInit() {
       }
     });
   }
+  // Watchdog LAN/Tailscale, unico, fuori da start() -- prova l'altro lato
+  // solo dopo 10s consecutivi scollegato (non un blip breve, quello lo
+  // risolve gia' da solo il reconnect automatico di mqtt.js).
+  setInterval(() => {
+    if (dxOfflineSince !== null && !dxSwitching && Date.now() - dxOfflineSince > 10000) {
+      dxSwitching = true;
+      const wasFallback = dxCurrentIsFallback;
+      dxClient.end(true);
+      setTimeout(() => {
+        dxSwitching = false;
+        dxOfflineSince = null;
+        start(wasFallback ? DX_BROKER : DX_BROKER_TAILSCALE, !wasFallback);
+      }, 500);
+    }
+  }, 3000);
   setInterval(() => {
     let changed = false;
     for (const dev of Object.values(dxDevices)) {
