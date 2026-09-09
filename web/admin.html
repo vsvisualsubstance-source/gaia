@@ -2331,15 +2331,21 @@ function initPiManager() {
   // fallback gia' trovato e fissato per l'agent della macchina touring).
   const LAN_HOST       = '192.168.1.142';
   const TAILSCALE_HOST = '100.94.220.65';
-  let triedFallback = false;
+  // Bidirezionale (2026-09-09, secondo giro: il primo fallback passava a
+  // Tailscale su qualunque intoppo iniziale ma non tornava MAI piu' sulla
+  // LAN, nemmeno se questa era perfettamente funzionante -- segnalato dal
+  // vivo "patchdeck non si vede"/"mixeraudio offline" su pagine gemelle da
+  // un client SULLA LAN, rimasto agganciato a un tentativo Tailscale
+  // fallito). Ora ogni lato, se cade, prova SEMPRE l'altro.
+  let switching = false;
 
   function startMqtt(host, isFallback) {
     document.getElementById('pm-broker-label').textContent = host;
     const mqttUrl = `ws://${host}:9001`;
-    // reconnectPeriod:0 sul primo tentativo (LAN) -- fallisce in fretta
-    // invece di ritentare all'infinito su un IP irraggiungibile da fuori
-    // rete, cosi' il fallback Tailscale scatta subito.
-    _pmClient = mqtt.connect(mqttUrl, isFallback ? {} : { reconnectPeriod: 0, connectTimeout: 4000 });
+    // reconnectPeriod:0 su ogni tentativo -- fallisce in fretta invece di
+    // ritentare all'infinito sullo stesso IP, cosi' il cambio lato scatta
+    // subito quando serve.
+    _pmClient = mqtt.connect(mqttUrl, { reconnectPeriod: 0, connectTimeout: 4000 });
     _pmClient.on('connect', () => {
       pmSetConn(true);
       _pmClient.subscribe('gaia/device/+/status');
@@ -2350,15 +2356,19 @@ function initPiManager() {
       _pmClient.subscribe('gaia/voice/stats/+');
       pmLog('in', `Connesso a ${mqttUrl}`);
     });
-    function tryFallback() {
-      if (isFallback || triedFallback) return;
-      triedFallback = true;
-      pmLog('err', `LAN (${host}) irraggiungibile, provo Tailscale…`);
+    function trySwitch() {
+      if (switching) return;
+      switching = true;
+      const other = isFallback ? LAN_HOST : TAILSCALE_HOST;
+      pmLog('err', `${host} irraggiungibile, provo ${other}…`);
       _pmClient.end(true);
-      startMqtt(TAILSCALE_HOST, true);
+      setTimeout(() => {
+        switching = false;
+        startMqtt(other, !isFallback);
+      }, 2000);
     }
-    _pmClient.on('error',   e  => { pmSetConn(false); pmLog('err', e.message || 'Errore MQTT'); tryFallback(); });
-    _pmClient.on('offline', () => { pmSetConn(false); tryFallback(); });
+    _pmClient.on('error',   e  => { pmSetConn(false); pmLog('err', e.message || 'Errore MQTT'); trySwitch(); });
+    _pmClient.on('offline', () => { pmSetConn(false); trySwitch(); });
     _pmClient.on('reconnect', () => pmLog('err', 'Riconnessione…'));
     _pmClient.on('message', (topic, raw) => {
       if (!raw || !raw.length) return;

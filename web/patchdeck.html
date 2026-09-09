@@ -333,14 +333,20 @@ function pdAdopt(id) {
 }
 
 // Fallback Tailscale (2026-09-09, segnalato dal vivo: "da tailscale non
-// funziona") -- stesso principio gia' in uso in admin.html/startMqtt.
+// funziona") -- bidirezionale (2026-09-09, secondo giro: il primo fix
+// passava a Tailscale su qualunque intoppo iniziale ma non tornava MAI
+// piu' sulla LAN, nemmeno se questa era perfettamente funzionante --
+// segnalato dal vivo "patchdeck non si vede"/"mixeraudio offline" da un
+// client SULLA LAN, dove la pagina era rimasta agganciata a un tentativo
+// Tailscale fallito. Ora ogni lato, se cade, prova SEMPRE l'altro --
+// converge da solo su quello che funziona, senza bisogno di ricaricare.
 const PD_BROKER_TAILSCALE = '100.94.220.65';
-let pdTriedFallback = false;
+let pdSwitching = false;
 
 function pdInit() {
   function start(host, isFallback) {
     const mqttUrl = `ws://${host}:9001`;
-    pdClient = mqtt.connect(mqttUrl, isFallback ? {} : { reconnectPeriod: 0, connectTimeout: 4000 });
+    pdClient = mqtt.connect(mqttUrl, { reconnectPeriod: 0, connectTimeout: 4000 });
     pdClient.on('connect', () => {
       pdSetConn(true);
       pdClient.subscribe('gaia/device/+/status');
@@ -366,14 +372,17 @@ function pdInit() {
         if (any) { pdAdopt(any[0]); } else { PD_DEVICE_ID = null; pdMatrix = null; pdDevice = null; pdRenderDevice(); }
       }, 1500);
     });
-    function tryFallback() {
-      if (isFallback || pdTriedFallback) return;
-      pdTriedFallback = true;
+    function trySwitch() {
+      if (pdSwitching) return;
+      pdSwitching = true;
       pdClient.end(true);
-      start(PD_BROKER_TAILSCALE, true);
+      setTimeout(() => {
+        pdSwitching = false;
+        start(isFallback ? PD_BROKER : PD_BROKER_TAILSCALE, !isFallback);
+      }, 2000);
     }
-    pdClient.on('error',   () => { pdSetConn(false); tryFallback(); });
-    pdClient.on('offline', () => { pdSetConn(false); tryFallback(); });
+    pdClient.on('error',   () => { pdSetConn(false); trySwitch(); });
+    pdClient.on('offline', () => { pdSetConn(false); trySwitch(); });
     pdClient.on('message', (topic, raw) => {
       if (!raw || !raw.length) return;
       if (topic.endsWith('/patchdeck_matrix')) {
