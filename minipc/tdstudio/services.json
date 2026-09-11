@@ -1,0 +1,29 @@
+{
+  "machine_role": "tdstudio",
+
+  "_nota": "device_id/stanza non impostati qui apposta -- l'agent li deriva da solo (tdstudio-{hostname}, stanza 'unknown') finche' non si decide un nome/stanza vero; meglio 'unknown' visibile che un placeholder letterale spedito per sbaglio come fosse configurato (stesso principio gia' seguito per TCCM_STANZA in minipc/tccm/config.py: vuoto/non assegnato, non indovinare). Macchina reale: Mac-mini-di-visualsubstnce.local. project2/project3 sono ancora placeholder (path .toe da confermare) -- herbarium e' gia' verificato dal vivo sul Mac (2026-09-11): TouchDesigner.app e' in /Applications/TouchDesigner.app/Contents/MacOS/TouchDesigner, .toe reale confermato dall'utente in ~/Desktop/vst/vst1.pietrasanta.10.toe (tra le decine di .toe/backup trovati sul Desktop, quello sbagliato per nome sarebbe stato 'AV Herbarum MAC (OSC out NICOLA).1.toe' in ~/Documents/avh -- NON e' quello giusto, non fidarsi del nome piu' ovvio).",
+
+  "services": {
+    "herbarium": {
+      "cmd": ["/Applications/TouchDesigner.app/Contents/MacOS/TouchDesigner",
+              "/Users/visualsvisualsubstnce/Desktop/vst/vst1.pietrasanta.10.toe"],
+      "cwd": "/Users/visualsvisualsubstnce/Desktop/vst",
+      "conflicts": ["project2", "project3"],
+      "env_extra": {}
+    },
+    "project2": {
+      "cmd": ["/Applications/TouchDesigner.app/Contents/MacOS/TouchDesigner",
+              "/CONFIGURA/percorso/assoluto/project2.toe"],
+      "cwd": "/CONFIGURA/percorso/assoluto",
+      "conflicts": ["herbarium", "project3"],
+      "env_extra": {}
+    },
+    "project3": {
+      "cmd": ["/Applications/TouchDesigner.app/Contents/MacOS/TouchDesigner",
+              "/CONFIGURA/percorso/assoluto/project3.toe"],
+      "cwd": "/CONFIGURA/percorso/assoluto",
+      "conflicts": ["herbarium", "project2"],
+      "env_extra": {}
+    }
+  }
+}

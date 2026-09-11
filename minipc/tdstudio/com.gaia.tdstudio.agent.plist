@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.gaia.tdstudio.agent</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>__SCRIPT_DIR__/venv/bin/python3</string>
+        <string>-u</string>
+        <string>__SCRIPT_DIR__/agent.py</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>__SCRIPT_DIR__</string>
+
+    <!-- Questa macchina non ha una rotta diretta verso la LAN di casa
+         (192.168.1.0/24) di Core -- verificato dal vivo 2026-09-11,
+         connessione MQTT diretta va in timeout. Il tier Tailscale della
+         discovery serve per forza qui, non solo come rete di sicurezza. -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>GAIA_CORE_TAILSCALE_HOST</key>
+        <string>100.94.220.65</string>
+    </dict>
+
+    <!-- LaunchAgent (non LaunchDaemon): deve girare nella sessione GUI
+         dell'utente loggato, perché TouchDesigner ha bisogno di uno schermo
+         reale -- stesso motivo per cui OPS usa Task Scheduler "AtLogOn" e
+         non un servizio Windows di sistema. -->
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>__SCRIPT_DIR__/agent.log</string>
+    <key>StandardErrorPath</key>
+    <string>__SCRIPT_DIR__/agent.log</string>
+</dict>
+</plist>

@@ -8,12 +8,13 @@ per Pi→Core): questo modulo serve a chiunque debba raggiungere un host via
 TCP semplice (Node-RED su OPS, l'API di gaia_admin, ecc.), da qualunque
 piattaforma. Stdlib-only apposta — nessuna dipendenza da installare.
 
-Copiato identico in tre punti (repo senza meccanismo di import
+Copiato identico in quattro punti (repo senza meccanismo di import
 cross-directory, ogni agent è un'unità di deploy indipendente):
   pi/agent/net_resolve.py       (copia canonica)
   ops/agent/net_resolve.py
   minipc/script/net_resolve.py
-Sync manuale — se tocchi uno di questi file, aggiorna anche gli altri due.
+  minipc/tdstudio/net_resolve.py
+Sync manuale — se tocchi uno di questi file, aggiorna anche gli altri tre.
 
 Uso:
     import net_resolve
@@ -22,6 +23,8 @@ Uso:
         {"kind": "tailscale", "host": "100.91.251.83",  "port": 1880},
     ])
 """
+from __future__ import annotations
+
 import platform
 import shutil
 import socket
@@ -45,16 +48,23 @@ def probe_tcp(host: str, port: int, timeout: float = 1.5) -> bool:
 
 
 def _tailscale_binary() -> str | None:
-    """Trova il binario tailscale sul PATH. Su Windows prova anche il path
-    di installazione standard se non è sul PATH (l'agent OPS spesso gira
-    senza il PATH utente completo, vedi il gotcha pythonw.exe già noto)."""
+    """Trova il binario tailscale sul PATH. Se non e' sul PATH (l'agent OPS
+    spesso gira senza il PATH utente completo, gotcha pythonw.exe gia' noto;
+    su macOS un LaunchAgent ha un PATH ancora piu' minimale del previsto —
+    trovato dal vivo 2026-09-11 su minipc/tdstudio: /usr/local/bin/tailscale
+    esiste ma non e' visibile a shutil.which() dentro il LaunchAgent) prova
+    i path di installazione standard per piattaforma."""
+    import os
     exe = "tailscale.exe" if platform.system() == "Windows" else "tailscale"
     found = shutil.which(exe)
     if found:
         return found
-    if platform.system() == "Windows":
-        default = r"C:\Program Files\Tailscale\tailscale.exe"
-        import os
+    defaults = {
+        "Windows": [r"C:\Program Files\Tailscale\tailscale.exe"],
+        "Darwin":  ["/usr/local/bin/tailscale",
+                    "/Applications/Tailscale.app/Contents/MacOS/Tailscale"],
+    }
+    for default in defaults.get(platform.system(), []):
         if os.path.exists(default):
             return default
     return None
