@@ -323,10 +323,13 @@ function pdAdopt(id) {
   if (c?.status) {
     const d = { ...c.status };
     d._lastSeen = d.ts || Date.now();
-    // 600000ms (10min), non 90000: il device TD di PatchDeck pubblica lo
-    // status ogni ~6.5min (osservato dal vivo 2026-09-11 su td-pd-winnic),
-    // non ogni 30s come Pi/OPS -- 90s lo marcava offline anche se attivo.
-    d._offline = (Date.now() - d._lastSeen) > 600000;
+    // 1800000ms (30min), non 90000: il device TD di PatchDeck non ha un
+    // heartbeat periodico fisso -- osservato dal vivo 2026-09-11 su
+    // td-pd-winnic sia ~6.5min che ~15.5min tra due publish consecutivi
+    // (sembra event-driven, non un timer). 90s lo marcava offline anche
+    // se attivo; 30min e' una soglia volutamente permissiva finche' non
+    // si sa se/come rendere il publish TD-side piu' regolare.
+    d._offline = (Date.now() - d._lastSeen) > 1800000;
     pdDevice = d;
     pdConfirmed = true;
   }
@@ -403,7 +406,7 @@ function pdInit() {
           if (!pdConfirmed && pdCandidates[m.device_id]?.status) {
             const d = { ...pdCandidates[m.device_id].status };
             d._lastSeen = d.ts || Date.now();
-            d._offline = (Date.now() - d._lastSeen) > 600000;
+            d._offline = (Date.now() - d._lastSeen) > 1800000;
             pdDevice = d;
             pdConfirmed = true;
           }
@@ -446,7 +449,7 @@ function pdInit() {
         // un retained vecchio arriva "ora" ma non e' fresco (bug gia' noto,
         // vedi TDDeviceRegistry lato Python).
         d._lastSeen = d.ts || Date.now();
-        d._offline = (Date.now() - d._lastSeen) > 600000;
+        d._offline = (Date.now() - d._lastSeen) > 1800000;
         pdDevice = d;
         pdRenderDevice();
       } catch (e) {}
@@ -471,7 +474,7 @@ function pdInit() {
   // (LAN poi fallback Tailscale), un secondo interval duplicherebbe i
   // controlli di staleness.
   setInterval(() => {
-    if (pdDevice && Date.now() - pdDevice._lastSeen > 600000 && !pdDevice._offline) {
+    if (pdDevice && Date.now() - pdDevice._lastSeen > 1800000 && !pdDevice._offline) {
       pdDevice._offline = true;
       pdRenderDevice();
     }

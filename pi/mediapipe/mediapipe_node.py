@@ -128,12 +128,15 @@ class _MocapTargetRegistry:
     abilitata esplicitamente da Admin, opt-in via
     gaia/mocap-bridge/{DEVICE_ID}/command."""
 
-    # 600s (10min), non 90: i device TD pubblicano lo status ogni alcuni
-    # minuti (~6.5min osservato dal vivo 2026-09-11 su td-pd-winnic), non
-    # ogni 30s come Pi/OPS -- 90s li segnava offline anche se attivi,
+    # 1800s (30min), non 90: i device TD non hanno un heartbeat periodico
+    # fisso -- osservato dal vivo 2026-09-11 su td-pd-winnic sia ~6.5min
+    # che ~15.5min tra due publish (sembra event-driven, non un timer),
+    # non ogni 30s come Pi/OPS. 90s li segnava offline anche se attivi,
     # nascondendoli dall'opt-in mocap di Pi Manager pur comparendo
-    # regolarmente in gaia/device/+/status. Stesso fix di osc_bridge.py.
-    OFFLINE_AFTER_S = 600
+    # regolarmente in gaia/device/+/status. Stesso fix di osc_bridge.py;
+    # 30min e' volutamente permissiva finche' non si sa se/come rendere il
+    # publish TD-side piu' regolare.
+    OFFLINE_AFTER_S = 1800
 
     def __init__(self, sender_device_id, my_hostname, port):
         self._sender_id = sender_device_id

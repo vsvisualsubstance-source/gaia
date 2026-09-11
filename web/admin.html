@@ -2536,13 +2536,15 @@ function pmFmtUp(sec) { if(!sec)return''; const h=Math.floor(sec/3600),m=Math.fl
 // pausa/ripresa privo di senso, stesso principio di pmMocapIsRelevant.
 // DMX resta visibile (non lo consuma oggi, ma l'utente ha lasciato la
 // porta aperta per il futuro), a differenza del mocap dove è escluso.
-// I device TD (dmx/patchdeck/mixeraudio) pubblicano lo status ogni alcuni
-// minuti (osservato dal vivo 2026-09-11 su td-pd-winnic: ~6.5min), non
-// ogni 30s come Pi/OPS -- una soglia unica a 90s li marcava offline anche
-// se attivi (stesso bug fissato in patchdeck.html/dmx.html/mixeraudio.html
-// lo stesso giorno). 600000ms = 10min per loro, 90000ms invariato per
-// tutti gli altri (Pi/OPS/TD-bridge/mocap-bridge).
-const PM_STALE_MS_TD = 600000;
+// I device TD (dmx/patchdeck/mixeraudio) non hanno un heartbeat periodico
+// fisso -- osservato dal vivo 2026-09-11 su td-pd-winnic sia ~6.5min che
+// ~15.5min tra due publish (sembra event-driven, non un timer), non ogni
+// 30s come Pi/OPS -- una soglia unica a 90s li marcava offline anche se
+// attivi (stesso bug fissato in patchdeck.html/dmx.html/mixeraudio.html
+// lo stesso giorno). 1800000ms = 30min per loro (volutamente permissiva
+// finche' non si sa se/come rendere il publish TD-side piu' regolare),
+// 90000ms invariato per tutti gli altri (Pi/OPS/TD-bridge/mocap-bridge).
+const PM_STALE_MS_TD = 1800000;
 function pmStaleMs(family) {
   return (family === 'dmx' || family === 'patchdeck' || family === 'mixeraudio') ? PM_STALE_MS_TD : 90000;
 }
