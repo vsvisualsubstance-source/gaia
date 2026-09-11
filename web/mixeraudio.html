@@ -533,7 +533,11 @@ function mxInit() {
         // un retained vecchio arriva "ora" ma non e' fresco (bug gia' noto,
         // vedi TDDeviceRegistry lato Python).
         d._lastSeen = d.ts || Date.now();
-        d._offline = (Date.now() - d._lastSeen) > 90000;
+        // 600000ms (10min), non 90000: i device TD pubblicano lo status
+        // ogni alcuni minuti, non ogni 30s come Pi/OPS -- 90s li marcava
+        // offline anche se attivi (stesso bug trovato su patchdeck.html
+        // 2026-09-11, td-pd-winnic: intervallo reale ~6.5min).
+        d._offline = (Date.now() - d._lastSeen) > 600000;
         mxDevice = d;
         mxRenderAll();
       } catch (e) {}
@@ -558,7 +562,7 @@ function mxInit() {
   // (LAN poi fallback Tailscale), interval duplicati altrimenti.
   setInterval(() => { mxRenderInputLevel(); mxRenderLiveBand(); }, 1000);
   setInterval(() => {
-    if (mxDevice && Date.now() - mxDevice._lastSeen > 90000 && !mxDevice._offline) {
+    if (mxDevice && Date.now() - mxDevice._lastSeen > 600000 && !mxDevice._offline) {
       mxDevice._offline = true;
       mxRenderAll();
     }

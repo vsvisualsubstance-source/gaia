@@ -2464,7 +2464,7 @@ function initPiManager() {
         // questo fix un device morto da giorni sembra online per i primi
         // 90s dopo ogni apertura della pagina.
         d._lastSeen = d.ts || Date.now();
-        d._offline  = (Date.now() - d._lastSeen) > 90000;
+        d._offline  = (Date.now() - d._lastSeen) > pmStaleMs(d.family);
         _pmDevices[id] = d;
         pmApplyCardVisibility(id, d);
         pmLog('in', `[${id}] stanza=${d.stanza||'?'} ip=${d.ip||'?'}${d._offline ? ' (offline, nascosto)' : ''}`);
@@ -2497,7 +2497,7 @@ function initPiManager() {
     let changed = false;
     for (const [id, d] of Object.entries(_pmDevices)) {
       const was = d._offline;
-      d._offline = (now - d._lastSeen) > 90000;
+      d._offline = (now - d._lastSeen) > pmStaleMs(d.family);
       if (was !== d._offline) { pmApplyCardVisibility(id, d); changed = true; }
     }
     if (changed) { pmWelcomeMenuRender(); pmRenderOfflineCount(); }
@@ -2536,6 +2536,17 @@ function pmFmtUp(sec) { if(!sec)return''; const h=Math.floor(sec/3600),m=Math.fl
 // pausa/ripresa privo di senso, stesso principio di pmMocapIsRelevant.
 // DMX resta visibile (non lo consuma oggi, ma l'utente ha lasciato la
 // porta aperta per il futuro), a differenza del mocap dove è escluso.
+// I device TD (dmx/patchdeck/mixeraudio) pubblicano lo status ogni alcuni
+// minuti (osservato dal vivo 2026-09-11 su td-pd-winnic: ~6.5min), non
+// ogni 30s come Pi/OPS -- una soglia unica a 90s li marcava offline anche
+// se attivi (stesso bug fissato in patchdeck.html/dmx.html/mixeraudio.html
+// lo stesso giorno). 600000ms = 10min per loro, 90000ms invariato per
+// tutti gli altri (Pi/OPS/TD-bridge/mocap-bridge).
+const PM_STALE_MS_TD = 600000;
+function pmStaleMs(family) {
+  return (family === 'dmx' || family === 'patchdeck' || family === 'mixeraudio') ? PM_STALE_MS_TD : 90000;
+}
+
 function pmTdOscIsRelevant(family) { return family !== 'mixeraudio'; }
 
 function pmTdRender(targets) {

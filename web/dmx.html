@@ -117,7 +117,11 @@ button.small{padding:4px 10px;font-size:.78rem}
 <script>
 // Stesso pattern MQTT-over-WS di admin.html/patchdeck.html/mixeraudio.html.
 const DX_BROKER = '192.168.1.142';
-const DX_STALE_MS = 90000;
+// 600000ms (10min), non 90000: i device TD pubblicano lo status ogni
+// alcuni minuti, non ogni 30s come Pi/OPS -- 90s li marcava offline anche
+// se attivi (stesso bug trovato su patchdeck.html 2026-09-11,
+// td-pd-winnic: intervallo reale ~6.5min).
+const DX_STALE_MS = 600000;
 
 // Raggruppamento SOLO visivo (etichette/ordine) -- il set reale di
 // parametri/tipi/range/opzioni viene sempre dalla dmx_matrix di ogni
