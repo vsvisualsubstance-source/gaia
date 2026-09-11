@@ -172,7 +172,12 @@ class TDDeviceRegistry:
     esclusi da live_ips()) va su gaia/td-bridge/status, retained — quel
     che consuma Pi Manager per disegnare la sezione con i pulsanti."""
 
-    OFFLINE_AFTER_S = 90
+    # 600s (10min), non 90: i device TD pubblicano lo status ogni alcuni
+    # minuti (~6.5min osservato dal vivo 2026-09-11 su td-pd-winnic), non
+    # ogni 30s come Pi/OPS -- 90s li segnava offline anche se attivi,
+    # nascondendoli dalla lista pausa/ripresa OSC di Pi Manager pur
+    # comparendo regolarmente in gaia/device/+/status.
+    OFFLINE_AFTER_S = 600
     # Pulizia automatica dei retained di un device sparito per davvero
     # (2026-08-27, su richiesta esplicita dopo che le prove DMX di una sera
     # avevano lasciato 6+ device_id orfani sul broker, puliti a mano) --
