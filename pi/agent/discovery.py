@@ -1,7 +1,6 @@
 """
 Discovery di Gaia Core — cascata: IP in cache → broadcast UDP → mDNS →
-Tailscale (2026-08-21, ultimo tier: solo se GAIA_CORE_TAILSCALE_HOST è
-impostato, altrimenti zero costo — vedi _tailscale()).
+Tailscale (ultimo tier, tentato sempre per default — vedi _tailscale()).
 
 Controparte client di minipc/beacon/gaia_beacon.py (protocollo v1):
 datagramma b"GAIA_DISCOVER" su UDP 8899 → risposta JSON con mqtt_host,
@@ -13,6 +12,17 @@ Uso (da agent.py, prima della connect MQTT):
     info = discovery.discover(cached_host=config.MQTT_HOST)
     if info:
         config.MQTT_HOST = info["mqtt_host"]
+
+Copiato identico in cinque punti (stessa convenzione di net_resolve.py —
+repo senza meccanismo di import cross-directory, ogni servizio è un'unità
+di deploy indipendente):
+  pi/agent/discovery.py         (copia canonica)
+  pi/yolo/discovery.py
+  pi/mediapipe/discovery.py
+  pi/voice/discovery.py
+  minipc/tdstudio/discovery.py
+Sync manuale — se tocchi uno di questi file, aggiorna anche gli altri
+quattro.
 """
 from __future__ import annotations
 
@@ -20,13 +30,17 @@ import json
 import os
 import socket
 
-# IP Tailscale di Core (100.x.x.x) o hostname MagicDNS (*.ts.net), da usare
-# SOLO quando cache/broadcast/mDNS falliscono tutti -- caso "device altrove,
-# raggiungibile solo via tailnet" (vedi docs/discovery-protocol.md). Limite
-# di cold-bootstrap noto: un Pi che non ha MAI toccato la LAN di Core non
-# può scoprire questo valore da solo, va scritto in /etc/gaia/device.conf
-# al provisioning, esattamente come il default LAN in config.py oggi.
-CORE_TAILSCALE_HOST = os.getenv("GAIA_CORE_TAILSCALE_HOST", "").strip() or None
+# IP Tailscale di Core (100.x.x.x, stabile per la vita del nodo -- non
+# riassegnato come un IP DHCP) o hostname MagicDNS (*.ts.net). Default
+# 2026-09-13: sempre tentato, non piu' opt-in per-macchina -- ogni Pi puo'
+# fisicamente trovarsi ovunque (LAN di casa, un'altra rete, solo Tailscale),
+# quindi il fallback deve funzionare ovunque senza configurazione manuale
+# ripetuta a ogni Pi (bug reale trovato dal vivo 2026-09-13: il vecchio
+# comportamento "solo se impostato" richiedeva di ricordarsi di aggiungere
+# GAIA_CORE_TAILSCALE_HOST macchina per macchina). Override via env se
+# l'IP Tailscale di Core dovesse mai cambiare, o "" per disattivare del
+# tutto questo tier (torna al comportamento precedente).
+CORE_TAILSCALE_HOST = os.getenv("GAIA_CORE_TAILSCALE_HOST", "100.94.220.65").strip() or None
 
 BEACON_PORT = int(os.getenv("GAIA_BEACON_PORT", "8899"))
 MAGIC       = b"GAIA_DISCOVER"

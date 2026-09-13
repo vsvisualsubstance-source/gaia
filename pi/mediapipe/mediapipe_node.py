@@ -26,6 +26,7 @@ import signal
 import socket
 import subprocess
 import logging
+import discovery
 from ota import OtaHandler
 from camera_client import CameraClient
 
@@ -341,6 +342,22 @@ def _on_message(client, userdata, msg):
 def _on_disconnect(client, userdata, rc, properties=None):
     log.warning(f"MQTT disconnesso rc={rc}")
 
+
+# Discovery (cache → broadcast UDP → mDNS → Tailscale) prima di connettersi
+# a MQTT: senza, questo servizio resta bloccato sull'MQTT_HOST statico di
+# config.py (default LAN) anche se il Pi è altrove e raggiungibile solo via
+# Tailscale — stesso identico gap gia' fissato in agent.py, qui mancava
+# ancora (trovato dal vivo 2026-09-13, Pi ingresso su LAN isolata dal WiFi).
+if "MQTT_HOST" not in os.environ and os.getenv("GAIA_DISCOVERY", "1") != "0":
+    try:
+        _info = discovery.discover(cached_host=MQTT_HOST)
+        if _info:
+            if _info["mqtt_host"] != MQTT_HOST:
+                log.info(f"Gaia Core trovato: {_info['mqtt_host']} (config era {MQTT_HOST})")
+            MQTT_HOST = _info["mqtt_host"]
+            MQTT_PORT = int(_info.get("mqtt_port", MQTT_PORT))
+    except Exception as e:
+        log.warning(f"Discovery fallita ({e}), uso {MQTT_HOST}")
 
 _mqtt = mqtt.Client(client_id=f"gaia-mp-{DEVICE_ID}", clean_session=True)
 _mqtt.reconnect_delay_set(min_delay=2, max_delay=30)

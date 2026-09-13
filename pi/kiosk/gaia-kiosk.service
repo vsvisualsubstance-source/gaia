@@ -17,13 +17,18 @@ EnvironmentFile=-/etc/gaia/kiosk.conf
 # Retroilluminazione: accesa solo mentre una superficie possiede il display
 # (spenta a riposo il DSI mostrerebbe la console del kernel).
 ExecStartPre=+/home/asemico/gaia/kiosk/display_power.sh on
-ExecStart=/bin/sh -c 'exec cage -- chromium-browser --kiosk \
+# Risolve l'host di Node-RED (LAN OPS -> Tailscale OPS) PRIMA di ogni
+# avvio -- scrive /etc/gaia/nodered_host.conf, sorgente direttamente nella
+# shell sotto invece che via EnvironmentFile (che leggerebbe uno snapshot
+# preso all'attivazione dell'unit, PRIMA che questo ExecStartPre giri).
+ExecStartPre=/usr/bin/python3 /home/asemico/gaia/kiosk/resolve_url.py
+ExecStart=/bin/sh -c '. /etc/gaia/nodered_host.conf 2>/dev/null; exec cage -- chromium-browser --kiosk \
   --ozone-platform=wayland \
   --password-store=basic \
   --noerrdialogs --disable-infobars --no-first-run \
   --disable-session-crashed-bubble \
   --autoplay-policy=no-user-gesture-required \
-  "${KIOSK_URL:-http://${MQTT_HOST:-192.168.1.142}:1880/welcome.html?cam=localhost&room=${CAMERA_NAME:-cucina}}"'
+  "${KIOSK_URL:-http://${NODERED_HOST:-192.168.1.240}:1880/welcome.html?cam=localhost&room=${CAMERA_NAME:-cucina}}"'
 ExecStopPost=+/home/asemico/gaia/kiosk/display_power.sh off
 Restart=on-failure
 RestartSec=5

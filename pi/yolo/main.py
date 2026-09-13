@@ -7,11 +7,13 @@ automaticamente senza restart.
 """
 
 import cv2
+import os
 import time
 import base64
 import signal
 import logging
 import config
+import discovery
 
 from detector import Detector
 from tracker import Tracker
@@ -31,6 +33,22 @@ log.info(f"device_id={config.DEVICE_ID} node_id_claim={config.NODE_ID}")
 
 detector = Detector(config.YOLO_MODEL)
 tracker  = Tracker(max_age=15)
+
+# Discovery (cache → broadcast UDP → mDNS → Tailscale) prima di connettersi
+# a MQTT: senza, questo servizio resta bloccato sull'MQTT_HOST statico di
+# config.py (default LAN) anche se il Pi è altrove e raggiungibile solo via
+# Tailscale — stesso identico gap gia' fissato in agent.py, qui mancava
+# ancora (trovato dal vivo 2026-09-13, Pi ingresso su LAN isolata dal WiFi).
+if "MQTT_HOST" not in os.environ and os.getenv("GAIA_DISCOVERY", "1") != "0":
+    try:
+        _info = discovery.discover(cached_host=config.MQTT_HOST)
+        if _info:
+            if _info["mqtt_host"] != config.MQTT_HOST:
+                log.info(f"Gaia Core trovato: {_info['mqtt_host']} (config era {config.MQTT_HOST})")
+            config.MQTT_HOST = _info["mqtt_host"]
+            config.MQTT_PORT = int(_info.get("mqtt_port", config.MQTT_PORT))
+    except Exception as e:
+        log.warning(f"Discovery fallita ({e}), uso {config.MQTT_HOST}")
 
 mqtt = MqttClient(
     host=config.MQTT_HOST,

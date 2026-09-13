@@ -8,13 +8,14 @@ per Pi→Core): questo modulo serve a chiunque debba raggiungere un host via
 TCP semplice (Node-RED su OPS, l'API di gaia_admin, ecc.), da qualunque
 piattaforma. Stdlib-only apposta — nessuna dipendenza da installare.
 
-Copiato identico in quattro punti (repo senza meccanismo di import
+Copiato identico in cinque punti (repo senza meccanismo di import
 cross-directory, ogni agent è un'unità di deploy indipendente):
   pi/agent/net_resolve.py       (copia canonica)
   ops/agent/net_resolve.py
   minipc/script/net_resolve.py
   minipc/tdstudio/net_resolve.py
-Sync manuale — se tocchi uno di questi file, aggiorna anche gli altri tre.
+  pi/kiosk/net_resolve.py
+Sync manuale — se tocchi uno di questi file, aggiorna anche gli altri quattro.
 
 Uso:
     import net_resolve

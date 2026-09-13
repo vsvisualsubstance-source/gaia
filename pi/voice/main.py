@@ -30,6 +30,7 @@ from openwakeword.model import Model as WakeWordModel
 import paho.mqtt.client as mqtt
 
 import config
+import discovery
 from ota import OtaHandler
 
 # ──────────────────────────────────────────────────────────────────────
@@ -656,6 +657,23 @@ def _record_speech() -> np.ndarray | None:
 # ──────────────────────────────────────────────────────────────────────
 def main():
     global _stats_ts, _ww_conf_peak, _gaia_conf_peak
+
+    # Discovery (cache → broadcast UDP → mDNS → Tailscale) prima di
+    # connettersi a MQTT: senza, questo servizio resta bloccato
+    # sull'MQTT_HOST statico di config.py (default LAN) anche se il Pi è
+    # altrove e raggiungibile solo via Tailscale — stesso gap gia' fissato
+    # in agent.py, qui mancava ancora (trovato dal vivo 2026-09-13, Pi
+    # ingresso su LAN isolata dal WiFi).
+    if "MQTT_HOST" not in os.environ and os.getenv("GAIA_DISCOVERY", "1") != "0":
+        try:
+            info = discovery.discover(cached_host=config.MQTT_HOST)
+            if info:
+                if info["mqtt_host"] != config.MQTT_HOST:
+                    print(f"[GAIA Voice] Gaia Core trovato: {info['mqtt_host']} (config era {config.MQTT_HOST})")
+                config.MQTT_HOST = info["mqtt_host"]
+                config.MQTT_PORT = int(info.get("mqtt_port", config.MQTT_PORT))
+        except Exception as e:
+            print(f"[GAIA Voice] Discovery fallita ({e}), uso {config.MQTT_HOST}")
 
     _mqtt.connect(config.MQTT_HOST, config.MQTT_PORT, 60)
     _mqtt.loop_start()
