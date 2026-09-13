@@ -63,6 +63,20 @@ const $grid = document.getElementById('grid');
 const STALE_MS = 90000;
 let _lastKey = null;   // id ordinati delle camere online -- ricostruisce il DOM (e riavvia gli stream MJPEG) SOLO se cambia davvero il set online, non ad ogni poll
 
+// Fallback a due stadi: LAN prima (veloce, funziona quando si è sulla
+// stessa rete del Pi), poi Tailscale se disponibile. this.dataset.triedTs
+// evita un loop se anche il Tailscale fallisce (onerror altrimenti
+// rifirerebbe all'infinito sullo stesso url).
+function camImgError(img, tsUrl) {
+  if (tsUrl && !img.dataset.triedTs) {
+    img.dataset.triedTs = '1';
+    img.src = tsUrl;
+    return;
+  }
+  img.style.display = 'none';
+  img.nextElementSibling.style.display = 'flex';
+}
+
 async function load() {
   let profiles = {};
   try {
@@ -80,8 +94,14 @@ async function load() {
     const mjpeg = p.services?.camera?.endpoints?.mjpeg;
     if (!mjpeg) continue;
     if (!p.ts || (now - p.ts) > STALE_MS) { offlineCount++; continue; }
+    // Fallback Tailscale: l'mjpeg pubblicato usa sempre l'IP LAN del Pi
+    // (_service_endpoints in pi/agent/agent.py) -- irraggiungibile se chi
+    // guarda questa pagina non è sulla stessa LAN del Pi (isolamento WiFi,
+    // o il Pi è su una rete di casa diversa, visto dal vivo 2026-09-13 su
+    // Ingresso e Cucina). Stessa porta/path, solo l'host cambia.
+    const mjpegTailscale = p.tailscale_ip ? mjpeg.replace(/\/\/[^:/]+/, `//${p.tailscale_ip}`) : null;
     cams.push({
-      id, mjpeg,
+      id, mjpeg, mjpegTailscale,
       room:  p.room_assigned || p.room || '?',
       role:  p.role || '?',
       state: p.services?.camera?.state || '?',
@@ -114,7 +134,7 @@ async function load() {
       </div>
       <div class="cam-body">
         <img src="${c.mjpeg}" alt=""
-             onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+             onerror="camImgError(this, ${c.mjpegTailscale ? JSON.stringify(c.mjpegTailscale) : 'null'})">
         <div class="cam-err">
           <span class="big">📡</span>
           <span>stream non raggiungibile da questa rete</span>
