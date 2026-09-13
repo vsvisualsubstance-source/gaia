@@ -609,7 +609,18 @@ def main():
                 config.MQTT_PORT = int(info.get("mqtt_port", config.MQTT_PORT))
                 break
             print(f"[Agent] Gaia Core non trovato, ritento tra {backoff}s...")
-            time.sleep(backoff)
+            # time.sleep(backoff) intero non va bene: per PEP 475 (Python
+            # 3.5+) un syscall interrotto da segnale si RIPRENDE da solo
+            # invece di restituire subito il controllo -- un SIGTERM
+            # durante questo sleep non fa uscire dal ciclo, lo shutdown
+            # resta bloccato fino a 60s (trovato dal vivo 2026-09-13 su
+            # vsrasp01/pi-b2c8db: restart bloccato "deactivating" per oltre
+            # un minuto). Sleep a passi di 1s, ricontrollando _running ad
+            # ogni giro, così un segnale in arrivo lo interrompe entro 1s.
+            for _ in range(backoff):
+                if not _running:
+                    break
+                time.sleep(1)
             backoff = min(backoff * 2, 60)
 
     # Registrazione presso Gaia Core: se l'admin ha assegnato una stanza
