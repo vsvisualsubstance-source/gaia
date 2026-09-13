@@ -76,11 +76,24 @@ def save_config(cfg: dict):
 
 
 def _write_device_env(cfg: dict):
-    """Scrive /etc/gaia/device.conf — letto dai servizi come EnvironmentFile."""
+    """Scrive /etc/gaia/device.conf — letto dai servizi come EnvironmentFile.
+
+    NON scrive MQTT_HOST (rimosso 2026-09-13): config.MQTT_HOST viene
+    mutato a runtime dalla discovery (vedi discovery.discover() in main()),
+    che è pensata per essere ri-eseguita ad ogni avvio. Scriverlo qui lo
+    persiste come env var in device.conf — al riavvio successivo
+    `"MQTT_HOST" not in os.environ` risulta falso e la discovery viene
+    SALTATA del tutto, congelando per sempre l'ultimo IP scoperto (anche
+    se era solo temporaneo, es. l'IP WiFi di Core durante una demo
+    portatile). Bug reale trovato dal vivo su vsrasp01/pi-b2c8db: rimasto
+    bloccato 2 giorni a ritentare un IP ormai morto, discovery mai più
+    invocata. discovery.py ha già il proprio file di cache
+    (gaia_core.json) per "ricorda l'ultimo IP buono" SENZA questo effetto
+    collaterale — non serve duplicarlo qui.
+    """
     stanza = cfg.get("stanza", config.DEFAULT_STANZA)
     lines = [
         f"CAMERA_NAME={stanza}",
-        f"MQTT_HOST={config.MQTT_HOST}",
         f"MQTT_PORT={config.MQTT_PORT}",
         f"DEVICE_ID={config.DEVICE_ID}",
     ]
