@@ -116,6 +116,20 @@ verso il router di casa, nessun'altra modifica da disfare.
   up Gaia-Demo`, quindi la regola di eccezione va reinserita ogni volta
   (vedi comando nella checklist "all'arrivo" sopra) — non è un fix
   una-tantum.
+- **Un device scollegato dallo switch Gaia-Demo può sembrare comunque
+  "online"** se Core ha anche il WiFi di casa attivo in parallelo (dry-run,
+  o qualunque sessione con doppia connessione) — il device raggiunge il
+  broker MQTT via quella seconda rete e continua a pubblicare lo status
+  normalmente, mascherando il fatto che non è davvero sulla LAN demo.
+  Successo dal vivo due volte: TCC M (2026-09-09) e il Mac di PatchDeck/
+  DMX (2026-09-13), entrambi con status fresco su MQTT ma **irraggiungibili
+  in ping/ARP sull'interfaccia demo** (`ip neigh show` → `INCOMPLETE`) e
+  con i comandi MQTT reali (enable/set) senza alcun effetto — sintomo
+  facilmente scambiato per un bug applicativo lato TD, quando è solo un
+  cavo non collegato allo switch giusto. Prima di sospettare un bug nel
+  motore di comando, verificare `ping <ip>` + `ip neigh show | grep <ip>`
+  da Core: se è `INCOMPLETE`/`FAILED` sull'interfaccia `enp0s31f6`, il
+  device non è fisicamente sulla rete demo, punto.
 
 ## Limiti noti
 
