@@ -661,7 +661,9 @@ button.small{padding:3px 9px;font-size:.78rem;margin:0}
     <p style="font-size:.82rem;color:var(--muted);margin-bottom:10px">
       Ogni quanti secondi Gaia sceglie una nuova palette DMX / clip PatchDeck dal mood (i due
       interruttori "Gaia VJ" qui sopra decidono SE è attivo, questo decide con che ritmo).
-      Default 60s; per una demo dal vivo può convenire abbassarlo (es. 7-8s).
+      Default 60s; per una demo dal vivo può convenire abbassarlo (es. 7-8s). Per PatchDeck
+      questo è anche il tempo tra un cambio e l'altro dei due deck: A e B non cambiano mai
+      insieme, si alternano (prima A, poi B, poi di nuovo A…).
     </p>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <label style="font-size:.82rem;color:var(--muted)">Ogni
@@ -671,6 +673,20 @@ button.small{padding:3px 9px;font-size:.78rem;margin:0}
       <button onclick="saveVjInterval()">Salva</button>
     </div>
     <div id="vj-interval-msg" class="msg"></div>
+  </div>
+
+  <div class="card">
+    <h2>Gaia VJ — patch PatchDeck ammesse</h2>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:10px">
+      Elenco delle patch (1-38) tra cui Gaia può scegliere per i deck A/B — utile per limitare
+      la scelta a quelle preparate per l'occasione (es. una demo) invece di pescare tra tutte
+      e 38. Numeri separati da virgola, es. "3, 7, 12, 18". Vuoto = tutte.
+    </p>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <input type="text" id="vj-clips" placeholder="vuoto = tutte le 38" style="flex:1;min-width:200px;padding:6px">
+      <button onclick="saveVjClips()">Salva</button>
+    </div>
+    <div id="vj-clips-msg" class="msg"></div>
   </div>
 
 </div><!-- end .grid -->
@@ -1505,6 +1521,40 @@ async function saveVjInterval() {
   }
 }
 
+async function loadVjClips() {
+  try {
+    const r = await fetch(`${NODERED_API}/gaia/vj/patchdeck-clips`, {signal: AbortSignal.timeout(3000)});
+    if (!r.ok) throw new Error();
+    const d = await r.json();
+    document.getElementById('vj-clips').value = (d.clips || []).join(', ');
+  } catch {
+    setMsg('vj-clips-msg', 'Errore di connessione', 'err');
+  }
+}
+
+async function saveVjClips() {
+  const raw = document.getElementById('vj-clips').value.trim();
+  const clips = raw ? raw.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n)) : [];
+  if (raw && !clips.length) {
+    setMsg('vj-clips-msg', '✗ Nessun numero valido trovato', 'err');
+    return;
+  }
+  try {
+    const r = await fetch(`${NODERED_API}/gaia/vj/patchdeck-clips`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({clips})
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'errore sconosciuto');
+    setMsg('vj-clips-msg', d.clips.length ? `✓ Patch ammesse: ${d.clips.join(', ')}` : '✓ Tutte le 38 patch ammesse', 'ok');
+    document.getElementById('vj-clips').value = d.clips.join(', ');
+  } catch (e) {
+    setMsg('vj-clips-msg', `✗ Errore nel salvare: ${e.message || e}`, 'err');
+    loadVjClips();
+  }
+}
+
 // ── Preview webcam per enrollment volto ────────────────────────────────────
 let _faceStream = null;
 
@@ -2132,6 +2182,7 @@ loadAutomations();
 loadRegister();
 loadQuietHours();
 loadVjInterval();
+loadVjClips();
 
 poll();
 
