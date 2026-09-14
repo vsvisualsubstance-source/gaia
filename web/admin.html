@@ -656,6 +656,23 @@ button.small{padding:3px 9px;font-size:.78rem;margin:0}
     </div>
   </div>
 
+  <div class="card">
+    <h2>Gaia VJ — intervallo palette/clip</h2>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:10px">
+      Ogni quanti secondi Gaia sceglie una nuova palette DMX / clip PatchDeck dal mood (i due
+      interruttori "Gaia VJ" qui sopra decidono SE è attivo, questo decide con che ritmo).
+      Default 60s; per una demo dal vivo può convenire abbassarlo (es. 7-8s).
+    </p>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <label style="font-size:.82rem;color:var(--muted)">Ogni
+        <input type="number" id="vj-interval" min="3" max="600" style="width:70px;padding:6px;margin:0 4px">
+        secondi
+      </label>
+      <button onclick="saveVjInterval()">Salva</button>
+    </div>
+    <div id="vj-interval-msg" class="msg"></div>
+  </div>
+
 </div><!-- end .grid -->
 </div><!-- end tab-cfg -->
 
@@ -1456,6 +1473,38 @@ async function saveQuietHours() {
   }
 }
 
+async function loadVjInterval() {
+  try {
+    const r = await fetch(`${NODERED_API}/gaia/vj/interval`, {signal: AbortSignal.timeout(3000)});
+    if (!r.ok) throw new Error();
+    const d = await r.json();
+    document.getElementById('vj-interval').value = d.interval_s;
+  } catch {
+    setMsg('vj-interval-msg', 'Errore di connessione', 'err');
+  }
+}
+
+async function saveVjInterval() {
+  const s = parseInt(document.getElementById('vj-interval').value, 10);
+  if (isNaN(s) || s < 3 || s > 600) {
+    setMsg('vj-interval-msg', '✗ Intervallo non valido (3-600s)', 'err');
+    return;
+  }
+  try {
+    const r = await fetch(`${NODERED_API}/gaia/vj/interval`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({interval_s: s})
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'errore sconosciuto');
+    setMsg('vj-interval-msg', `✓ Intervallo VJ: ${s}s`, 'ok');
+  } catch (e) {
+    setMsg('vj-interval-msg', `✗ Errore nel salvare: ${e.message || e}`, 'err');
+    loadVjInterval();
+  }
+}
+
 // ── Preview webcam per enrollment volto ────────────────────────────────────
 let _faceStream = null;
 
@@ -2082,6 +2131,7 @@ setInterval(refreshDoorbellStatus, 5000);
 loadAutomations();
 loadRegister();
 loadQuietHours();
+loadVjInterval();
 
 poll();
 
