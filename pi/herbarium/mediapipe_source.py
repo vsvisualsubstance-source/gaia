@@ -26,6 +26,7 @@ Selezionabile in ALTERNATIVA a plant_simulator.py — mai insieme (Conflicts=
 nella unit systemd): scriverebbero sulla stessa porta e si confonderebbero.
 """
 import json
+import os
 import re
 import subprocess
 import sys
@@ -34,6 +35,7 @@ import time
 import paho.mqtt.client as mqtt
 
 import config
+import discovery
 
 GESTURE_OFFSETS = {"fist": 0, "point": 3, "victory": 5, "three": 7, "open_hand": 10}
 ATTENTION_BASE = {"center": 60, "left": 52, "right": 68, "unknown": 60}
@@ -142,6 +144,22 @@ def main():
         client = mqtt.Client(client_id=f"gaia-herb-mediapipe-{config.DEVICE_ID}")
     client.on_message = _on_message
     client.reconnect_delay_set(min_delay=2, max_delay=30)
+
+    # Stessa discovery di main.py/agent.py/yolo/mediapipe/voice -- senza,
+    # questa sorgente (alternativa al simulatore) resterebbe bloccata
+    # sull'MQTT_HOST statico di config.py (default LAN) se il Pi non e'
+    # sulla LAN di Core.
+    if "MQTT_HOST" not in os.environ and os.getenv("GAIA_DISCOVERY", "1") != "0":
+        try:
+            info = discovery.discover(cached_host=config.MQTT_HOST)
+            if info:
+                if info["mqtt_host"] != config.MQTT_HOST:
+                    print(f"[MediapipeSource] Gaia Core trovato: {info['mqtt_host']} (config era {config.MQTT_HOST})")
+                config.MQTT_HOST = info["mqtt_host"]
+                config.MQTT_PORT = int(info.get("mqtt_port", config.MQTT_PORT))
+        except Exception as e:
+            print(f"[MediapipeSource] Discovery fallita ({e}), uso {config.MQTT_HOST}")
+
     client.connect_async(config.MQTT_HOST, config.MQTT_PORT, 60)
 
     def _on_connect(c, u, f, rc, properties=None):

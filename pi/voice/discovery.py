@@ -13,16 +13,17 @@ Uso (da agent.py, prima della connect MQTT):
     if info:
         config.MQTT_HOST = info["mqtt_host"]
 
-Copiato identico in cinque punti (stessa convenzione di net_resolve.py —
+Copiato identico in sei punti (stessa convenzione di net_resolve.py —
 repo senza meccanismo di import cross-directory, ogni servizio è un'unità
 di deploy indipendente):
   pi/agent/discovery.py         (copia canonica)
   pi/yolo/discovery.py
   pi/mediapipe/discovery.py
   pi/voice/discovery.py
+  pi/herbarium/discovery.py
   minipc/tdstudio/discovery.py
 Sync manuale — se tocchi uno di questi file, aggiorna anche gli altri
-quattro.
+cinque.
 """
 from __future__ import annotations
 

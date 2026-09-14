@@ -67,6 +67,7 @@ import time
 import paho.mqtt.client as mqtt
 
 import config
+import discovery
 from music_engine import MusicEngine, VOICE_CHANNELS
 
 _running = True
@@ -543,6 +544,25 @@ def main():
     else:
         _carla = subprocess.Popen(shlex.split(config.CARLA_BIN) + ["--no-gui", config.PATCH])
         print(f"[Herbarium] Carla headless avviato con {config.PATCH}")
+    # Discovery (cache → broadcast UDP → mDNS → Tailscale) prima di
+    # connettersi a MQTT: senza, questo servizio resta bloccato
+    # sull'MQTT_HOST statico di config.py (default LAN) anche se il Pi è
+    # altrove e raggiungibile solo via Tailscale -- stesso gap gia'
+    # fissato in agent.py/yolo/mediapipe/voice, qui mancava ancora
+    # (trovato dal vivo 2026-09-14: ultimo "[MQTT] Connesso" nei log
+    # risaliva all'11 agosto, le note venivano generate/suonate in
+    # locale ma non arrivavano mai a Node-RED/UI gioco).
+    if "MQTT_HOST" not in os.environ and os.getenv("GAIA_DISCOVERY", "1") != "0":
+        try:
+            info = discovery.discover(cached_host=config.MQTT_HOST)
+            if info:
+                if info["mqtt_host"] != config.MQTT_HOST:
+                    print(f"[Herbarium] Gaia Core trovato: {info['mqtt_host']} (config era {config.MQTT_HOST})")
+                config.MQTT_HOST = info["mqtt_host"]
+                config.MQTT_PORT = int(info.get("mqtt_port", config.MQTT_PORT))
+        except Exception as e:
+            print(f"[Herbarium] Discovery fallita ({e}), uso {config.MQTT_HOST}")
+
     _mqtt.connect_async(config.MQTT_HOST, config.MQTT_PORT, 60)
     threading.Thread(target=_mqtt.loop_forever,
                      kwargs={"retry_first_connection": True}, daemon=True).start()
