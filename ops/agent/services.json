@@ -91,7 +91,18 @@
       ],
       "cwd": "C:\\Program Files\\Derivative\\TouchDesigner\\bin",
       "check_script": false,
-      "_nota": "Path/progetto confermati dal vivo 2026-09-01 (PID reale ispezionato via Get-CimInstance). check_script:false perche' l'ultimo elemento di cmd non e' l'eseguibile ma un argomento (il .toe) -- stesso pattern di 'kiosk' sopra: e' l'eseguibile stesso ad essere lanciato, non uno script Python nella cwd dell'agent. Da' un vero controllo start/stop/restart ('chiudi/riapri TD') su questa istanza -- prima non esisteva alcun modo per farlo da remoto, solo i toggle granulari interni (dmx_a_kick_enable, ecc, pubblicati DA TD stesso via td_internal_agent.py con role:'touchdesigner', family:'dmx', device_id 'td-dmx-ops') che sono un'altra cosa e restano nascosti da Pi Manager per design (vedi pmIsHiddenFromGrid in web/admin.html) -- questo servizio invece vive dentro il device ops-silvermini2 (role:'ops'), quindi appare regolarmente in Pi Manager. Nessun watchdog automatico (ops/agent.py non ne ha, per design -- solo installation/agent.py ce l'ha, macchina non presidiata): se TD crasha resta giu' finche' non lo si riavvia a mano da Pi Manager/Telegram, stesso comportamento di kiosk/mediaplayer."
+      "conflicts": ["touchdesigner_herbarium"],
+      "_nota": "Path/progetto confermati dal vivo 2026-09-01 (PID reale ispezionato via Get-CimInstance). check_script:false perche' l'ultimo elemento di cmd non e' l'eseguibile ma un argomento (il .toe) -- stesso pattern di 'kiosk' sopra: e' l'eseguibile stesso ad essere lanciato, non uno script Python nella cwd dell'agent. Da' un vero controllo start/stop/restart ('chiudi/riapri TD') su questa istanza -- prima non esisteva alcun modo per farlo da remoto, solo i toggle granulari interni (dmx_a_kick_enable, ecc, pubblicati DA TD stesso via td_internal_agent.py con role:'touchdesigner', family:'dmx', device_id 'td-dmx-ops') che sono un'altra cosa e restano nascosti da Pi Manager per design (vedi pmIsHiddenFromGrid in web/admin.html) -- questo servizio invece vive dentro il device ops-silvermini2 (role:'ops'), quindi appare regolarmente in Pi Manager. Nessun watchdog automatico (ops/agent.py non ne ha, per design -- solo installation/agent.py ce l'ha, macchina non presidiata): se TD crasha resta giu' finche' non lo si riavvia a mano da Pi Manager/Telegram, stesso comportamento di kiosk/mediaplayer. 'conflicts' aggiunto 2026-09-14 insieme a touchdesigner_herbarium: un solo .toe alla volta sulla stessa istanza TouchDesigner.exe."
+    },
+    "touchdesigner_herbarium": {
+      "cmd": [
+        "C:\\Program Files\\Derivative\\TouchDesigner\\bin\\TouchDesigner.exe",
+        "C:/Users/vsvis/Documents/td/Herbarum/herbarum.toe"
+      ],
+      "cwd": "C:\\Program Files\\Derivative\\TouchDesigner\\bin",
+      "check_script": false,
+      "conflicts": ["touchdesigner"],
+      "_nota": "Path verificato dal vivo 2026-09-14 via `Get-ChildItem -Recurse` su C:\\Users\\vsvis\\Documents\\td (la cartella contiene anche un secondo .toe piu' vecchio, 'vst1.357+videoultimoooo1.2.toe', non e' questo). Stesso pattern di 'touchdesigner' (DMX) sopra -- chiave separata perche' e' un .toe diverso sulla stessa istanza TouchDesigner.exe, mai 'herbarium' da sola: quel nome e' gia' usato dal servizio gaia-herbarium sui Pi (AV Herbarium, tutt'altra cosa) ed e' nel set TOGGLEABLE di Telegram in node-red/flows.json -- riusarlo qui avrebbe fatto rispondere anche questo device a '/attiva herbarium' insieme ai Pi."
     },
     "ollama": {
       "type": "http_check",

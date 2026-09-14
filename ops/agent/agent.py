@@ -268,6 +268,22 @@ def _svc_status(key: str) -> str:
     return "active" if _is_running(key) else "inactive"
 
 
+def _stop_conflicts(key: str):
+    """Progetti TD che vanno uno alla volta sulla stessa istanza
+    TouchDesigner (es. touchdesigner/touchdesigner_herbarium su OPS):
+    dichiarati in "conflicts" nel manifest, fermati prima di avviarne uno
+    nuovo -- stesso meccanismo gia' in minipc/tdstudio/agent.py, portato
+    qui perche' prima esisteva un solo slot TD per macchina (nessun
+    concetto di conflitto)."""
+    defn = _SERVICE_DEFS.get(key, {})
+    for other in defn.get("conflicts", []):
+        if other in _SERVICE_DEFS and _is_running(other):
+            print(f"[Agent] {key} e' in conflitto con {other}, lo fermo prima")
+            _stop_service(other)
+            with _cfg_lock:
+                _cfg.setdefault("services", {}).setdefault(other, {})["enabled"] = False
+
+
 def _start_service(key: str) -> bool:
     defn = _SERVICE_DEFS.get(key)
     if not defn:
@@ -284,6 +300,7 @@ def _start_service(key: str) -> bool:
         return ok
     if _is_running(key):
         return True
+    _stop_conflicts(key)
     env = _build_env(defn.get("env_extra", {}))
     cwd = defn.get("cwd")
     # {STANZA} negli argomenti → stanza corrente (es. URL del kiosk che segue
