@@ -67,7 +67,8 @@ let _lastKey = null;   // id ordinati delle camere online -- ricostruisce il DOM
 // stessa rete del Pi), poi Tailscale se disponibile. this.dataset.triedTs
 // evita un loop se anche il Tailscale fallisce (onerror altrimenti
 // rifirerebbe all'infinito sullo stesso url).
-function camImgError(img, tsUrl) {
+function camImgError(img) {
+  const tsUrl = img.dataset.ts;
   if (tsUrl && !img.dataset.triedTs) {
     img.dataset.triedTs = '1';
     img.src = tsUrl;
@@ -133,8 +134,8 @@ async function load() {
         <span class="cam-role">${c.role}</span>
       </div>
       <div class="cam-body">
-        <img src="${c.mjpeg}" alt=""
-             onerror="camImgError(this, ${c.mjpegTailscale ? JSON.stringify(c.mjpegTailscale) : 'null'})">
+        <img src="${c.mjpeg}" alt="" ${c.mjpegTailscale ? `data-ts="${c.mjpegTailscale}"` : ''}
+             onerror="camImgError(this)">
         <div class="cam-err">
           <span class="big">📡</span>
           <span>stream non raggiungibile da questa rete</span>
