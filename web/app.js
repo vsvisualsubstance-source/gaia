@@ -227,6 +227,14 @@ const plantBlades = new Map();
 const lightGems = new Map();
 const shadowFigures = new Map();
 const roomMarkers = new Map();
+// Angoli fissi per i device "fuori casa" (role installation lato Gaia, es.
+// Palazzo Ducale) -- oltre il raggio massimo di computeRoomLayout (~6.6 per
+// un grafo profondo), cosi' non si sovrappongono mai alle stanze vere.
+const EXTERNAL_CORNER_POS = [
+    { x: 7.5,  z: 7.5  }, { x: -7.5, z: 7.5  },
+    { x: -7.5, z: -7.5 }, { x: 7.5,  z: -7.5 },
+];
+const externalCorners = new Map();
 const yoloObjects = new Map();
 const tdDeviceMeshes = new Map();
 
@@ -663,11 +671,28 @@ function updateRoomMarkers() {
             marker.userData.stats = stats;
             scene.add(marker); roomMarkers.set(id, marker);
         }
-        const p = layout && layout[id];
-        if (p) marker.position.set(p.x, 0.01, p.z);
-        else if (marker.position.lengthSq() === 0) marker.position.set(Math.cos(i * 1.6) * 3.2, 0.01, Math.sin(i * 1.6) * 3.2);
-
         const room = liveRooms.get(id);
+        const p = layout && layout[id];
+        if (room && room.external) {
+            // Device fuori casa (es. macchina touring Palazzo Ducale, role
+            // "installation" lato Gaia) -- posizione fissa in uno dei 4
+            // angoli, FUORI dal raggio massimo delle stanze reali (richiesto
+            // esplicitamente 2026-09-15: "potremmo metterli in angoli"
+            // invece di mescolarli nell'anello radiale della casa, che
+            // viene dalla piantina VERA e non avrebbe senso per un posto
+            // che non è in nessuna piantina). Assegnazione stabile per id,
+            // mai riassegnata a caso da un frame all'altro.
+            if (!externalCorners.has(id)) {
+                externalCorners.set(id, EXTERNAL_CORNER_POS[externalCorners.size % EXTERNAL_CORNER_POS.length]);
+            }
+            const c = externalCorners.get(id);
+            marker.position.set(c.x, 0.01, c.z);
+        } else if (p) {
+            marker.position.set(p.x, 0.01, p.z);
+        } else if (marker.position.lengthSq() === 0) {
+            marker.position.set(Math.cos(i * 1.6) * 3.2, 0.01, Math.sin(i * 1.6) * 3.2);
+        }
+
         // empty/idle alzati da 0x111122 (quasi nero puro, invisibile su
         // sfondo nero) -- una stanza MONITORATA ma quieta deve restare
         // visibile, distinta dalla "presenza spettrale" sotto (stanza nota
@@ -677,6 +702,16 @@ function updateRoomMarkers() {
             marker.material.opacity = 0.45;
             marker.material.color.setHex(colors[room.activity] || colors[room.current_activity] || 0x111122);
             marker.userData.targetScale = room.persons_count > 0 ? 1.2 : 0.8;
+            if (room.external) {
+                // Tinta ambra fissa, riconoscibile a colpo d'occhio come
+                // "fuori casa" -- persons_count/attività qui non hanno lo
+                // stesso senso di una stanza vera (non c'è gente dentro,
+                // è una macchina altrove), quindi non seguono la mappa
+                // colori sopra. Il colore TD/palette sotto resta comunque
+                // prioritario se quel device ha un rig attivo in scena.
+                marker.material.color.setHex(0xffaa33);
+                marker.material.opacity = 0.55;
+            }
             // chi parla: la stanza pulsa color accento
             if (room.speaking) {
                 marker.material.color.setHex(0x00ffcc);
