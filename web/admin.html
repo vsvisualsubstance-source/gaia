@@ -689,6 +689,21 @@ button.small{padding:3px 9px;font-size:.78rem;margin:0}
     <div id="vj-clips-msg" class="msg"></div>
   </div>
 
+  <div class="card">
+    <h2>Gaia VJ — quali DMX pilotare</h2>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:10px">
+      Se più device si annunciano come DMX insieme (es. il DMX integrato di PatchDeck +
+      quello dedicato su OPS/Herbarium), Gaia VJ manda la stessa palette a TUTTI quelli
+      online per default. Seleziona qui per restringere a solo alcuni — nessuna selezione
+      = tutti quelli online (comportamento di sempre).
+    </p>
+    <div id="vj-dmx-devices-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">
+      <span style="color:var(--muted);font-size:.82rem">Caricamento…</span>
+    </div>
+    <button onclick="saveVjDmxDevices()">Salva</button>
+    <div id="vj-dmx-devices-msg" class="msg"></div>
+  </div>
+
 </div><!-- end .grid -->
 </div><!-- end tab-cfg -->
 
@@ -1555,6 +1570,54 @@ async function saveVjClips() {
   }
 }
 
+async function loadVjDmxDevices() {
+  const list = document.getElementById('vj-dmx-devices-list');
+  try {
+    const r = await fetch(`${NODERED_API}/gaia/vj/dmx-devices`, {signal: AbortSignal.timeout(3000)});
+    if (!r.ok) throw new Error();
+    const d = await r.json();
+    const allowed = new Set(d.devices || []);
+    const available = d.available || [];
+    // Un device attualmente selezionato ma non (più) visto tra i family=dmx
+    // noti (es. spento in questo momento) resta comunque in lista, altrimenti
+    // salvare di nuovo lo farebbe sparire silenziosamente dall'allowlist.
+    for (const id of allowed) {
+      if (!available.some(a => a.id === id)) available.push({id, stanza: null, online: false});
+    }
+    if (!available.length) {
+      list.innerHTML = '<span style="color:var(--muted);font-size:.82rem">Nessun device DMX visto finora — accendi PatchDeck/DMX/Herbarium almeno una volta.</span>';
+      return;
+    }
+    list.innerHTML = available.map(a => `
+      <label style="display:flex;align-items:center;gap:8px;font-size:.85rem">
+        <input type="checkbox" data-dmx-id="${a.id}" ${allowed.has(a.id) ? 'checked' : ''}>
+        <span>${a.id}</span>
+        <span style="color:var(--muted)">${a.stanza ? '(' + a.stanza + ')' : ''} ${a.online ? '🟢' : '🔴'}</span>
+      </label>`).join('');
+  } catch {
+    list.innerHTML = '';
+    setMsg('vj-dmx-devices-msg', 'Errore di connessione', 'err');
+  }
+}
+
+async function saveVjDmxDevices() {
+  const devices = Array.from(document.querySelectorAll('#vj-dmx-devices-list input[data-dmx-id]:checked'))
+    .map(el => el.dataset.dmxId);
+  try {
+    const r = await fetch(`${NODERED_API}/gaia/vj/dmx-devices`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({devices})
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'errore sconosciuto');
+    setMsg('vj-dmx-devices-msg', d.devices.length ? `✓ DMX pilotati: ${d.devices.join(', ')}` : '✓ Tutti i DMX online', 'ok');
+  } catch (e) {
+    setMsg('vj-dmx-devices-msg', `✗ Errore nel salvare: ${e.message || e}`, 'err');
+    loadVjDmxDevices();
+  }
+}
+
 // ── Preview webcam per enrollment volto ────────────────────────────────────
 let _faceStream = null;
 
@@ -2183,6 +2246,7 @@ loadRegister();
 loadQuietHours();
 loadVjInterval();
 loadVjClips();
+loadVjDmxDevices();
 
 poll();
 
