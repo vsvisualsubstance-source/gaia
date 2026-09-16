@@ -1,11 +1,18 @@
 # Architettura Gaia — mappa di sistema
 
-Riferimento interno, aggiornato 2026-08-25. Copre la topologia fisica, il
-protocollo comune degli agenti (Pi/OPS/Core/TouchDesigner), come le pagine
-web parlano col sistema, e il canale di collaborazione con la sessione
-TD/Mac. Complementa `README.md` (struttura repository, componenti software)
-e `docs/discovery-protocol.md` (dettaglio scoperta/fallback rete) — non li
-sostituisce.
+Riferimento interno, aggiornato 2026-09-16 (precedente: 2026-08-25). Copre
+la topologia fisica, il protocollo comune degli agenti
+(Pi/OPS/Core/TouchDesigner/installation), come le pagine web parlano col
+sistema, e il canale di collaborazione con la sessione TD/Mac. Complementa
+`README.md` (struttura repository, componenti software) e
+`docs/discovery-protocol.md` (dettaglio scoperta/fallback rete) — non li
+sostituisce. Novità principali dall'ultimo aggiornamento: fallback
+LAN→Tailscale esteso a TUTTI i servizi Pi (non solo l'agent) e alle pagine
+web di controllo TD, TouchDesigner su OPS gestisce tre progetti in mutua
+esclusione (DMX/Herbarium/Yolo), Gaia VJ pilota mood→palette DMX/clip
+PatchDeck in autonomia (§2.3), il TCC M (Sennheiser, mic a soffitto) è un
+agent Gaia nativo su Core, e un nuovo ruolo "installation" copre macchine
+Windows in trasferta (venue touring, es. Palazzo Ducale — §7).
 
 ## 1. Topologia
 
@@ -27,36 +34,50 @@ alla pari verso il broker, nessuna gerarchia tra loro.
 │  voice — wakeword/     │        │  ops/agent.py — camera/     │
 │    STT/TTS             │        │    yolo/mediapipe/voice/    │
 │  kiosk / mediaplayer   │        │    kiosk                    │
-│                        │        │  td-silvermini2 (TD Agent)  │
-│  discovery: beacon →   │        │    istanza TD locale        │
-│    mDNS → Tailscale    │        └──────────────┬─────────────┘
-│    (fallback)          │                       │ status/command
-└───────────┬────────────┘                       │
+│  discovery: beacon →   │        │  TouchDesigner — 3 progetti │
+│    mDNS → Tailscale    │        │    in mutua esclusione (§7):│
+│    (fallback, ora su   │        │    DMX · Herbarium · Yolo   │
+│    tutti i servizi)    │        └──────────────┬─────────────┘
+└───────────┬────────────┘                       │ status/command
             │ status/command                     │
             │            ┌──────────────────────▼──┐
             │            │        CORE — miniPC      │
             └───────────►│   192.168.1.142 · Linux   │◄───────────┐
                          │                            │            │
 ┌───────────────────────┐│  mosquitto MQTT            │  status/command/set
-│  BROWSER — LAN         ││    :1883 lan · :9001 ws    │            │
+│  BROWSER — LAN/remoto  ││    :1883 lan · :9001 ws    │            │
 │                        ││  Ollama — LLM locale       │ ┌──────────┴────────────┐
-│  admin · dashboard ·   ││  Qdrant — memoria          │ │  MAC — TouchDesigner   │
-│    welcome              │  OpenHAB — luci/sensori    │ │  192.168.1.135 · dev   │
+│  admin · dashboard ·   ││  Qdrant — memoria          │ │  MAC MAURO — TD        │
+│    welcome              │  OpenHAB — luci/sensori    │ │  dev, via Tailscale    │
 │  patchdeck · mixer-     ││  gaia_admin.py :8765       │ │                        │
-│    audio · dmx          ││  local-agent (device Core) │ │  PatchDeck — mixer 48ch│
-│                        │└──────────────▲─────────────┘ │  ControllerV7 — audio  │
-│  mqtt.js — publish/     │               │ HTTP :1880    │  DMX × N scenari       │
-│  subscribe diretto dal  │               │ (Device        │    — chase             │
-│  browser, nessun        └───────────────┘  Registry,     │  ognuno: gaia_device_  │
-│  backend nuovo                              web)         │    agent.py nativo,    │
-│                        WS :9001 (controllo live)          │    Envoy/MCP → §4      │
-└────────────────────────┴─────────────────────────────────┴────────────────────────┘
+│    audio · dmx          ││  gaia-tccm.service — TCC M │ │  PatchDeck (+DMX       │
+│                        ││    (Sennheiser, §7)        │ │    integrato) ·        │
+│  mqtt.js — publish/     │└──────────────▲─────────────┘ │  ControllerV7 · TD Gaia│
+│  subscribe diretto dal  │               │ HTTP :1880    │  ognuno: gaia_device_  │
+│  browser, nessun        └───────────────┘  (Device      │    agent.py nativo,    │
+│  backend nuovo                              Registry,    │    Envoy/MCP → §4      │
+│                        WS :9001 (controllo live)          web)                    │
+└────────────────────────┴─────────────────────────────────┴───────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────┐
+│  MACCHINE "installation" — Windows in trasferta (venue, §7)          │
+│  Tailscale come via primaria (raramente sulla LAN di Core) — es.     │
+│  Palazzo Ducale Genova: MadMapper + bridge OSC↔MQTT, watchdog,       │
+│  spegnimento programmato, /riavvia_pc /spegni_pc da Telegram         │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
 **Fallback Tailscale**: quando un Pi (o altro device) è fuori dalla LAN di
 Core, `net_resolve.py` prova prima l'IP LAN poi l'IP Tailscale — stesso
 principio ovunque nel repo, dettaglio completo in
-`docs/discovery-protocol.md`.
+`docs/discovery-protocol.md`. Dal settembre 2026 il fallback non copre più
+solo `pi/agent` ma è stato esteso a **tutti** i servizi Pi che si
+connettono da soli a MQTT (`yolo`, `mediapipe`, `voice`, `herbarium`) e al
+Pi kiosk (risolve dinamicamente anche l'host di Node-RED, non solo il
+broker) — ciascuno prova la propria discovery prima del connect, zero
+costo se `MQTT_HOST` è già in ambiente. Le pagine web di controllo TD
+(`admin.html`, `dmx.html`, `patchdeck.html`, `mixeraudio.html`,
+`tccm.html`) hanno lo stesso fallback lato browser.
 
 **N macchine, un solo agent** (`docs/core-distribuito.md`): qualunque
 macchina nuova (Pi, OPS, Core, o una futura macchina "media" per
@@ -234,6 +255,53 @@ Attivi e verificati dal vivo con publish MQTT reali (2026-08-08):
 `gaia_nursery` lato TD lo applichi davvero — `gaia/nursery/status`
 restava vuoto nei test, domanda aperta lasciata a TD/Mac.
 
+### Gaia VJ — mood pilota luci/video in autonomia (2026-09)
+
+Terzo modo, oltre ai due sopra, in cui Gaia raggiunge TouchDesigner: un
+ciclo periodico (`vj_mood_fn`, Node-RED) che legge `brain.mood.state`/
+`.energy` e sceglie da solo una palette DMX e/o una clip PatchDeck
+coerenti artisticamente (mappa curata a mano per mood, variazione pesata
+dall'energia + fascia oraria, anti-ripetizione sullo storico) — stesso
+principio "Gaia sceglie, mai un LLM nel loop" della Nursery (§2).
+
+```
+tick (1s, gate su brain.automations.gaiaVjIntervalS — default 60,
+      abbassabile per una demo)
+   │
+   ▼
+mood corrente + energia → weightedPick() dentro la mappa curata
+   │
+   ├─ gaiaVjDmx (toggle) ──► broadcast a TUTTI i device online con
+   │                          family="dmx" (dmx_a_palette/dmx_b_palette) —
+   │                          restringibile a una lista specifica via
+   │                          brain.automations.gaiaVjDmxDevices
+   │                          (Admin → "Gaia VJ -- quali DMX pilotare",
+   │                          vuoto = tutti)
+   │
+   └─ gaiaVjPatchdeck (toggle) ──► un solo deck alla volta (A/B alternati,
+                                    mai insieme) su tutti i device
+                                    family="patchdeck" — clip scelta da un
+                                    elenco curato opzionale
+                                    (gaiaVjPatchdeckClips, vuoto = tutte
+                                    e 38) + i 5 FX (edge/feedback/
+                                    fb_scale/fb_blur/mirror) con jitter e
+                                    riposo periodico
+```
+
+**Broadcast per family, non per singolo device**: se più device si
+annunciano con la stessa `family` (es. il DMX integrato di PatchDeck +
+un DMX dedicato su OPS/Herbarium, entrambi online insieme), il VJ manda
+lo stesso comando a **tutti** per default — l'allowlist
+`gaiaVjDmxDevices` esiste apposta per restringere a un sottoinsieme
+quando serve pilotarne solo uno. `family` è auto-dichiarato da ogni
+device nel proprio status (mai dedotto dal device_id) — vedi §3.
+
+**Due toggle indipendenti** (`gaiaVjDmx`/`gaiaVjPatchdeck`, entrambi OFF
+di default) — richiesto esplicitamente: il VJ non deve mai interferire
+con uno show manuale o un momento critico solo perché il mood è
+cambiato, e i due sistemi si accendono/spengono separatamente (es. luci
+automatiche sì, clip a mano).
+
 ## 3. Il protocollo agente — un pattern, sei istanze
 
 Pi, OPS, Core e ogni istanza TouchDesigner parlano lo stesso protocollo
@@ -277,9 +345,13 @@ senza mai dover cambiare l'heartbeat nativo di 30s.
 | Pi × N            | ✓               | ✓                  | —                           | —                    | —                        |
 | OPS               | ✓               | ✓                  | —                           | —                    | —                        |
 | Core (self)       | ✓               | ✓                  | —                           | —                    | —                        |
-| PatchDeck         | ✓               | ✓                  | ✓ `patchdeck_matrix`        | —                    | —                        |
-| ControllerV7      | ✓               | ✓                  | — (naming `ch{N}_...`)      | ✓ 588 parametri      | ✓ `audio_levels`         |
-| DMX × N scenari   | ✓               | ✓                  | ✓ `dmx_matrix`              | ✓ ~27 param/scenario | —                        |
+| PatchDeck (Mac)   | ✓               | ✓ `family:patchdeck`| ✓ `patchdeck_matrix`       | ✓ 5 param FX          | —                        |
+| ControllerV7      | ✓               | ✓ `family:mixeraudio`| — (naming `ch{N}_...`)    | ✓ 588 parametri      | ✓ `audio_levels`         |
+| DMX × N (Mac/OPS) | ✓               | ✓ `family:dmx`      | ✓ `dmx_matrix`              | ✓ ~27 param/scenario | —                        |
+| Herbarium (OPS)   | ✓               | ✓ `family:herbarum`| ✓ (stessi param `dmx_a_*`, family diversa quindi fuori dal VJ DMX §2) | ✓ | — |
+| TD Gaia (Mac)     | ✓               | ✓ `family:gaia`     | —                           | —                    | —                        |
+| TCC M (Core)      | ✓               | ✓ `role:tccm`       | —                           | —                    | ✓ audio/beam/attività    |
+| MadMapper (install.)| ✓             | ✓ `family:madmapper`| —                          | ✓ OSC generico        | —                        |
 
 Le estensioni sono retrocompatibili per costruzione: `_params` parte vuoto
 per chi non chiama mai `register_param()`, quindi PatchDeck e i Pi non
@@ -358,11 +430,14 @@ attive in parallelo sullo stesso file sono un rischio reale, non teorico
 | OpenHAB                   | Core (docker)     | 8080 http                 | Luci, sensori, automazioni fisiche               |
 | pi/agent.py                | Pi × N            | mqtt                       | Servizi per stanza — camera/voce/kiosk           |
 | ops/agent.py               | OPS               | mqtt                       | Servizi pre-prod — stesso schema dei Pi          |
-| gaia_device_agent.py       | Mac TD (+ OPS)    | mqttclientDAT nativo       | PatchDeck · ControllerV7 · DMX                   |
+| gaia_device_agent.py       | Mac TD (+ OPS)    | mqttclientDAT nativo       | PatchDeck (+DMX) · ControllerV7 · DMX · TD Gaia · Herbarium |
 | TD4Gaia                   | GitHub            | repo pubblico              | Progetto TD + canale di confine Core↔TD/Mac      |
 | Hue Bridge                 | rete locale       | API v1 · bridge-id fisso   | Luci fisiche — `hue:bridge:4c442d6265`           |
 | Bot Telegram               | Node-RED (OPS)    | function unica, 3 output   | Comandi + linguaggio naturale → Hue/Echo/voce    |
 | esp/sim/brick_node.py      | Core (simulatore) | mqtt, protocollo Pi-compat.| Prototipo "mattone intelligente" (Casa Zero)     |
+| gaia-tccm.service (`minipc/tccm/tccm_agent.py`) | Core | SSCv2 HTTPS/SSE → mqtt | TCC M (Sennheiser, mic a soffitto) — §7 |
+| minipc/installation/agent.py | Windows touring | mqtt (stesso pattern Pi/OPS) | Ruolo "installation" — venue temporanee, es. Palazzo Ducale — §7 |
+| minipc/madmapper (bridge) | Windows touring | OSC↔mqtt | Controllo/blackout MadMapper da Gaia — §7 |
 
 ## 7. Moduli e automazioni
 
@@ -370,7 +445,7 @@ Comportamenti e servizi periferici che completano il quadro — dettaglio
 completo nei doc gemelli in `docs/`, qui solo ciò che serve per
 orientarsi.
 
-### Automazioni proattive — 11 toggle (`admin.html` → Automazioni)
+### Automazioni proattive — 18 toggle (`admin.html` → Automazioni, elenco autorevole in `GET /gaia/automations`)
 
 | id | Default | Cosa fa |
 |---|---|---|
@@ -378,16 +453,74 @@ orientarsi.
 | `fallDetection` | ON | Rilevamento cadute (sicurezza) |
 | `fireAlarm` | ON | Allarme incendio (sicurezza) |
 | `fridgeAlarm` | ON | Frigo aperto (sicurezza) |
+| `rpgCelebrationLights` | ON | Luci celebrative level-up/riti RPG |
+| `gameDiaryText` | ON | `game.html` — mostra il diario testuale |
+| `visualHud` | ON | Vista 3D (`index.html`) — mostra HUD testuale |
 | `moodLighting` | OFF, per-stanza | Scena luci da mood (`MoodSceneSync`) |
 | `maggiordomo` | OFF | Citofono · pioggia+finestre · spegne luci stanza vuota da >10min — `docs/maggiordomo.md` |
 | `thirstyPlantAlert` | OFF | Alert Telegram pianta assetata (umidità <25%) |
 | `awayMode` | OFF | Nessuno in casa da >30min → spegne tutte le luci |
 | `welcomeScene` | OFF | Persona nota rientra la sera → accende ingresso |
 | `touchdesignerLighting` | OFF | Luci pilotate da parametri generati in TD (`gaia/touchdesigner/lighting/#`) |
+| `touchdesignerMood` | OFF | Mood pilotato da TouchDesigner |
 | `voiceAutoEnroll` | OFF (attivo) | Doppia conferma volto+voce → raffina il profilo vocale esistente |
+| `gaiaVjDmx` | OFF | Gaia VJ — palette DMX da mood (§2.3) |
+| `gaiaVjPatchdeck` | OFF | Gaia VJ — clip PatchDeck da mood (§2.3) |
+| `azimuthRadar` | OFF | Radar azimuth TCC M nel kiosk (`welcome.html`, §7) |
 
-Le prime 4 (sicurezza/cura) sono ON di default; tutte le altre partono
-OFF, opt-in esplicito — stessa convenzione ovunque nel progetto.
+Sicurezza/cura + le tre di visualizzazione "sempre utili" sono ON di
+default; tutte le altre partono OFF, opt-in esplicito — stessa
+convenzione ovunque nel progetto.
+
+### TouchDesigner su OPS — tre progetti, mutua esclusione (2026-09)
+
+OPS gestisce un solo progetto TouchDesigner alla volta (limite reale: un
+processo `TouchDesigner.exe` per macchina) tra tre voci in
+`ops/agent/services.json` — `touchdesigner` (DMX,
+`Documents/td/DMX/dmx.toe`), `touchdesigner_herbarium`
+(`Documents/td/Herbarum/herbarum.toe`), `touchdesigner_yolo`
+(`Documents/td/yolo/Yolo.toe`) — ciascuna dichiara le altre due in
+`conflicts`. `_stop_conflicts()` (in `ops/agent/agent.py`, stesso
+meccanismo già in uso su `minipc/tdstudio/` per il Mac mini Herbarium)
+ferma automaticamente il progetto attivo prima di avviarne un altro,
+via MQTT (`enable`) o Pi Manager — non serve mai fermare a mano quello
+in corso. Herbarium su OPS pubblica i propri controlli DMX-simili con
+`family:"herbarum"` (non `"dmx"`), quindi resta fuori dal broadcast di
+Gaia VJ DMX per design (§2.3).
+
+### TCC M (Sennheiser TeamConnect Ceiling) — mic a soffitto (2026-09)
+
+Agent nativo Gaia (`minipc/tccm/tccm_agent.py`, `gaia-tccm.service` su
+Core) — non è un device TouchDesigner, parla SSCv2 su HTTPS
+(autenticazione Basic, certificato self-signed) con una subscription SSE
+per lo stato live (beam azimuth/elevazione, livello audio, attività per
+zona). Config in `/etc/gaia/tccm.conf` (non in git — contiene la
+password). Copre la zona "zona-giorno" (soggiorno+salotto+cucina+
+ingresso insieme, non singola stanza — un solo mic a copertura
+multi-stanza). L'azimuth del beam alimenta un radar direzionale nel
+kiosk (`welcome.html`, toggle `azimuthRadar`) e il canale OSC verso
+TD/gaia-art per il "quadro vivente". Vedi `docs/dante-dsp-audio.md` per
+il lato rete audio Dante (separato, solo trasporto).
+
+### Macchine "installation" — kit touring per venue temporanee (2026-09)
+
+Nuovo ruolo, distinto da Pi/OPS/Core, per macchine Windows che vanno in
+trasferta per un'installazione (video-mapping non presidiato) —
+`minipc/installation/` (agent, stesso pattern di `ops/agent.py` +
+watchdog reale che riavvia i servizi caduti, mai un reboot automatico)
+e `minipc/madmapper/` (bridge OSC↔MQTT separato, `family:"madmapper"`,
+blackout via `/surfaces/*/opacity`, relay OSC generico per gli
+indirizzi specifici del progetto). Raggiunte quasi sempre solo via
+Tailscale (raramente sulla LAN di Core). Prima installazione reale:
+**Palazzo Ducale, Genova** (device `installation-vs-mini-silver`,
+1 mese, non presidiata) — spegnimento programmato via Task Scheduler
+Windows nativo + `/riavvia_pc`/`/spegni_pc` da Telegram come rete di
+sicurezza software, riavvio reale verificato dal vivo (si autoripara:
+AtLogOn + watchdog + ricarica del progetto MadMapper reale). In
+`index.html`/`game.html` questi device compaiono come oggetti "esterni"
+negli angoli della scena 3D, non nella mappa delle stanze di casa (non
+hanno una `room` reale). Dettaglio completo in
+`docs/installation-touring.md`.
 
 ### Alexa/Echo
 
@@ -442,5 +575,8 @@ tra stanze) restano design, non implementazione — dettaglio completo in
 ---
 
 Versione visiva (SVG, stessi contenuti): artifact pubblicato il
-2026-08-25, link condiviso a parte — questo file è la copia
-"da terminale", pensata per restare aggiornata insieme al codice.
+2026-08-25, link condiviso a parte — **non riflette gli aggiornamenti del
+2026-09-16** (Gaia VJ, TD multi-progetto OPS, TCC M, ruolo
+"installation"), da rigenerare se serve di nuovo una versione visiva.
+Questo file `.md` è la copia "da terminale", pensata per restare
+aggiornata insieme al codice — è la fonte autorevole tra le due.

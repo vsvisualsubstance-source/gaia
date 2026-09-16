@@ -1,6 +1,12 @@
 # GAIA – Coscienza Artificiale della Casa
 
-**v1.0.2** — Sistema cognitivo distribuito per domotica intelligente. Discovery/provisioning automatico dei nodi (beacon UDP + captive portal WiFi), welcome kiosk con enrollment. Integra rilevamento visivo (YOLO, MediaPipe), riconoscimento facciale (InsightFace), riconoscimento vocale (Whisper + resemblyzer), automazione (OpenHAB, MQTT), LLM locale (Ollama), memoria vettoriale (Qdrant), notifiche Telegram e interfaccia 3D (Three.js).
+**v1.0.2** — Sistema cognitivo distribuito per domotica intelligente. Discovery/provisioning automatico dei nodi (beacon UDP + captive portal WiFi), welcome kiosk con enrollment. Integra rilevamento visivo (YOLO, MediaPipe), riconoscimento facciale (InsightFace), riconoscimento vocale (Whisper + resemblyzer), automazione (OpenHAB, MQTT), LLM locale (Ollama), memoria vettoriale (Qdrant), notifiche Telegram, controllo TouchDesigner/DMX/MadMapper e interfaccia 3D (Three.js).
+
+> **Questo file è una panoramica.** Per la topologia reale (Core/OPS/Pi/TD,
+> aggiornata 2026-09-16), il protocollo agente comune, Gaia VJ, TCC M e le
+> macchine "installation" in trasferta, la fonte autorevole è
+> **`docs/architettura.md`** — leggilo prima se devi capire come i pezzi si
+> parlano davvero, questo README resta a livello di indice.
 
 ---
 
@@ -8,17 +14,28 @@
 
 ```
 core-node-0/
-├── pi/                    ← codice deployato sui Raspberry Pi
+├── pi/                    ← codice deployato sui Raspberry Pi (uno per stanza)
 │   ├── agent/             gaia-agent: daemon + service files + discovery Gaia Core
 │   ├── camera/            camera_server: frame broker shared memory
 │   ├── yolo/              rilevamento persone/oggetti (YOLO11)
 │   ├── mediapipe/         pose, gesture, emozioni (MediaPipe)
-│   └── voice/             wakeword + STT + TTS (openWakeWord + Whisper + Piper)
-├── minipc/                ← codice locale al miniPC (non va sui Pi)
+│   ├── voice/             wakeword + STT + TTS (openWakeWord + Whisper + Piper)
+│   ├── herbarium/         AV Herbarium: sensore MIDI → music_engine → Carla → audio
+│   ├── kiosk/             welcome su display DSI (cage + Chromium kiosk)
+│   ├── screen/             superficie asemica su display DSI (Conflicts= con kiosk)
+│   ├── livestream/        icecast2 locale + ffmpeg source (mic o libreria)
+│   ├── mediaplayer/       musica/radio per stanza (mpv IPC + MQTT)
+│   └── provision/         onboarding WiFi (hotspot + captive portal)
+├── ops/                   ← agent per la macchina "pre-prod" Windows (visione+voce+TD)
+│   └── agent/             ops-agent: stesso protocollo di pi/agent, + TouchDesigner
+│                            (DMX/Herbarium/Yolo, mutua esclusione) e Ollama
+├── minipc/                ← codice locale al miniPC "Core" (non va sui Pi)
 │   ├── script/            voice pipeline (gaia_listener.py), enrollment, gaia_admin
 │   ├── beacon/            gaia-beacon: risponditore UDP discovery + annuncio mDNS
 │   ├── camera/            camera_server locale (shared memory + stream MJPEG :8766)
+│   ├── tccm/              gaia-tccm.service: TCC M Sennheiser (SSCv2 HTTPS/SSE)
 │   ├── touchdesigner/     bridge OSC↔MQTT per TouchDesigner (family dmx/patchdeck/controller)
+│   ├── tdstudio/          agent macOS per Mac mini TouchDesigner (Herbarium + progetti)
 │   ├── installation/      kit agent per macchine Windows touring (ruolo "installation", vedi docs/installation-touring.md)
 │   ├── madmapper/         bridge OSC↔MQTT per MadMapper (family madmapper, usato da installation/)
 │   ├── local_agent.py     agente locale (emula Pi per test OTA e Pi Manager)
@@ -26,11 +43,15 @@ core-node-0/
 │   ├── wakeword_models/   modelli wakeword (gitignored)
 │   ├── say.sh             TTS locale via Piper
 │   └── transcribe_audio.sh STT da file audio
-├── node-red/              ← flows git-tracked
+├── node-red/              ← flows git-tracked (vive su OPS dall'8 agosto 2026)
 │   └── flows.json         flussi principali (copia del live)
-├── docs/                  ← contratti e protocolli (discovery-protocol.md, installation-touring.md)
-├── mosquitto/             config broker MQTT
-└── docker-compose.yaml    servizi Docker (mosquitto, openhab, ollama, qdrant)
+├── esp/sim/               ← simulatore "mattone" (Casa Zero), protocollo Pi-compatibile
+├── docs/                  ← contratti e protocolli — architettura.md è la mappa
+│                            di sistema completa, discovery-protocol.md il dettaglio
+│                            fallback rete, installation-touring.md le macchine touring
+├── mosquitto/             config broker MQTT (resta sempre su Core)
+└── docker-compose.yaml    servizi Docker (mosquitto, openhab, qdrant — Ollama gira
+                             solo su OPS dal 10/8, il container su Core resta fermo)
 ```
 
 **D: drive** (runtime, non in git — modelli, venv, servizi con dati propri):
@@ -50,29 +71,43 @@ core-node-0/
 
 ## Architettura generale
 
+Dall'8 agosto 2026 Node-RED (orchestrazione, brain, Device Registry) gira
+su **OPS** (Windows, monitor touch di produzione), non più su Core — il
+broker MQTT, Ollama/Qdrant/OpenHAB e la voce locale restano su **Core**.
+Pi, OPS e le istanze TouchDesigner sono tutti client alla pari del broker.
+Diagramma completo e dettagliato in `docs/architettura.md` §1; qui solo
+la vista rapida:
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                     RASPBERRY PI (uno per stanza)               │
-│                                                                 │
-│  [Camera] → pi/yolo         → gaia/{stanza}/frame              │
-│  [Camera] → pi/mediapipe    → gaia/mediapipe/pose              │
-│  [Mic]    → pi/voice        → gaia/voice/command/{stanza}      │
-│                                                                 │
-│  pi/agent: gestisce enable/disable servizi via MQTT OTA         │
-└─────────────────────────────┬───────────────────────────────────┘
+│                     RASPBERRY PI (uno per stanza)                │
+│                                                                    │
+│  [Camera] → pi/yolo         → gaia/{stanza}/frame                │
+│  [Camera] → pi/mediapipe    → gaia/mediapipe/pose                │
+│  [Mic]    → pi/voice        → gaia/voice/command/{stanza}        │
+│  pi/herbarium · kiosk · livestream · mediaplayer                  │
+│                                                                    │
+│  pi/agent: gestisce enable/disable servizi via MQTT OTA,           │
+│    fallback LAN→Tailscale se fuori dalla LAN di Core               │
+└─────────────────────────────┬──────────────────────────────────────┘
                               │ MQTT
-┌─────────────────────────────▼───────────────────────────────────┐
-│                     MINIPC (192.168.1.142)                      │
-│                                                                 │
-│  [Mic] minipc/script/gaia_listener.py                          │
-│        → gaia/voice/command/minipc                             │
-│  [Camera] /media/core/D/gaia-vision/main.py                   │
-│        → gaia/{camera_name}/frame                              │
-│                                                                 │
-│  Node-RED: orchestrazione, brain, intent, TTS, Telegram        │
-│  Ollama: LLM locale          Qdrant: memoria episodica         │
-│  OpenHAB: luci/sensori       Piper: TTS italiano               │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────▼──────────────────────────────────────┐
+│                     OPS — Windows (192.168.1.240)                   │
+│                                                                      │
+│  Node-RED :1880 — Device Registry, brain, web statico (gaia-web)    │
+│  ops/agent — camera/yolo/mediapipe/voice/kiosk + TouchDesigner       │
+│    (DMX/Herbarium/Yolo, un solo progetto alla volta) + Ollama        │
+└─────────────────────────────┬──────────────────────────────────────┘
+                              │ MQTT
+┌─────────────────────────────▼──────────────────────────────────────┐
+│                     CORE — miniPC (192.168.1.142)                   │
+│                                                                      │
+│  mosquitto MQTT :1883/:9001 — broker, sistema nervoso                │
+│  [Mic] minipc/script/gaia_listener.py → gaia/voice/command/minipc    │
+│  Qdrant: memoria episodica    OpenHAB: luci/sensori Hue              │
+│  gaia_admin.py :8765          gaia-tccm.service: TCC M (Sennheiser)  │
+│  Piper: TTS italiano          (Ollama: solo su OPS dal 10/8/2026)    │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -81,19 +116,23 @@ core-node-0/
 
 | Componente | Tecnologia | Ruolo |
 |---|---|---|
-| Node-RED | JavaScript | Orchestrazione flussi (presenza, visione, chat, TTS, memoria, Telegram) |
+| Node-RED | JavaScript (su OPS dall'8/8/2026) | Orchestrazione flussi (presenza, visione, chat, TTS, memoria, Telegram, Device Registry) |
 | pi/yolo | Python (ultralytics YOLO11) | Rilevamento persone/oggetti → `gaia/{stanza}/frame` |
 | pi/mediapipe | Python (MediaPipe) | Pose, gesture, emozioni → `gaia/mediapipe/pose` |
 | pi/voice | Python (openWakeWord + Whisper + Piper) | Wakeword → STT → `gaia/voice/command/{stanza}` |
-| pi/agent | Python (paho-mqtt) | Daemon Pi: gestisce start/stop servizi via MQTT |
+| pi/agent | Python (paho-mqtt) | Daemon Pi: gestisce start/stop servizi via MQTT, fallback LAN→Tailscale |
+| ops/agent | Python (paho-mqtt) | Daemon OPS: stesso protocollo di pi/agent + TouchDesigner (DMX/Herbarium/Yolo) |
+| TouchDesigner (Mac + OPS) | gaia_device_agent nativo | PatchDeck (+DMX integrato) · ControllerV7 · DMX · Herbarium · TD Gaia — `docs/architettura.md` §3 |
+| Gaia VJ | Node-RED (`vj_mood_fn`) | Mood → palette DMX / clip PatchDeck in autonomia — `docs/architettura.md` §2.3 |
+| gaia-tccm | Python (SSCv2 HTTPS/SSE) | TCC M Sennheiser — mic a soffitto multi-stanza, beam azimuth |
 | minipc/local_agent | Python (paho-mqtt) | Agente locale miniPC (test OTA + Pi Manager senza Pi fisico) |
 | gaia_listener | Python (Whisper + resemblyzer) | Wakeword miniPC "Gaia" → STT → speaker ID → `gaia/voice/command/minipc` |
 | Piper TTS | Binary (it_IT-paola-medium) | Sintesi vocale → `minipc/say.sh` |
-| Ollama | LLM locale (qwen2.5:3b) | Risposte e pensieri spontanei |
-| Qdrant | Vector DB | Memoria episodica a lungo termine |
-| OpenHAB | Java (MQTT) | Luci Hue, sensori temperatura/luminosità |
+| Ollama | LLM locale (qwen2.5:3b) | Risposte e pensieri spontanei — **solo su OPS** dal 10/8/2026 (Core più lento, container fermato apposta) |
+| Qdrant | Vector DB (Core) | Memoria episodica a lungo termine |
+| OpenHAB | Java (MQTT, Core) | Luci Hue, sensori temperatura/luminosità |
 | Telegram Bot | node-red-contrib-telegrambot | Allarmi, comandi `/stato`, chat remota |
-| Three.js | JavaScript (WebGL) | Render 3D avatar, piante, luci |
+| Three.js | JavaScript (WebGL) | Render 3D avatar, piante, luci, device TD/installation |
 
 ---
 
@@ -234,38 +273,49 @@ journalctl -u gaia-listener -f
 
 ## Node-RED — sincronizzazione flows
 
-Node-RED usa `/home/core/.node-red/flows.json`. Il repo tiene una copia in `node-red/flows.json`.
+**Dall'8 agosto 2026 Node-RED gira su OPS** (container Docker
+`gaia-nodered-test`, repo montato allo stesso path assoluto Linux di
+Core), non più localmente su Core — vedi `docs/architettura.md` §1. Il
+repo tiene la copia sorgente in `node-red/flows.json`; il deploy verso
+OPS **passa sempre da `scripts/deploy_ops_nodered.sh`**, mai da un
+copia-incolla manuale: lo script rigenera ad ogni esecuzione la patch
+degli IP (broker/OpenHAB/memory → `192.168.1.142`, necessaria perché lo
+stesso `flows.json` gira su una macchina diversa da Core) prima di
+pubblicarlo via l'API `/flows` — un deploy della copia non patchata ha
+disconnesso il broker in produzione per decine di secondi, tre volte,
+prima che questo script esistesse.
 
 ```bash
-# Esporta da NR verso repo (dopo modifiche nell'editor)
-cp /home/core/.node-red/flows.json ~/core-node-0/node-red/flows.json
+# Deploy repo -> OPS (unico modo corretto)
+bash scripts/deploy_ops_nodered.sh
 
-# Importa da repo verso NR + riavvia
-cp ~/core-node-0/node-red/flows.json /home/core/.node-red/flows.json
-pkill -f node-red && node-red --userDir /home/core/.node-red &
+# Deploy repo -> web statico su OPS (gaia-web)
+bash scripts/deploy_ops_web.sh
+
+# Deploy pi/{yolo,mediapipe,voice,camera,agent} -> OTA servito da OPS
+bash scripts/deploy_ops_pi.sh
 ```
 
-**`kill -HUP` NON funziona qui** (verificato 2026-07-03): questo Node-RED non intercetta SIGHUP,
-quindi lo termina invece di ricaricare i flow — va sempre riavviato per intero con il comando
-sopra. Non è un problema per lo stato: `Load Brain at StartUp` (inject `once` su tab Inject)
-ricarica `gaiaBrain` da `/home/core/gaia/brain.json` ad ogni avvio — sopravvivono
-rooms/presence/people/lights/plants/sensors/mood/lifeIndex/gamification/automations; si
-azzerano invece diary/events/thoughts/memories/chatLog/emotions/gestures/sessions (comportamento
-normale ad ogni riavvio, non solo quando il processo muore per errore).
+`Load Brain at StartUp` (inject `once` su tab Inject) ricarica `gaiaBrain`
+da `brain.json` ad ogni avvio del container — sopravvivono
+rooms/presence/people/lights/plants/sensors/mood/lifeIndex/gamification/automations;
+si azzerano invece diary/events/thoughts/memories/chatLog/emotions/gestures/sessions
+(comportamento normale ad ogni riavvio, non solo quando il processo muore per errore).
 
 ---
 
 ## Avvio sistema completo
 
 ```bash
-# Servizi Docker (mosquitto, openhab, ollama, qdrant)
+# Servizi Docker su Core (mosquitto, openhab, qdrant — Ollama resta fermo qui,
+# gira solo su OPS dal 10/8/2026)
 docker compose up -d
 
-# Node-RED (se non parte automaticamente)
-node-red --userDir /home/core/.node-red &
+# Node-RED gira in Docker su OPS (container gaia-nodered-test), non su Core —
+# se non risponde su :1880, va riavviato/verificato LÌ, non qui
 
-# Verifica
-systemctl status gaia-listener
+# Verifica servizi Core
+systemctl status gaia-listener gaia-tccm
 journalctl -u gaia-listener -f
 ```
 
