@@ -678,12 +678,14 @@ button.small{padding:3px 9px;font-size:.78rem;margin:0}
   <div class="card">
     <h2>Gaia VJ — patch PatchDeck ammesse</h2>
     <p style="font-size:.82rem;color:var(--muted);margin-bottom:10px">
-      Elenco delle patch (1-38) tra cui Gaia può scegliere per i deck A/B — utile per limitare
+      Elenco delle patch tra cui Gaia può scegliere per i deck A/B — utile per limitare
       la scelta a quelle preparate per l'occasione (es. una demo) invece di pescare tra tutte
-      e 38. Numeri separati da virgola, es. "3, 7, 12, 18". Vuoto = tutte.
+      quelle disponibili. Il numero totale segue la matrice reale del device (non più fisso
+      a 38 — vedi <span id="vj-clips-available">…</span>). Numeri separati da virgola, es.
+      "3, 7, 12, 18". Vuoto = tutte.
     </p>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <input type="text" id="vj-clips" placeholder="vuoto = tutte le 38" style="flex:1;min-width:200px;padding:6px">
+      <input type="text" id="vj-clips" placeholder="vuoto = tutte quelle disponibili" style="flex:1;min-width:200px;padding:6px">
       <button onclick="saveVjClips()">Salva</button>
     </div>
     <div id="vj-clips-msg" class="msg"></div>
@@ -1542,6 +1544,10 @@ async function loadVjClips() {
     if (!r.ok) throw new Error();
     const d = await r.json();
     document.getElementById('vj-clips').value = (d.clips || []).join(', ');
+    const avail = d.available || [];
+    document.getElementById('vj-clips-available').textContent = avail.length
+      ? `oggi ${avail.length}: ${avail[0]}-${avail[avail.length - 1]}`
+      : 'nessun device visto ancora';
   } catch {
     setMsg('vj-clips-msg', 'Errore di connessione', 'err');
   }
@@ -3090,6 +3096,18 @@ function pmBuildCard(id, d) {
         ${d.services?.livestream?.endpoints?.stream||`http://${d.ip}:8000/stream.ogg`}
       </div>
     </div>`:''}
+    ${d.role==='installation'?`<div>
+      <div class="pm-section-label">⏻ Spegnimento programmato</div>
+      <div class="pm-rename-row">
+        <input type="time" class="pm-inp-shutdownat" value="${pmEsc(d.shutdown_at||'')}" style="flex:1">
+        <button class="pm-btn blue pm-btn-shutdownat" style="width:auto;padding:0 14px">💾 Salva</button>
+        ${d.shutdown_at?`<button class="pm-btn gray pm-btn-shutdownat-clear" style="width:auto;padding:0 14px">✕ Disattiva</button>`:''}
+      </div>
+      <div style="font-size:.75rem;color:var(--muted);margin-top:4px">
+        Rete di sicurezza software (watchdog interno dell'agent, non un secondo
+        Task Scheduler) — orario locale della macchina. Vuoto = disattivato.
+      </div>
+    </div>`:''}
     <div class="pm-card-actions">
       ${svcKeys.includes('livestream') ? `<button class="pm-btn blue" onclick="window.open('${d.services?.livestream?.endpoints?.stream||`http://${d.ip}:8000/stream.ogg`}','_blank')">🔊 Ascolta stream</button>` : ''}
       ${d.capabilities?.camera && d.stanza ? `<button class="pm-btn blue pm-btn-welcome" onclick="window.open('http://${location.hostname}:1880/welcome.html?cam=${encodeURIComponent(d.ip||'')}&room=${encodeURIComponent(d.stanza)}','_blank')">🖥 Apri Welcome</button>` : ''}
@@ -3208,6 +3226,20 @@ function pmAttachEvents(id, card) {
     _pmClient.publish(`gaia/livestream/${stanza}/command`, JSON.stringify({mic_device: sel.value}));
     pmLog('out', `LiveStream ${stanza}: microfono → ${sel.value}`);
     liveMicBtn.textContent = '✓'; setTimeout(() => { liveMicBtn.textContent = 'Applica'; }, 1200);
+  };
+  const shutdownAtBtn = card.querySelector('.pm-btn-shutdownat');
+  if (shutdownAtBtn) shutdownAtBtn.onclick = () => {
+    const inp = card.querySelector('.pm-inp-shutdownat');
+    const val = inp?.value || null;
+    pmSend(id, {action:'set_config', shutdown_at: val});
+    pmLog('out', `${id}: spegnimento programmato → ${val || 'disattivato'}`);
+    shutdownAtBtn.textContent = '✓'; setTimeout(() => { shutdownAtBtn.textContent = '💾 Salva'; }, 1200);
+  };
+  const shutdownAtClearBtn = card.querySelector('.pm-btn-shutdownat-clear');
+  if (shutdownAtClearBtn) shutdownAtClearBtn.onclick = () => {
+    card.querySelector('.pm-inp-shutdownat').value = '';
+    pmSend(id, {action:'set_config', shutdown_at: null});
+    pmLog('out', `${id}: spegnimento programmato disattivato`);
   };
   card.querySelector('.pm-btn-status').onclick  = () => pmSend(id, {action:'status'});
   card.querySelector('.pm-btn-reboot').onclick  = () => { if(confirm(`Riavviare ${id}?`)) pmSend(id, {action:'reboot'}); };
