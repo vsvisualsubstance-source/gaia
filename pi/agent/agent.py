@@ -288,9 +288,27 @@ def restart_service(key: str) -> bool:
 _mqtt = mqtt.Client(client_id=f"gaia-agent-{config.DEVICE_ID}")
 _mqtt.reconnect_delay_set(min_delay=2, max_delay=30)
 
+# Ri-scoperta automatica dopo disconnessione prolungata (2026-09-19, bug
+# reale trovato due volte dal vivo — Corridoio e installation-silver-filoq:
+# discovery.discover() gira UNA SOLA VOLTA all'avvio del processo; se la
+# rete cambia sotto il processo già vivo (Pi spostato di rete, o la prima
+# scelta si rivela irraggiungibile solo al connect vero, es. dopo un
+# riavvio reale), paho continua a ritentare lo STESSO host morto in eterno
+# col solo backoff di reconnect_delay_set, mai una nuova discovery — unico
+# modo per uscirne era riavviare l'agent a mano. Qui: se resta disconnesso
+# più di RECOVERY_THRESHOLD secondi, il loop principale (main(), già gira
+# ogni 1s) ri-esegue la discovery e ripunta il client su un host nuovo se
+# diverso da quello attuale.
+_mqtt_connected = False
+_last_disconnect_ts = time.time()
+_next_rediscovery_ts = 0
+RECOVERY_THRESHOLD = 90
+
 
 def _on_connect(client, userdata, flags, rc, properties=None):
+    global _mqtt_connected
     if rc == 0:
+        _mqtt_connected = True
         client.subscribe(f"gaia/device/{config.DEVICE_ID}/command")
         client.subscribe("gaia/device/all/command")
         print(f"[MQTT] Connesso — device_id: {config.DEVICE_ID}")
@@ -300,8 +318,41 @@ def _on_connect(client, userdata, flags, rc, properties=None):
 
 
 def _on_disconnect(client, userdata, rc, properties=None):
+    global _mqtt_connected, _last_disconnect_ts
+    was_connected = _mqtt_connected
+    _mqtt_connected = False
+    if was_connected:
+        _last_disconnect_ts = time.time()
     if rc != 0:
         print(f"[MQTT] Disconnesso (rc={rc})")
+
+
+def _maybe_rediscover():
+    """Chiamata ad ogni giro del loop principale — vedi commento sopra
+    _mqtt_connected. No-op quasi sempre (early return), costo trascurabile."""
+    global _next_rediscovery_ts
+    if _mqtt_connected:
+        return
+    now = time.time()
+    if now - _last_disconnect_ts < RECOVERY_THRESHOLD or now < _next_rediscovery_ts:
+        return
+    _next_rediscovery_ts = now + RECOVERY_THRESHOLD
+    print(f"[Agent] Disconnesso da oltre {RECOVERY_THRESHOLD}s, ri-eseguo discovery...")
+    try:
+        info = discovery.discover(cached_host=config.MQTT_HOST)
+    except Exception as e:
+        print(f"[Agent] Ri-discovery fallita: {e}")
+        return
+    if info and info.get("mqtt_host") and info["mqtt_host"] != config.MQTT_HOST:
+        print(f"[Agent] Nuovo host trovato: {info['mqtt_host']} (era {config.MQTT_HOST})")
+        config.MQTT_HOST = info["mqtt_host"]
+        config.MQTT_PORT = int(info.get("mqtt_port", config.MQTT_PORT))
+        try:
+            _mqtt.connect_async(config.MQTT_HOST, config.MQTT_PORT, 60)
+        except Exception as e:
+            print(f"[Agent] connect_async fallita: {e}")
+    else:
+        print("[Agent] Ri-discovery: nessun host migliore trovato, continuo a ritentare quello attuale")
 
 
 def _on_message(client, userdata, msg):
@@ -695,6 +746,7 @@ def main():
         if now - last_heartbeat >= config.HEARTBEAT_INTERVAL:
             _publish_status()
             last_heartbeat = now
+        _maybe_rediscover()
         shutdown_at = _device_config.get("shutdown_at")
         if shutdown_at:
             nowdt = datetime.now()

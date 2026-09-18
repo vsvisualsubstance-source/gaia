@@ -82,6 +82,23 @@ CONFIG_FILE = os.path.join(_DIR, "agent_config.json")
 
 MQTT_HOST = os.getenv("MQTT_HOST", "192.168.1.142")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
+_mqtt = None
+
+# Ri-scoperta automatica dopo disconnessione prolungata (2026-09-19, bug
+# reale trovato due volte dal vivo -- Corridoio su pi/agent.py e proprio
+# questa macchina dopo un riavvio reale: discovery.discover() gira UNA SOLA
+# VOLTA all'avvio del processo; se la prima scelta si rivela irraggiungibile
+# solo al connect vero (es. la LAN risultava "probabile" ma poi il socket
+# fallisce con rete non raggiungibile), paho continua a ritentare lo STESSO
+# host morto in eterno col solo backoff di reconnect_delay_set, mai una
+# nuova discovery -- unico modo per uscirne era riavviare l'agent a mano.
+# Qui: se resta disconnesso più di RECOVERY_THRESHOLD secondi, il loop
+# principale (main(), già gira ogni 1s) ri-esegue la discovery e ripunta il
+# client su un host nuovo se diverso da quello attuale.
+_mqtt_connected = False
+_last_disconnect_ts = time.time()
+_next_rediscovery_ts = 0
+RECOVERY_THRESHOLD = 90
 HEARTBEAT_INTERVAL = 30
 
 # Watchdog — riavvia da solo un servizio "enabled" che risulta caduto,
@@ -417,7 +434,9 @@ def _publish_profile(status_payload: dict):
 
 
 def _on_connect(client, userdata, flags, reason_code, properties=None):
+    global _mqtt_connected
     if reason_code == 0:
+        _mqtt_connected = True
         with _cfg_lock:
             device_id = _cfg.get("device_id")
         client.subscribe(f"gaia/device/{device_id}/command")
@@ -426,6 +445,44 @@ def _on_connect(client, userdata, flags, reason_code, properties=None):
         _publish_status()
     else:
         print(f"[MQTT] Connessione fallita rc={reason_code}")
+
+
+def _on_disconnect(client, userdata, reason_code, properties=None):
+    global _mqtt_connected, _last_disconnect_ts
+    was_connected = _mqtt_connected
+    _mqtt_connected = False
+    if was_connected:
+        _last_disconnect_ts = time.time()
+    if reason_code != 0:
+        print(f"[MQTT] Disconnesso (rc={reason_code})")
+
+
+def _maybe_rediscover():
+    """Chiamata ad ogni giro del loop principale in main() -- vedi commento
+    sopra RECOVERY_THRESHOLD. No-op quasi sempre (early return)."""
+    global _next_rediscovery_ts, MQTT_HOST, MQTT_PORT
+    if _mqtt_connected or _mqtt is None:
+        return
+    now = time.time()
+    if now - _last_disconnect_ts < RECOVERY_THRESHOLD or now < _next_rediscovery_ts:
+        return
+    _next_rediscovery_ts = now + RECOVERY_THRESHOLD
+    print(f"[Agent] Disconnesso da oltre {RECOVERY_THRESHOLD}s, ri-eseguo discovery...")
+    try:
+        info = discovery.discover(cached_host=MQTT_HOST)
+    except Exception as e:
+        print(f"[Agent] Ri-discovery fallita: {e}")
+        return
+    if info and info.get("mqtt_host") and info["mqtt_host"] != MQTT_HOST:
+        print(f"[Agent] Nuovo host trovato: {info['mqtt_host']} (era {MQTT_HOST})")
+        MQTT_HOST = info["mqtt_host"]
+        MQTT_PORT = int(info.get("mqtt_port", MQTT_PORT))
+        try:
+            _mqtt.connect_async(MQTT_HOST, MQTT_PORT, 60)
+        except Exception as e:
+            print(f"[Agent] connect_async fallita: {e}")
+    else:
+        print("[Agent] Ri-discovery: nessun host migliore trovato, continuo a ritentare quello attuale")
 
 
 def _on_message(client, userdata, msg):
@@ -671,6 +728,7 @@ def main():
 
     _mqtt = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"gaia-installation-agent-{_cfg['device_id']}")
     _mqtt.on_connect = _on_connect
+    _mqtt.on_disconnect = _on_disconnect
     _mqtt.on_message = _on_message
     # Senza questo, il reconnect automatico di loop_start() dopo la
     # connessione iniziale si e' visto bloccarsi indefinitamente al primo
@@ -702,6 +760,7 @@ def main():
         if time.time() - last_hb >= HEARTBEAT_INTERVAL:
             _publish_status()
             last_hb = time.time()
+        _maybe_rediscover()
         time.sleep(1)
 
     _mqtt.loop_stop()
