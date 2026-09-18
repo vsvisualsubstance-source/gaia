@@ -8,11 +8,16 @@ Responsabilità:
   - Pubblica heartbeat ogni HEARTBEAT_INTERVAL secondi
   - Gestisce OTA per aggiornamenti file singoli
   - Auto-rileva periferiche (camera, microfono)
+  - Spegnimento programmato opzionale (shutdown_at "HH:MM" in device.json,
+    2026-09-19, stesso principio di minipc/installation/agent.py) -- un Pi
+    spento così NON ha risveglio remoto, si riaccende solo staccando e
+    riattaccando l'alimentazione fisica.
 """
 import glob
 import hashlib
 import json
 import os
+import re
 import signal
 import subprocess
 import time
@@ -55,7 +60,16 @@ _DEFAULT_CONFIG = {
     "stanza":    config.DEFAULT_STANZA,
     "services": {
         k: {"enabled": False} for k in config.SERVICE_MAP if k != "camera"
-    }
+    },
+    # Spegnimento programmato (2026-09-19, stesso principio di
+    # minipc/installation/agent.py, portato qui su richiesta esplicita per
+    # tutti i Pi): "HH:MM" locale o None = disattivato. ATTENZIONE diversa
+    # dalla macchina Windows: un Pi spento via `sudo poweroff` NON ha un
+    # equivalente del BIOS RTC wake usato là -- si riaccende SOLO staccando
+    # e riattaccando l'alimentazione fisica, stesso limite gia' noto
+    # dell'azione "shutdown" diretta via MQTT (vedi pi/CLAUDE.md). Usare con
+    # cautela su un Pi non facilmente raggiungibile di persona.
+    "shutdown_at": None,
 }
 
 
@@ -315,6 +329,7 @@ def _publish_status():
         "capabilities": _capabilities,
         "services":     all_statuses(),
         "config":       _device_config.get("services", {}),
+        "shutdown_at":  _device_config.get("shutdown_at"),
         "uptime":       _get_uptime(),
         "ts":           int(time.time() * 1000),
     }
@@ -351,6 +366,31 @@ def _publish_profile(status_payload: dict):
     }
     _mqtt.publish(f"gaia/devices/{config.DEVICE_ID}/profile",
                   json.dumps(profile), retain=True)
+
+
+def _notify_telegram(text: str):
+    """Stesso topic/pattern di minipc/installation/agent.py — un publish su
+    gaia/notify/telegram, consumato dal dispatcher Telegram esistente. Qui
+    ancora più importante che su una macchina Windows: un Pi spento non ha
+    un risveglio remoto, l'unico avviso possibile è PRIMA che succeda."""
+    try:
+        _mqtt.publish("gaia/notify/telegram", json.dumps({"text": text}))
+    except Exception as e:
+        print(f"[Agent] Errore notifica Telegram: {e}")
+
+
+def _do_shutdown(reason: str):
+    """Unico punto che spegne davvero il Pi -- usato sia dal comando MQTT
+    diretto sia dal trigger programmato (vedi main(), shutdown_at) cosi' i
+    due percorsi restano coerenti, stesso schema di minipc/installation/."""
+    print(f"[Agent] Shutdown ({reason}) — eseguo tra 2s.")
+    _notify_telegram(
+        f"🔌 Shutdown ({reason}) sul Pi \"{_device_config.get('stanza','?')}\" — "
+        "in corso. Si riaccende SOLO staccando/riattaccando l'alimentazione."
+    )
+    _publish_status()
+    time.sleep(2)
+    subprocess.run(["sudo", "poweroff"])
 
 
 def _get_ip() -> str:
@@ -410,6 +450,14 @@ def _handle_command(cmd: dict):
                     stanza_changed = True
             if "name" in cmd:
                 _device_config["name"] = cmd["name"]
+            if "shutdown_at" in cmd:
+                val = cmd["shutdown_at"]
+                if val in (None, ""):
+                    _device_config["shutdown_at"] = None
+                elif isinstance(val, str) and re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", val):
+                    _device_config["shutdown_at"] = val
+                else:
+                    print(f"[Agent] shutdown_at non valido (atteso HH:MM o null): {val!r}, ignorato")
             if "services" in cmd:
                 for svc, val in cmd["services"].items():
                     enabled = val if isinstance(val, bool) else val.get("enabled", False)
@@ -437,9 +485,7 @@ def _handle_command(cmd: dict):
         return
 
     elif action == "shutdown":
-        _publish_status()
-        time.sleep(2)
-        subprocess.run(["sudo", "poweroff"])
+        _do_shutdown("richiesto da remoto")
         return
 
     elif action == "ota_update":
@@ -643,11 +689,19 @@ def main():
     _mqtt.loop_start()
 
     last_heartbeat = 0
+    last_scheduled_shutdown_date = None
     while _running:
         now = time.time()
         if now - last_heartbeat >= config.HEARTBEAT_INTERVAL:
             _publish_status()
             last_heartbeat = now
+        shutdown_at = _device_config.get("shutdown_at")
+        if shutdown_at:
+            nowdt = datetime.now()
+            today = nowdt.strftime("%Y-%m-%d")
+            if nowdt.strftime("%H:%M") == shutdown_at and last_scheduled_shutdown_date != today:
+                last_scheduled_shutdown_date = today
+                _do_shutdown(f"programmato {shutdown_at}")
         time.sleep(1)
 
     _mqtt.loop_stop()

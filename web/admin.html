@@ -3096,7 +3096,7 @@ function pmBuildCard(id, d) {
         ${d.services?.livestream?.endpoints?.stream||`http://${d.ip}:8000/stream.ogg`}
       </div>
     </div>`:''}
-    ${d.role==='installation'?`<div>
+    ${(d.role==='installation'||d.role==='pi')?`<div>
       <div class="pm-section-label">⏻ Spegnimento programmato</div>
       <div class="pm-rename-row">
         <input type="time" class="pm-inp-shutdownat" value="${pmEsc(d.shutdown_at||'')}" style="flex:1">
@@ -3104,8 +3104,9 @@ function pmBuildCard(id, d) {
         ${d.shutdown_at?`<button class="pm-btn gray pm-btn-shutdownat-clear" style="width:auto;padding:0 14px">✕ Disattiva</button>`:''}
       </div>
       <div style="font-size:.75rem;color:var(--muted);margin-top:4px">
-        Rete di sicurezza software (watchdog interno dell'agent, non un secondo
-        Task Scheduler) — orario locale della macchina. Vuoto = disattivato.
+        ${d.role==='pi'
+          ? '⚠️ Un Pi spento così NON si riaccende da remoto — solo staccando/riattaccando l\'alimentazione. Orario locale del device, vuoto = disattivato.'
+          : 'Rete di sicurezza software (watchdog interno dell\'agent, non un secondo Task Scheduler) — orario locale della macchina. Vuoto = disattivato.'}
       </div>
     </div>`:''}
     <div class="pm-card-actions">
