@@ -268,20 +268,47 @@ def _svc_status(key: str) -> str:
     return "active" if _is_running(key) else "inactive"
 
 
+# Webcam esclusiva (stesso principio di CAMERA_CONSUMERS/_sync_camera sopra):
+# fermare un consumer non libera subito l'hardware, il driver/OS impiega un
+# istante in piu' a rilasciarlo DOPO che il processo e' gia' morto per
+# davvero (p.wait() gia' confermato). Trovato dal vivo 2026-09-19 (evento
+# 25/9): avviare touchdesigner_yolo/herbarium subito dopo aver fermato
+# yolo/mediapipe nativi dava un conflitto webcam in TD "come se il servizio
+# gaia non si spegnesse in tempo" -- perche' letteralmente non faceva in
+# tempo, il process kill e il rilascio hardware non sono lo stesso istante.
+# Vale in ENTRAMBE le direzioni: anche tornare da un .toe che ha la webcam
+# aperta a yolo/mediapipe nativi ha lo stesso identico problema, quindi
+# l'insieme copre sia i consumer nativi sia i due progetti TD.
+CAMERA_RELEASE_DELAY = 2.0
+CAMERA_HOLDING_SERVICES = set(CAMERA_CONSUMERS) | {"camera", "touchdesigner_yolo", "touchdesigner_herbarium"}
+
+
 def _stop_conflicts(key: str):
     """Progetti TD che vanno uno alla volta sulla stessa istanza
     TouchDesigner (es. touchdesigner/touchdesigner_herbarium su OPS):
     dichiarati in "conflicts" nel manifest, fermati prima di avviarne uno
     nuovo -- stesso meccanismo gia' in minipc/tdstudio/agent.py, portato
     qui perche' prima esisteva un solo slot TD per macchina (nessun
-    concetto di conflitto)."""
+    concetto di conflitto). Include anche i consumer camera nativi
+    (yolo/mediapipe/camera, 2026-09-19) -- un progetto TD che apre la
+    webcam direttamente e' in conflitto con loro tanto quanto con un altro
+    progetto TD, stesso hardware esclusivo."""
     defn = _SERVICE_DEFS.get(key, {})
+    stopped_camera_consumer = False
     for other in defn.get("conflicts", []):
         if other in _SERVICE_DEFS and _is_running(other):
             print(f"[Agent] {key} e' in conflitto con {other}, lo fermo prima")
             _stop_service(other)
             with _cfg_lock:
                 _cfg.setdefault("services", {}).setdefault(other, {})["enabled"] = False
+            if other in CAMERA_HOLDING_SERVICES:
+                stopped_camera_consumer = True
+    with _cfg_lock:
+        services_cfg = dict(_cfg.get("services", {}))
+    _sync_camera(services_cfg)
+    if stopped_camera_consumer:
+        print(f"[Agent] Attendo {CAMERA_RELEASE_DELAY}s per il rilascio hardware della webcam...")
+        time.sleep(CAMERA_RELEASE_DELAY)
 
 
 def _start_service(key: str) -> bool:
