@@ -92,6 +92,7 @@
       "cwd": "C:\\Program Files\\Derivative\\TouchDesigner\\bin",
       "check_script": false,
       "conflicts": ["touchdesigner_herbarium", "touchdesigner_yolo"],
+      "_nota_conflicts": "DMX resta in mutua esclusione con entrambi -- solo herbarium/yolo possono girare insieme (2026-09-19, evento 25/9)",
       "_nota": "Path/progetto confermati dal vivo 2026-09-01 (PID reale ispezionato via Get-CimInstance). check_script:false perche' l'ultimo elemento di cmd non e' l'eseguibile ma un argomento (il .toe) -- stesso pattern di 'kiosk' sopra: e' l'eseguibile stesso ad essere lanciato, non uno script Python nella cwd dell'agent. Da' un vero controllo start/stop/restart ('chiudi/riapri TD') su questa istanza -- prima non esisteva alcun modo per farlo da remoto, solo i toggle granulari interni (dmx_a_kick_enable, ecc, pubblicati DA TD stesso via td_internal_agent.py con role:'touchdesigner', family:'dmx', device_id 'td-dmx-ops') che sono un'altra cosa e restano nascosti da Pi Manager per design (vedi pmIsHiddenFromGrid in web/admin.html) -- questo servizio invece vive dentro il device ops-silvermini2 (role:'ops'), quindi appare regolarmente in Pi Manager. Nessun watchdog automatico (ops/agent.py non ne ha, per design -- solo installation/agent.py ce l'ha, macchina non presidiata): se TD crasha resta giu' finche' non lo si riavvia a mano da Pi Manager/Telegram, stesso comportamento di kiosk/mediaplayer. 'conflicts' aggiunto 2026-09-14 insieme a touchdesigner_herbarium (poi touchdesigner_yolo lo stesso giorno): un solo .toe alla volta sulla stessa istanza TouchDesigner.exe."
     },
     "touchdesigner_herbarium": {
@@ -101,7 +102,8 @@
       ],
       "cwd": "C:\\Program Files\\Derivative\\TouchDesigner\\bin",
       "check_script": false,
-      "conflicts": ["touchdesigner", "touchdesigner_yolo"],
+      "conflicts": ["touchdesigner"],
+      "_nota_conflicts": "NON piu' in conflitto con touchdesigner_yolo (2026-09-19, evento 25/9: girano insieme, richiesto esplicitamente). Resta in conflitto solo con DMX. NON ANCORA VERIFICATO DAL VIVO se due processi TouchDesigner.exe separati (uno per herbarium, uno per yolo) reggono insieme sulle risorse di questa macchina -- testare prima del 25/9, non dato per scontato.",
       "_nota": "Path verificato dal vivo 2026-09-14 via `Get-ChildItem -Recurse` su C:\\Users\\vsvis\\Documents\\td (la cartella contiene anche un secondo .toe piu' vecchio, 'vst1.357+videoultimoooo1.2.toe', non e' questo). Stesso pattern di 'touchdesigner' (DMX) sopra -- chiave separata perche' e' un .toe diverso sulla stessa istanza TouchDesigner.exe, mai 'herbarium' da sola: quel nome e' gia' usato dal servizio gaia-herbarium sui Pi (AV Herbarium, tutt'altra cosa) ed e' nel set TOGGLEABLE di Telegram in node-red/flows.json -- riusarlo qui avrebbe fatto rispondere anche questo device a '/attiva herbarium' insieme ai Pi."
     },
     "touchdesigner_yolo": {
@@ -111,7 +113,8 @@
       ],
       "cwd": "C:\\Program Files\\Derivative\\TouchDesigner\\bin",
       "check_script": false,
-      "conflicts": ["touchdesigner", "touchdesigner_herbarium"],
+      "conflicts": ["touchdesigner"],
+      "_nota_conflicts": "NON piu' in conflitto con touchdesigner_herbarium (2026-09-19, evento 25/9: girano insieme, richiesto esplicitamente) -- resta in conflitto solo con DMX.",
       "_nota": "Path verificato dal vivo 2026-09-14 via `Get-ChildItem -Recurse` su C:\\Users\\vsvis\\Documents\\td: il .toe giusto e' dentro la sottocartella td\\yolo\\ (Yolo.toe) -- NON il file sciolto 'Yolo_PC_Mauro.toe' nella cartella td\\ principale (progetto diverso/vecchio, altra macchina). Chiave 'touchdesigner_yolo' e non 'yolo' da sola per lo stesso motivo di touchdesigner_herbarium: 'yolo' e' gia' un servizio Python vero e proprio (pi/yolo, person/object detection) nel set TOGGLEABLE di Telegram e in questo stesso manifest -- riusarlo per il .toe avrebbe fatto rispondere entrambi i servizi allo stesso comando/nome."
     },
     "ollama": {
