@@ -83,20 +83,37 @@ _cfg        = {}
 _cfg_lock   = threading.RLock()
 _procs: dict = {}
 _procs_lock = threading.Lock()
-# RLock (non Lock semplice): serializza l'intero "controlla se gira ->
-# ferma i conflitti -> avvia" di _start_service per lo STESSO servizio, cosi'
-# due comandi 'enable' concorrenti (es. TD Gaia che manda enable piu' volte
-# ravvicinate) non passano ENTRAMBI il controllo _is_running(key) prima che
-# il primo abbia fatto in tempo a registrare il proprio Popen in _procs --
-# bug reale trovato dal vivo 2026-09-19 (evento 25/9): istanze duplicate di
-# Herbarium/Yolo TD, la finestra della race si e' allargata proprio perche'
-# _stop_conflicts ora aspetta CAMERA_RELEASE_DELAY (2s) prima di ritornare,
-# tempo in cui un secondo 'enable' per la stessa chiave vede ancora
-# _is_running(key)==False e riparte da capo. RLock (non Lock) perche'
-# _sync_camera puo' richiamare _start_service("camera") dallo STESSO thread
-# mentre siamo gia' dentro _start_service di un'altra chiave -- con un Lock
-# semplice sarebbe un deadlock certo.
-_start_service_lock = threading.RLock()
+# Lock PER-CHIAVE (non uno globale) attorno a "controlla se gira -> ferma i
+# conflitti -> avvia" di _start_service, cosi' due comandi 'enable' concorrenti
+# per la STESSA chiave (es. TD Gaia che manda 'enable' piu' volte ravvicinate)
+# non passano ENTRAMBI il controllo _is_running(key) prima che il primo abbia
+# fatto in tempo a registrare il proprio Popen -- bug reale trovato dal vivo
+# 2026-09-19 (evento 25/9): istanze duplicate di Herbarium/Yolo TD.
+#
+# Un lock GLOBALE unico (primo tentativo, poi trovato reale il problema
+# descritto sotto) serializzava anche chiavi DIVERSE senza motivo (avviare
+# touchdesigner_yolo bloccava touchdesigner_herbarium finche' non finiva, con
+# _stop_conflicts che aspetta fino a 5s per processo fermato +
+# CAMERA_RELEASE_DELAY) e soprattutto ha prodotto un DEADLOCK REALE dal vivo
+# con un burst di comandi concorrenti (disable camera/yolo/mediapipe + enable
+# di entrambi i progetti TD quasi simultanei) -- l'agent si e' bloccato per
+# oltre 25 minuti, nessun heartbeat, causa esatta non isolata con certezza.
+# Per-chiave riduce la contesa (chiavi diverse non si bloccano a vicenda) e
+# l'acquire ha comunque un timeout (vedi sotto) come rete di sicurezza finale:
+# l'agent non deve MAI piu' restare bloccato per sempre, qualunque sia la
+# causa esatta di un blocco imprevisto.
+_start_service_locks: dict = {}
+_start_service_locks_guard = threading.Lock()
+_START_LOCK_TIMEOUT = 15.0
+
+
+def _get_start_lock(key: str) -> threading.RLock:
+    with _start_service_locks_guard:
+        lock = _start_service_locks.get(key)
+        if lock is None:
+            lock = threading.RLock()
+            _start_service_locks[key] = lock
+        return lock
 # Processi orfani (istanze reali OS, non lanciate dal Popen di QUESTA
 # istanza dell'agent) rilevati e adottati -- vedi _find_os_pid/_is_running.
 _adopted_pids: dict = {}
@@ -343,7 +360,15 @@ def _start_service(key: str) -> bool:
         ok = _is_running(key)
         print(f"[Agent] {key} e' gestito esternamente, non avviabile da qui (attivo={ok})")
         return ok
-    with _start_service_lock:
+    lock = _get_start_lock(key)
+    if not lock.acquire(timeout=_START_LOCK_TIMEOUT):
+        # Rete di sicurezza (vedi commento sopra _start_service_locks): non
+        # bloccare mai per sempre, anche se la causa di fondo di una
+        # contesa lunga non e' chiara -- meglio un 'enable' che fallisce e
+        # si puo' ritentare che un agent intero bloccato.
+        print(f"[Agent] Timeout ({_START_LOCK_TIMEOUT}s) acquisendo il lock di avvio per {key}, salto")
+        return False
+    try:
         if _is_running(key):
             return True
         _stop_conflicts(key)
@@ -379,6 +404,8 @@ def _start_service(key: str) -> bool:
                 print(f"[{svc}] {line.decode(errors='replace').rstrip()}")
         threading.Thread(target=drain, args=(proc, key), daemon=True).start()
         return True
+    finally:
+        lock.release()
 
 
 def _stop_service(key: str) -> bool:
