@@ -311,7 +311,11 @@ def _svc_status(key: str) -> str:
 # aperta a yolo/mediapipe nativi ha lo stesso identico problema, quindi
 # l'insieme copre sia i consumer nativi sia i due progetti TD.
 CAMERA_RELEASE_DELAY = 2.0
-CAMERA_HOLDING_SERVICES = set(CAMERA_CONSUMERS) | {"camera", "touchdesigner_yolo", "touchdesigner_herbarium"}
+# touchdesigner_herbarium ESCLUSO apposta (2026-09-19, richiesto
+# esplicitamente): confermato dal vivo che non tocca la webcam, resta
+# sempre acceso durante l'evento 25/9 -- solo touchdesigner_yolo la apre
+# davvero.
+CAMERA_HOLDING_SERVICES = set(CAMERA_CONSUMERS) | {"camera", "touchdesigner_yolo"}
 
 
 def _stop_conflicts(key: str):

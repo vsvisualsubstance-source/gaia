@@ -22,8 +22,8 @@
         "main.py"
       ],
       "cwd": "C:\\gaia\\pi\\yolo",
-      "conflicts": ["touchdesigner_yolo", "touchdesigner_herbarium"],
-      "_nota_conflicts": "2026-09-19: tornare dai .toe (webcam aperta direttamente da TD) a yolo nativo ha lo stesso conflitto webcam nella direzione opposta -- vedi CAMERA_HOLDING_SERVICES in agent.py.",
+      "conflicts": ["touchdesigner_yolo"],
+      "_nota_conflicts": "2026-09-19: tornare dai .toe (webcam aperta direttamente da TD) a yolo nativo ha lo stesso conflitto webcam nella direzione opposta -- vedi CAMERA_HOLDING_SERVICES in agent.py. touchdesigner_herbarium rimosso lo stesso giorno (richiesto esplicitamente): non tocca la webcam, resta sempre acceso durante l'evento 25/9, nessun conflitto reale con yolo/mediapipe nativi.",
       "env_extra": {
         "HEADLESS": "1",
         "PYTHONUNBUFFERED": "1"
@@ -35,7 +35,7 @@
         "mediapipe_node.py"
       ],
       "cwd": "C:\\gaia\\pi\\mediapipe",
-      "conflicts": ["touchdesigner_yolo", "touchdesigner_herbarium"],
+      "conflicts": ["touchdesigner_yolo"],
       "env_extra": {
         "HEADLESS": "1",
         "PYTHONUNBUFFERED": "1",
@@ -105,8 +105,8 @@
       ],
       "cwd": "C:\\Program Files\\Derivative\\TouchDesigner\\bin",
       "check_script": false,
-      "conflicts": ["touchdesigner", "yolo", "mediapipe", "camera"],
-      "_nota_conflicts": "NON piu' in conflitto con touchdesigner_yolo (2026-09-19, evento 25/9: girano insieme, richiesto esplicitamente). Aggiunto conflitto con yolo/mediapipe/camera NATIVI (stesso giorno, trovato dal vivo): questo .toe apre la webcam direttamente, in conflitto con qualunque consumer nativo esattamente come con un altro progetto TD -- vedi CAMERA_RELEASE_DELAY in agent.py per il perche' serve anche una pausa dopo averli fermati, non solo fermarli.",
+      "conflicts": ["touchdesigner"],
+      "_nota_conflicts": "NON piu' in conflitto con touchdesigner_yolo (2026-09-19, evento 25/9: girano insieme, richiesto esplicitamente). Rimosso ANCHE il conflitto con yolo/mediapipe/camera NATIVI (stesso giorno, richiesto esplicitamente): questo .toe NON tocca la webcam (confermato dal vivo, nessun conflitto reale) -- resta sempre acceso durante l'evento 25/9, mai chiuso dal ciclo camera-nativa/TD-Yolo. Resta in conflitto solo con DMX (touchdesigner), unico caso in cui un solo slot TouchDesigner.exe serve davvero.",
       "_nota": "Path verificato dal vivo 2026-09-14 via `Get-ChildItem -Recurse` su C:\\Users\\vsvis\\Documents\\td (la cartella contiene anche un secondo .toe piu' vecchio, 'vst1.357+videoultimoooo1.2.toe', non e' questo). Stesso pattern di 'touchdesigner' (DMX) sopra -- chiave separata perche' e' un .toe diverso sulla stessa istanza TouchDesigner.exe, mai 'herbarium' da sola: quel nome e' gia' usato dal servizio gaia-herbarium sui Pi (AV Herbarium, tutt'altra cosa) ed e' nel set TOGGLEABLE di Telegram in node-red/flows.json -- riusarlo qui avrebbe fatto rispondere anche questo device a '/attiva herbarium' insieme ai Pi."
     },
     "touchdesigner_yolo": {
