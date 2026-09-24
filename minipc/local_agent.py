@@ -572,6 +572,15 @@ def _handle_command(cmd: dict):
         ).start()
         return
 
+    elif action in ("reboot", "shutdown"):
+        # Core e' un desktop presidiato solo a tratti (demo 25/9): spegnimento/
+        # riavvio da Pi Manager/Web. sudo -n = NOPASSWD gia' configurato per l'utente core.
+        print(f"[Agent] {action} richiesto via MQTT — eseguo tra 5s.")
+        verb = "reboot" if action == "reboot" else "poweroff"
+        subprocess.Popen(["bash", "-c", f"sleep 5 && sudo -n systemctl {verb}"],
+                         start_new_session=True)
+        return
+
     else:
         print(f"[Agent] Azione sconosciuta: {action}")
 

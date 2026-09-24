@@ -647,9 +647,13 @@ def _handle_command(cmd: dict):
         ).start()
         return
 
-    elif action == "reboot":
-        print("[Agent] Reboot richiesto via MQTT — non eseguito automaticamente su "
-              "questa macchina (silvermini2 non e' un Pi headless): ignorato.")
+    elif action in ("reboot", "shutdown"):
+        # Evento 25/9: OPS va spento/riavviato da remoto (Pi Manager/Web).
+        # Prima "reboot" era ignorato di proposito; ora e' richiesto esplicitamente.
+        flag = "/r" if action == "reboot" else "/s"
+        print(f"[Agent] {action} richiesto via MQTT — eseguo tra 5s.")
+        subprocess.run(["shutdown", flag, "/t", "5"],
+                       creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
         return
 
     else:
