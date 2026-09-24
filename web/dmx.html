@@ -633,6 +633,13 @@ function dxInit() {
       dxSetConn(true);
       dxClient.subscribe('gaia/device/+/status');
       dxClient.subscribe('gaia/devices/+/dmx_matrix');
+      // Il topic della matrice prende il nome della FAMILY (gaia_client): il DMX
+      // integrato in Herbarium (family 'herbarum', ortografia del progetto TD, e la
+      // variante corretta per sicurezza) pubblica herbarum_matrix, non dmx_matrix --
+      // stesso schema {device_id, rigs:{a:{params,services}}}, prima mai visto qui
+      // (2026-09-24, segnalato: si vedeva solo il DMX di PatchDeck).
+      dxClient.subscribe('gaia/devices/+/herbarum_matrix');
+      dxClient.subscribe('gaia/devices/+/herbarium_matrix');
       dxStartPolling();
       // Il device ricordato potrebbe essere stato rimosso/rinominato per
       // sempre (non solo momentaneamente offline) -- senza questo timeout
@@ -649,7 +656,7 @@ function dxInit() {
     dxClient.on('offline', () => { dxSetConn(false); if (dxOfflineSince === null) dxOfflineSince = Date.now(); });
     dxClient.on('message', (topic, raw) => {
       if (!raw || !raw.length) return;
-      if (topic.endsWith('/dmx_matrix')) {
+      if (topic.endsWith('/dmx_matrix') || topic.endsWith('/herbarum_matrix') || topic.endsWith('/herbarium_matrix')) {
         try { dxRegisterMatrix(JSON.parse(raw.toString())); } catch (e) {}
         return;
       }

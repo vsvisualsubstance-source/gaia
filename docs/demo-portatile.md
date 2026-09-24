@@ -53,6 +53,22 @@ fallback WiFi/captive-portal come rete di sicurezza, invariato.
 5. Da portare: Core, OPS, Pi + camera/mic, bridge Hue + lampadine reali,
    switch Ethernet non gestito, cavi, alimentatori.
 
+## Avvio automatico della LAN demo (2026-09-24, evento 25/9)
+
+Su Core `Gaia-Demo` parte da sola al boot (`autoconnect yes`, priorita' 100,
+vince su `netplan-enp0s31f6`) e il dispatcher NetworkManager
+`minipc/network/gaia-demo-fw-dispatcher.sh` (installato come
+`/etc/NetworkManager/dispatcher.d/90-gaia-demo-fw`) reinserisce da solo la
+regola Docker→LAN a ogni attivazione: i passi 2 e 3 sotto non servono piu'.
+Verificato il solo script (eseguito a mano, idempotente); NON ancora provato
+con un vero riavvio di Core: controllare dopo il boot con
+`sudo iptables -L nm-sh-fw-enp0s31f6 -n --line-numbers` (prima riga ACCEPT) e
+`journalctl -t gaia-demo-fw`.
+
+**Dopo l'evento, a casa, tornare alla normale** — con `autoconnect` attivo, se il
+cavo di Core va nel router di casa, Core avvia un server DHCP sulla LAN di casa:
+`sudo nmcli connection modify Gaia-Demo connection.autoconnect no`.
+
 ## Checklist all'arrivo (sede demo)
 
 1. Collegare Core, OPS, bridge Hue allo switch via cavo; collegare anche il
