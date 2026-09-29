@@ -145,20 +145,62 @@ anche mandati via OSC/UDP **direttamente** a TouchDesigner, bypassando MQTT/Node
 rallenterebbe inutilmente per nulla.
 
 Richiede `pip install python-osc` nel venv del servizio (non è nei requirements.txt di
-default: è opzionale, solo per chi accende questo flag — tipicamente OPS, non i Pi).
+default: è opzionale, solo per chi accende questo flag).
 
-**Destinazioni: scoperte via MQTT, non fisse in config (2026-08-06).** Nessun IP da
-scrivere a mano — il servizio ascolta `gaia/device/+/status` e trova da solo le istanze
-TD vive. Per default **si abilita SOLO l'istanza TD sulla STESSA macchina** (comportamento
-di sempre, zero config) — il mocap è pesante (centinaia di punti a ~12Hz), quindi non fa
-fan-out automatico a ogni TD scoperta come il feed principale del bridge. Per mandarlo
-anche a un'altra istanza (es. una TD su un'altra macchina): Admin → Pi Devices → "🎭 Mocap
-diretto", oppure MQTT diretto:
+### Lato MITTENTE — chi invia il mocap
+
+`OSC_LANDMARKS` è **live-configurabile da Admin/MQTT dal 2026-09-29**, non più solo un
+flag statico in `services.json`/env: qualunque device con un servizio `mediapipe` (Pi o
+Core — `pi/agent/agent.py`/`minipc/local_agent.py`, stesso contratto su entrambi) mostra
+in Pi Manager la card "🕺 Mocap → TouchDesigner" con un checkbox. Accenderlo scrive
+`/etc/gaia/mediapipe.conf` (`OSC_LANDMARKS=1`) e riavvia `mediapipe` se già attivo — nessun
+redeploy, nessun SSH. Equivalente MQTT diretto:
+```
+gaia/device/{device_id}/command   {"action":"set_config","osc_landmarks": true|false}
+```
+Su OPS resta acceso in modo statico (`OSC_LANDMARKS=1` fisso in `ops/agent/services.json`)
+— nessun bisogno del toggle lì, ma niente vieta di aggiungerlo se un domani serve spegnerlo
+da remoto anche su OPS.
+
+**Ogni sender è indipendente**: il topic è `gaia/mocap-bridge/{questo-device-id}/...`, non
+condiviso — più macchine (Pi, Core, OPS) possono mandare mocap CONTEMPORANEAMENTE senza
+conflitto, ognuna verso i propri target abilitati.
+
+### Destinazioni — scoperte via MQTT, non fisse in config (2026-08-06)
+
+Nessun IP da scrivere a mano — il servizio ascolta `gaia/device/+/status` e trova da solo
+le istanze TD vive (`role:"touchdesigner"`). Per default **si abilita SOLO l'istanza TD
+sulla STESSA macchina** (comportamento di sempre, zero config) — il mocap è pesante
+(centinaia di punti a ~12Hz), quindi non fa fan-out automatico a ogni TD scoperta come il
+feed principale del bridge. Per mandarlo anche a un'altra istanza (es. una TD su un'altra
+macchina): Admin → Pi Devices → "🎭 Mocap diretto", oppure MQTT diretto:
 ```
 gaia/mocap-bridge/{device_id}/command   {"device_id": "<td-device-id>", "action": "enable"|"disable"}
 gaia/mocap-bridge/{device_id}/status    (retained) — stato di tutte le istanze TD note e abilitate
 ```
 `{device_id}` nel topic è **questo** device (il mittente, es. `ops-silvermini2`), non la TD.
+
+### LAN + Tailscale insieme (2026-09-29)
+
+Per ogni target abilitato, se il suo status pubblica sia `ip` (LAN) sia `tailscale_ip`
+(campo aggiunto lato `gaia_client` il 2026-09-29, vedi `GAIA_INTERFACE.md` canale 7) **e i
+due sono diversi**, il mocap parte su ENTRAMBI gli indirizzi — un UDP verso un indirizzo
+non raggiungibile è innocuo, quindi non serve indovinare quale dei due percorsi funziona
+davvero (LAN diretta, Tailscale diretto, Tailscale via relay). Nessuna configurazione
+richiesta lato mittente: basta che il target TD pubblichi `tailscale_ip` (`null` se non ha
+Tailscale attivo — innocuo, resta solo il percorso LAN). Stesso meccanismo, stesso giorno,
+anche sul feed canvas (canale 2, `minipc/touchdesigner/osc_bridge.py`).
+
+### Contratto minimo richiesto lato TD (`gaia_client`) per comparire come target
+
+- `role: "touchdesigner"` nello status/profile (`gaia/device/{id}/status`).
+- `family` valorizzato e diverso da `mixeraudio`/`dmx` (quei due sono esclusi dall'opt-in
+  per design, vedi `pmMocapIsRelevant` in `web/admin.html` — non renderizzano nulla che
+  reagisca al corpo).
+- `ip` sempre presente; `tailscale_ip` opzionale ma raccomandato (vedi sopra).
+- Una porta OSC in ascolto — di default la stessa 7000 del canale 1 (stesso OSC In lato
+  TD, distinto per prefisso indirizzo `/gaia/mocap/...`), a meno che il progetto non usi
+  un `Mocapport` dedicato diverso (chiesto a TD/Mac il 2026-09-29, risposta in sospeso).
 
 ### Schema indirizzi — un device, un tipo, un person_id correlato
 

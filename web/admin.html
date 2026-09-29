@@ -3179,6 +3179,26 @@ function pmPatchCard(id, d) {
   const inpN = card.querySelector('.pm-inp-name');
   if (inpS && document.activeElement!==inpS) inpS.value = d.stanza||'';
   if (inpN && document.activeElement!==inpN) inpN.value = d.name||'';
+  // Spegnimento programmato / watchdog / mocap: pmBuildCard li scrive solo
+  // alla PRIMA card di questo device -- senza sincronizzarli anche qui,
+  // restano congelati al loro valore iniziale per tutta la sessione,
+  // anche dopo un comando confermato dal backend (o cambiato da un'altra
+  // scheda/utente) -- trovato dal vivo 2026-09-29, "non capisco se i
+  // checkbox si attivano" (il testo/stato non si aggiornava mai da solo).
+  const inpShutdownAt = card.querySelector('.pm-inp-shutdownat');
+  if (inpShutdownAt && document.activeElement!==inpShutdownAt) inpShutdownAt.value = d.shutdown_at||'';
+  const watchdogChk = card.querySelector('.pm-chk-watchdog');
+  if (watchdogChk && document.activeElement!==watchdogChk) {
+    watchdogChk.checked = !!d.watchdog;
+    const lbl = watchdogChk.parentElement?.querySelector('span');
+    if (lbl) lbl.textContent = d.watchdog?'Acceso — servizi "attivi" caduti vengono rilanciati da soli':'Spento — nessun riavvio automatico, solo su comando esplicito';
+  }
+  const oscLandmarksChk = card.querySelector('.pm-chk-osclandmarks');
+  if (oscLandmarksChk && document.activeElement!==oscLandmarksChk) {
+    oscLandmarksChk.checked = !!d.osc_landmarks;
+    const lbl = oscLandmarksChk.parentElement?.querySelector('span');
+    if (lbl) lbl.textContent = d.osc_landmarks?'Acceso — invia viso/mani/pose via OSC a chi si abilita a riceverlo':'Spento — nessun invio mocap da questo device';
+  }
 }
 
 function pmAttachEvents(id, card) {
