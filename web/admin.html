@@ -3096,7 +3096,7 @@ function pmBuildCard(id, d) {
         ${d.services?.livestream?.endpoints?.stream||`http://${d.ip}:8000/stream.ogg`}
       </div>
     </div>`:''}
-    ${(d.role==='installation'||d.role==='pi')?`<div>
+    ${(d.role==='installation'||d.role==='pi'||d.role==='ops')?`<div>
       <div class="pm-section-label">⏻ Spegnimento programmato</div>
       <div class="pm-rename-row">
         <input type="time" class="pm-inp-shutdownat" value="${pmEsc(d.shutdown_at||'')}" style="flex:1">
@@ -3107,6 +3107,18 @@ function pmBuildCard(id, d) {
         ${d.role==='pi'
           ? '⚠️ Un Pi spento così NON si riaccende da remoto — solo staccando/riattaccando l\'alimentazione. Orario locale del device, vuoto = disattivato.'
           : 'Rete di sicurezza software (watchdog interno dell\'agent, non un secondo Task Scheduler) — orario locale della macchina. Vuoto = disattivato.'}
+      </div>
+    </div>`:''}
+    ${(d.role==='installation'||d.role==='ops')?`<div>
+      <div class="pm-section-label">🐕 Watchdog (riavvio automatico servizi caduti)</div>
+      <div class="pm-rename-row">
+        <label style="display:flex;align-items:center;gap:6px;flex:1;cursor:pointer">
+          <input type="checkbox" class="pm-chk-watchdog" ${d.watchdog?'checked':''}>
+          <span style="font-size:.8rem">${d.watchdog?'Acceso — servizi "attivi" caduti vengono rilanciati da soli':'Spento — nessun riavvio automatico, solo su comando esplicito'}</span>
+        </label>
+      </div>
+      <div style="font-size:.75rem;color:var(--muted);margin-top:4px">
+        Live, nessun redeploy — utile per una macchina che passa da presidiata a non presidiata (es. un portatile di test).
       </div>
     </div>`:''}
     <div class="pm-card-actions">
@@ -3241,6 +3253,12 @@ function pmAttachEvents(id, card) {
     card.querySelector('.pm-inp-shutdownat').value = '';
     pmSend(id, {action:'set_config', shutdown_at: null});
     pmLog('out', `${id}: spegnimento programmato disattivato`);
+  };
+  const watchdogChk = card.querySelector('.pm-chk-watchdog');
+  if (watchdogChk) watchdogChk.onchange = () => {
+    const val = watchdogChk.checked;
+    pmSend(id, {action:'set_config', watchdog: val});
+    pmLog('out', `${id}: watchdog → ${val ? 'acceso' : 'spento'}`);
   };
   card.querySelector('.pm-btn-status').onclick  = () => pmSend(id, {action:'status'});
   card.querySelector('.pm-btn-reboot').onclick  = () => { if(confirm(`Riavviare ${id}?`)) pmSend(id, {action:'reboot'}); };

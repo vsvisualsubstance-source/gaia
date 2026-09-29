@@ -1,0 +1,10 @@
+{
+  "_nota": "Manifest servizi per 'install-msi-02' (portatile MSI di test, utente nicol/msi\\nicol, 192.168.1.230) -- macchina di test per progetti TD (TD Gaia, PatchDeck, Herbarium), non per MadMapper. TouchDesigner gia' installato (due build: standard + TouchDesigner.2025.33230). Servizi vuoti di proposito: i progetti TD si lanciano a mano durante i test (stesso principio di 'niente path indovinati alla cieca' gia' seguito per Ducale/FiloQ) -- se si vuole controllo start/stop/restart da Pi Manager (come 'touchdesigner'/'touchdesigner_herbarium' su ops/agent/services.json), aggiungere qui le entry quando si conoscono i path .toe reali di QUESTA macchina.",
+  "machine_role": "installation",
+  "watchdog": true,
+  "_nota_watchdog": "true di partenza, ma LIVE (contratto 2026-09-29): si accende/spegne dal vivo via Pi Manager (checkbox nella card) o {\"action\":\"set_config\",\"watchdog\":bool} senza redeploy -- richiesto esplicitamente per questa macchina ('con possibilita' che sia presidiata o meno').",
+  "device_id": "install-msi-02",
+  "stanza": "test",
+  "_nota_stanza": "Placeholder -- rinominare via Admin quando si sa a cosa serve questa sessione di test.",
+  "services": {}
+}

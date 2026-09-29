@@ -7,10 +7,13 @@ modificare questo file, e propagare ogni modifica strutturale anche alla
 copia in ops/agent/ (il repo duplica il file invece di importarlo
 cross-directory, stesso principio gia' documentato per net_resolve.py).
 
-Comportamento differenziato SOLO da services.json: qui "watchdog":true
-(macchina non presidiata) e "shutdown_at" gia' in uso, "conflicts"/
-"camera_consumers" assenti (nessuna webcam su questa macchina, i relativi
-percorsi restano no-op innocui).
+Comportamento differenziato da services.json ("conflicts" per servizio,
+"camera_consumers" — assenti qui, nessuna webcam su questa macchina, i
+relativi percorsi restano no-op innocui) E da _cfg["watchdog"], LIVE
+(settabile via set_config senza redeploy, vedi WATCHDOG_DEFAULT in
+agent.py) — qui il valore di fabbrica e' true (macchina non presidiata),
+ma può essere spento/riacceso dal vivo per una singola sessione (es. una
+macchina touring prestata temporaneamente per un test presidiato).
 
 Gestisce processi locali (subprocess) invece di systemctl (che non esiste su
 Windows). Stessa interfaccia MQTT di pi/agent/agent.py:
@@ -137,13 +140,19 @@ MACHINE_ROLE     = _manifest.get("machine_role", "installation")
 _SERVICE_DEFS    = _manifest["services"]
 CAMERA_CONSUMERS = tuple(_manifest.get("camera_consumers", []))
 # Contratto agent Windows (docs/agent-windows-contract.md): stesso agent.py
-# su ogni macchina Windows, comportamento differenziato SOLO da services.json.
-# "watchdog":true = riavvia da solo un servizio "enabled" che risulta caduto
-# (macchina non presidiata, es. installazione touring). false = mai (macchina
-# presidiata come OPS: un utente puo' chiudere TD a mano dal suo stesso tasto
-# X per alleggerire la macchina senza che l'agent glielo rilanci sotto -- vedi
-# incidente reale 2026-09-02 in project-architettura-core-ops).
-WATCHDOG_ENABLED = bool(_manifest.get("watchdog", False))
+# su ogni macchina Windows, comportamento differenziato da services.json E
+# da _cfg["watchdog"] (quest'ultimo LIVE, non serve un redeploy per
+# cambiarlo -- vedi set_config). "watchdog":true = riavvia da solo un
+# servizio "enabled" che risulta caduto (macchina non presidiata, es.
+# installazione touring). false = mai (macchina presidiata come OPS: un
+# utente puo' chiudere TD a mano dal suo stesso tasto X per alleggerire la
+# macchina senza che l'agent glielo rilanci sotto -- vedi incidente reale
+# 2026-09-02 in project-architettura-core-ops). WATCHDOG_DEFAULT e' solo il
+# valore iniziale/di fabbrica (services.json, immutabile senza redeploy) --
+# per una macchina che puo' essere ora presidiata ora no (es. un portatile
+# di test, richiesto esplicitamente 2026-09-29) usa quello per il primo
+# avvio, poi cambialo dal vivo con {"action":"set_config","watchdog":bool}.
+WATCHDOG_DEFAULT = bool(_manifest.get("watchdog", False))
 
 CONFIG_FILE = os.path.join(_DIR, "agent_config.json")
 
@@ -167,7 +176,8 @@ _next_rediscovery_ts = 0
 RECOVERY_THRESHOLD = 90
 HEARTBEAT_INTERVAL = 30
 
-# Watchdog (solo se WATCHDOG_ENABLED, vedi sopra) — riavvia da solo un
+# Watchdog (solo se _cfg["watchdog"] e' vero al momento, vedi sopra) —
+# riavvia da solo un
 # servizio "enabled" caduto, ritenta a oltranza, notifica Telegram dopo N
 # fallimenti consecutivi (MAI un reboot automatico dell'intera macchina).
 WATCHDOG_INTERVAL    = 30
@@ -182,6 +192,8 @@ _DEFAULT_CFG = {
     # minipc/installation/agent.py e pi/agent/agent.py, ora sul contratto
     # comune: controllabile da Admin/Telegram senza SSH su QUALSIASI Windows.
     "shutdown_at": None,
+    # Live, vedi commento su WATCHDOG_DEFAULT sopra.
+    "watchdog": WATCHDOG_DEFAULT,
 }
 
 # Guardia anti-doppio-trigger per lo shutdown programmato: l'orario viene
@@ -248,7 +260,7 @@ _start_ts   = time.monotonic()
 # Watchdog: fallimenti consecutivi per servizio + se e' gia' stato mandato
 # un alert per questa "striscia" di fallimenti (evita spam ad ogni giro dopo
 # il primo alert, un solo avviso finche' non recupera). No-op se
-# WATCHDOG_ENABLED e' False (vedi sopra).
+# _cfg["watchdog"] e' falso al momento (vedi sopra).
 _watchdog_fail_counts: dict = {}
 _watchdog_alerted: set = set()
 
@@ -259,7 +271,7 @@ def load_config() -> dict:
     if os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, encoding="utf-8") as f:
             saved = json.load(f)
-        base.update({k: saved[k] for k in ("device_id", "stanza", "name", "updated") if k in saved})
+        base.update({k: saved[k] for k in ("device_id", "stanza", "name", "updated", "shutdown_at", "watchdog") if k in saved})
         for svc in _SERVICE_DEFS:
             if svc == "camera":
                 continue
@@ -691,6 +703,7 @@ def _publish_status():
         name        = _cfg.get("name", stanza)
         svc_cfg     = _cfg.get("services", {})
         shutdown_at = _cfg.get("shutdown_at")
+        watchdog    = _cfg.get("watchdog", WATCHDOG_DEFAULT)
 
     services = {k: _svc_status(k) for k in _SERVICE_DEFS}
 
@@ -706,6 +719,7 @@ def _publish_status():
         "services":     services,
         "config":       svc_cfg,
         "shutdown_at":  shutdown_at,
+        "watchdog":     watchdog,
         "uptime":       _get_uptime(),
         "ts":           int(time.time() * 1000),
     }
@@ -849,6 +863,12 @@ def _handle_command(cmd: dict):
                     _cfg["shutdown_at"] = val
                 else:
                     print(f"[Agent] shutdown_at non valido (atteso HH:MM o null): {val!r}, ignorato")
+            if "watchdog" in cmd:
+                # Live, nessun redeploy/restart necessario -- vedi commento
+                # su WATCHDOG_DEFAULT. Per una macchina che passa da
+                # presidiata a non presidiata (es. portatile di test).
+                _cfg["watchdog"] = bool(cmd["watchdog"])
+                print(f"[Agent] watchdog impostato a {_cfg['watchdog']}")
             if "services" in cmd:
                 for svc, val in cmd["services"].items():
                     if svc == "camera":
@@ -932,28 +952,32 @@ def _ota_update(service_key: str, url: str, md5_expected: str, filename: str):
     _publish_status()
 
 
-# ── Watchdog (solo se WATCHDOG_ENABLED, vedi manifest "watchdog") ──────
+# ── Watchdog (sempre in esecuzione, si auto-disabilita se _cfg["watchdog"]
+# e' falso -- vedi WATCHDOG_DEFAULT/set_config) ─────────────────────────
 def _watchdog_loop():
-    """Riavvia da solo un servizio "enabled" che risulta caduto, non solo
-    su comando MQTT esplicito -- per le macchine non presidiate
-    (WATCHDOG_ENABLED, contratto in docs/agent-windows-contract.md).
-    Ritenta A OLTRANZA -- mai un reboot automatico dell'intera macchina.
-    Dopo WATCHDOG_ALERT_AFTER fallimenti CONSECUTIVI per lo stesso
-    servizio, un solo alert Telegram (non uno ad ogni giro) finche' non
-    recupera. Gestisce anche shutdown_at (spegnimento programmato) qui
-    invece che in un thread separato -- gia' un loop periodico."""
+    """Sempre in esecuzione (avviato incondizionatamente da main()) --
+    gestisce shutdown_at ad ogni giro (indipendente dal resto) e, SOLO se
+    _cfg["watchdog"] e' vero in quel momento (live, vedi set_config e
+    WATCHDOG_DEFAULT sopra), riavvia da solo un servizio "enabled" che
+    risulta caduto, non solo su comando MQTT esplicito. Ritenta A
+    OLTRANZA -- mai un reboot automatico dell'intera macchina. Dopo
+    WATCHDOG_ALERT_AFTER fallimenti CONSECUTIVI per lo stesso servizio, un
+    solo alert Telegram (non uno ad ogni giro) finche' non recupera."""
     global _last_scheduled_shutdown_date
     while _running:
         time.sleep(WATCHDOG_INTERVAL)
         with _cfg_lock:
             services    = dict(_cfg.get("services", {}))
             shutdown_at = _cfg.get("shutdown_at")
+            watchdog_on = _cfg.get("watchdog", WATCHDOG_DEFAULT)
         if shutdown_at:
             now = datetime.now()
             today = now.strftime("%Y-%m-%d")
             if now.strftime("%H:%M") == shutdown_at and _last_scheduled_shutdown_date != today:
                 _last_scheduled_shutdown_date = today
                 _do_shutdown(f"programmato {shutdown_at}")
+        if not watchdog_on:
+            continue
         for key, scfg in services.items():
             if key == "camera":
                 continue  # gestita solo via ref-count (_sync_camera), mai dal watchdog
@@ -1031,7 +1055,7 @@ def main():
     print(f"[GAIA Installation Agent] device_id : {_cfg['device_id']}")
     print(f"[GAIA Installation Agent] stanza    : {_cfg['stanza']}")
     print(f"[GAIA Installation Agent] role      : {MACHINE_ROLE}")
-    print(f"[GAIA Installation Agent] watchdog  : {WATCHDOG_ENABLED}")
+    print(f"[GAIA Installation Agent] watchdog  : {_cfg.get('watchdog', WATCHDOG_DEFAULT)} (live, set_config per cambiare)")
 
     # Discovery PRIMA di tutto -- no-op quasi ovunque (cache/broadcast/mDNS
     # trovano Core sulla LAN in un attimo), ma copre anche OPS ora: se l'IP
@@ -1070,8 +1094,11 @@ def main():
         return
     _mqtt.loop_start()
 
-    if WATCHDOG_ENABLED:
-        threading.Thread(target=_watchdog_loop, daemon=True).start()
+    # Sempre avviato -- il thread stesso controlla _cfg["watchdog"] ad ogni
+    # giro (live, vedi WATCHDOG_DEFAULT sopra) invece di essere condizionato
+    # da una costante fissata all'avvio: cosi' watchdog on/off si puo'
+    # cambiare via set_config senza un redeploy/restart dell'agent.
+    threading.Thread(target=_watchdog_loop, daemon=True).start()
 
     last_hb = 0
     while _running:
