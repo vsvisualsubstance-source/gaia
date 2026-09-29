@@ -26,6 +26,7 @@ import hashlib
 from datetime import datetime, timezone
 
 import paho.mqtt.client as mqtt
+import psutil
 import net_resolve
 
 # La console Windows di default usa la codepage locale (es. cp1252) per
@@ -118,7 +119,15 @@ def _get_start_lock(key: str) -> threading.RLock:
 # istanza dell'agent) rilevati e adottati -- vedi _find_os_pid/_is_running.
 _adopted_pids: dict = {}
 _orphan_check_cache: dict = {}   # key -> (bool_alive, scaduto_a)
-_ORPHAN_CHECK_TTL = 20.0
+# Deve stare SOPRA HEARTBEAT_INTERVAL (30s) o il commento sopra ("non
+# spammare PowerShell ad ogni heartbeat") e' falso -- bug reale trovato dal
+# vivo 2026-09-29: con 20s < 30s la cache scadeva sempre PRIMA del prossimo
+# heartbeat, quindi ogni servizio spento (nessun PID da adottare, il
+# fast-path psutil in _is_running non si applica) riapriva comunque una
+# PowerShell/conhost.exe visibile ad ogni ciclo. Il fast-path psutil copre
+# gia' gli orfani TROVATI; questo TTL copre il caso "cercato e non
+# trovato" (voice/kiosk quando spenti).
+_ORPHAN_CHECK_TTL = 45.0
 _start_ts   = time.monotonic()
 
 
@@ -218,22 +227,14 @@ def _http_check(url: str, timeout: float = 3.0) -> bool:
         return False
 
 
-def _find_os_pid(key: str) -> int | None:
-    """Scansiona i processi OS reali per un'istanza di 'key' non tracciata
-    da _procs -- serve quando l'AGENT STESSO e' stato riavviato (crash,
-    aggiornamento Windows, un deploy) lasciando il vecchio sottoprocesso
-    vivo come orfano: senza questo, _is_running si fida solo della memoria
-    dell'istanza agent CORRENTE e non vede quello vecchio ancora attivo.
-    Bug reale trovato dal vivo 2026-08-21 (kiosk: "stop"/"enable" da Admin
-    rispondevano OK senza toccare il processo reale -- Edge con lo stesso
-    --user-data-dir assorbe silenziosamente un secondo lancio invece di
-    aprirne uno nuovo, nessun errore visibile).
-
-    Signature = stesso path assoluto gia' verificato in _start_service
-    (check_script), o l'ultimo argomento per i servizi con
-    check_script=False (es. kiosk: --user-data-dir=... e' gia' univoco di
-    suo, a differenza di "main.py" che da solo comparirebbe identico per
-    yolo/mediapipe/voice/mediaplayer)."""
+def _service_signature(key: str) -> str | None:
+    """Stringa univoca usata per riconoscere il processo OS di 'key' --
+    stesso path assoluto gia' verificato in _start_service (check_script),
+    o l'ultimo argomento per i servizi con check_script=False (es. kiosk:
+    --user-data-dir=... e' gia' univoco di suo, a differenza di "main.py"
+    che da solo comparirebbe identico per yolo/mediapipe/voice/mediaplayer).
+    Usata sia da _find_os_pid (scansione PowerShell) sia dal fast-path a
+    PID noto in _is_running (verifica psutil, vedi li')."""
     defn = _SERVICE_DEFS.get(key)
     if not defn or defn.get("type") in ("docker", "http_check"):
         return None
@@ -245,6 +246,31 @@ def _find_os_pid(key: str) -> int | None:
         signature = cmd[-1]
     with _cfg_lock:
         signature = signature.replace("{STANZA}", _cfg.get("stanza", ""))
+    return signature
+
+
+def _find_os_pid(key: str) -> int | None:
+    """Scansiona i processi OS reali per un'istanza di 'key' non tracciata
+    da _procs -- serve quando l'AGENT STESSO e' stato riavviato (crash,
+    aggiornamento Windows, un deploy) lasciando il vecchio sottoprocesso
+    vivo come orfano: senza questo, _is_running si fida solo della memoria
+    dell'istanza agent CORRENTE e non vede quello vecchio ancora attivo.
+    Bug reale trovato dal vivo 2026-08-21 (kiosk: "stop"/"enable" da Admin
+    rispondevano OK senza toccare il processo reale -- Edge con lo stesso
+    --user-data-dir assorbe silenziosamente un secondo lancio invece di
+    aprirne uno nuovo, nessun errore visibile).
+
+    Costosa (spawna powershell.exe): usata solo per la scansione iniziale
+    o quando il PID adottato in precedenza e' sparito -- vedi il fast-path
+    a PID noto in _is_running, aggiunto 2026-09-29 apposta per non dover
+    richiamare questa ad ogni scadenza cache per gli stessi orfani gia'
+    noti (TD Herbarium/Yolo/DMX, check_script:false quindi mai in _procs:
+    prima riaprivano una PowerShell/conhost.exe visibile quasi ad ogni
+    heartbeat, percepito dall'utente come un "watchdog" che sfarfalla
+    finestre cmd)."""
+    signature = _service_signature(key)
+    if signature is None:
+        return None
     try:
         # Esclude powershell.exe/pwsh.exe dal match: senza, il processo che
         # esegue QUESTA STESSA query si auto-matcha (la sua riga di comando
@@ -274,7 +300,24 @@ def _is_running(key: str) -> bool:
         p = _procs.get(key)
         if p is not None and p.poll() is None:
             return True
-    # Nessun Popen nostro vivo -- prima di concludere "fermo", verifica se
+    # Un orfano gia' adottato in un giro precedente: verifica il PID noto
+    # con psutil (chiamata nativa in-process, nessun sottoprocesso) invece
+    # di rilanciare ogni volta la scansione PowerShell di _find_os_pid --
+    # vedi nota li' per il perche' (2026-09-29, finestre cmd visibili).
+    known_pid = _adopted_pids.get(key)
+    if known_pid is not None:
+        try:
+            proc = psutil.Process(known_pid)
+            signature = _service_signature(key) or ""
+            if signature and signature in " ".join(proc.cmdline()):
+                return True
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+        # PID sparito o riassegnato a un altro processo (cmdline non
+        # combacia piu') -- ricadi sulla scansione completa sotto.
+        _adopted_pids.pop(key, None)
+        _orphan_check_cache.pop(key, None)
+    # Nessun Popen nostro vivo, nessun PID orfano gia' noto -- verifica se
     # esiste un processo orfano reale (vedi _find_os_pid). Cache breve per
     # non spammare PowerShell ad ogni heartbeat/status poll.
     now = time.monotonic()
@@ -283,11 +326,8 @@ def _is_running(key: str) -> bool:
         return cached[0]
     pid = _find_os_pid(key)
     if pid is not None:
-        if _adopted_pids.get(key) != pid:
-            print(f"[Agent] {key}: rilevato processo orfano PID={pid} (non lanciato da questa istanza dell'agent, adottato)")
+        print(f"[Agent] {key}: rilevato processo orfano PID={pid} (non lanciato da questa istanza dell'agent, adottato)")
         _adopted_pids[key] = pid
-    else:
-        _adopted_pids.pop(key, None)
     alive = pid is not None
     _orphan_check_cache[key] = (alive, now + _ORPHAN_CHECK_TTL)
     return alive
