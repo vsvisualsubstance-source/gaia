@@ -1,6 +1,8 @@
 {
   "_nota": "Manifest servizi per l'agent Windows di questa macchina (ruolo ops, Missione 4 in ops/CLAUDE.md). cmd/cwd sono assoluti a questa macchina (silvermini2) — non portabile su un'altra installazione senza aggiornare i path del venv.",
+  "_nota_watchdog": "false = mai un riavvio automatico dei servizi caduti (macchina presidiata: l'utente puo' chiudere TD dal suo stesso tasto X per alleggerire la macchina senza che l'agent glielo rilanci sotto -- incidente reale 2026-09-02, vedi docs/agent-windows-contract.md). Le installazioni touring (minipc/installation/services.json) hanno watchdog:true.",
   "machine_role": "ops",
+  "watchdog": false,
   "device_id": "ops-silvermini2",
   "stanza": "soggiorno",
   "services": {

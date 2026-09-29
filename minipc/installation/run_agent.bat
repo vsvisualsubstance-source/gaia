@@ -11,4 +11,9 @@ rem l'interprete copiato in C:\gaia\venv\Scripts\, Windows Defender
 rem rilanciava una seconda copia del processo tramite l'installazione
 rem Python "reale" -- vedi _nota in services.json. Si usa direttamente
 rem l'installazione Python di sistema (winget, utente vs).
-"C:\Users\vs\AppData\Local\Programs\Python\Python312\pythonw.exe" agent.py >> "C:\gaia\minipc\installation\agent.log" 2>&1
+rem Niente redirect su agent.log qui: l'agent scrive il file da solo con
+rem rotazione (_RotatingConsole, vedi agent.py) -- un handle ereditato
+rem dalla shell resterebbe aperto per tutta la vita del processo e
+rem bloccherebbe il rename in rotazione. NUL e' solo una rete di sicurezza
+rem se quella classe fallisse ad avviarsi.
+"C:\Users\vs\AppData\Local\Programs\Python\Python312\pythonw.exe" agent.py > NUL 2>&1

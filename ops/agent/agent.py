@@ -1,11 +1,22 @@
 #!/usr/bin/env python3
 """
-GAIA OPS Agent — porting Windows del pattern subprocess di
-minipc/local_agent.py (Missione 4 in ops/CLAUDE.md).
+GAIA OPS Agent — implementazione di riferimento del CONTRATTO agent
+Windows (docs/agent-windows-contract.md): STESSO agent.py su ogni macchina
+Windows del progetto (oggi: ops-silvermini2, le installazioni touring in
+minipc/installation/) — vedi quel documento prima di modificare questo
+file, e propagare ogni modifica strutturale anche alla copia gemella (il
+repo duplica il file invece di importarlo cross-directory, stesso
+principio gia' documentato per net_resolve.py: ogni cartella deploy e'
+autosufficiente).
+
+Comportamento differenziato SOLO da services.json (non da branch nel
+codice): "watchdog" (riavvio automatico dei servizi caduti), "conflicts"
+per servizio, "camera_consumers" — assenti/false nel manifest, la relativa
+funzione e' semplicemente un no-op innocuo.
 
 Gestisce processi locali (subprocess) invece di systemctl (che non esiste su
 Windows). Stessa interfaccia MQTT di pi/agent/agent.py:
-  - pubblica: gaia/device/{id}/status  (heartbeat ogni 30s, retain=True, role="ops")
+  - pubblica: gaia/device/{id}/status  (heartbeat ogni 30s, retain=True)
   - ascolta:  gaia/device/{id}/command
   - ascolta:  gaia/device/all/command
 
@@ -15,6 +26,7 @@ hardcoded come in local_agent.py) — vedi quel file per cmd/cwd/env_extra.
 import json
 import msvcrt
 import os
+import re
 import signal
 import socket
 import subprocess
@@ -28,16 +40,82 @@ from datetime import datetime, timezone
 import paho.mqtt.client as mqtt
 import psutil
 import net_resolve
-
-# La console Windows di default usa la codepage locale (es. cp1252) per
-# stdout quando non e' una tty (redirect su file) — i log dei sottoprocessi
-# (accenti, frecce) mandano in crash print() con UnicodeEncodeError.
-sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+import discovery
 
 # ── Singleton lock (msvcrt invece di fcntl — non esiste su Windows) ──────────
 _DIR = os.path.dirname(os.path.abspath(__file__))
 _LOCK_FILE = os.path.join(_DIR, "agent.lock")
 _lock_fh = None
+
+
+class _RotatingConsole:
+    """Sostituisce sys.stdout/stderr: pythonw.exe non ha una console reale,
+    quindi senza un redirect esplicito i print() andrebbero persi (o in
+    crash se sys.stdout e' None) -- e senza QUESTA classe la codepage
+    locale (es. cp1252) mandava in crash print() con UnicodeEncodeError sui
+    log dei sottoprocessi (accenti, frecce): sostituisce anche il vecchio
+    `sys.stdout.reconfigure(encoding="utf-8", ...)`, ora ridondante dato che
+    apriamo il file noi stessi in utf-8.
+
+    Scrive su agent.log con rotazione a dimensione massima -- fatto qui
+    invece che con un redirect `>>` di cmd.exe (run_agent.bat, prima)
+    perche' un handle ereditato dalla shell resta aperto sul file per tutta
+    la vita del processo e blocca il rename in rotazione (PermissionError
+    su Windows). Trovato dal vivo 2026-09-29: agent.log su OPS arrivato a
+    483MB, mai ruotato da quando esiste. run_agent.bat non redirige piu' su
+    questo file (solo su NUL, rete di sicurezza se questa classe fallisse
+    ad avviarsi)."""
+
+    def __init__(self, path, max_bytes=20 * 1024 * 1024, backups=5):
+        self._path = path
+        self._max_bytes = max_bytes
+        self._backups = backups
+        self._lock = threading.Lock()
+        self._fh = open(path, "a", encoding="utf-8", errors="replace")
+
+    def write(self, s):
+        with self._lock:
+            try:
+                self._fh.write(s)
+                self._fh.flush()
+                if self._fh.tell() >= self._max_bytes:
+                    self._rotate()
+            except Exception:
+                pass
+        return len(s)
+
+    def flush(self):
+        with self._lock:
+            try:
+                self._fh.flush()
+            except Exception:
+                pass
+
+    def isatty(self):
+        return False
+
+    def _rotate(self):
+        try:
+            self._fh.close()
+            for i in range(self._backups - 1, 0, -1):
+                src, dst = f"{self._path}.{i}", f"{self._path}.{i + 1}"
+                if os.path.exists(src):
+                    if os.path.exists(dst):
+                        os.remove(dst)
+                    os.rename(src, dst)
+            if os.path.exists(self._path):
+                dst1 = f"{self._path}.1"
+                if os.path.exists(dst1):
+                    os.remove(dst1)
+                os.rename(self._path, dst1)
+        finally:
+            self._fh = open(self._path, "a", encoding="utf-8", errors="replace")
+
+
+try:
+    sys.stdout = sys.stderr = _RotatingConsole(os.path.join(_DIR, "agent.log"))
+except Exception:
+    pass
 
 
 def _acquire_lock():
@@ -60,19 +138,58 @@ with open(MANIFEST_FILE, encoding="utf-8") as f:
 MACHINE_ROLE     = _manifest.get("machine_role", "ops")
 _SERVICE_DEFS    = _manifest["services"]
 CAMERA_CONSUMERS = tuple(_manifest.get("camera_consumers", []))
+# Contratto agent Windows (docs/agent-windows-contract.md): stesso agent.py
+# su ogni macchina Windows, comportamento differenziato SOLO da services.json.
+# "watchdog":true = riavvia da solo un servizio "enabled" che risulta caduto
+# (macchina non presidiata, es. installazione touring). false = mai (macchina
+# presidiata come OPS: un utente puo' chiudere TD a mano dal suo stesso tasto
+# X per alleggerire la macchina senza che l'agent glielo rilanci sotto -- vedi
+# incidente reale 2026-09-02 in project-architettura-core-ops).
+WATCHDOG_ENABLED = bool(_manifest.get("watchdog", False))
 
 CONFIG_FILE = os.path.join(_DIR, "agent_config.json")
 
 MQTT_HOST = os.getenv("MQTT_HOST", "192.168.1.142")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
+_mqtt = None
+
+# Ri-scoperta automatica dopo disconnessione prolungata (2026-09-19, bug
+# reale trovato due volte dal vivo -- Corridoio su pi/agent.py e la macchina
+# installazione di Palazzo Ducale dopo un riavvio reale: discovery.discover()
+# gira UNA SOLA VOLTA all'avvio del processo; se la prima scelta si rivela
+# irraggiungibile solo al connect vero, paho continua a ritentare lo STESSO
+# host morto in eterno col solo backoff di reconnect_delay_set, mai una nuova
+# discovery -- unico modo per uscirne era riavviare l'agent a mano. Portato
+# su OPS 2026-09-29 dopo l'incidente della LAN demo (IP di OPS cambiato piu'
+# volte in un mattino, vedi project-evento-25-settembre): utile ovunque, non
+# solo per le macchine fuori LAN.
+_mqtt_connected = False
+_last_disconnect_ts = time.time()
+_next_rediscovery_ts = 0
+RECOVERY_THRESHOLD = 90
 HEARTBEAT_INTERVAL = 30
+
+# Watchdog (solo se WATCHDOG_ENABLED, vedi sopra) — riavvia da solo un
+# servizio "enabled" caduto, ritenta a oltranza, notifica Telegram dopo N
+# fallimenti consecutivi (MAI un reboot automatico dell'intera macchina).
+WATCHDOG_INTERVAL    = 30
+WATCHDOG_ALERT_AFTER = 5
 
 _DEFAULT_CFG = {
     "device_id": _manifest.get("device_id", f"ops-{socket.gethostname()}"),
     "stanza":    _manifest.get("stanza", "unknown"),
     "name":      _manifest.get("stanza", "unknown"),
     "services":  {k: {"enabled": False} for k in _SERVICE_DEFS if k != "camera"},
+    # Spegnimento programmato ("HH:MM" o None) — stessa semantica di
+    # minipc/installation/agent.py e pi/agent/agent.py, ora sul contratto
+    # comune: controllabile da Admin/Telegram senza SSH su QUALSIASI Windows.
+    "shutdown_at": None,
 }
+
+# Guardia anti-doppio-trigger per lo shutdown programmato: l'orario viene
+# controllato ogni WATCHDOG_INTERVAL/HEARTBEAT (30s), quindi un solo minuto
+# HH:MM combacia per ~2 giri -- senza questa data scatterebbe due volte.
+_last_scheduled_shutdown_date = None
 
 # ── Stato globale ─────────────────────────────────────────────────────
 _running    = True
@@ -129,6 +246,13 @@ _orphan_check_cache: dict = {}   # key -> (bool_alive, scaduto_a)
 # trovato" (voice/kiosk quando spenti).
 _ORPHAN_CHECK_TTL = 45.0
 _start_ts   = time.monotonic()
+
+# Watchdog: fallimenti consecutivi per servizio + se e' gia' stato mandato
+# un alert per questa "striscia" di fallimenti (evita spam ad ogni giro dopo
+# il primo alert, un solo avviso finche' non recupera). No-op se
+# WATCHDOG_ENABLED e' False (vedi sopra).
+_watchdog_fail_counts: dict = {}
+_watchdog_alerted: set = set()
 
 
 # ── Config persistence ────────────────────────────────────────────────
@@ -540,15 +664,35 @@ def _sync_camera(services_cfg: dict):
 
 
 # ── MQTT ──────────────────────────────────────────────────────────────
-_mqtt = None
+def _notify_telegram(text: str):
+    """Stesso topic/pattern gia' in produzione per gli alert TD
+    (osc_bridge.py TDDeviceRegistry._notify()) — un publish su
+    gaia/notify/telegram, consumato dal dispatcher Telegram esistente."""
+    if not _mqtt:
+        return
+    try:
+        _mqtt.publish("gaia/notify/telegram", json.dumps({"text": text}))
+    except Exception as e:
+        print(f"[Agent] Errore notifica Telegram: {e}")
+
+
+def _do_shutdown(reason: str):
+    """Unico punto che spegne davvero la macchina — usato sia dal comando
+    MQTT diretto sia dal trigger programmato (_watchdog_loop) cosi' i due
+    percorsi non duplicano la stessa subprocess.run e restano coerenti."""
+    print(f"[Agent] Shutdown ({reason}) — eseguo tra 5s.")
+    _notify_telegram(f"🔌 Shutdown ({reason}) su {MACHINE_ROLE}:{_cfg.get('device_id')} — in corso.")
+    subprocess.run(["shutdown", "/s", "/t", "5"],
+                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
 
 
 def _publish_status():
     with _cfg_lock:
-        device_id = _cfg.get("device_id")
-        stanza    = _cfg.get("stanza")
-        name      = _cfg.get("name", stanza)
-        svc_cfg   = _cfg.get("services", {})
+        device_id   = _cfg.get("device_id")
+        stanza      = _cfg.get("stanza")
+        name        = _cfg.get("name", stanza)
+        svc_cfg     = _cfg.get("services", {})
+        shutdown_at = _cfg.get("shutdown_at")
 
     services = {k: _svc_status(k) for k in _SERVICE_DEFS}
 
@@ -563,6 +707,7 @@ def _publish_status():
         "capabilities": detect_capabilities(),
         "services":     services,
         "config":       svc_cfg,
+        "shutdown_at":  shutdown_at,
         "uptime":       _get_uptime(),
         "ts":           int(time.time() * 1000),
     }
@@ -599,7 +744,9 @@ def _publish_profile(status_payload: dict):
 
 
 def _on_connect(client, userdata, flags, reason_code, properties=None):
+    global _mqtt_connected
     if reason_code == 0:
+        _mqtt_connected = True
         with _cfg_lock:
             device_id = _cfg.get("device_id")
         client.subscribe(f"gaia/device/{device_id}/command")
@@ -608,6 +755,44 @@ def _on_connect(client, userdata, flags, reason_code, properties=None):
         _publish_status()
     else:
         print(f"[MQTT] Connessione fallita rc={reason_code}")
+
+
+def _on_disconnect(client, userdata, disconnect_flags, reason_code, properties=None):
+    global _mqtt_connected, _last_disconnect_ts
+    was_connected = _mqtt_connected
+    _mqtt_connected = False
+    if was_connected:
+        _last_disconnect_ts = time.time()
+    if reason_code != 0:
+        print(f"[MQTT] Disconnesso (rc={reason_code})")
+
+
+def _maybe_rediscover():
+    """Chiamata ad ogni giro del loop principale in main() -- vedi commento
+    sopra RECOVERY_THRESHOLD. No-op quasi sempre (early return)."""
+    global _next_rediscovery_ts, MQTT_HOST, MQTT_PORT
+    if _mqtt_connected or _mqtt is None:
+        return
+    now = time.time()
+    if now - _last_disconnect_ts < RECOVERY_THRESHOLD or now < _next_rediscovery_ts:
+        return
+    _next_rediscovery_ts = now + RECOVERY_THRESHOLD
+    print(f"[Agent] Disconnesso da oltre {RECOVERY_THRESHOLD}s, ri-eseguo discovery...")
+    try:
+        info = discovery.discover(cached_host=MQTT_HOST)
+    except Exception as e:
+        print(f"[Agent] Ri-discovery fallita: {e}")
+        return
+    if info and info.get("mqtt_host") and info["mqtt_host"] != MQTT_HOST:
+        print(f"[Agent] Nuovo host trovato: {info['mqtt_host']} (era {MQTT_HOST})")
+        MQTT_HOST = info["mqtt_host"]
+        MQTT_PORT = int(info.get("mqtt_port", MQTT_PORT))
+        try:
+            _mqtt.connect_async(MQTT_HOST, MQTT_PORT, 60)
+        except Exception as e:
+            print(f"[Agent] connect_async fallita: {e}")
+    else:
+        print("[Agent] Ri-discovery: nessun host migliore trovato, continuo a ritentare quello attuale")
 
 
 def _on_message(client, userdata, msg):
@@ -658,6 +843,14 @@ def _handle_command(cmd: dict):
                 stanza_changed = True
             if "name" in cmd:
                 _cfg["name"] = cmd["name"]
+            if "shutdown_at" in cmd:
+                val = cmd["shutdown_at"]
+                if val in (None, ""):
+                    _cfg["shutdown_at"] = None
+                elif isinstance(val, str) and re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", val):
+                    _cfg["shutdown_at"] = val
+                else:
+                    print(f"[Agent] shutdown_at non valido (atteso HH:MM o null): {val!r}, ignorato")
             if "services" in cmd:
                 for svc, val in cmd["services"].items():
                     if svc == "camera":
@@ -687,13 +880,19 @@ def _handle_command(cmd: dict):
         ).start()
         return
 
-    elif action in ("reboot", "shutdown"):
-        # Evento 25/9: OPS va spento/riavviato da remoto (Pi Manager/Web).
-        # Prima "reboot" era ignorato di proposito; ora e' richiesto esplicitamente.
-        flag = "/r" if action == "reboot" else "/s"
-        print(f"[Agent] {action} richiesto via MQTT — eseguo tra 5s.")
-        subprocess.run(["shutdown", flag, "/t", "5"],
+    elif action == "reboot":
+        # Contratto agent Windows: reboot/shutdown via MQTT/Pi Manager/
+        # Telegram su QUALSIASI macchina Windows (prima "reboot" era
+        # ignorato apposta su OPS, "non e' un Pi headless" — richiesto
+        # esplicitamente in seguito, vedi docs/agent-windows-contract.md).
+        print("[Agent] Reboot richiesto via MQTT — eseguo tra 5s.")
+        _notify_telegram(f"🔄 Reboot richiesto da remoto su {MACHINE_ROLE}:{_cfg.get('device_id')} — in corso.")
+        subprocess.run(["shutdown", "/r", "/t", "5"],
                        creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+        return
+
+    elif action == "shutdown":
+        _do_shutdown("richiesto da remoto")
         return
 
     else:
@@ -733,6 +932,55 @@ def _ota_update(service_key: str, url: str, md5_expected: str, filename: str):
             os.remove(tmp)
 
     _publish_status()
+
+
+# ── Watchdog (solo se WATCHDOG_ENABLED, vedi manifest "watchdog") ──────
+def _watchdog_loop():
+    """Riavvia da solo un servizio "enabled" che risulta caduto, non solo
+    su comando MQTT esplicito -- per le macchine non presidiate
+    (WATCHDOG_ENABLED, contratto in docs/agent-windows-contract.md).
+    Ritenta A OLTRANZA -- mai un reboot automatico dell'intera macchina.
+    Dopo WATCHDOG_ALERT_AFTER fallimenti CONSECUTIVI per lo stesso
+    servizio, un solo alert Telegram (non uno ad ogni giro) finche' non
+    recupera. Gestisce anche shutdown_at (spegnimento programmato) qui
+    invece che in un thread separato -- gia' un loop periodico."""
+    global _last_scheduled_shutdown_date
+    while _running:
+        time.sleep(WATCHDOG_INTERVAL)
+        with _cfg_lock:
+            services    = dict(_cfg.get("services", {}))
+            shutdown_at = _cfg.get("shutdown_at")
+        if shutdown_at:
+            now = datetime.now()
+            today = now.strftime("%Y-%m-%d")
+            if now.strftime("%H:%M") == shutdown_at and _last_scheduled_shutdown_date != today:
+                _last_scheduled_shutdown_date = today
+                _do_shutdown(f"programmato {shutdown_at}")
+        for key, scfg in services.items():
+            if key == "camera":
+                continue  # gestita solo via ref-count (_sync_camera), mai dal watchdog
+            if not scfg.get("enabled"):
+                _watchdog_fail_counts.pop(key, None)
+                _watchdog_alerted.discard(key)
+                continue
+            if _is_running(key):
+                if _watchdog_fail_counts.pop(key, None):
+                    print(f"[Watchdog] {key}: recuperato")
+                    if key in _watchdog_alerted:
+                        _watchdog_alerted.discard(key)
+                        _notify_telegram(f"✅ \"{key}\" di nuovo attivo su {_cfg.get('device_id')}.")
+                continue
+            fails = _watchdog_fail_counts.get(key, 0) + 1
+            _watchdog_fail_counts[key] = fails
+            print(f"[Watchdog] {key}: caduto (fallimento #{fails}), riavvio...")
+            _restart_service(key)
+            if fails >= WATCHDOG_ALERT_AFTER and key not in _watchdog_alerted:
+                _watchdog_alerted.add(key)
+                _notify_telegram(
+                    f"⚠️ \"{key}\" non riparte da {fails} tentativi consecutivi "
+                    f"su {_cfg.get('device_id')} — il watchdog continua a ritentare."
+                )
+        _publish_status()
 
 
 # ── Apply initial config ──────────────────────────────────────────────
@@ -778,13 +1026,24 @@ signal.signal(signal.SIGINT,  _handle_signal)
 
 # ── Main ──────────────────────────────────────────────────────────────
 def main():
-    global _cfg, _mqtt
+    global _cfg, _mqtt, MQTT_HOST
 
     _acquire_lock()
     _cfg = load_config()
     print(f"[GAIA OPS Agent] device_id : {_cfg['device_id']}")
     print(f"[GAIA OPS Agent] stanza    : {_cfg['stanza']}")
     print(f"[GAIA OPS Agent] role      : {MACHINE_ROLE}")
+    print(f"[GAIA OPS Agent] watchdog  : {WATCHDOG_ENABLED}")
+
+    # Discovery PRIMA di tutto -- no-op quasi ovunque (cache/broadcast/mDNS
+    # trovano Core sulla LAN in un attimo), ma copre anche OPS ora: se l'IP
+    # LAN di Core cambiasse, l'agent lo ritrova da solo invece di restare
+    # puntato su un host morto (vedi commento su RECOVERY_THRESHOLD sopra).
+    info = discovery.discover(cached_host=MQTT_HOST)
+    if info and info.get("mqtt_host") and info["mqtt_host"] != MQTT_HOST:
+        print(f"[GAIA OPS Agent] Gaia Core trovato: {info['mqtt_host']} (default era {MQTT_HOST})")
+        MQTT_HOST = info["mqtt_host"]
+
     print(f"[GAIA OPS Agent] MQTT      : {MQTT_HOST}:{MQTT_PORT}")
     print(f"[GAIA OPS Agent] Servizi   : {list(_SERVICE_DEFS.keys())}")
 
@@ -792,7 +1051,9 @@ def main():
 
     _mqtt = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"gaia-ops-agent-{_cfg['device_id']}")
     _mqtt.on_connect = _on_connect
+    _mqtt.on_disconnect = _on_disconnect
     _mqtt.on_message = _on_message
+    _mqtt.reconnect_delay_set(min_delay=2, max_delay=30)
 
     # AtLogOn può scattare prima che la rete/Tailscale sia pronta a
     # raggiungere il Core: niente retry qui = crash del processo intero
@@ -811,11 +1072,15 @@ def main():
         return
     _mqtt.loop_start()
 
+    if WATCHDOG_ENABLED:
+        threading.Thread(target=_watchdog_loop, daemon=True).start()
+
     last_hb = 0
     while _running:
         if time.time() - last_hb >= HEARTBEAT_INTERVAL:
             _publish_status()
             last_hb = time.time()
+        _maybe_rediscover()
         time.sleep(1)
 
     _mqtt.loop_stop()

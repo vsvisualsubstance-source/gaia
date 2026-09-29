@@ -13,3 +13,4 @@
 # dipendenze proprie elencate lì).
 
 paho-mqtt
+psutil
