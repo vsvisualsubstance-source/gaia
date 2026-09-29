@@ -3121,6 +3121,18 @@ function pmBuildCard(id, d) {
         Live, nessun redeploy — utile per una macchina che passa da presidiata a non presidiata (es. un portatile di test).
       </div>
     </div>`:''}
+    ${((d.role==='pi'||d.role==='core')&&svcKeys.includes('mediapipe'))?`<div>
+      <div class="pm-section-label">🕺 Mocap → TouchDesigner (OSC diretto)</div>
+      <div class="pm-rename-row">
+        <label style="display:flex;align-items:center;gap:6px;flex:1;cursor:pointer">
+          <input type="checkbox" class="pm-chk-osclandmarks" ${d.osc_landmarks?'checked':''}>
+          <span style="font-size:.8rem">${d.osc_landmarks?'Acceso — invia viso/mani/pose via OSC a chi si abilita a riceverlo':'Spento — nessun invio mocap da questo device'}</span>
+        </label>
+      </div>
+      <div style="font-size:.75rem;color:var(--muted);margin-top:4px">
+        Riavvia mediapipe se già acceso per applicare subito. La ricezione lato TD resta opt-in per singola istanza (Admin → mocap).
+      </div>
+    </div>`:''}
     <div class="pm-card-actions">
       ${svcKeys.includes('livestream') ? `<button class="pm-btn blue" onclick="window.open('${d.services?.livestream?.endpoints?.stream||`http://${d.ip}:8000/stream.ogg`}','_blank')">🔊 Ascolta stream</button>` : ''}
       ${d.capabilities?.camera && d.stanza ? `<button class="pm-btn blue pm-btn-welcome" onclick="window.open('http://${location.hostname}:1880/welcome.html?cam=${encodeURIComponent(d.ip||'')}&room=${encodeURIComponent(d.stanza)}','_blank')">🖥 Apri Welcome</button>` : ''}
@@ -3259,6 +3271,12 @@ function pmAttachEvents(id, card) {
     const val = watchdogChk.checked;
     pmSend(id, {action:'set_config', watchdog: val});
     pmLog('out', `${id}: watchdog → ${val ? 'acceso' : 'spento'}`);
+  };
+  const oscLandmarksChk = card.querySelector('.pm-chk-osclandmarks');
+  if (oscLandmarksChk) oscLandmarksChk.onchange = () => {
+    const val = oscLandmarksChk.checked;
+    pmSend(id, {action:'set_config', osc_landmarks: val});
+    pmLog('out', `${id}: mocap OSC → ${val ? 'acceso' : 'spento'}`);
   };
   card.querySelector('.pm-btn-status').onclick  = () => pmSend(id, {action:'status'});
   card.querySelector('.pm-btn-reboot').onclick  = () => { if(confirm(`Riavviare ${id}?`)) pmSend(id, {action:'reboot'}); };

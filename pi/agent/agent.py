@@ -70,6 +70,12 @@ _DEFAULT_CONFIG = {
     # dell'azione "shutdown" diretta via MQTT (vedi pi/CLAUDE.md). Usare con
     # cautela su un Pi non facilmente raggiungibile di persona.
     "shutdown_at": None,
+    # Mocap OSC diretto a TouchDesigner (canale 7, pi/mediapipe/README.md) --
+    # di default OFF ovunque (comportamento invariato), attivabile da
+    # remoto (Pi Manager/MQTT) senza toccare systemd/file a mano. Il
+    # servizio 'mediapipe' deve gia' esistere sul device (non ogni Pi ce
+    # l'ha) -- vedi _write_mediapipe_conf sotto e set_config.
+    "osc_landmarks": False,
 }
 
 
@@ -115,6 +121,23 @@ def _write_device_env(cfg: dict):
     with open(config.DEVICE_ENV_FILE, "w") as f:
         f.write("\n".join(lines) + "\n")
     print(f"[Agent] device.conf aggiornato → CAMERA_NAME={stanza}")
+
+
+MEDIAPIPE_CONF_FILE = "/etc/gaia/mediapipe.conf"
+
+
+def _write_mediapipe_conf(cfg: dict):
+    """Scrive /etc/gaia/mediapipe.conf — letto direttamente da
+    pi/mediapipe/mediapipe_node.py all'avvio (_load_conf, stesso pattern
+    INI di camera.conf), non via systemd EnvironmentFile. Contiene solo
+    OSC_LANDMARKS oggi: se in futuro serve rendere remoto anche
+    OSC_HOST/altri campi di quel modulo, aggiungerli qui allo stesso modo.
+    Va chiamata PRIMA di un (re)start di 'mediapipe' perché il processo
+    legge questo file solo all'avvio, non lo ri-controlla mentre gira."""
+    os.makedirs(os.path.dirname(MEDIAPIPE_CONF_FILE), exist_ok=True)
+    with open(MEDIAPIPE_CONF_FILE, "w") as f:
+        f.write(f"OSC_LANDMARKS={'1' if cfg.get('osc_landmarks') else '0'}\n")
+    print(f"[Agent] mediapipe.conf aggiornato → OSC_LANDMARKS={'1' if cfg.get('osc_landmarks') else '0'}")
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -381,6 +404,7 @@ def _publish_status():
         "services":     all_statuses(),
         "config":       _device_config.get("services", {}),
         "shutdown_at":  _device_config.get("shutdown_at"),
+        "osc_landmarks": _device_config.get("osc_landmarks", False),
         "uptime":       _get_uptime(),
         "ts":           int(time.time() * 1000),
     }
@@ -509,6 +533,11 @@ def _handle_command(cmd: dict):
                     _device_config["shutdown_at"] = val
                 else:
                     print(f"[Agent] shutdown_at non valido (atteso HH:MM o null): {val!r}, ignorato")
+            if "osc_landmarks" in cmd:
+                osc_landmarks_changed = bool(cmd["osc_landmarks"]) != _device_config.get("osc_landmarks", False)
+                _device_config["osc_landmarks"] = bool(cmd["osc_landmarks"])
+            else:
+                osc_landmarks_changed = False
             if "services" in cmd:
                 for svc, val in cmd["services"].items():
                     enabled = val if isinstance(val, bool) else val.get("enabled", False)
@@ -525,6 +554,17 @@ def _handle_command(cmd: dict):
                 if cfg.get("enabled") and service_status(svc) == "active":
                     print(f"[Agent] Riavvio {svc} per cambio stanza")
                     restart_service(svc)
+        if osc_landmarks_changed:
+            _write_mediapipe_conf(_device_config)
+            # mediapipe_node.py legge mediapipe.conf solo all'avvio -- se
+            # e' gia' acceso va riavviato per applicare il nuovo valore.
+            # Se il device non ha nemmeno il servizio 'mediapipe' (non
+            # tutti i Pi ce l'hanno), service_status ritorna "unknown" e
+            # qui non facciamo nulla -- il file resta scritto per quando
+            # (se mai) quel servizio verra' aggiunto.
+            if service_status("mediapipe") == "active":
+                print(f"[Agent] Riavvio mediapipe per applicare osc_landmarks={_device_config['osc_landmarks']}")
+                restart_service("mediapipe")
 
     elif action == "status":
         pass   # risponde sotto con _publish_status()
@@ -620,6 +660,9 @@ def _ota_update(service_key: str, url: str, md5_expected: str, filename: str, ve
 # ──────────────────────────────────────────────────────────────────────
 def apply_initial_config():
     _write_device_env(_device_config)   # assicura /etc/gaia/device.conf aggiornato
+    _write_mediapipe_conf(_device_config)   # idem per mediapipe.conf (osc_landmarks) --
+    # PRIMA del loop sotto: se mediapipe e' enabled, deve gia' trovare il
+    # file giusto al suo primo avvio, non solo dopo un set_config successivo.
     # camera è un servizio normale ora (vedi SERVICE_DEPENDENCIES sopra): se è
     # enabled per conto suo, o se lo è yolo/mediapipe/kiosk (che la richiedono
     # come dipendenza), parte comunque in questo stesso giro — enable_service

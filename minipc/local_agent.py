@@ -53,6 +53,10 @@ _DEFAULT_CFG = {
     "stanza":    "minipc-test",
     "name":      "MiniPC (test locale)",
     "services": {k: {"enabled": False} for k in ("yolo", "mediapipe")},
+    # Mocap OSC diretto a TouchDesigner (canale 7) — stesso campo/stesso
+    # file di pi/agent/agent.py, contratto condiviso: default OFF, attivabile
+    # da remoto (Pi Manager/MQTT) senza toccare file a mano.
+    "osc_landmarks": False,
 }
 
 # ── Mappa servizi → comando da eseguire ──────────────────────────────
@@ -246,6 +250,21 @@ def _build_env(extra: dict) -> dict:
     env["MQTT_PORT"]   = str(MQTT_PORT)
     env.update(extra)
     return env
+
+
+MEDIAPIPE_CONF_FILE = "/etc/gaia/mediapipe.conf"
+
+
+def _write_mediapipe_conf(cfg: dict):
+    """Scrive /etc/gaia/mediapipe.conf — letto direttamente da
+    pi/mediapipe/mediapipe_node.py all'avvio, stesso file/stesso schema di
+    pi/agent/agent.py (contratto condiviso per il toggle mocap). Va
+    chiamata PRIMA di un (re)start di 'mediapipe': il processo legge
+    questo file solo all'avvio, non lo ricontrolla mentre gira."""
+    os.makedirs(os.path.dirname(MEDIAPIPE_CONF_FILE), exist_ok=True)
+    with open(MEDIAPIPE_CONF_FILE, "w") as f:
+        f.write(f"OSC_LANDMARKS={'1' if cfg.get('osc_landmarks') else '0'}\n")
+    print(f"[Agent] mediapipe.conf aggiornato → OSC_LANDMARKS={'1' if cfg.get('osc_landmarks') else '0'}")
 
 
 def _docker_is_running(container: str) -> bool:
@@ -444,6 +463,7 @@ def _publish_status():
         "capabilities": detect_capabilities(),
         "services":     services,
         "config":       svc_cfg,
+        "osc_landmarks": _cfg.get("osc_landmarks", False),
         "uptime":       _get_uptime(),
         "ts":           int(time.time() * 1000),
     }
@@ -545,6 +565,11 @@ def _handle_command(cmd: dict):
                     stanza_changed = True
             if "name" in cmd:
                 _cfg["name"] = cmd["name"]
+            if "osc_landmarks" in cmd:
+                osc_landmarks_changed = bool(cmd["osc_landmarks"]) != _cfg.get("osc_landmarks", False)
+                _cfg["osc_landmarks"] = bool(cmd["osc_landmarks"])
+            else:
+                osc_landmarks_changed = False
             if "services" in cmd:
                 for svc, val in cmd["services"].items():
                     enabled = val if isinstance(val, bool) else val.get("enabled", False)
@@ -554,6 +579,11 @@ def _handle_command(cmd: dict):
                     else:
                         _stop_service(svc)
         save_config(_cfg)
+        if osc_landmarks_changed:
+            _write_mediapipe_conf(_cfg)
+            if _is_running("mediapipe"):
+                print(f"[Agent] Riavvio mediapipe per applicare osc_landmarks={_cfg['osc_landmarks']}")
+                _restart_service("mediapipe")
         if stanza_changed:
             # Riavvia i servizi attivi con il nuovo CAMERA_NAME
             for key in list(_SERVICE_DEFS.keys()):
@@ -624,6 +654,7 @@ def _ota_update(service_key: str, url: str, md5_expected: str, filename: str):
 def apply_initial_config():
     with _cfg_lock:
         services = _cfg.get("services", {})
+    _write_mediapipe_conf(_cfg)   # prima di un eventuale avvio di mediapipe sotto
     for svc, scfg in services.items():
         if scfg.get("enabled"):
             print(f"[Agent] Avvio iniziale: {svc}")
