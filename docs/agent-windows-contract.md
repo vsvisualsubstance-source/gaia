@@ -186,6 +186,22 @@ gestito da `agent.py` — si annuncia da solo via MQTT con `role:
 `gaia`/`yolo`/`herbarum`). Non fa parte di questo contratto (è per
 progetto, non per macchina) — resta come oggi.
 
+## services.json per-macchina — convenzione di naming (dal 2026-09-29)
+
+Il file `minipc/installation/services.json` tracciato in repo rappresenta
+la macchina touring **attualmente live** (oggi: Palazzo Ducale,
+`installation-vs-mini-silver`) — è quello che finisce su
+`C:\gaia\minipc\installation\services.json` quando si fa deploy lì.
+
+Per una SECONDA macchina touring in preparazione in parallelo (es.
+silver-filoq), il file di riferimento vive sotto un nome distinto,
+`services.<nome-macchina>.json` (es. `services.silver-filoq.json`), finché
+non è quella la macchina attiva — evita di sovrascrivere la config di una
+macchina live mentre se ne prepara un'altra offline. Quando si fa il
+deploy vero su quella macchina, il file va copiato come `services.json`
+nella sua cartella (non rinominato in repo: resta comunque comodo avere
+entrambe le versioni sotto controllo versione per confronto).
+
 ## Prossimi passi (non ancora fatti)
 
 - **Pi**: stesso esercizio di unificazione per `pi/agent/agent.py` (oggi
@@ -199,7 +215,10 @@ progetto, non per macchina) — resta come oggi.
   anche apparire come device separato in una pagina web dedicata.
 - **silver-filoq**: offline al momento di questo giro (Tailscale "last
   seen 1h ago") — deploy del contratto aggiornato rimandato al prossimo
-  avvio.
+  avvio. `services.silver-filoq.json` preparato con madmapper/
+  madmapper_bridge (stesso kit di Ducale) ma path PLACEHOLDER, da
+  verificare dal vivo appena la macchina è online (versione MadMapper,
+  progetto .mad reale, interprete Python) prima di distribuirlo.
 - **Portatile Windows di test** (menzionato dall'utente, per TD
   Gaia/PatchDeck/Herbarium): visto sulla LAN di casa come `Nitai.lan`
   (192.168.1.249) ma non confermato — servono IP/credenziali confermati

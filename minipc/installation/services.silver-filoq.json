@@ -1,0 +1,31 @@
+{
+  "_nota": "Manifest servizi per l'agent Windows di silver-filoq (macchina touring, copia del kit gia' in produzione a Palazzo Ducale -- vedi services.json in questa stessa cartella, quello e' il file operativo per vs-mini-silver). Preparato offline il 2026-09-29 (la macchina risultava offline su Tailscale, 'last seen 1h ago') -- i path di madmapper.cmd sotto sono COPIATI da Ducale come PLACEHOLDER, non verificati dal vivo su questa macchina: MadMapper potrebbe essere in una versione diversa, un percorso diverso, o non ancora installato. Stesso principio gia' seguito per Ducale stesso (docs/agent-windows-contract.md, piano originale): non si costruisce alla cieca, si verifica dal vivo appena la macchina e' online, poi si aggiorna questo file e lo si ridistribuisce. Non toccare services.json (Ducale, live, non riavviare quella macchina).",
+  "machine_role": "installation",
+  "watchdog": true,
+  "_nota_watchdog": "true = riavvia da solo un servizio 'enabled' caduto (macchina non presidiata). Vedi docs/agent-windows-contract.md.",
+  "device_id": "installation-silver-filoq",
+  "stanza": "DA-DEFINIRE",
+  "_nota_stanza": "Nome venue/stanza da decidere quando si sa dove va installata questa macchina -- oggi solo un placeholder, aggiornare prima del deploy definitivo (set_config da Admin va bene anche dopo, non blocca l'avvio).",
+  "services": {
+    "madmapper": {
+      "cmd": [
+        "C:\\Program Files\\MadMapper 6.1.5\\MadMapper.exe",
+        "DA-VERIFICARE-path-progetto-.mad"
+      ],
+      "cwd": "C:\\Program Files\\MadMapper 6.1.5",
+      "check_script": false,
+      "_nota": "PLACEHOLDER copiato da Ducale (services.json) -- DA VERIFICARE dal vivo su questa macchina: versione MadMapper installata (potrebbe non essere 6.1.5), path reale dell'exe, e soprattutto il path del progetto .mad da caricare (senza, MadMapper riparte a vuoto sulla schermata menu -- stesso bug gia' visto su Ducale, vedi commit d259975/44edde6). Trovare il progetto reale via AppData\\Roaming\\MadMapper (cache thumbnail) o chiedere all'utente il percorso esatto."
+    },
+    "madmapper_bridge": {
+      "cmd": [
+        "PYTHON_DA_VERIFICARE",
+        "madmapper_bridge.py"
+      ],
+      "cwd": "C:\\gaia\\minipc\\madmapper",
+      "env_extra": {
+        "PYTHONUNBUFFERED": "1"
+      },
+      "_nota": "Modulo condiviso in minipc/madmapper/ (stesso file di Ducale, nessuna modifica necessaria) -- DA VERIFICARE solo il path dell'interprete Python di QUESTA macchina (cmd[0]: su Ducale e' C:\\Users\\vs\\AppData\\Local\\Programs\\Python\\Python312\\python.exe, niente venv per lo stesso motivo documentato li' -- verificare se vale anche qui o se questa macchina ha gia' un venv diverso dal setup Windows agent precedente)."
+    }
+  }
+}
