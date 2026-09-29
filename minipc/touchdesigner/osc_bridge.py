@@ -327,7 +327,8 @@ class TDDeviceRegistry:
             is_new = device_id not in self._targets
             paused = self._targets.get(device_id, {}).get("paused", False)
             self._targets[device_id] = {
-                "ip": ip, "name": d.get("name") or device_id,
+                "ip": ip, "tailscale_ip": d.get("tailscale_ip"),
+                "name": d.get("name") or device_id,
                 "stanza": d.get("stanza"), "last_seen": last_seen,
                 "paused": paused, "family": (d.get("family") or "").lower(),
             }
@@ -355,7 +356,8 @@ class TDDeviceRegistry:
         with self._lock:
             targets = {
                 device_id: {
-                    "ip": t["ip"], "name": t["name"], "stanza": t["stanza"],
+                    "ip": t["ip"], "tailscale_ip": t.get("tailscale_ip"),
+                    "name": t["name"], "stanza": t["stanza"],
                     "paused": t["paused"], "family": t.get("family") or "",
                     "offline": (now - t["last_seen"]) > self.OFFLINE_AFTER_S,
                 }
@@ -376,12 +378,28 @@ class TDDeviceRegistry:
     _OSC_EXCLUDED_FAMILIES = {"mixeraudio"}
 
     def live_ips(self):
+        """Set piatto di indirizzi destinazione (LAN + Tailscale quando
+        noto e diverso) -- TDFanoutClient manda a OGNI indirizzo qui
+        dentro senza distinguere il percorso: un UDP verso un indirizzo
+        non raggiungibile è innocuo, quindi includere entrambi copre sia
+        il caso "stessa LAN" sia "raggiungibile solo via Tailscale" senza
+        dover scegliere quale funziona davvero (vedi GAIA_INTERFACE.md
+        2026-09-29)."""
         now = time.time()
+        out = set()
         with self._lock:
-            return sorted({t["ip"] for t in self._targets.values()
-                            if not t["paused"]
-                            and t.get("family") not in self._OSC_EXCLUDED_FAMILIES
-                            and now - t["last_seen"] < self.OFFLINE_AFTER_S})
+            for t in self._targets.values():
+                if t["paused"]:
+                    continue
+                if t.get("family") in self._OSC_EXCLUDED_FAMILIES:
+                    continue
+                if now - t["last_seen"] >= self.OFFLINE_AFTER_S:
+                    continue
+                out.add(t["ip"])
+                ts_ip = t.get("tailscale_ip")
+                if ts_ip and ts_ip != t["ip"]:
+                    out.add(ts_ip)
+        return sorted(out)
 
 
 class TDFanoutClient:

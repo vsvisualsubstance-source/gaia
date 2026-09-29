@@ -144,7 +144,7 @@ class _MocapTargetRegistry:
         self._my_hostname = my_hostname
         self._port = port
         self._targets = {}   # td_id -> {ip,name,stanza,enabled,last_seen}
-        self._clients = {}   # td_id -> SimpleUDPClient
+        self._clients = {}   # td_id -> [SimpleUDPClient, ...] (LAN, +Tailscale se noto)
         self.status_topic  = f'gaia/mocap-bridge/{sender_device_id}/status'
         self.command_topic = f'gaia/mocap-bridge/{sender_device_id}/command'
 
@@ -155,14 +155,20 @@ class _MocapTargetRegistry:
         ip, td_id = d.get('ip'), d.get('device_id')
         if not ip or not td_id:
             return False
+        # tailscale_ip: fallback per un target raggiungibile solo via
+        # Tailscale (rete diversa dal sender) — richiesto/proposto in
+        # GAIA_INTERFACE.md (2026-09-29), campo pubblicato da gaia_client
+        # dallo stesso giorno. None se il device non lo pubblica ancora o
+        # non ha Tailscale attivo -- innocuo, enabled_clients() lo salta.
+        tailscale_ip = d.get('tailscale_ip')
         prev = self._targets.get(td_id)
         is_new = prev is None
         # autoabilitata solo la prima volta che la vediamo E solo se è la
         # stessa macchina — se l'utente l'ha poi disabilitata a mano, i
         # heartbeat successivi non la riaccendono da soli.
         enabled = (prev or {}).get('enabled', is_new and self._is_same_host(td_id))
-        if prev and prev.get('ip') != ip:
-            self._clients.pop(td_id, None)   # ip cambiato, ricrea il client
+        if prev and (prev.get('ip') != ip or prev.get('tailscale_ip') != tailscale_ip):
+            self._clients.pop(td_id, None)   # ip/tailscale_ip cambiati, ricrea i client
         # Timestamp del MESSAGGIO (ts, ms), non l'orario di ricezione locale
         # — stesso motivo del fix in osc_bridge.py/TDDeviceRegistry: un
         # riavvio di mediapipe fa consegnare subito l'ultimo status
@@ -171,7 +177,8 @@ class _MocapTargetRegistry:
         raw_ts = d.get('ts')
         last_seen = raw_ts / 1000 if isinstance(raw_ts, (int, float)) and raw_ts > 0 else time.time()
         self._targets[td_id] = {
-            'ip': ip, 'name': d.get('name') or td_id, 'stanza': d.get('stanza'),
+            'ip': ip, 'tailscale_ip': tailscale_ip,
+            'name': d.get('name') or td_id, 'stanza': d.get('stanza'),
             'family': d.get('family'), 'enabled': enabled, 'last_seen': last_seen,
         }
         return is_new
@@ -188,22 +195,33 @@ class _MocapTargetRegistry:
         return True
 
     def enabled_clients(self):
+        """Un target abilitato può avere FINO A DUE client OSC (LAN +
+        Tailscale, quando entrambi gli IP sono noti e diversi) — mandiamo
+        su entrambi invece di sceglierne uno: un UDP verso un indirizzo
+        non raggiungibile è innocuo (nessun errore, nessun costo reale),
+        quindi non serve decidere quale dei due percorsi funziona davvero
+        (LAN, Tailscale diretto, Tailscale relay) caso per caso. Vedi
+        GAIA_INTERFACE.md 2026-09-29 per il perché."""
         from pythonosc.udp_client import SimpleUDPClient
         out = []
         for td_id, t in self._targets.items():
             if not t['enabled']:
                 continue
-            client = self._clients.get(td_id)
-            if client is None:
-                client = SimpleUDPClient(t['ip'], self._port)
-                self._clients[td_id] = client
-            out.append(client)
+            clients = self._clients.get(td_id)
+            if clients is None:
+                clients = [SimpleUDPClient(t['ip'], self._port)]
+                ts_ip = t.get('tailscale_ip')
+                if ts_ip and ts_ip != t['ip']:
+                    clients.append(SimpleUDPClient(ts_ip, self._port))
+                self._clients[td_id] = clients
+            out.extend(clients)
         return out
 
     def status_payload(self):
         now = time.time()
         return {'targets': {
-            td_id: {'ip': t['ip'], 'name': t['name'], 'stanza': t['stanza'],
+            td_id: {'ip': t['ip'], 'tailscale_ip': t.get('tailscale_ip'),
+                    'name': t['name'], 'stanza': t['stanza'],
                     'enabled': t['enabled'],
                     'offline': (now - t['last_seen']) > self.OFFLINE_AFTER_S}
             for td_id, t in self._targets.items()
