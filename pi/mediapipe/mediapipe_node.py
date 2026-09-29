@@ -68,7 +68,14 @@ _defaults = {
     # non viene acceso esplicitamente (pensato per OPS, non per i Pi).
     'OSC_LANDMARKS':    '0',
     'OSC_HOST':         '127.0.0.1',
-    'OSC_PORT':         '7000',
+    # 7010, non 7000 (2026-09-29): 7000/7001 sono gia' i canali 1/2
+    # (osc_bridge.py, feed grezzo+canvas) -- un OSC In CHOP lato TD non
+    # condivide la porta con un secondo listener (confermato dalla doc
+    # ufficiale TD via la sessione TD/Mac, GAIA_INTERFACE.md), quindi un
+    # progetto che avesse sia oscin1 sia il mocap di gaia_client attivi
+    # sulla stessa porta fallirebbe il bind per davvero. Allineato con
+    # `Mocapport` lato gaia_client, stesso valore concordato lì.
+    'OSC_PORT':         '7010',
     'OSC_INTERVAL':     '0.08',   # ~12Hz, indipendente da PUBLISH_INTERVAL (quello è per MQTT)
 }
 

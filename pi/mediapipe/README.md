@@ -52,7 +52,7 @@ cd ~/gaia/mediapipe && bash install.sh
 | `POSE_MODEL_PATH` | *(vuoto)* | Path al bundle `.task` di PoseLandmarker, obbligatorio se `MULTI_PERSON=1` (vedi sotto) |
 | `OSC_LANDMARKS` | `0` | `1` = manda anche i landmark grezzi (viso/mani/pose) via OSC diretto a TouchDesigner — vedi sezione dedicata sotto |
 | `OSC_HOST` | `127.0.0.1` | **Non più l'IP effettivo** (rimosso 2026-08-06) — le destinazioni si scoprono via MQTT, vedi sotto. Ininfluente, tenuto solo per compatibilità del layer di config. |
-| `OSC_PORT` | `7000` | Porta OSC di TouchDesigner |
+| `OSC_PORT` | `7010` | Porta OSC di TouchDesigner (2026-09-29: NON 7000, quella e' gia' del canale 1 — un OSC In CHOP lato TD non condivide la porta con un secondo listener, vedi sezione mocap sotto) |
 | `OSC_INTERVAL` | `0.08` | Secondi tra un invio mocap e l'altro (~12Hz), indipendente da `PUBLISH_INTERVAL` |
 
 Le variabili d'ambiente hanno priorità sul file di configurazione. **Tutti i default
@@ -198,9 +198,12 @@ anche sul feed canvas (canale 2, `minipc/touchdesigner/osc_bridge.py`).
   per design, vedi `pmMocapIsRelevant` in `web/admin.html` — non renderizzano nulla che
   reagisca al corpo).
 - `ip` sempre presente; `tailscale_ip` opzionale ma raccomandato (vedi sopra).
-- Una porta OSC in ascolto — di default la stessa 7000 del canale 1 (stesso OSC In lato
-  TD, distinto per prefisso indirizzo `/gaia/mocap/...`), a meno che il progetto non usi
-  un `Mocapport` dedicato diverso (chiesto a TD/Mac il 2026-09-29, risposta in sospeso).
+- Una porta OSC dedicata in ascolto (`Mocapport` lato `gaia_client`) — **7010**, non 7000
+  (deciso il 2026-09-29 dopo conferma da TD/Mac via doc ufficiale TD: un OSC In CHOP non
+  condivide la porta con un secondo listener, quindi condividerla col canale 1 avrebbe
+  fatto fallire il bind del secondo). `OSC_PORT` lato `pi/mediapipe/mediapipe_node.py`
+  allineato allo stesso valore. TD/Mac aggiunge anche una guardia attiva (bind di test
+  prima di accendere il CHOP mocap) come rete di sicurezza indipendente.
 
 ### Schema indirizzi — un device, un tipo, un person_id correlato
 
