@@ -182,6 +182,19 @@ HEARTBEAT_INTERVAL = 30
 WATCHDOG_INTERVAL    = 30
 WATCHDOG_ALERT_AFTER = 5
 
+# Mocap OSC diretto a TD (canale 7, pi/mediapipe/README.md) — stesso
+# campo/contratto di pi/agent.py e minipc/local_agent.py (2026-09-29),
+# portato qui il 2026-09-30 dopo un bug reale trovato dal vivo: OPS ha
+# SEMPRE mandato mocap (OSC_LANDMARKS=1 statico nell'env_extra di
+# services.json), ma non pubblicava mai il campo osc_landmarks nel
+# proprio status -- un client TD che filtra gaia/device/+/status per
+# osc_landmarks==true non vedeva MAI OPS, pur essendo un sender reale e
+# attivo. Seed dal valore statico gia' in services.json cosi' il campo
+# e' corretto fin dal primo avvio senza bisogno di un set_config.
+OSC_LANDMARKS_DEFAULT = (
+    _SERVICE_DEFS.get("mediapipe", {}).get("env_extra", {}).get("OSC_LANDMARKS") == "1"
+)
+
 _DEFAULT_CFG = {
     "device_id": _manifest.get("device_id", f"ops-{socket.gethostname()}"),
     "stanza":    _manifest.get("stanza", "unknown"),
@@ -193,6 +206,8 @@ _DEFAULT_CFG = {
     "shutdown_at": None,
     # Live, vedi commento su WATCHDOG_DEFAULT sopra.
     "watchdog": WATCHDOG_DEFAULT,
+    # Live, vedi commento su OSC_LANDMARKS_DEFAULT sopra.
+    "osc_landmarks": OSC_LANDMARKS_DEFAULT,
 }
 
 # Guardia anti-doppio-trigger per lo shutdown programmato: l'orario viene
@@ -270,7 +285,7 @@ def load_config() -> dict:
     if os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, encoding="utf-8") as f:
             saved = json.load(f)
-        base.update({k: saved[k] for k in ("device_id", "stanza", "name", "updated", "shutdown_at", "watchdog") if k in saved})
+        base.update({k: saved[k] for k in ("device_id", "stanza", "name", "updated", "shutdown_at", "watchdog", "osc_landmarks") if k in saved})
         for svc in _SERVICE_DEFS:
             if svc == "camera":
                 continue
@@ -702,6 +717,7 @@ def _publish_status():
         svc_cfg     = _cfg.get("services", {})
         shutdown_at = _cfg.get("shutdown_at")
         watchdog    = _cfg.get("watchdog", WATCHDOG_DEFAULT)
+        osc_landmarks = _cfg.get("osc_landmarks", OSC_LANDMARKS_DEFAULT)
 
     services = {k: _svc_status(k) for k in _SERVICE_DEFS}
 
@@ -718,6 +734,7 @@ def _publish_status():
         "config":       svc_cfg,
         "shutdown_at":  shutdown_at,
         "watchdog":     watchdog,
+        "osc_landmarks": osc_landmarks,
         "uptime":       _get_uptime(),
         "ts":           int(time.time() * 1000),
     }
@@ -867,6 +884,12 @@ def _handle_command(cmd: dict):
                 # presidiata a non presidiata (es. portatile di test).
                 _cfg["watchdog"] = bool(cmd["watchdog"])
                 print(f"[Agent] watchdog impostato a {_cfg['watchdog']}")
+            if "osc_landmarks" in cmd:
+                osc_landmarks_changed = bool(cmd["osc_landmarks"]) != _cfg.get("osc_landmarks", OSC_LANDMARKS_DEFAULT)
+                _cfg["osc_landmarks"] = bool(cmd["osc_landmarks"])
+                print(f"[Agent] osc_landmarks impostato a {_cfg['osc_landmarks']}")
+            else:
+                osc_landmarks_changed = False
             if "services" in cmd:
                 for svc, val in cmd["services"].items():
                     if svc == "camera":
@@ -879,6 +902,16 @@ def _handle_command(cmd: dict):
                         _stop_service(svc)
                 _sync_camera(_cfg["services"])
         save_config(_cfg)
+        if osc_landmarks_changed and "mediapipe" in _SERVICE_DEFS:
+            # OPS non ha un file conf esterno come Pi/Core (Windows,
+            # env passato direttamente al Popen) -- si muta l'env_extra
+            # IN MEMORIA cosi' il prossimo _start_service/_restart_service
+            # lo raccoglie subito via _build_env.
+            _SERVICE_DEFS["mediapipe"].setdefault("env_extra", {})["OSC_LANDMARKS"] = \
+                "1" if _cfg["osc_landmarks"] else "0"
+            if _is_running("mediapipe"):
+                print(f"[Agent] Riavvio mediapipe per applicare osc_landmarks={_cfg['osc_landmarks']}")
+                _restart_service("mediapipe")
         if stanza_changed:
             for key in list(_SERVICE_DEFS.keys()):
                 if _is_running(key):

@@ -3121,7 +3121,7 @@ function pmBuildCard(id, d) {
         Live, nessun redeploy — utile per una macchina che passa da presidiata a non presidiata (es. un portatile di test).
       </div>
     </div>`:''}
-    ${((d.role==='pi'||d.role==='core')&&svcKeys.includes('mediapipe'))?`<div>
+    ${((d.role==='pi'||d.role==='core'||d.role==='ops')&&svcKeys.includes('mediapipe'))?`<div>
       <div class="pm-section-label">🕺 Mocap → TouchDesigner (OSC diretto)</div>
       <div class="pm-rename-row">
         <label style="display:flex;align-items:center;gap:6px;flex:1;cursor:pointer">
