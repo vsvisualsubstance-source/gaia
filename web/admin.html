@@ -2802,10 +2802,25 @@ function pmMocapRender() {
   `).join('');
 }
 
+// Collega il pulsante Admin al client TD (2026-09-30, GAIA_INTERFACE.md):
+// prima "Abilita" toccava SOLO il sender (mandava pacchetti OSC a
+// vuoto se l'operatore non aveva impostato Mocapingest/Opsdevice a
+// mano dentro TD, stessa "trappola" del Opsdevice sbagliato vista da
+// TD/Mac). Ora manda ANCHE i due comandi sul canale 4 del client TD
+// stesso (register_param di gaia_client, forma confermata e verificata
+// dal vivo da TD/Mac) -- un solo click, zero passaggi manuali in TD.
+// Disabilita e' simmetrico: spegne anche Mocapingest lato TD (Opsdevice
+// resta, e' solo un filtro, innocuo con ingest spento).
 function pmMocapToggle(sender, deviceId, action) {
   if (!_pmClient || !_pmClient.connected) { pmLog('err', 'MQTT non connesso'); return; }
   _pmClient.publish(`gaia/mocap-bridge/${sender}/command`, JSON.stringify({ device_id: deviceId, action }));
-  pmLog('out', `mocap ${sender}→${deviceId}: ${action}`);
+  const enabling = action === 'enable';
+  const tdTopic = `gaia/device/${deviceId}/command`;
+  if (enabling) {
+    _pmClient.publish(tdTopic, JSON.stringify({ action: 'set', param: 'Opsdevice', value: sender }));
+  }
+  _pmClient.publish(tdTopic, JSON.stringify({ action: 'set', param: 'Mocapingest', value: enabling }));
+  pmLog('out', `mocap ${sender}→${deviceId}: ${action} (sender + client TD)`);
 }
 
 // ── Piante — luogo (brain.roomGraph, 13 stanze canoniche, non solo le 5 vive) ──
