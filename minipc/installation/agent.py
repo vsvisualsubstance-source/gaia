@@ -394,34 +394,32 @@ def _find_os_pid(key: str) -> int | None:
     --user-data-dir assorbe silenziosamente un secondo lancio invece di
     aprirne uno nuovo, nessun errore visibile).
 
-    Costosa (spawna powershell.exe): usata solo per la scansione iniziale
-    o quando il PID adottato in precedenza e' sparito -- vedi il fast-path
-    a PID noto in _is_running, aggiunto 2026-09-29 apposta per non dover
-    richiamare questa ad ogni scadenza cache per gli stessi orfani gia'
-    noti (TD Herbarium/Yolo/DMX, check_script:false quindi mai in _procs:
-    prima riaprivano una PowerShell/conhost.exe visibile quasi ad ogni
-    heartbeat, percepito dall'utente come un "watchdog" che sfarfalla
-    finestre cmd)."""
+    Usa psutil.process_iter() (chiamata nativa in-process, libreria gia'
+    nel venv per il fast-path in _is_running) invece di spawnare
+    powershell.exe -- 2026-09-30, seconda passata sullo stesso bug del
+    29/9: il fast-path a PID noto aveva gia' tagliato la stragrande
+    maggioranza delle scansioni (orfani GIA' trovati in precedenza), ma
+    per i servizi davvero spenti (nessun PID da ricordare) _find_os_pid
+    veniva comunque richiamata ad ogni scadenza della cache negativa
+    (45s) per sempre -- l'utente continuava a vedere una PowerShell/
+    conhost.exe sfarfallare periodicamente. psutil elimina la causa alla
+    radice invece di allungare ancora la cache: zero sottoprocessi, zero
+    finestre, qualunque sia la frequenza dei check."""
     signature = _service_signature(key)
     if signature is None:
         return None
     try:
-        # Esclude powershell.exe/pwsh.exe dal match: senza, il processo che
-        # esegue QUESTA STESSA query si auto-matcha (la sua riga di comando
-        # contiene letteralmente la stringa 'signature' cercata) --
-        # falso positivo reale trovato dal vivo 2026-08-21, un PID diverso
-        # ad ogni chiamata, tutti già spariti al controllo successivo.
-        r = subprocess.run(
-            ["powershell", "-NoProfile", "-Command",
-             "(Get-CimInstance Win32_Process | Where-Object "
-             f"{{$_.CommandLine -like '*{signature}*' -and "
-             "$_.Name -ne 'powershell.exe' -and $_.Name -ne 'pwsh.exe'} | "
-             "Select-Object -First 1 -ExpandProperty ProcessId)"],
-            capture_output=True, text=True, timeout=8,
-            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
-        )
-        pid = r.stdout.strip()
-        return int(pid) if pid.isdigit() else None
+        my_pid = os.getpid()
+        for p in psutil.process_iter(["pid", "name", "cmdline"]):
+            if p.info["pid"] == my_pid:
+                continue  # mai auto-matchare -- questo stesso processo ha 'signature' nel suo import/env
+            try:
+                cmdline = p.info.get("cmdline") or []
+                if any(signature in part for part in cmdline):
+                    return p.info["pid"]
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        return None
     except Exception:
         return None
 
