@@ -2641,6 +2641,11 @@ function initPiManager() {
         pmLog('in', `[${id}] stanza=${d.stanza||'?'} ip=${d.ip||'?'}${d._offline ? ' (offline, nascosto)' : ''}`);
         pmWelcomeMenuRender();
         pmRenderOfflineCount();
+        // Un client TD (role touchdesigner) porta Mocapingest/Opsdevice in
+        // `params` -- la matrice mocap li legge da _pmDevices per il
+        // pallino verde/giallo, va ridisegnata anche quando è QUESTO
+        // status (non solo gaia/mocap-bridge/+/status) a cambiare.
+        if (d.role === 'touchdesigner') pmMocapRender();
       } catch(e) { pmLog('err', 'Parse: ' + e.message); }
     });
   }
@@ -2775,31 +2780,71 @@ function pmMocapIsRelevant(id, family) {
   return id !== 'td-controllerv7-macbook-air-di-mauro' && !/^td-dmx/i.test(id);
 }
 
+// Matrice sender × ricevitore (2026-09-30, sostituisce la lista piatta) —
+// richiesta dall'utente: con più sender e più client TD insieme, una lista
+// di coppie già scoperte non rende affatto ovvio "chi ascolta chi ADESSO",
+// soprattutto ora che Opsdevice lato TD è un valore SINGOLO (un client TD
+// ascolta un solo sender alla volta, anche se più sender risultano
+// "enabled" verso di lui dal lato Admin — abilitarne un secondo TOGLIE
+// silenziosamente l'ascolto al primo). La matrice incrocia lo stato del
+// sender (_pmMocapBySender, "sto mandando pacchetti") con lo stato REALE
+// del client TD (_pmDevices[td_id].params, popolato dallo stesso
+// gaia/device/+/status già sottoscritto per le card normali — non serve
+// una subscription nuova) per distinguere "inviato" da "ascoltato per
+// davvero", invece di fidarsi solo del lato sender come faceva la lista.
 function pmMocapRender() {
   const wrap  = document.getElementById('pm-mocap-targets');
   const empty = document.getElementById('pm-mocap-no-targets');
-  const rows = [];
-  for (const [sender, targets] of Object.entries(_pmMocapBySender)) {
-    for (const [id, t] of Object.entries(targets || {})) {
-      if (t.offline || !pmMocapIsRelevant(id, t.family)) continue;   // offline tolto dalla vista, non-visuale escluso dall'opt-in
-      rows.push({ sender, id, ...t });
-    }
-  }
-  if (!rows.length) { empty.style.display = ''; wrap.style.display = 'none'; return; }
+  const senders = Object.keys(_pmMocapBySender).sort();
+  const targetIds = new Set();
+  const targetMeta = {};
+  senders.forEach(sender => {
+    Object.entries(_pmMocapBySender[sender] || {}).forEach(([id, t]) => {
+      if (t.offline || !pmMocapIsRelevant(id, t.family)) return;
+      targetIds.add(id);
+      targetMeta[id] = t;   // name/stanza uguali per qualunque sender li abbia visti
+    });
+  });
+  const targets = [...targetIds].sort();
+  if (!senders.length || !targets.length) { empty.style.display = ''; wrap.style.display = 'none'; return; }
   empty.style.display = 'none';
   wrap.style.display = '';
-  wrap.innerHTML = rows.map(t => `
-    <div class="pi-card" style="display:flex;align-items:center;gap:12px;padding:12px 16px;margin-bottom:8px">
-      <div style="flex:1;min-width:0">
-        <div class="pi-display-name">${pmEsc(t.name || t.id)}</div>
-        <div class="pi-device-id">da ${pmEsc(t.sender)} → ${pmEsc(t.id)} · ${pmEsc(t.ip||'?')}${t.stanza?' · '+pmEsc(t.stanza):''}</div>
-      </div>
-      <span class="pm-badge ${t.enabled ? 'cap' : ''}">${t.enabled ? '🎭 ricevuto' : '— non abilitato'}</span>
-      <button class="pm-btn ${t.enabled ? 'gray' : 'green'}" onclick="pmMocapToggle('${t.sender}','${t.id}','${t.enabled ? 'disable' : 'enable'}')">
-        ${t.enabled ? 'Disabilita' : 'Abilita'}
-      </button>
+
+  const head = `<th style="text-align:left;padding:6px 10px;font-size:.75rem;color:var(--muted)">Sender ↓ / Client TD →</th>` +
+    targets.map(id => `<th style="padding:6px 10px;font-size:.75rem;text-align:center;min-width:110px">${pmEsc(targetMeta[id].name||id)}<div style="font-weight:400;color:var(--muted)">${pmEsc(targetMeta[id].stanza||'')}</div></th>`).join('');
+
+  const body = senders.map(sender => {
+    const cells = targets.map(id => {
+      const t = (_pmMocapBySender[sender] || {})[id];
+      if (!t) return `<td style="text-align:center;color:var(--muted)">—</td>`;
+      const p = _pmDevices[id]?.params || {};
+      const live = t.enabled && p.Mocapingest === true && p.Opsdevice === sender;
+      const sentNotHeard = t.enabled && !live;
+      const dot = live ? '🟢' : sentNotHeard ? '🟡' : '⚪';
+      const title = live ? 'attivo — il client sta ascoltando proprio questo sender'
+                  : sentNotHeard ? 'inviato ma il client ascolta un altro sender (Opsdevice non combacia)'
+                  : 'non abilitato';
+      return `<td style="text-align:center;padding:4px">
+        <button class="pm-btn ${t.enabled?'gray':'green'}" style="width:auto;padding:2px 10px;font-size:.75rem"
+          title="${pmEsc(title)}"
+          onclick="pmMocapToggle('${pmEsc(sender)}','${pmEsc(id)}','${t.enabled ? 'disable' : 'enable'}')">
+          ${dot} ${t.enabled ? 'Disabilita' : 'Abilita'}
+        </button>
+      </td>`;
+    }).join('');
+    return `<tr><td style="padding:6px 10px;font-size:.8rem;white-space:nowrap">${pmEsc(sender)}</td>${cells}</tr>`;
+  }).join('');
+
+  wrap.innerHTML = `
+    <div style="overflow-x:auto">
+      <table style="border-collapse:collapse;width:100%">
+        <thead><tr>${head}</tr></thead>
+        <tbody>${body}</tbody>
+      </table>
     </div>
-  `).join('');
+    <div style="font-size:.72rem;color:var(--muted);margin-top:8px">
+      🟢 il client ascolta proprio questo sender · 🟡 il sender manda ma il client ascolta un altro (Opsdevice non combacia) · ⚪ non abilitato — un client ascolta un solo sender alla volta, abilitarne un secondo toglie l'ascolto al primo.
+    </div>`;
 }
 
 // Collega il pulsante Admin al client TD (2026-09-30, GAIA_INTERFACE.md):
