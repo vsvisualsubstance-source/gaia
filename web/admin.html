@@ -137,6 +137,12 @@ button.small{padding:3px 9px;font-size:.78rem;margin:0}
 .pm-badge.active{color:var(--green);border-color:#1e4030;background:#0d1f18}
 .pm-badge.cap{color:var(--accent);border-color:#1a2e50;background:#0c1428}
 .pm-section-label{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:4px}
+.pm-advanced{border:1px solid var(--border);border-radius:6px;padding:0;background:var(--bg)}
+.pm-advanced summary{cursor:pointer;padding:7px 10px;font-size:.78rem;color:var(--muted);user-select:none;list-style:none}
+.pm-advanced summary::-webkit-details-marker{display:none}
+.pm-advanced summary::before{content:'▸ ';display:inline-block;transition:transform .15s}
+.pm-advanced[open] summary::before{transform:rotate(90deg)}
+.pm-advanced-body{display:flex;flex-direction:column;gap:10px;padding:0 10px 10px}
 .pm-rename-row{display:flex;flex-direction:column;gap:6px}
 .pm-rename-inputs{display:flex;gap:6px}
 .pm-rename-row input{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:6px 10px;color:var(--text);font-size:.82rem;outline:none;min-width:0}
@@ -3081,6 +3087,76 @@ function pmRenderOfflineCount() {
   }
 }
 
+// Raggruppa i tre blocchi di config "si tocca una volta e poi mai più"
+// (spegnimento programmato, watchdog, mocap) dentro un <details> chiuso
+// di default -- prima stavano sempre impiegati nella card, impilati uno
+// sopra l'altro, e con l'aggiunta del mocap (2026-09-30) le card erano
+// diventate troppo lunghe per scorrere la griglia a colpo d'occhio
+// (richiesto dall'utente 2026-10-01: "sta diventando molto lunga e
+// complessa"). <details>/<summary> nativi, zero JS per aprire/chiudere --
+// lo stato dei controlli dentro (checkbox/input) resta identico a prima,
+// pmPatchCard li trova con gli stessi selettori indipendentemente da
+// essere dentro un <details> aperto o chiuso.
+function pmAdvancedHtml(d) {
+  const showShutdown = d.role==='installation'||d.role==='pi'||d.role==='ops';
+  const showWatchdog = d.role==='installation'||d.role==='ops';
+  const showMocap    = (d.role==='pi'||d.role==='core'||d.role==='ops') && pmSvcKeys(d).includes('mediapipe');
+  if (!showShutdown && !showWatchdog && !showMocap) return '';
+
+  const shutdownBlock = showShutdown ? `<div>
+      <div class="pm-section-label">⏻ Spegnimento programmato</div>
+      <div class="pm-rename-row">
+        <input type="time" class="pm-inp-shutdownat" value="${pmEsc(d.shutdown_at||'')}" style="flex:1">
+        <button class="pm-btn blue pm-btn-shutdownat" style="width:auto;padding:0 14px">💾 Salva</button>
+        ${d.shutdown_at?`<button class="pm-btn gray pm-btn-shutdownat-clear" style="width:auto;padding:0 14px">✕ Disattiva</button>`:''}
+      </div>
+      <div style="font-size:.75rem;color:var(--muted);margin-top:4px">
+        ${d.role==='pi'
+          ? '⚠️ Un Pi spento così NON si riaccende da remoto — solo staccando/riattaccando l\'alimentazione. Orario locale del device, vuoto = disattivato.'
+          : 'Rete di sicurezza software (watchdog interno dell\'agent, non un secondo Task Scheduler) — orario locale della macchina. Vuoto = disattivato.'}
+      </div>
+    </div>` : '';
+
+  const watchdogBlock = showWatchdog ? `<div>
+      <div class="pm-section-label">🐕 Watchdog (riavvio automatico servizi caduti)</div>
+      <div class="pm-rename-row">
+        <label style="display:flex;align-items:center;gap:6px;flex:1;cursor:pointer">
+          <input type="checkbox" class="pm-chk-watchdog" ${d.watchdog?'checked':''}>
+          <span style="font-size:.8rem">${d.watchdog?'Acceso — servizi "attivi" caduti vengono rilanciati da soli':'Spento — nessun riavvio automatico, solo su comando esplicito'}</span>
+        </label>
+      </div>
+      <div style="font-size:.75rem;color:var(--muted);margin-top:4px">
+        Live, nessun redeploy — utile per una macchina che passa da presidiata a non presidiata (es. un portatile di test).
+      </div>
+    </div>` : '';
+
+  const mocapBlock = showMocap ? `<div>
+      <div class="pm-section-label">🕺 Mocap → TouchDesigner (OSC diretto)</div>
+      <div class="pm-rename-row">
+        <label style="display:flex;align-items:center;gap:6px;flex:1;cursor:pointer">
+          <input type="checkbox" class="pm-chk-osclandmarks" ${d.osc_landmarks?'checked':''}>
+          <span style="font-size:.8rem">${d.osc_landmarks?'Acceso — invia viso/mani/pose via OSC a chi si abilita a riceverlo':'Spento — nessun invio mocap da questo device'}</span>
+        </label>
+      </div>
+      <div style="font-size:.75rem;color:var(--muted);margin-top:4px">
+        Riavvia mediapipe se già acceso per applicare subito. La ricezione lato TD resta opt-in per singola istanza (Admin → mocap).
+      </div>
+    </div>` : '';
+
+  // Badge rapido nel <summary> cosi' si vede senza aprire se qualcosa di
+  // non-default e' attivo (altrimenti bisognerebbe aprire ogni card per
+  // scoprire se ha uno spegnimento programmato impostato, per esempio).
+  const hints = [];
+  if (d.shutdown_at) hints.push(`⏻ ${pmEsc(d.shutdown_at)}`);
+  if (showWatchdog && d.watchdog) hints.push('🐕 on');
+  if (showMocap && d.osc_landmarks) hints.push('🕺 on');
+
+  return `<details class="pm-advanced">
+    <summary>⚙️ Avanzate${hints.length?` · ${hints.join(' · ')}`:''}</summary>
+    <div class="pm-advanced-body">${shutdownBlock}${watchdogBlock}${mocapBlock}</div>
+  </details>`;
+}
+
 function pmBuildCard(id, d) {
   const grid = document.getElementById('pm-devices-grid');
   document.getElementById('pm-no-devices').style.display = 'none';
@@ -3156,43 +3232,7 @@ function pmBuildCard(id, d) {
         ${d.services?.livestream?.endpoints?.stream||`http://${d.ip}:8000/stream.ogg`}
       </div>
     </div>`:''}
-    ${(d.role==='installation'||d.role==='pi'||d.role==='ops')?`<div>
-      <div class="pm-section-label">⏻ Spegnimento programmato</div>
-      <div class="pm-rename-row">
-        <input type="time" class="pm-inp-shutdownat" value="${pmEsc(d.shutdown_at||'')}" style="flex:1">
-        <button class="pm-btn blue pm-btn-shutdownat" style="width:auto;padding:0 14px">💾 Salva</button>
-        ${d.shutdown_at?`<button class="pm-btn gray pm-btn-shutdownat-clear" style="width:auto;padding:0 14px">✕ Disattiva</button>`:''}
-      </div>
-      <div style="font-size:.75rem;color:var(--muted);margin-top:4px">
-        ${d.role==='pi'
-          ? '⚠️ Un Pi spento così NON si riaccende da remoto — solo staccando/riattaccando l\'alimentazione. Orario locale del device, vuoto = disattivato.'
-          : 'Rete di sicurezza software (watchdog interno dell\'agent, non un secondo Task Scheduler) — orario locale della macchina. Vuoto = disattivato.'}
-      </div>
-    </div>`:''}
-    ${(d.role==='installation'||d.role==='ops')?`<div>
-      <div class="pm-section-label">🐕 Watchdog (riavvio automatico servizi caduti)</div>
-      <div class="pm-rename-row">
-        <label style="display:flex;align-items:center;gap:6px;flex:1;cursor:pointer">
-          <input type="checkbox" class="pm-chk-watchdog" ${d.watchdog?'checked':''}>
-          <span style="font-size:.8rem">${d.watchdog?'Acceso — servizi "attivi" caduti vengono rilanciati da soli':'Spento — nessun riavvio automatico, solo su comando esplicito'}</span>
-        </label>
-      </div>
-      <div style="font-size:.75rem;color:var(--muted);margin-top:4px">
-        Live, nessun redeploy — utile per una macchina che passa da presidiata a non presidiata (es. un portatile di test).
-      </div>
-    </div>`:''}
-    ${((d.role==='pi'||d.role==='core'||d.role==='ops')&&svcKeys.includes('mediapipe'))?`<div>
-      <div class="pm-section-label">🕺 Mocap → TouchDesigner (OSC diretto)</div>
-      <div class="pm-rename-row">
-        <label style="display:flex;align-items:center;gap:6px;flex:1;cursor:pointer">
-          <input type="checkbox" class="pm-chk-osclandmarks" ${d.osc_landmarks?'checked':''}>
-          <span style="font-size:.8rem">${d.osc_landmarks?'Acceso — invia viso/mani/pose via OSC a chi si abilita a riceverlo':'Spento — nessun invio mocap da questo device'}</span>
-        </label>
-      </div>
-      <div style="font-size:.75rem;color:var(--muted);margin-top:4px">
-        Riavvia mediapipe se già acceso per applicare subito. La ricezione lato TD resta opt-in per singola istanza (Admin → mocap).
-      </div>
-    </div>`:''}
+    ${pmAdvancedHtml(d)}
     <div class="pm-card-actions">
       ${svcKeys.includes('livestream') ? `<button class="pm-btn blue" onclick="window.open('${d.services?.livestream?.endpoints?.stream||`http://${d.ip}:8000/stream.ogg`}','_blank')">🔊 Ascolta stream</button>` : ''}
       ${d.capabilities?.camera && d.stanza ? `<button class="pm-btn blue pm-btn-welcome" onclick="window.open('http://${location.hostname}:1880/welcome.html?cam=${encodeURIComponent(d.ip||'')}&room=${encodeURIComponent(d.stanza)}','_blank')">🖥 Apri Welcome</button>` : ''}
@@ -3258,6 +3298,17 @@ function pmPatchCard(id, d) {
     oscLandmarksChk.checked = !!d.osc_landmarks;
     const lbl = oscLandmarksChk.parentElement?.querySelector('span');
     if (lbl) lbl.textContent = d.osc_landmarks?'Acceso — invia viso/mani/pose via OSC a chi si abilita a riceverlo':'Spento — nessun invio mocap da questo device';
+  }
+  // Badge riassuntivo nel <summary> di "⚙️ Avanzate" -- stessa logica di
+  // pmAdvancedHtml, ricalcolata qui per restare fresca senza ricostruire
+  // l'intero <details> (che chiuderebbe un pannello che l'utente ha aperto).
+  const advSummary = card.querySelector('.pm-advanced > summary');
+  if (advSummary) {
+    const hints = [];
+    if (d.shutdown_at) hints.push(`⏻ ${pmEsc(d.shutdown_at)}`);
+    if (watchdogChk && d.watchdog) hints.push('🐕 on');
+    if (oscLandmarksChk && d.osc_landmarks) hints.push('🕺 on');
+    advSummary.textContent = `⚙️ Avanzate${hints.length?` · ${hints.join(' · ')}`:''}`;
   }
 }
 
