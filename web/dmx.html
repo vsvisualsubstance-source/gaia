@@ -59,6 +59,11 @@ button.small{padding:4px 10px;font-size:.78rem}
 .svc-state{font-size:.75rem;color:var(--muted);padding:2px 8px;border-radius:10px;background:var(--bg)}
 .svc-state.active{color:var(--accent)}
 
+.dmx-ports-table{width:100%;margin-bottom:16px;font-size:.8rem;border-collapse:collapse}
+.dmx-ports-table th{text-align:left;color:var(--muted);font-weight:600;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;padding:4px 8px;border-bottom:1px solid var(--border)}
+.dmx-ports-table td{padding:5px 8px;border-bottom:1px solid var(--border);color:var(--text)}
+.dmx-ports-table td.port-online{text-align:center}
+
 .sect-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
 .sect{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px}
 .sect-title{font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--cyan);margin-bottom:10px}
@@ -398,6 +403,26 @@ function dxBuildParamRow(name, def) {
   </div>`;
 }
 
+// Tabella sola-lettura dei nodi Art-Net scoperti dall'ultimo dmx_scan --
+// non param/servizio Gaia, solo elenco informativo (vedi dxRegisterMatrix).
+function dxBuildPortsTable(ports) {
+  if (!Array.isArray(ports)) return '';
+  if (!ports.length) {
+    return '<div class="dev-meta" style="margin-bottom:16px">Nessun nodo Art-Net scoperto ancora — usa il servizio "Scan" qui sotto.</div>';
+  }
+  const rows = ports.map(p => `<tr>
+      <td>${p.label || p.node || p.port_id || '—'}</td>
+      <td>${p.ip || '—'}</td>
+      <td>U ${p.net ?? '?'}:${p.subnet ?? '?'}:${p.universe ?? '?'}</td>
+      <td class="port-online">${String(p.online) === '1' ? '🟢' : '⚪'}</td>
+    </tr>`).join('');
+  return `<div class="dev-meta" style="margin-bottom:8px">Nodi Art-Net scoperti (ultimo scan):</div>
+    <table class="dmx-ports-table">
+      <thead><tr><th>Nodo</th><th>IP</th><th>Universo</th><th class="port-online">Online</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
 function dxBuildSections() {
   const wrap = document.getElementById('param-sections');
   const dev = dxActive();
@@ -414,7 +439,7 @@ function dxBuildSections() {
   const extra = Object.keys(matrix.params || {}).filter(k => !known.has(k)).sort();
   const sections = extra.length ? [...DX_SECTIONS, { title: 'Altro', params: extra }] : DX_SECTIONS;
 
-  wrap.innerHTML = `<div class="sect-grid">${sections.map(sect => {
+  wrap.innerHTML = dxBuildPortsTable(matrix.ports) + `<div class="sect-grid">${sections.map(sect => {
     const rows = sect.params.filter(p => matrix.params[p]).map(p => dxBuildParamRow(p, matrix.params[p])).join('');
     return rows ? `<div class="sect"><div class="sect-title">${sect.title}</div>${rows}</div>` : '';
   }).join('')}</div>`;
@@ -563,6 +588,18 @@ function dxRegisterMatrix(m) {
     for (const [srcLabel, srcMatrix] of Object.entries(m.audio.sources)) {
       dxRegisterScenario(`${deviceId}::audio_${srcLabel}`, deviceId, null, srcMatrix, `🔊 Sorgente ${srcLabel.toUpperCase()}`);
     }
+  }
+  // Scan & Patch Art-Net (/project1/dmx_patch, 2026-10-01) -- unico per
+  // device (non per rig, non per sorgente): 3 servizi (dmx_scan azione,
+  // dmx_output/dmx_blackout bool) già nomi finali sul wire, nessun param.
+  // `ports` (l'elenco dei nodi scoperti dall'ultimo scan) non è un
+  // param/servizio Gaia, è dato informativo in sola lettura -- portato
+  // dentro la stessa matrice "scoped" cosi' dxBuildSections lo trova
+  // (vedi dxBuildPortsTable) senza bisogno di un fetch separato.
+  if (m.patch && typeof m.patch === 'object') {
+    dxRegisterScenario(`${deviceId}::patch`, deviceId, null,
+      { params: {}, services: m.patch.services || {}, ports: m.patch.ports || [] },
+      '⚡ Patch Art-Net');
   }
 }
 
