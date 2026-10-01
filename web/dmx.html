@@ -137,6 +137,15 @@ const DX_SECTIONS = [
   { title: 'Audio / Kick', params: ['dmx_agc_release', 'dmx_min_range', 'dmx_kick_threshold', 'dmx_kick_boost', 'dmx_kick_decay', 'dmx_kick_cooldown', 'dmx_kick_smooth'] },
   { title: 'Fixture patch', params: ['dmx_fixture_count', 'dmx_start_address', 'dmx_palette', 'dmx_fixture_profile'] },
   { title: 'Colori custom', params: ['dmx_custom_color1', 'dmx_custom_color2', 'dmx_custom_color3', 'dmx_custom_color4', 'dmx_custom_color5'] },
+  // Pseudo-scenari "Sorgente Audio A/B" (audio_engine condiviso, 2026-10-01,
+  // vedi TD4Gaia GAIA_INTERFACE.md "TD/Win-PD, 6") -- un device espone al
+  // massimo UNA delle due liste qui sotto per volta (la matrice di ogni
+  // sorgente contiene solo i propri param audio_a_*/audio_b_*), quindi
+  // elencarle entrambe nello stesso DX_SECTIONS globale è innocuo: il
+  // filtro "solo i param presenti nella matrice attiva" di dxBuildSections
+  // esclude da sé quelli dell'altra sorgente o dei rig dmx_*.
+  { title: 'Sorgente', params: ['audio_a_type', 'audio_a_driver', 'audio_a_device', 'audio_b_type', 'audio_b_driver', 'audio_b_device'] },
+  { title: 'Audio — EQ / Gain', params: ['audio_a_gain', 'audio_a_bass_cutoff', 'audio_a_mid_low', 'audio_a_mid_high', 'audio_a_high_cutoff', 'audio_a_bass_gain', 'audio_a_mid_gain', 'audio_a_high_gain', 'audio_b_gain', 'audio_b_bass_cutoff', 'audio_b_mid_low', 'audio_b_mid_high', 'audio_b_high_cutoff', 'audio_b_bass_gain', 'audio_b_mid_gain', 'audio_b_high_gain'] },
 ];
 
 let dxClient = null;
@@ -244,7 +253,7 @@ function dxCurrentValue(name, def) {
   return (name in live) ? { value: live[name], isDefault: false } : { value: def.default, isDefault: def.default !== undefined };
 }
 
-function dxLabel(name) { return name.replace(/^dmx_/, '').replace(/_/g, ' '); }
+function dxLabel(name) { return name.replace(/^dmx_/, '').replace(/^audio_[ab]_/, '').replace(/_/g, ' '); }
 
 // ── Tab bar ──────────────────────────────────────────────────────────
 // Uno scenario offline (o mai visto pubblicare uno status) viene tolto
@@ -296,7 +305,7 @@ function dxRenderTabs() {
   wrap.innerHTML = ids.map(id => {
     const d = dxDevices[id];
     const base = d.status?.name || d.status?.stanza || d.realDeviceId;
-    const label = d.rigLabel ? `${base} · Rig ${d.rigLabel.toUpperCase()}` : base;
+    const label = d.tabLabel ? `${base} · ${d.tabLabel}` : (d.rigLabel ? `${base} · Rig ${d.rigLabel.toUpperCase()}` : base);
     return `<div class="dmx-tab${id === dxActiveId ? ' active' : ''}" data-tab="${id}">
       <span class="tab-dot"></span>${label}
     </div>`;
@@ -497,7 +506,7 @@ function dxRenderAll() {
     const offline = st._offline;
     badge.className = 'dev-badge ' + (offline ? 'offline' : 'online');
     badge.textContent = offline ? '● offline' : '● online';
-    const rigSuffix = dev.rigLabel ? ` · Rig ${dev.rigLabel.toUpperCase()}` : '';
+    const rigSuffix = dev.tabLabel ? ` · ${dev.tabLabel}` : (dev.rigLabel ? ` · Rig ${dev.rigLabel.toUpperCase()}` : '');
     meta.textContent = `${st.name || dev.realDeviceId} · ip ${st.ip || '?'} · ${st.stanza || '?'}${rigSuffix}`;
     const empty = !Object.keys(st.services || {}).length && !Object.keys(st.params || {}).length;
     if (empty) {
@@ -542,14 +551,28 @@ function dxRegisterMatrix(m) {
   } else {
     dxRegisterScenario(deviceId, deviceId, null, m);
   }
+  // Sorgenti audio condivise (audio_engine, 2026-10-01, vedi TD4Gaia
+  // GAIA_INTERFACE.md "TD/Win-PD, 6") -- NON sono un rig (infrastruttura
+  // condivisa fra dmx_a/dmx_b dello stesso device, selezionata da ciascun
+  // rig col proprio dmx_audio_source), quindi rigLabel resta null: i nomi
+  // dentro audio.sources.{a,b} sono già quelli definitivi sul wire
+  // (audio_a_gain, non "gain" come nei rig), nessuna ri-prefissazione da
+  // fare, stesso trattamento "flat" di un device a rig singolo. tabLabel
+  // distingue la tab da quelle dei rig veri.
+  if (m.audio?.sources && typeof m.audio.sources === 'object') {
+    for (const [srcLabel, srcMatrix] of Object.entries(m.audio.sources)) {
+      dxRegisterScenario(`${deviceId}::audio_${srcLabel}`, deviceId, null, srcMatrix, `🔊 Sorgente ${srcLabel.toUpperCase()}`);
+    }
+  }
 }
 
-function dxRegisterScenario(scenarioId, realDeviceId, rigLabel, matrix) {
+function dxRegisterScenario(scenarioId, realDeviceId, rigLabel, matrix, tabLabel) {
   const isNew = !dxDevices[scenarioId];
-  if (isNew) dxDevices[scenarioId] = { order: dxOrder++, status: null, matrix: null, realDeviceId, rigLabel };
+  if (isNew) dxDevices[scenarioId] = { order: dxOrder++, status: null, matrix: null, realDeviceId, rigLabel, tabLabel };
   dxDevices[scenarioId].matrix = matrix;
   dxDevices[scenarioId].realDeviceId = realDeviceId;
   dxDevices[scenarioId].rigLabel = rigLabel;
+  if (tabLabel !== undefined) dxDevices[scenarioId].tabLabel = tabLabel;
   if (dxActiveId === null) dxActiveId = scenarioId;   // primo scenario scoperto -> attivo di default
   if (scenarioId === dxActiveId) dxPersistPending = false;   // lo scenario ricordato è ricomparso
   // Applica subito uno status già arrivato in precedenza per questo stesso
