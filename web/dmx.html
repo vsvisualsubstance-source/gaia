@@ -149,7 +149,11 @@ const DX_SECTIONS = [
   // elencarle entrambe nello stesso DX_SECTIONS globale è innocuo: il
   // filtro "solo i param presenti nella matrice attiva" di dxBuildSections
   // esclude da sé quelli dell'altra sorgente o dei rig dmx_*.
-  { title: 'Sorgente', params: ['audio_a_type', 'audio_a_driver', 'audio_a_device', 'audio_b_type', 'audio_b_driver', 'audio_b_device'] },
+  // audio_<x>_sender (2026-10-01, "TD/Win-PD, 8"): mittente Touch LAN
+  // scoperto via gaia/device/+/status -- enum coi device_id trovati,
+  // valido solo quando audio_<x>_type è touch_audio/touch_bands (gli
+  // altri tipi lo ignorano, il param resta comunque nella matrice).
+  { title: 'Sorgente', params: ['audio_a_type', 'audio_a_sender', 'audio_a_driver', 'audio_a_device', 'audio_b_type', 'audio_b_sender', 'audio_b_driver', 'audio_b_device'] },
   { title: 'Audio — EQ / Gain', params: ['audio_a_gain', 'audio_a_bass_cutoff', 'audio_a_mid_low', 'audio_a_mid_high', 'audio_a_high_cutoff', 'audio_a_bass_gain', 'audio_a_mid_gain', 'audio_a_high_gain', 'audio_b_gain', 'audio_b_bass_cutoff', 'audio_b_mid_low', 'audio_b_mid_high', 'audio_b_high_cutoff', 'audio_b_bass_gain', 'audio_b_mid_gain', 'audio_b_high_gain'] },
 ];
 
