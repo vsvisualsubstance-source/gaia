@@ -1,0 +1,28 @@
+{
+  "Lampeggio": {
+    "loop": true,
+    "steps": [
+      { "palette": "White", "duration": 0.3, "fade": 0.05 },
+      { "palette": "Off", "duration": 0.3, "fade": 0.05 }
+    ]
+  },
+  "Arcobaleno": {
+    "loop": true,
+    "steps": [
+      { "palette": "Fire", "duration": 3, "fade": 1.5 },
+      { "palette": "Sunset", "duration": 3, "fade": 1.5 },
+      { "palette": "Warm", "duration": 3, "fade": 1.5 },
+      { "palette": "Forest", "duration": 3, "fade": 1.5 },
+      { "palette": "Ocean", "duration": 3, "fade": 1.5 },
+      { "palette": "Cool", "duration": 3, "fade": 1.5 },
+      { "palette": "Magenta", "duration": 3, "fade": 1.5 }
+    ]
+  },
+  "Respiro": {
+    "loop": true,
+    "steps": [
+      { "palette": "Ocean", "duration": 4, "fade": 4 },
+      { "palette": "Off", "duration": 4, "fade": 4 }
+    ]
+  }
+}

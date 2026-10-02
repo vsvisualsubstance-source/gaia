@@ -8,9 +8,14 @@ protocollo Art-Net, nodo diverso, nessun conflitto.
 
 A differenza di DMX V8 (TD, kick-detection audio-reattivo, patch multi-
 fixture, scan di rete) questo è deliberatamente semplice: un solo target
-RGB/RGBW alla volta, nessuna analisi audio, nessuna discovery di rete —
-l'host Art-Net si configura a mano (config.ARTNET_HOST). Vedi artnet.py per
-il perché niente ArtPoll.
+RGB/RGBW alla volta, nessuna discovery di rete — l'host Art-Net si
+configura a mano (config.ARTNET_HOST). Vedi artnet.py per il perché
+niente ArtPoll.
+
+Audio-reattività (2026-10-02, opt-in): livello RMS dal microfono locale
+(webcam o scheda audio, via ffmpeg+pipewire-alsa) modula la brillantezza
+in tempo reale -- niente bande/kick-detection come DMX V8, quello resta
+il posto giusto per l'analisi vera. Vedi _audio_capture_loop().
 
 Catena: comando MQTT (palette o timeline) → stato interno (_fade_from/_to,
 progresso crossfade) → loop di uscita a config.FPS → ArtNetSender.send().
@@ -19,9 +24,11 @@ del Pi (vedi pi/livestream/main.py, pi/mediaplayer/main.py): paho-mqtt
 diretto, non il protocollo gaia_client lato TD (quello è per TouchDesigner,
 qui non serve quel livello di complessità).
 """
+import audioop
 import json
 import os
 import signal
+import subprocess
 import threading
 import time
 
@@ -68,6 +75,20 @@ _timeline_loop = True
 _timeline_running = False
 _timeline_index = -1
 _timeline_step_started = 0.0
+_timelines = {}           # nome preset -> {"steps":[...], "loop": bool}
+_current_timeline_name = None   # None se la timeline attiva non è (più) un preset noto (timeline_set custom)
+
+# Audio-reattività: _audio_level è 0-1, già normalizzato (AGC-lite --
+# nessun valore assoluto di RMS ha senso fisso: un mic di webcam e uno
+# esterno hanno guadagni diversissimi, impossibile tarare un numero fisso
+# che funzioni ovunque). Smoothing esponenziale per evitare uno sfarfallio
+# frame-a-frame innaturale.
+_audio_reactive = False
+_audio_level = 0.0
+_audio_proc = None
+_audio_thread = None
+_audio_floor = 200.0    # rumore di fondo stimato (RMS raw, scala int16), si adatta da solo verso il basso
+_audio_peak = 4000.0    # picco stimato, si adatta da solo verso l'alto (mai sotto un minimo, vedi funzione)
 
 
 def _shutdown(sig, frame):
@@ -90,6 +111,17 @@ def _load_palettes():
     except Exception as e:
         print(f"[DMX] Impossibile leggere {config.PALETTES_FILE} ({e}), uso un set minimo di default")
         _palettes = {"White": [255, 255, 255], "Off": [0, 0, 0]}
+
+
+def _load_timelines():
+    global _timelines
+    try:
+        with open(config.TIMELINES_FILE, encoding="utf-8") as f:
+            _timelines = json.load(f)
+        print(f"[DMX] {len(_timelines)} preset timeline caricati da {config.TIMELINES_FILE}")
+    except Exception as e:
+        print(f"[DMX] Impossibile leggere {config.TIMELINES_FILE} ({e}), nessun preset timeline")
+        _timelines = {}
 
 
 def _resolve_color(step_or_cmd):
@@ -155,6 +187,22 @@ def _timeline_stop():
         _timeline_running = False
 
 
+def _timeline_load(name):
+    """Carica un preset da timelines.json e lo avvia subito -- un tap solo
+    dal touch menu (vedi web/dmx-touch.html), non due comandi separati."""
+    global _timeline_steps, _timeline_loop, _current_timeline_name
+    preset = _timelines.get(name)
+    if not preset or not isinstance(preset.get("steps"), list) or not preset["steps"]:
+        print(f"[DMX] timeline_load: preset sconosciuto o vuoto {name!r}")
+        return False
+    with _lock:
+        _timeline_steps = preset["steps"]
+        _timeline_loop = bool(preset.get("loop", True))
+        _current_timeline_name = name
+    _timeline_start()
+    return True
+
+
 def _timeline_tick(now):
     """Chiamato dal loop di uscita ad ogni frame. Avanza lo step corrente
     se la sua durata è scaduta."""
@@ -171,6 +219,78 @@ def _timeline_tick(now):
             return
         nxt = 0
     _timeline_advance_to(nxt)
+
+
+# ── Audio-reattività ─────────────────────────────────────────────────────────
+# ffmpeg invece di sounddevice/pyaudio: nessuna dipendenza pip nuova (stesso
+# principio "modulo leggero" di pi/livestream, che usa ffmpeg per la stessa
+# identica ragione), e passa già dal plugin pipewire-alsa come gli altri --
+# "default" vede il mic anche se PipeWire lo ha reclamato come sorgente di
+# sistema (stesso gotcha documentato in pi/CLAUDE.md).
+_AUDIO_CHUNK = 1024   # campioni per lettura, ~64ms a 16kHz -- reattivo ma non frenetico
+
+
+def _audio_capture_loop():
+    global _audio_proc, _audio_level, _audio_floor, _audio_peak
+    cmd = ["ffmpeg", "-nostdin", "-loglevel", "quiet",
+           "-f", "alsa", "-i", config.AUDIO_DEVICE,
+           "-f", "s16le", "-ar", str(config.AUDIO_SAMPLE_RATE), "-ac", "1", "-"]
+    try:
+        _audio_proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    except FileNotFoundError:
+        print("[DMX] ffmpeg non trovato, audio-reattività non disponibile")
+        return
+    print(f"[DMX] Audio-reattività: cattura da '{config.AUDIO_DEVICE}' avviata")
+    chunk_bytes = _AUDIO_CHUNK * 2   # 2 byte/campione, s16le
+    try:
+        while _audio_reactive and _audio_proc and _audio_proc.poll() is None:
+            data = _audio_proc.stdout.read(chunk_bytes)
+            if not data:
+                break
+            rms = audioop.rms(data, 2)
+            # AGC-lite: il floor insegue verso il basso (rumore di fondo che
+            # cala), il peak verso l'alto (un picco reale alza il soffitto),
+            # entrambi lentamente -- cosi' un ambiente silenzioso resta
+            # sensibile e uno rumoroso non resta sempre "a tavoletta".
+            if rms < _audio_floor:
+                _audio_floor += (rms - _audio_floor) * 0.05
+            else:
+                _audio_floor += (rms - _audio_floor) * 0.002
+            _audio_peak = max(_audio_peak * 0.999, rms, _audio_floor + 500)
+            span = max(1.0, _audio_peak - _audio_floor)
+            level = max(0.0, min(1.0, (rms - _audio_floor) / span))
+            with _lock:
+                _audio_level = _audio_level * 0.6 + level * 0.4   # smoothing, evita lo sfarfallio
+    except Exception as e:
+        print(f"[DMX] Audio-reattività: errore cattura ({e})")
+    finally:
+        if _audio_proc:
+            _audio_proc.terminate()
+            try:
+                _audio_proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                _audio_proc.kill()
+                _audio_proc.wait(timeout=2)
+        with _lock:
+            _audio_level = 0.0
+        print("[DMX] Audio-reattività: cattura fermata")
+
+
+def _start_audio():
+    global _audio_reactive, _audio_thread
+    if _audio_reactive:
+        return
+    _audio_reactive = True
+    _audio_thread = threading.Thread(target=_audio_capture_loop, daemon=True)
+    _audio_thread.start()
+
+
+def _stop_audio():
+    global _audio_reactive, _audio_proc
+    _audio_reactive = False
+    if _audio_proc:
+        _audio_proc.terminate()
+        _audio_proc = None
 
 
 # ── Loop di uscita Art-Net ───────────────────────────────────────────────────
@@ -194,6 +314,12 @@ def _output_loop():
         buf = [0] * 512
         start = max(0, config.START_ADDRESS - 1)
         has_dimmer = config.DIMMER_CHANNEL > 0
+        # Audio-reattività: _audio_level (0-1, già AGC+smoothing, vedi
+        # _audio_capture_loop) modula la brillantezza impostata -- lo
+        # slider/_brightness resta il TETTO massimo, il livello audio decide
+        # quanto di quel tetto si vede in ogni istante. Spenta = comportamento
+        # di sempre (_brightness da solo).
+        eff_brightness = _brightness * _audio_level if _audio_reactive else _brightness
         if _forced_off:
             # buf resta tutto a 0 -- spegnimento garantito, vedi commento su
             # _forced_off. rgb3/rgb_start fittizi solo perché il codice
@@ -204,14 +330,14 @@ def _output_loop():
             # luminosità va sul suo canale -- vedi commento in config.py.
             dimmer_idx = start + config.DIMMER_CHANNEL - 1
             if 0 <= dimmer_idx < 512:
-                buf[dimmer_idx] = max(0, min(255, round(_brightness * 255)))
+                buf[dimmer_idx] = max(0, min(255, round(eff_brightness * 255)))
             rgb_start = start + config.DIMMER_CHANNEL
             rgb3 = [max(0, min(255, round(c))) for c in rgb]
         else:
             # Nessun dimmer separato: luminosità moltiplicata direttamente
             # nei canali colore (comportamento di sempre).
             rgb_start = start
-            rgb3 = [max(0, min(255, round(c * _brightness))) for c in rgb]
+            rgb3 = [max(0, min(255, round(c * eff_brightness))) for c in rgb]
         # Canali oltre i 3 RGB (es. W di una RGBW) -- NUM_CHANNELS conta il
         # totale occupato dalla fixture, dimmer incluso se presente.
         extra = max(0, config.NUM_CHANNELS - 3 - (1 if has_dimmer else 0))
@@ -262,6 +388,10 @@ def _publish_status():
             "timeline_running": _timeline_running,
             "timeline_loop": _timeline_loop,
             "timeline_step_index": _timeline_index if _timeline_running else None,
+            "timeline_presets": sorted(_timelines.keys()),
+            "current_timeline_preset": _current_timeline_name,
+            "audio_reactive": _audio_reactive,
+            "audio_level": round(_audio_level, 3),
             "ts": int(time.time() * 1000),
         }
     _mqtt.publish(f"gaia/dmx/{_current_room}/status", json.dumps(payload), retain=True)
@@ -281,7 +411,7 @@ def _on_connect(client, userdata, flags, rc, properties=None):
 
 
 def _on_message(client, userdata, msg):
-    global _current_room, _brightness, _timeline_steps, _timeline_loop, _forced_off
+    global _current_room, _brightness, _timeline_steps, _timeline_loop, _forced_off, _current_timeline_name
     if msg.topic in _ota.topics():
         _ota.handle(msg.topic, msg.payload)
         return
@@ -321,6 +451,7 @@ def _on_message(client, userdata, msg):
                 with _lock:
                     _timeline_steps = steps
                     _timeline_loop = bool(cmd.get("loop", True))
+                    _current_timeline_name = None   # non è (più) un preset noto
                 print(f"[DMX] Timeline impostata: {len(steps)} step, loop={_timeline_loop}")
             else:
                 print("[DMX] timeline_set: 'steps' mancante o vuoto")
@@ -328,8 +459,18 @@ def _on_message(client, userdata, msg):
             _timeline_start()
         elif action == "timeline_stop":
             _timeline_stop()
+        elif action == "timeline_load":
+            name = cmd.get("name", "")
+            if not _timeline_load(name):
+                print(f"[DMX] timeline_load: preset sconosciuto {name!r} (disponibili: {', '.join(_timelines)})")
         elif action == "reload_palettes":
             _load_palettes()
+        elif action == "reload_timelines":
+            _load_timelines()
+        elif action == "audio_reactive_start":
+            _start_audio()
+        elif action == "audio_reactive_stop":
+            _stop_audio()
         else:
             print(f"[DMX] Azione sconosciuta: {action!r}")
         _publish_status()
@@ -379,6 +520,7 @@ def _start_local_webserver():
 
 def main():
     _load_palettes()
+    _load_timelines()
     _mqtt.connect_async(config.MQTT_HOST, config.MQTT_PORT, 60)
     threading.Thread(target=_mqtt.loop_forever,
                      kwargs={"retry_first_connection": True}, daemon=True).start()
@@ -394,6 +536,7 @@ def main():
             _publish_status()
         time.sleep(1)
 
+    _stop_audio()
     _artnet.close()
     _mqtt.publish(f"gaia/dmx/{_current_room}/status", "", retain=True)
     print("[DMX] Terminato.")

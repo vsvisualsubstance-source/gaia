@@ -76,3 +76,16 @@ PALETTES_FILE = _get("DMX_PALETTES_FILE", os.path.join(_BASE, "palettes.json"))
 # di convenzione per questo progetto, stesso principio di 6454/Art-Net o
 # 1883/MQTT: un valore solo, documentato, mai da indovinare altrove.
 TOUCH_PORT = int(_get("DMX_TOUCH_PORT", "8099"))
+
+TIMELINES_FILE = _get("DMX_TIMELINES_FILE", os.path.join(_BASE, "timelines.json"))
+
+# Audio-reattività (base: livello RMS -> brillantezza, niente bande/kick
+# come DMX V8 su TD -- quello resta il posto giusto per l'analisi vera).
+# Stesso gotcha PipeWire già documentato in pi/livestream/pi/mediaplayer:
+# un microfono USB (qui la webcam) reclamato da PipeWire sparisce
+# dall'accesso ALSA diretto -- "default" passa dal plugin pipewire-alsa,
+# che lo rivede sempre. Spento di default: non ogni installazione ha un
+# microfono dedicato a questo, va acceso esplicitamente via MQTT quando
+# il device ce l'ha (qui confermato dal vivo: mic della webcam, card 4).
+AUDIO_DEVICE = _get("DMX_AUDIO_DEVICE", "default")
+AUDIO_SAMPLE_RATE = int(_get("DMX_AUDIO_RATE", "16000"))
