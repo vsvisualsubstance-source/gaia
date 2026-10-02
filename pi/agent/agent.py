@@ -8,11 +8,16 @@ Responsabilità:
   - Pubblica heartbeat ogni HEARTBEAT_INTERVAL secondi
   - Gestisce OTA per aggiornamenti file singoli
   - Auto-rileva periferiche (camera, microfono)
+  - Spegnimento programmato opzionale (shutdown_at "HH:MM" in device.json,
+    2026-09-19, stesso principio di minipc/installation/agent.py) -- un Pi
+    spento così NON ha risveglio remoto, si riaccende solo staccando e
+    riattaccando l'alimentazione fisica.
 """
 import glob
 import hashlib
 import json
 import os
+import re
 import signal
 import subprocess
 import time
@@ -55,7 +60,22 @@ _DEFAULT_CONFIG = {
     "stanza":    config.DEFAULT_STANZA,
     "services": {
         k: {"enabled": False} for k in config.SERVICE_MAP if k != "camera"
-    }
+    },
+    # Spegnimento programmato (2026-09-19, stesso principio di
+    # minipc/installation/agent.py, portato qui su richiesta esplicita per
+    # tutti i Pi): "HH:MM" locale o None = disattivato. ATTENZIONE diversa
+    # dalla macchina Windows: un Pi spento via `sudo poweroff` NON ha un
+    # equivalente del BIOS RTC wake usato là -- si riaccende SOLO staccando
+    # e riattaccando l'alimentazione fisica, stesso limite gia' noto
+    # dell'azione "shutdown" diretta via MQTT (vedi pi/CLAUDE.md). Usare con
+    # cautela su un Pi non facilmente raggiungibile di persona.
+    "shutdown_at": None,
+    # Mocap OSC diretto a TouchDesigner (canale 7, pi/mediapipe/README.md) --
+    # di default OFF ovunque (comportamento invariato), attivabile da
+    # remoto (Pi Manager/MQTT) senza toccare systemd/file a mano. Il
+    # servizio 'mediapipe' deve gia' esistere sul device (non ogni Pi ce
+    # l'ha) -- vedi _write_mediapipe_conf sotto e set_config.
+    "osc_landmarks": False,
 }
 
 
@@ -101,6 +121,76 @@ def _write_device_env(cfg: dict):
     with open(config.DEVICE_ENV_FILE, "w") as f:
         f.write("\n".join(lines) + "\n")
     print(f"[Agent] device.conf aggiornato → CAMERA_NAME={stanza}")
+
+
+MEDIAPIPE_CONF_FILE = "/etc/gaia/mediapipe.conf"
+
+
+def _write_mediapipe_conf(cfg: dict):
+    """Scrive /etc/gaia/mediapipe.conf — letto direttamente da
+    pi/mediapipe/mediapipe_node.py all'avvio (_load_conf, stesso pattern
+    INI di camera.conf), non via systemd EnvironmentFile. Contiene solo
+    OSC_LANDMARKS oggi: se in futuro serve rendere remoto anche
+    OSC_HOST/altri campi di quel modulo, aggiungerli qui allo stesso modo.
+    Va chiamata PRIMA di un (re)start di 'mediapipe' perché il processo
+    legge questo file solo all'avvio, non lo ri-controlla mentre gira."""
+    os.makedirs(os.path.dirname(MEDIAPIPE_CONF_FILE), exist_ok=True)
+    with open(MEDIAPIPE_CONF_FILE, "w") as f:
+        f.write(f"OSC_LANDMARKS={'1' if cfg.get('osc_landmarks') else '0'}\n")
+    print(f"[Agent] mediapipe.conf aggiornato → OSC_LANDMARKS={'1' if cfg.get('osc_landmarks') else '0'}")
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Kiosk — switch remoto fra pagine (2026-10-02)
+# ──────────────────────────────────────────────────────────────────────
+# Stesso LAN IP già usato da pi/kiosk/resolve_url.py (OPS_LAN) -- non
+# duplicato per un import (quel modulo fa anche probe di rete/Tailscale,
+# qui serve solo la costante). KIOSK_URL va scritto come stringa GIA'
+# risolta: /etc/gaia/kiosk.conf è letto via EnvironmentFile= di systemd,
+# che non fa interpolazione di shell -- un ${NODERED_HOST} scritto qui
+# resterebbe letterale, non verrebbe mai espanso (il default welcome nel
+# .service invece lo fa perché gira dentro `sh -c '...'`).
+_KIOSK_CONF = "/etc/gaia/kiosk.conf"
+_OPS_LAN = "192.168.1.240"
+KIOSK_PAGES = {
+    "dmx": "dmx-touch.html",
+}
+
+
+def _set_kiosk(page: str, room: str = None) -> bool:
+    """page='welcome' ripristina il default del service file (nessun
+    KIOSK_URL in kiosk.conf); un'altra chiave in KIOSK_PAGES punta invece
+    a quella pagina in web/ con ?room=<stanza attuale>."""
+    room = room or _device_config.get("stanza", config.DEFAULT_STANZA)
+    if page == "welcome":
+        content = ""
+    elif page in KIOSK_PAGES:
+        content = f"KIOSK_URL=http://{_OPS_LAN}:1880/{KIOSK_PAGES[page]}?room={room}\n"
+    else:
+        print(f"[Agent] set_kiosk: pagina sconosciuta {page!r} (valide: welcome, {', '.join(KIOSK_PAGES)})")
+        return False
+    # Il file può essere root (scritto a mano/via sudo in passato) --
+    # questo processo gira come utente normale (vedi pi/CLAUDE.md), quindi
+    # riscrivere un file di un altro proprietario fallirebbe in silenzio
+    # (PermissionError) anche se la DIRECTORY è scrivibile. Si toglie di
+    # mezzo e si riscrive da zero, cosi' resta sempre proprietà di questo
+    # processo da qui in avanti.
+    try:
+        if os.path.exists(_KIOSK_CONF):
+            os.remove(_KIOSK_CONF)
+        with open(_KIOSK_CONF, "w") as f:
+            f.write(content)
+    except OSError as e:
+        print(f"[Agent] set_kiosk: impossibile scrivere {_KIOSK_CONF}: {e}")
+        return False
+    with _config_lock:
+        _device_config.setdefault("services", {}).setdefault("kiosk", {})["enabled"] = True
+        _device_config["kiosk_page"] = page
+    save_config(_device_config)
+    enable_service("kiosk", _device_config)   # avvia se non già attivo (gestisce anche il Conflicts= con screen)
+    restart_service("kiosk")                  # forza la rilettura del nuovo KIOSK_URL anche se era già attivo
+    print(f"[Agent] Kiosk → {page}" + (f" ({content.strip()})" if content else " (default welcome)"))
+    return True
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -274,9 +364,27 @@ def restart_service(key: str) -> bool:
 _mqtt = mqtt.Client(client_id=f"gaia-agent-{config.DEVICE_ID}")
 _mqtt.reconnect_delay_set(min_delay=2, max_delay=30)
 
+# Ri-scoperta automatica dopo disconnessione prolungata (2026-09-19, bug
+# reale trovato due volte dal vivo — Corridoio e installation-silver-filoq:
+# discovery.discover() gira UNA SOLA VOLTA all'avvio del processo; se la
+# rete cambia sotto il processo già vivo (Pi spostato di rete, o la prima
+# scelta si rivela irraggiungibile solo al connect vero, es. dopo un
+# riavvio reale), paho continua a ritentare lo STESSO host morto in eterno
+# col solo backoff di reconnect_delay_set, mai una nuova discovery — unico
+# modo per uscirne era riavviare l'agent a mano. Qui: se resta disconnesso
+# più di RECOVERY_THRESHOLD secondi, il loop principale (main(), già gira
+# ogni 1s) ri-esegue la discovery e ripunta il client su un host nuovo se
+# diverso da quello attuale.
+_mqtt_connected = False
+_last_disconnect_ts = time.time()
+_next_rediscovery_ts = 0
+RECOVERY_THRESHOLD = 90
+
 
 def _on_connect(client, userdata, flags, rc, properties=None):
+    global _mqtt_connected
     if rc == 0:
+        _mqtt_connected = True
         client.subscribe(f"gaia/device/{config.DEVICE_ID}/command")
         client.subscribe("gaia/device/all/command")
         print(f"[MQTT] Connesso — device_id: {config.DEVICE_ID}")
@@ -286,8 +394,41 @@ def _on_connect(client, userdata, flags, rc, properties=None):
 
 
 def _on_disconnect(client, userdata, rc, properties=None):
+    global _mqtt_connected, _last_disconnect_ts
+    was_connected = _mqtt_connected
+    _mqtt_connected = False
+    if was_connected:
+        _last_disconnect_ts = time.time()
     if rc != 0:
         print(f"[MQTT] Disconnesso (rc={rc})")
+
+
+def _maybe_rediscover():
+    """Chiamata ad ogni giro del loop principale — vedi commento sopra
+    _mqtt_connected. No-op quasi sempre (early return), costo trascurabile."""
+    global _next_rediscovery_ts
+    if _mqtt_connected:
+        return
+    now = time.time()
+    if now - _last_disconnect_ts < RECOVERY_THRESHOLD or now < _next_rediscovery_ts:
+        return
+    _next_rediscovery_ts = now + RECOVERY_THRESHOLD
+    print(f"[Agent] Disconnesso da oltre {RECOVERY_THRESHOLD}s, ri-eseguo discovery...")
+    try:
+        info = discovery.discover(cached_host=config.MQTT_HOST)
+    except Exception as e:
+        print(f"[Agent] Ri-discovery fallita: {e}")
+        return
+    if info and info.get("mqtt_host") and info["mqtt_host"] != config.MQTT_HOST:
+        print(f"[Agent] Nuovo host trovato: {info['mqtt_host']} (era {config.MQTT_HOST})")
+        config.MQTT_HOST = info["mqtt_host"]
+        config.MQTT_PORT = int(info.get("mqtt_port", config.MQTT_PORT))
+        try:
+            _mqtt.connect_async(config.MQTT_HOST, config.MQTT_PORT, 60)
+        except Exception as e:
+            print(f"[Agent] connect_async fallita: {e}")
+    else:
+        print("[Agent] Ri-discovery: nessun host migliore trovato, continuo a ritentare quello attuale")
 
 
 def _on_message(client, userdata, msg):
@@ -315,6 +456,9 @@ def _publish_status():
         "capabilities": _capabilities,
         "services":     all_statuses(),
         "config":       _device_config.get("services", {}),
+        "shutdown_at":  _device_config.get("shutdown_at"),
+        "osc_landmarks": _device_config.get("osc_landmarks", False),
+        "kiosk_page":   _device_config.get("kiosk_page", "welcome"),
         "uptime":       _get_uptime(),
         "ts":           int(time.time() * 1000),
     }
@@ -351,6 +495,31 @@ def _publish_profile(status_payload: dict):
     }
     _mqtt.publish(f"gaia/devices/{config.DEVICE_ID}/profile",
                   json.dumps(profile), retain=True)
+
+
+def _notify_telegram(text: str):
+    """Stesso topic/pattern di minipc/installation/agent.py — un publish su
+    gaia/notify/telegram, consumato dal dispatcher Telegram esistente. Qui
+    ancora più importante che su una macchina Windows: un Pi spento non ha
+    un risveglio remoto, l'unico avviso possibile è PRIMA che succeda."""
+    try:
+        _mqtt.publish("gaia/notify/telegram", json.dumps({"text": text}))
+    except Exception as e:
+        print(f"[Agent] Errore notifica Telegram: {e}")
+
+
+def _do_shutdown(reason: str):
+    """Unico punto che spegne davvero il Pi -- usato sia dal comando MQTT
+    diretto sia dal trigger programmato (vedi main(), shutdown_at) cosi' i
+    due percorsi restano coerenti, stesso schema di minipc/installation/."""
+    print(f"[Agent] Shutdown ({reason}) — eseguo tra 2s.")
+    _notify_telegram(
+        f"🔌 Shutdown ({reason}) sul Pi \"{_device_config.get('stanza','?')}\" — "
+        "in corso. Si riaccende SOLO staccando/riattaccando l'alimentazione."
+    )
+    _publish_status()
+    time.sleep(2)
+    subprocess.run(["sudo", "poweroff"])
 
 
 def _get_ip() -> str:
@@ -410,6 +579,19 @@ def _handle_command(cmd: dict):
                     stanza_changed = True
             if "name" in cmd:
                 _device_config["name"] = cmd["name"]
+            if "shutdown_at" in cmd:
+                val = cmd["shutdown_at"]
+                if val in (None, ""):
+                    _device_config["shutdown_at"] = None
+                elif isinstance(val, str) and re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", val):
+                    _device_config["shutdown_at"] = val
+                else:
+                    print(f"[Agent] shutdown_at non valido (atteso HH:MM o null): {val!r}, ignorato")
+            if "osc_landmarks" in cmd:
+                osc_landmarks_changed = bool(cmd["osc_landmarks"]) != _device_config.get("osc_landmarks", False)
+                _device_config["osc_landmarks"] = bool(cmd["osc_landmarks"])
+            else:
+                osc_landmarks_changed = False
             if "services" in cmd:
                 for svc, val in cmd["services"].items():
                     enabled = val if isinstance(val, bool) else val.get("enabled", False)
@@ -426,6 +608,20 @@ def _handle_command(cmd: dict):
                 if cfg.get("enabled") and service_status(svc) == "active":
                     print(f"[Agent] Riavvio {svc} per cambio stanza")
                     restart_service(svc)
+        if osc_landmarks_changed:
+            _write_mediapipe_conf(_device_config)
+            # mediapipe_node.py legge mediapipe.conf solo all'avvio -- se
+            # e' gia' acceso va riavviato per applicare il nuovo valore.
+            # Se il device non ha nemmeno il servizio 'mediapipe' (non
+            # tutti i Pi ce l'hanno), service_status ritorna "unknown" e
+            # qui non facciamo nulla -- il file resta scritto per quando
+            # (se mai) quel servizio verra' aggiunto.
+            if service_status("mediapipe") == "active":
+                print(f"[Agent] Riavvio mediapipe per applicare osc_landmarks={_device_config['osc_landmarks']}")
+                restart_service("mediapipe")
+
+    elif action == "set_kiosk":
+        _set_kiosk(cmd.get("page", ""), cmd.get("room"))
 
     elif action == "status":
         pass   # risponde sotto con _publish_status()
@@ -437,9 +633,7 @@ def _handle_command(cmd: dict):
         return
 
     elif action == "shutdown":
-        _publish_status()
-        time.sleep(2)
-        subprocess.run(["sudo", "poweroff"])
+        _do_shutdown("richiesto da remoto")
         return
 
     elif action == "ota_update":
@@ -523,6 +717,9 @@ def _ota_update(service_key: str, url: str, md5_expected: str, filename: str, ve
 # ──────────────────────────────────────────────────────────────────────
 def apply_initial_config():
     _write_device_env(_device_config)   # assicura /etc/gaia/device.conf aggiornato
+    _write_mediapipe_conf(_device_config)   # idem per mediapipe.conf (osc_landmarks) --
+    # PRIMA del loop sotto: se mediapipe e' enabled, deve gia' trovare il
+    # file giusto al suo primo avvio, non solo dopo un set_config successivo.
     # camera è un servizio normale ora (vedi SERVICE_DEPENDENCIES sopra): se è
     # enabled per conto suo, o se lo è yolo/mediapipe/kiosk (che la richiedono
     # come dipendenza), parte comunque in questo stesso giro — enable_service
@@ -643,11 +840,20 @@ def main():
     _mqtt.loop_start()
 
     last_heartbeat = 0
+    last_scheduled_shutdown_date = None
     while _running:
         now = time.time()
         if now - last_heartbeat >= config.HEARTBEAT_INTERVAL:
             _publish_status()
             last_heartbeat = now
+        _maybe_rediscover()
+        shutdown_at = _device_config.get("shutdown_at")
+        if shutdown_at:
+            nowdt = datetime.now()
+            today = nowdt.strftime("%Y-%m-%d")
+            if nowdt.strftime("%H:%M") == shutdown_at and last_scheduled_shutdown_date != today:
+                last_scheduled_shutdown_date = today
+                _do_shutdown(f"programmato {shutdown_at}")
         time.sleep(1)
 
     _mqtt.loop_stop()
