@@ -143,29 +143,32 @@ def _write_mediapipe_conf(cfg: dict):
 # ──────────────────────────────────────────────────────────────────────
 # Kiosk — switch remoto fra pagine (2026-10-02)
 # ──────────────────────────────────────────────────────────────────────
-# Stesso LAN IP già usato da pi/kiosk/resolve_url.py (OPS_LAN) -- non
-# duplicato per un import (quel modulo fa anche probe di rete/Tailscale,
-# qui serve solo la costante). KIOSK_URL va scritto come stringa GIA'
-# risolta: /etc/gaia/kiosk.conf è letto via EnvironmentFile= di systemd,
-# che non fa interpolazione di shell -- un ${NODERED_HOST} scritto qui
-# resterebbe letterale, non verrebbe mai espanso (il default welcome nel
-# .service invece lo fa perché gira dentro `sh -c '...'`).
+# KIOSK_URL va scritto come stringa GIA' risolta: /etc/gaia/kiosk.conf è
+# letto via EnvironmentFile= di systemd, che non fa interpolazione di
+# shell -- un ${NODERED_HOST} scritto qui resterebbe letterale, non
+# verrebbe mai espanso (il default welcome nel .service invece lo fa
+# perché gira dentro `sh -c '...'`). {room} sotto è un vero placeholder
+# Python (.format), sostituito subito, non shell.
 _KIOSK_CONF = "/etc/gaia/kiosk.conf"
-_OPS_LAN = "192.168.1.240"
+# 'dmx' punta al webserver LOCALE del servizio gaia-dmx (pi/dmx/main.py,
+# porta 8099 di convenzione, vedi pi/dmx/config.py TOUCH_PORT) invece che
+# a OPS/Node-RED -- stesso contenuto (www/ e' una copia di web/
+# dmx-touch.html), ma senza dipendere da OPS per il semplice HTML/JS. Resta
+# comunque una dipendenza reale dal broker MQTT di Core per il controllo.
 KIOSK_PAGES = {
-    "dmx": "dmx-touch.html",
+    "dmx": "http://localhost:8099/dmx-touch.html?room={room}",
 }
 
 
 def _set_kiosk(page: str, room: str = None) -> bool:
     """page='welcome' ripristina il default del service file (nessun
     KIOSK_URL in kiosk.conf); un'altra chiave in KIOSK_PAGES punta invece
-    a quella pagina in web/ con ?room=<stanza attuale>."""
+    al proprio URL (template con {room})."""
     room = room or _device_config.get("stanza", config.DEFAULT_STANZA)
     if page == "welcome":
         content = ""
     elif page in KIOSK_PAGES:
-        content = f"KIOSK_URL=http://{_OPS_LAN}:1880/{KIOSK_PAGES[page]}?room={room}\n"
+        content = f"KIOSK_URL={KIOSK_PAGES[page].format(room=room)}\n"
     else:
         print(f"[Agent] set_kiosk: pagina sconosciuta {page!r} (valide: welcome, {', '.join(KIOSK_PAGES)})")
         return False
