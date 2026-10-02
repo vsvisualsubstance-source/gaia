@@ -338,9 +338,95 @@ def _sync_dependencies(key: str, cfg: dict):
             time.sleep(1)
 
 
+# ──────────────────────────────────────────────────────────────────────
+# Profilo eth0 — DMX (Art-Net) vs normale (DHCP), 2026-10-02
+# ──────────────────────────────────────────────────────────────────────
+# Trovato dal vivo su Pi Ingresso: la rete Art-Net del DMX non ha DHCP
+# (comune per reti di illuminazione professionali), serve un IP statico
+# su eth0 -- ma SOLO mentre il servizio dmx è davvero attivo. Lasciare
+# l'IP statico anche a dmx spento intrappolerebbe chiunque ricolleghi
+# quella porta a una LAN normale (nessun indirizzo valido lì, DHCP mai
+# provato). L'indirizzo è per-Pi (reti Art-Net diverse hanno subnet
+# diverse, e due Pi sulla STESSA rete non possono avere lo stesso IP
+# statico) -- letto da /etc/gaia/dmx.conf (DMX_ETH_ADDRESS), MAI
+# indovinato: senza quella riga enable_service('dmx') parte comunque ma
+# non tocca la rete, stesso principio già seguito per ARTNET_HOST in
+# pi/dmx/config.py.
+def _dmx_eth_address() -> str:
+    path = "/etc/gaia/dmx.conf"
+    if not os.path.exists(path):
+        return ""
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith("DMX_ETH_ADDRESS="):
+                return line.split("=", 1)[1].strip()
+    return ""
+
+
+def _eth_connection_name() -> str:
+    """Nome della connessione NetworkManager di eth0, qualunque esso sia
+    (es. 'Connessione via cavo 1' su locale italiano, 'Wired connection 1'
+    su inglese) -- mai hardcodato, un Pi diverso potrebbe averlo diverso."""
+    try:
+        r = subprocess.run(["nmcli", "-t", "-f", "NAME,TYPE", "connection", "show"],
+                            capture_output=True, text=True, timeout=10)
+        for line in r.stdout.splitlines():
+            if ":" not in line:
+                continue
+            name, ctype = line.rsplit(":", 1)
+            if ctype == "802-3-ethernet":
+                return name
+    except Exception as e:
+        print(f"[Agent] _eth_connection_name: errore ({e})")
+    return ""
+
+
+def _set_eth_profile(mode: str):
+    """mode='dmx' -> IP statico (no default route, mai in competizione col
+    WiFi); mode='normal' -> DHCP, comportamento di sempre. No-op silenzioso
+    se non c'è una connessione Ethernet (Pi senza eth0 collegato) o se
+    DMX_ETH_ADDRESS non è configurato (vedi sopra).
+
+    Interamente avvolta in try/except, apposta: trovato dal vivo che
+    `nmcli connection up` su una rete SENZA DHCP (tipico di una rete
+    Art-Net, vedi sopra) resta appesa fino al proprio timeout interno
+    aspettando una lease che non arriverà mai -- superava il timeout di
+    subprocess qui sotto e l'eccezione (TimeoutExpired, non gestita)
+    uccideva l'intero thread di _handle_command PRIMA che arrivasse a
+    fermare/avviare il servizio vero. `-w 5` (wait) limita quanto nmcli
+    stesso aspetta prima di restituire il controllo comunque -- la
+    riconfigurazione di rete non deve MAI poter bloccare l'azione sul
+    servizio, che conta di più."""
+    try:
+        name = _eth_connection_name()
+        if not name:
+            return
+        if mode == "dmx":
+            addr = _dmx_eth_address()
+            if not addr:
+                print("[Agent] DMX_ETH_ADDRESS non impostato in /etc/gaia/dmx.conf, profilo eth invariato")
+                return
+            args = ["ipv4.method", "manual", "ipv4.addresses", addr,
+                    "ipv4.gateway", "", "ipv4.never-default", "yes"]
+        else:
+            args = ["ipv4.method", "auto", "ipv4.addresses", "", "ipv4.never-default", "no"]
+        subprocess.run(["sudo", "nmcli", "connection", "modify", name] + args,
+                        capture_output=True, timeout=10)
+        subprocess.run(["sudo", "nmcli", "-w", "5", "connection", "down", name],
+                        capture_output=True, timeout=10)
+        ok = subprocess.run(["sudo", "nmcli", "-w", "5", "connection", "up", name],
+                             capture_output=True, timeout=10).returncode == 0
+        print(f"[Agent] Profilo eth '{name}' → {mode} ({'OK' if ok else 'parziale (normale senza DHCP sulla rete DMX)'})")
+    except Exception as e:
+        print(f"[Agent] _set_eth_profile({mode!r}): errore non bloccante ({e})")
+
+
 def enable_service(key: str, cfg: dict = None) -> bool:
     if cfg is not None:
         _sync_dependencies(key, cfg)
+    if key == "dmx":
+        _set_eth_profile("dmx")
     unit = config.SERVICE_MAP.get(key)
     if not unit:
         return False
@@ -348,6 +434,8 @@ def enable_service(key: str, cfg: dict = None) -> bool:
 
 
 def disable_service(key: str, cfg: dict = None) -> bool:
+    if key == "dmx":
+        _set_eth_profile("normal")
     unit = config.SERVICE_MAP.get(key)
     if not unit:
         return False
