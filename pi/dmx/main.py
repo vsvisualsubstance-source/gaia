@@ -350,12 +350,41 @@ _mqtt.on_connect = _on_connect
 _mqtt.on_message = _on_message
 
 
+# ── Webserver locale per il mini menu touch ─────────────────────────────────
+# Serve web/dmx-touch.html (copia in www/, vedi nota sotto) direttamente da
+# questo Pi, cosi' il kiosk non dipende da OPS/Node-RED per il semplice
+# HTML/JS -- resta comunque una dipendenza reale dal broker MQTT di Core
+# (192.168.1.142:9001, hardcoded nella pagina) per il controllo vero, ma
+# Core e' molto piu' stabile di OPS/Node-RED in questo progetto (vedi
+# pi/CLAUDE.md e il changelog TD4Gaia per i precedenti di OPS giu').
+# www/ e' una COPIA (dmx-touch.html + vendor/mqtt.min.js): tenerla allineata
+# a web/dmx-touch.html e web/vendor/mqtt.min.js a mano se quella pagina
+# cambia, stessa convenzione di duplicazione gia' in uso per ota.py fra i
+# moduli Pi (vedi pi/CLAUDE.md).
+def _start_local_webserver():
+    import http.server
+    www_dir = os.path.join(config._BASE, "www")
+    if not os.path.isdir(www_dir):
+        print(f"[DMX] {www_dir} non trovato, webserver locale non avviato")
+        return
+    handler = lambda *a, **kw: http.server.SimpleHTTPRequestHandler(*a, directory=www_dir, **kw)
+    try:
+        httpd = http.server.ThreadingHTTPServer(("0.0.0.0", config.TOUCH_PORT), handler)
+    except OSError as e:
+        print(f"[DMX] Webserver locale: porta {config.TOUCH_PORT} non disponibile ({e})")
+        return
+    print(f"[DMX] Webserver locale su :{config.TOUCH_PORT} ({www_dir})")
+    httpd.serve_forever()
+
+
 def main():
     _load_palettes()
     _mqtt.connect_async(config.MQTT_HOST, config.MQTT_PORT, 60)
     threading.Thread(target=_mqtt.loop_forever,
                      kwargs={"retry_first_connection": True}, daemon=True).start()
     threading.Thread(target=_output_loop, daemon=True).start()
+    if config.TOUCH_PORT:
+        threading.Thread(target=_start_local_webserver, daemon=True).start()
 
     last_status = 0.0
     while _running:

@@ -70,3 +70,9 @@ FPS = float(_get("DMX_FPS", "30"))
 STATUS_EVERY_S = int(_get("DMX_STATUS_EVERY_S", "5"))
 
 PALETTES_FILE = _get("DMX_PALETTES_FILE", os.path.join(_BASE, "palettes.json"))
+
+# Webserver locale per il mini menu touch (www/dmx-touch.html) -- 0/vuoto
+# disattiva (nessun www/ da servire, es. un Pi senza display). Porta fissa
+# di convenzione per questo progetto, stesso principio di 6454/Art-Net o
+# 1883/MQTT: un valore solo, documentato, mai da indovinare altrove.
+TOUCH_PORT = int(_get("DMX_TOUCH_PORT", "8099"))

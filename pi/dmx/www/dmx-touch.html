@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>GAIA DMX Touch</title>
+<style>
+:root {
+  --bg:#08090f; --card:#0e1221; --border:#1e2840;
+  --accent:#00ffcc; --red:#f85149; --yellow:#e3b341;
+  --text:#c9d1d9; --muted:#6b7a99;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;user-select:none}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;
+     display:flex;flex-direction:column;padding:10px;gap:8px}
+
+.topbar{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.topbar h1{font-size:1rem;color:var(--accent);font-weight:700}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--muted);flex-shrink:0}
+.dot.ok{background:var(--accent);box-shadow:0 0 6px var(--accent)}
+.dot.err{background:var(--red)}
+.swatch{margin-left:auto;width:36px;height:36px;border-radius:8px;border:2px solid var(--border);background:#000}
+
+.palettes{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;flex:1;min-height:0}
+.pal-btn{border:2px solid var(--border);border-radius:10px;font-size:.85rem;font-weight:600;
+         color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6);display:flex;align-items:center;
+         justify-content:center;padding:4px}
+.pal-btn.active{border-color:#fff;box-shadow:0 0 0 2px var(--accent)}
+
+.controls{display:flex;gap:8px;flex-shrink:0;align-items:center}
+.controls input[type=range]{flex:1;height:40px;accent-color:var(--accent)}
+.btn{border:none;border-radius:10px;font-size:.85rem;font-weight:700;padding:14px 10px;color:#000;
+     background:var(--border);color:var(--text)}
+.btn.blackout{background:var(--red);color:#fff;min-width:90px}
+.btn.tl{background:var(--card);border:2px solid var(--border);color:var(--text);min-width:70px}
+.btn.tl.active{border-color:var(--accent);color:var(--accent)}
+.btn:active{opacity:.7}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="dot" id="dot"></span>
+  <h1 id="title">GAIA DMX</h1>
+  <div class="swatch" id="swatch"></div>
+</div>
+
+<div class="palettes" id="palettes"></div>
+
+<div class="controls">
+  <button class="btn tl" id="tl-start" onclick="tlStart()">▶ Timeline</button>
+  <button class="btn tl" id="tl-stop" onclick="tlStop()">■</button>
+  <input type="range" id="brightness" min="0" max="100" value="100" oninput="onBrightness(this.value)">
+  <button class="btn blackout" onclick="blackout()">⏻ OFF</button>
+</div>
+
+<script>
+// Pagina touch "mini menu" per gaia-dmx (pi/dmx/main.py) -- pensata per un
+// display DSI 800x480 montato su un Pi con quel servizio attivo. Stanza
+// presa da ?room=, default "ingresso" (primo Pi su cui gaia-dmx è stato
+// provato, 2026-10-02) -- riusabile su altri Pi passando un room diverso
+// nell'URL di kiosk.conf (KIOSK_URL), nessun nome hardcoded nella logica.
+const params = new URLSearchParams(location.search);
+const ROOM = params.get('room') || 'ingresso';
+document.getElementById('title').textContent = `GAIA DMX — ${ROOM}`;
+
+const PALETTE_COLORS = {
+  // Colori di sfondo dei bottoni -- stessi valori di pi/dmx/palettes.json,
+  // duplicati qui solo per il rendering (la lista VERA dei nomi arriva
+  // sempre dal device via status, mai hardcodata: se domani si aggiunge
+  // una palette nuova qui sotto resta grigia ma funziona comunque).
+  Warm: '#ffa03c', Cool: '#3c8cff', Fire: '#ff3c00', Ocean: '#0078b4',
+  Forest: '#14a03c', Sunset: '#ff5a28', Magenta: '#dc00b4', White: '#ffffff', Off: '#222',
+};
+
+let client = null;
+let lastPalette = null;
+let lastTimelineRunning = false;
+
+function setConn(ok) {
+  document.getElementById('dot').className = 'dot ' + (ok ? 'ok' : 'err');
+}
+
+function sendCmd(cmd) {
+  if (!client || !client.connected) return;
+  client.publish(`gaia/dmx/${ROOM}/command`, JSON.stringify(cmd));
+}
+
+function setPalette(name) {
+  sendCmd({ action: 'set_palette', palette: name, fade: 0.8 });
+}
+function blackout() { sendCmd({ action: 'blackout' }); }
+function tlStart() { sendCmd({ action: 'timeline_start' }); }
+function tlStop()  { sendCmd({ action: 'timeline_stop' }); }
+function onBrightness(v) { sendCmd({ action: 'set_brightness', value: v / 100 }); }
+
+function renderPalettes(names) {
+  const wrap = document.getElementById('palettes');
+  wrap.innerHTML = names.map(n => {
+    const bg = PALETTE_COLORS[n] || '#333';
+    const active = n === lastPalette ? ' active' : '';
+    return `<button class="pal-btn${active}" style="background:${bg}" data-pal="${n}">${n}</button>`;
+  }).join('');
+  wrap.querySelectorAll('[data-pal]').forEach(el => {
+    el.onclick = () => setPalette(el.dataset.pal);
+  });
+}
+
+function applyStatus(d) {
+  lastPalette = d.current_palette;
+  lastTimelineRunning = !!d.timeline_running;
+  renderPalettes(d.palettes || []);
+  const [r, g, b] = d.output_rgb || [0, 0, 0];
+  document.getElementById('swatch').style.background = `rgb(${r},${g},${b})`;
+  document.getElementById('brightness').value = Math.round((d.brightness ?? 1) * 100);
+  document.getElementById('tl-start').classList.toggle('active', lastTimelineRunning);
+}
+
+function start() {
+  client = mqtt.connect(`ws://192.168.1.142:9001`, { connectTimeout: 4000 });
+  client.on('connect', () => {
+    setConn(true);
+    client.subscribe(`gaia/dmx/${ROOM}/status`);
+  });
+  client.on('error',   () => setConn(false));
+  client.on('offline', () => setConn(false));
+  client.on('message', (topic, raw) => {
+    if (!raw || !raw.length) return;
+    try { applyStatus(JSON.parse(raw.toString())); } catch (e) {}
+  });
+}
+
+if (typeof mqtt !== 'undefined') {
+  start();
+} else {
+  const s = document.createElement('script');
+  s.src = 'vendor/mqtt.min.js';
+  s.onload = start;
+  document.head.appendChild(s);
+}
+</script>
+</body>
+</html>
