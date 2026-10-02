@@ -141,6 +141,59 @@ def _write_mediapipe_conf(cfg: dict):
 
 
 # ──────────────────────────────────────────────────────────────────────
+# Kiosk — switch remoto fra pagine (2026-10-02)
+# ──────────────────────────────────────────────────────────────────────
+# Stesso LAN IP già usato da pi/kiosk/resolve_url.py (OPS_LAN) -- non
+# duplicato per un import (quel modulo fa anche probe di rete/Tailscale,
+# qui serve solo la costante). KIOSK_URL va scritto come stringa GIA'
+# risolta: /etc/gaia/kiosk.conf è letto via EnvironmentFile= di systemd,
+# che non fa interpolazione di shell -- un ${NODERED_HOST} scritto qui
+# resterebbe letterale, non verrebbe mai espanso (il default welcome nel
+# .service invece lo fa perché gira dentro `sh -c '...'`).
+_KIOSK_CONF = "/etc/gaia/kiosk.conf"
+_OPS_LAN = "192.168.1.240"
+KIOSK_PAGES = {
+    "dmx": "dmx-touch.html",
+}
+
+
+def _set_kiosk(page: str, room: str = None) -> bool:
+    """page='welcome' ripristina il default del service file (nessun
+    KIOSK_URL in kiosk.conf); un'altra chiave in KIOSK_PAGES punta invece
+    a quella pagina in web/ con ?room=<stanza attuale>."""
+    room = room or _device_config.get("stanza", config.DEFAULT_STANZA)
+    if page == "welcome":
+        content = ""
+    elif page in KIOSK_PAGES:
+        content = f"KIOSK_URL=http://{_OPS_LAN}:1880/{KIOSK_PAGES[page]}?room={room}\n"
+    else:
+        print(f"[Agent] set_kiosk: pagina sconosciuta {page!r} (valide: welcome, {', '.join(KIOSK_PAGES)})")
+        return False
+    # Il file può essere root (scritto a mano/via sudo in passato) --
+    # questo processo gira come utente normale (vedi pi/CLAUDE.md), quindi
+    # riscrivere un file di un altro proprietario fallirebbe in silenzio
+    # (PermissionError) anche se la DIRECTORY è scrivibile. Si toglie di
+    # mezzo e si riscrive da zero, cosi' resta sempre proprietà di questo
+    # processo da qui in avanti.
+    try:
+        if os.path.exists(_KIOSK_CONF):
+            os.remove(_KIOSK_CONF)
+        with open(_KIOSK_CONF, "w") as f:
+            f.write(content)
+    except OSError as e:
+        print(f"[Agent] set_kiosk: impossibile scrivere {_KIOSK_CONF}: {e}")
+        return False
+    with _config_lock:
+        _device_config.setdefault("services", {}).setdefault("kiosk", {})["enabled"] = True
+        _device_config["kiosk_page"] = page
+    save_config(_device_config)
+    enable_service("kiosk", _device_config)   # avvia se non già attivo (gestisce anche il Conflicts= con screen)
+    restart_service("kiosk")                  # forza la rilettura del nuovo KIOSK_URL anche se era già attivo
+    print(f"[Agent] Kiosk → {page}" + (f" ({content.strip()})" if content else " (default welcome)"))
+    return True
+
+
+# ──────────────────────────────────────────────────────────────────────
 # Capability detection
 # ──────────────────────────────────────────────────────────────────────
 
@@ -405,6 +458,7 @@ def _publish_status():
         "config":       _device_config.get("services", {}),
         "shutdown_at":  _device_config.get("shutdown_at"),
         "osc_landmarks": _device_config.get("osc_landmarks", False),
+        "kiosk_page":   _device_config.get("kiosk_page", "welcome"),
         "uptime":       _get_uptime(),
         "ts":           int(time.time() * 1000),
     }
@@ -565,6 +619,9 @@ def _handle_command(cmd: dict):
             if service_status("mediapipe") == "active":
                 print(f"[Agent] Riavvio mediapipe per applicare osc_landmarks={_device_config['osc_landmarks']}")
                 restart_service("mediapipe")
+
+    elif action == "set_kiosk":
+        _set_kiosk(cmd.get("page", ""), cmd.get("room"))
 
     elif action == "status":
         pass   # risponde sotto con _publish_status()

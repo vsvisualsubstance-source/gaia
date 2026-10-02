@@ -1705,7 +1705,8 @@ function pmAdvancedHtml(d) {
   const showShutdown = d.role==='installation'||d.role==='pi'||d.role==='ops';
   const showWatchdog = d.role==='installation'||d.role==='ops';
   const showMocap    = (d.role==='pi'||d.role==='core'||d.role==='ops') && pmSvcKeys(d).includes('mediapipe');
-  if (!showShutdown && !showWatchdog && !showMocap) return '';
+  const showKiosk    = pmSvcKeys(d).includes('kiosk');
+  if (!showShutdown && !showWatchdog && !showMocap && !showKiosk) return '';
 
   const shutdownBlock = showShutdown ? `<div>
       <div class="pm-section-label">⏻ Spegnimento programmato</div>
@@ -1747,6 +1748,26 @@ function pmAdvancedHtml(d) {
       </div>
     </div>` : '';
 
+  // Elenco pagine kiosk: 'welcome' = default del service file, le altre
+  // da KIOSK_PAGES in pi/agent/agent.py (oggi solo 'dmx', pensato per
+  // crescere: un nuovo valore lì basta a farlo comparire anche qui senza
+  // altri cambi, stesso principio additivo del resto di questa pagina).
+  const KIOSK_PAGE_LABELS = { welcome: '🏠 Welcome', dmx: '💡 DMX' };
+  const kioskBlock = showKiosk ? `<div>
+      <div class="pm-section-label">🖥️ Display — pagina kiosk</div>
+      <div class="pm-rename-row">
+        <select class="pm-inp-kiosk" style="flex:1">
+          ${Object.entries(KIOSK_PAGE_LABELS).map(([k,l])=>
+            `<option value="${k}" ${(d.kiosk_page||'welcome')===k?'selected':''}>${l}</option>`
+          ).join('')}
+        </select>
+        <button class="pm-btn blue pm-btn-kiosk" style="width:auto;padding:0 14px">Applica</button>
+      </div>
+      <div style="font-size:.75rem;color:var(--muted);margin-top:4px">
+        Riavvia gaia-kiosk sul display DSI del device con la pagina scelta — nessun accesso SSH necessario.
+      </div>
+    </div>` : '';
+
   // Badge rapido nel <summary> cosi' si vede senza aprire se qualcosa di
   // non-default e' attivo (altrimenti bisognerebbe aprire ogni card per
   // scoprire se ha uno spegnimento programmato impostato, per esempio).
@@ -1754,10 +1775,11 @@ function pmAdvancedHtml(d) {
   if (d.shutdown_at) hints.push(`⏻ ${pmEsc(d.shutdown_at)}`);
   if (showWatchdog && d.watchdog) hints.push('🐕 on');
   if (showMocap && d.osc_landmarks) hints.push('🕺 on');
+  if (showKiosk && d.kiosk_page && d.kiosk_page !== 'welcome') hints.push(`🖥️ ${pmEsc(d.kiosk_page)}`);
 
   return `<details class="pm-advanced">
     <summary>⚙️ Avanzate${hints.length?` · ${hints.join(' · ')}`:''}</summary>
-    <div class="pm-advanced-body">${shutdownBlock}${watchdogBlock}${mocapBlock}</div>
+    <div class="pm-advanced-body">${shutdownBlock}${watchdogBlock}${mocapBlock}${kioskBlock}</div>
   </details>`;
 }
 
@@ -1903,6 +1925,8 @@ function pmPatchCard(id, d) {
     const lbl = oscLandmarksChk.parentElement?.querySelector('span');
     if (lbl) lbl.textContent = d.osc_landmarks?'Acceso — invia viso/mani/pose via OSC a chi si abilita a riceverlo':'Spento — nessun invio mocap da questo device';
   }
+  const kioskSel = card.querySelector('.pm-inp-kiosk');
+  if (kioskSel && document.activeElement!==kioskSel) kioskSel.value = d.kiosk_page||'welcome';
   // Badge riassuntivo nel <summary> di "⚙️ Avanzate" -- stessa logica di
   // pmAdvancedHtml, ricalcolata qui per restare fresca senza ricostruire
   // l'intero <details> (che chiuderebbe un pannello che l'utente ha aperto).
@@ -1912,6 +1936,7 @@ function pmPatchCard(id, d) {
     if (d.shutdown_at) hints.push(`⏻ ${pmEsc(d.shutdown_at)}`);
     if (watchdogChk && d.watchdog) hints.push('🐕 on');
     if (oscLandmarksChk && d.osc_landmarks) hints.push('🕺 on');
+    if (kioskSel && d.kiosk_page && d.kiosk_page !== 'welcome') hints.push(`🖥️ ${pmEsc(d.kiosk_page)}`);
     advSummary.textContent = `⚙️ Avanzate${hints.length?` · ${hints.join(' · ')}`:''}`;
   }
 }
@@ -2006,6 +2031,14 @@ function pmAttachEvents(id, card) {
     const val = watchdogChk.checked;
     pmSend(id, {action:'set_config', watchdog: val});
     pmLog('out', `${id}: watchdog → ${val ? 'acceso' : 'spento'}`);
+  };
+  const kioskBtn = card.querySelector('.pm-btn-kiosk');
+  if (kioskBtn) kioskBtn.onclick = () => {
+    const sel = card.querySelector('.pm-inp-kiosk');
+    if (!sel?.value) return;
+    pmSend(id, {action:'set_kiosk', page: sel.value});
+    pmLog('out', `${id}: kiosk → ${sel.value}`);
+    kioskBtn.textContent = '✓'; setTimeout(() => { kioskBtn.textContent = 'Applica'; }, 1200);
   };
   const oscLandmarksChk = card.querySelector('.pm-chk-osclandmarks');
   if (oscLandmarksChk) oscLandmarksChk.onchange = () => {
