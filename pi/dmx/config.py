@@ -44,11 +44,23 @@ ARTNET_NET      = int(_get("ARTNET_NET", "0"))
 ARTNET_SUBNET   = int(_get("ARTNET_SUBNET", "0"))
 ARTNET_UNIVERSE = int(_get("ARTNET_UNIVERSE", "0"))
 
-# Canali DMX della fixture pilotata: 3 = RGB, 4 = RGBW. START_ADDRESS è il
-# primo canale (1-512) nell'universo, non necessariamente 1 se condivide
-# l'universo con altre fixture patchate altrove.
+# Canali DMX della fixture pilotata. START_ADDRESS è il primo canale
+# (1-512) nell'universo, non necessariamente 1 se condivide l'universo con
+# altre fixture patchate altrove.
 NUM_CHANNELS   = int(_get("DMX_NUM_CHANNELS", "3"))
 START_ADDRESS  = int(_get("DMX_START_ADDRESS", "1"))
+
+# Molte fixture economiche (stesso "D+RGB 4CH"/"D+RGBW 5CH" visto nei
+# profili di DMX V8 su TD) hanno un canale Master/Dimmer SEPARATO prima dei
+# canali colore, non RGB puro -- confermato dal vivo su Pi Ingresso il
+# 2026-10-02 (test canale per canale contro il nodo Electroconcept
+# 2.1.1.2: RGB sui primi 3 canali non dava nulla, dimmer+colore sì).
+# 0 = nessun canale dimmer separato (fixture RGB pura, comportamento di
+# sempre: la luminosità si applica moltiplicando R/G/B prima dell'invio).
+# N>0 = offset (1-based, relativo a START_ADDRESS) del canale dimmer; i 3
+# canali RGB che seguono subito dopo vengono mandati GREZZI (0-255), la
+# luminosità va tutta sul canale dimmer.
+DIMMER_CHANNEL = int(_get("DMX_DIMMER_CHANNEL", "0"))
 
 # Refresh dell'uscita Art-Net. ≤44Hz per spec (Art-Net 4) — stesso limite
 # già rispettato lato TD per DMX V8 (passato lì da 120 a 40Hz, vedi

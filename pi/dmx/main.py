@@ -40,6 +40,15 @@ _palettes = {}            # nome -> [r,g,b] (o [r,g,b,w])
 _brightness = 1.0
 _current_palette_name = None   # None se l'output attuale non corrisponde a una palette nota (set_rgb custom, o timeline)
 
+# Blackout = spegnimento garantito, indipendente dal layout canali della
+# fixture. Con un canale dimmer separato, RGB=[0,0,0] da solo NON basta a
+# garantirlo su ogni fixture reale (dipende da come il driver interno
+# combina dimmer e colore, mai verificato per ogni modello) -- quando
+# attivo il loop di uscita manda tutti i canali a 0 senza fare il calcolo
+# dimmer/RGB, bypassando qualunque dubbio. Si disattiva da sé al primo
+# set_palette/set_rgb/avvio timeline successivo (vedi _set_target).
+_forced_off = False
+
 # Crossfade: il loop di uscita interpola linearmente da _fade_from a _fade_to
 # fra _fade_start e _fade_start+_fade_dur (secondi). _output_rgb è il valore
 # live attualmente calcolato/mandato -- usato come punto di partenza del
@@ -102,13 +111,14 @@ def _set_target(rgb, fade_s, palette_name=None):
     comandi manuali sia dall'avanzamento della timeline, cosi' il fade
     riparte sempre dal valore REALMENTE in uscita ora (_output_rgb), mai da
     un valore stantio."""
-    global _fade_from, _fade_to, _fade_start, _fade_dur, _current_palette_name
+    global _fade_from, _fade_to, _fade_start, _fade_dur, _current_palette_name, _forced_off
     with _lock:
         _fade_from = list(_output_rgb)
         _fade_to = list(rgb)
         _fade_start = time.time()
         _fade_dur = max(0.0, float(fade_s))
         _current_palette_name = palette_name
+        _forced_off = False
 
 
 # ── Timeline ─────────────────────────────────────────────────────────────────
@@ -181,16 +191,34 @@ def _output_loop():
             frm, to = _fade_from, _fade_to
         rgb = [frm[i] + (to[i] - frm[i]) * t for i in range(3)]
         _output_rgb = rgb
-        channels = [max(0, min(255, round(c * _brightness))) for c in rgb]
-        if config.NUM_CHANNELS > 3:
-            channels += [0] * (config.NUM_CHANNELS - 3)
-        else:
-            channels = channels[:config.NUM_CHANNELS]
         buf = [0] * 512
         start = max(0, config.START_ADDRESS - 1)
+        has_dimmer = config.DIMMER_CHANNEL > 0
+        if _forced_off:
+            # buf resta tutto a 0 -- spegnimento garantito, vedi commento su
+            # _forced_off. rgb3/rgb_start fittizi solo perché il codice
+            # sotto li scrive comunque (riscrive zero su zero, innocuo).
+            rgb_start, rgb3 = start, [0, 0, 0]
+        elif has_dimmer:
+            # Canale dimmer separato (es. "D+RGB 4CH"): RGB grezzo, la
+            # luminosità va sul suo canale -- vedi commento in config.py.
+            dimmer_idx = start + config.DIMMER_CHANNEL - 1
+            if 0 <= dimmer_idx < 512:
+                buf[dimmer_idx] = max(0, min(255, round(_brightness * 255)))
+            rgb_start = start + config.DIMMER_CHANNEL
+            rgb3 = [max(0, min(255, round(c))) for c in rgb]
+        else:
+            # Nessun dimmer separato: luminosità moltiplicata direttamente
+            # nei canali colore (comportamento di sempre).
+            rgb_start = start
+            rgb3 = [max(0, min(255, round(c * _brightness))) for c in rgb]
+        # Canali oltre i 3 RGB (es. W di una RGBW) -- NUM_CHANNELS conta il
+        # totale occupato dalla fixture, dimmer incluso se presente.
+        extra = max(0, config.NUM_CHANNELS - 3 - (1 if has_dimmer else 0))
+        channels = rgb3 + [0] * extra
         for i, v in enumerate(channels):
-            if start + i < 512:
-                buf[start + i] = v
+            if rgb_start + i < 512:
+                buf[rgb_start + i] = v
         if config.ARTNET_HOST:
             _artnet.send(buf)
         elif not warned_no_host:
@@ -253,7 +281,7 @@ def _on_connect(client, userdata, flags, rc, properties=None):
 
 
 def _on_message(client, userdata, msg):
-    global _current_room, _brightness, _timeline_steps, _timeline_loop
+    global _current_room, _brightness, _timeline_steps, _timeline_loop, _forced_off
     if msg.topic in _ota.topics():
         _ota.handle(msg.topic, msg.payload)
         return
@@ -280,6 +308,7 @@ def _on_message(client, userdata, msg):
         elif action == "blackout":
             _timeline_stop()
             _set_target([0, 0, 0], 0.0, palette_name=None)
+            _forced_off = True
         elif action == "set_brightness":
             try:
                 with _lock:
