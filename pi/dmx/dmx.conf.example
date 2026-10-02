@@ -1,0 +1,34 @@
+# GAIA DMX (base) — configurazione
+# Copia in /etc/gaia/dmx.conf e modifica per ogni Raspberry Pi
+
+# Broker MQTT
+MQTT_HOST=192.168.1.142
+MQTT_PORT=1883
+
+# Nodo Art-Net di destinazione (es. l'IP di un dimmer/driver RGB in rete).
+# OBBLIGATORIO -- senza questo il servizio gira (palette/timeline/status
+# funzionano via MQTT) ma non manda nessun pacchetto Art-Net, mai un valore
+# indovinato qui. Verifica l'IP reale del nodo prima di impostarlo (es. dal
+# pannello del driver stesso, o con uno scan Art-Net se disponibile).
+ARTNET_HOST=
+ARTNET_PORT=6454
+
+# Indirizzamento Art-Net a 3 campi -- lascia a 0 se la rete ha un solo
+# universo (caso comune per una fixture singola).
+ARTNET_NET=0
+ARTNET_SUBNET=0
+ARTNET_UNIVERSE=0
+
+# Canali della fixture pilotata: 3=RGB, 4=RGBW (il 4° canale resta sempre a
+# 0 in questa versione "base", nessun mixing automatico del bianco).
+# START_ADDRESS è il primo canale DMX (1-512) nell'universo -- 1 se la
+# fixture è sola nel suo universo, un valore diverso se condivide
+# l'universo con altre fixture patchate altrove.
+DMX_NUM_CHANNELS=3
+DMX_START_ADDRESS=1
+
+# Refresh dell'uscita Art-Net (Hz). Non superare ~44Hz (limite di spec
+# Art-Net 4) -- stesso limite già rispettato lato TD per DMX V8.
+DMX_FPS=30
+
+DMX_STATUS_EVERY_S=5
