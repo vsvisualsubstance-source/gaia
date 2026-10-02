@@ -27,6 +27,7 @@ echo "  ✓ paho-mqtt OK"
 echo ""
 echo "[2/2] Servizio systemd..."
 USER_NAME=$(whoami)
+USER_UID=$(id -u)
 sudo tee /etc/systemd/system/gaia-dmx.service > /dev/null << EOF
 [Unit]
 Description=GAIA DMX (base) — palette + timeline via Art-Net
@@ -40,6 +41,12 @@ WorkingDirectory=$SCRIPT_DIR
 EnvironmentFile=/etc/gaia/device.conf
 EnvironmentFile=-/etc/gaia/dmx.conf
 Environment=PYTHONUNBUFFERED=1
+# Richiesto dall'audio-reattività (ffmpeg -f alsa): senza questa variabile
+# un servizio systemd di sistema non trova la sessione PipeWire
+# dell'utente e l'acquisizione fallisce in silenzio (nessun errore
+# visibile, solo audio_level fermo a 0) -- stesso identico gotcha già
+# documentato/risolto in pi/mediaplayer/pi/livestream.
+Environment=XDG_RUNTIME_DIR=/run/user/$USER_UID
 ExecStart=/usr/bin/python3 $SCRIPT_DIR/main.py
 Restart=on-failure
 RestartSec=5

@@ -28,13 +28,20 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
          justify-content:center;padding:4px}
 .pal-btn.active{border-color:#fff;box-shadow:0 0 0 2px var(--accent)}
 
+.timelines{display:flex;gap:6px;flex-shrink:0;overflow-x:auto}
+.tl-preset{border:2px solid var(--border);border-radius:10px;background:var(--card);color:var(--text);
+           font-size:.78rem;font-weight:600;padding:10px 14px;white-space:nowrap;flex-shrink:0}
+.tl-preset.active{border-color:var(--accent);color:var(--accent)}
+
 .controls{display:flex;gap:8px;flex-shrink:0;align-items:center}
 .controls input[type=range]{flex:1;height:40px;accent-color:var(--accent)}
 .btn{border:none;border-radius:10px;font-size:.85rem;font-weight:700;padding:14px 10px;color:#000;
      background:var(--border);color:var(--text)}
-.btn.blackout{background:var(--red);color:#fff;min-width:90px}
-.btn.tl{background:var(--card);border:2px solid var(--border);color:var(--text);min-width:70px}
+.btn.blackout{background:var(--red);color:#fff;min-width:80px}
+.btn.tl{background:var(--card);border:2px solid var(--border);color:var(--text);min-width:56px}
 .btn.tl.active{border-color:var(--accent);color:var(--accent)}
+.btn.audio{background:var(--card);border:2px solid var(--border);color:var(--text);min-width:56px}
+.btn.audio.active{border-color:var(--yellow);color:var(--yellow);background:#2a2010}
 .btn:active{opacity:.7}
 </style>
 </head>
@@ -48,9 +55,12 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 
 <div class="palettes" id="palettes"></div>
 
+<div class="timelines" id="timelines"></div>
+
 <div class="controls">
-  <button class="btn tl" id="tl-start" onclick="tlStart()">▶ Timeline</button>
-  <button class="btn tl" id="tl-stop" onclick="tlStop()">■</button>
+  <button class="btn tl" id="tl-start" onclick="tlStart()" title="Riprendi">▶</button>
+  <button class="btn tl" id="tl-stop" onclick="tlStop()" title="Pausa">■</button>
+  <button class="btn audio" id="audio-btn" onclick="toggleAudio()" title="Audio-reattività">🎤</button>
   <input type="range" id="brightness" min="0" max="100" value="100" oninput="onBrightness(this.value)">
   <button class="btn blackout" onclick="blackout()">⏻ OFF</button>
 </div>
@@ -77,6 +87,8 @@ const PALETTE_COLORS = {
 let client = null;
 let lastPalette = null;
 let lastTimelineRunning = false;
+let lastTimelinePreset = null;
+let lastAudioReactive = false;
 
 function setConn(ok) {
   document.getElementById('dot').className = 'dot ' + (ok ? 'ok' : 'err');
@@ -93,7 +105,22 @@ function setPalette(name) {
 function blackout() { sendCmd({ action: 'blackout' }); }
 function tlStart() { sendCmd({ action: 'timeline_start' }); }
 function tlStop()  { sendCmd({ action: 'timeline_stop' }); }
+function tlLoad(name) { sendCmd({ action: 'timeline_load', name }); }
 function onBrightness(v) { sendCmd({ action: 'set_brightness', value: v / 100 }); }
+function toggleAudio() {
+  sendCmd({ action: lastAudioReactive ? 'audio_reactive_stop' : 'audio_reactive_start' });
+}
+
+function renderTimelines(names) {
+  const wrap = document.getElementById('timelines');
+  wrap.innerHTML = names.map(n => {
+    const active = n === lastTimelinePreset ? ' active' : '';
+    return `<button class="tl-preset${active}" data-tl="${n}">${n}</button>`;
+  }).join('');
+  wrap.querySelectorAll('[data-tl]').forEach(el => {
+    el.onclick = () => tlLoad(el.dataset.tl);
+  });
+}
 
 function renderPalettes(names) {
   const wrap = document.getElementById('palettes');
@@ -110,11 +137,15 @@ function renderPalettes(names) {
 function applyStatus(d) {
   lastPalette = d.current_palette;
   lastTimelineRunning = !!d.timeline_running;
+  lastTimelinePreset = d.current_timeline_preset;
+  lastAudioReactive = !!d.audio_reactive;
   renderPalettes(d.palettes || []);
+  renderTimelines(d.timeline_presets || []);
   const [r, g, b] = d.output_rgb || [0, 0, 0];
   document.getElementById('swatch').style.background = `rgb(${r},${g},${b})`;
   document.getElementById('brightness').value = Math.round((d.brightness ?? 1) * 100);
   document.getElementById('tl-start').classList.toggle('active', lastTimelineRunning);
+  document.getElementById('audio-btn').classList.toggle('active', lastAudioReactive);
 }
 
 function start() {
