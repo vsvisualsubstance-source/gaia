@@ -1,0 +1,345 @@
+#!/usr/bin/env python3
+"""
+GAIA DMX (base) — servizio Pi per una fixture DMX via Art-Net: palette
+nominate + una piccola timeline (sequenza di palette nel tempo, con
+crossfade). Pensato per una stanza/fixture NON già coperta da DMX V8 su TD
+(quello resta il rig "Consolle", via Electroconcept 2.1.1.2) — stesso
+protocollo Art-Net, nodo diverso, nessun conflitto.
+
+A differenza di DMX V8 (TD, kick-detection audio-reattivo, patch multi-
+fixture, scan di rete) questo è deliberatamente semplice: un solo target
+RGB/RGBW alla volta, nessuna analisi audio, nessuna discovery di rete —
+l'host Art-Net si configura a mano (config.ARTNET_HOST). Vedi artnet.py per
+il perché niente ArtPoll.
+
+Catena: comando MQTT (palette o timeline) → stato interno (_fade_from/_to,
+progresso crossfade) → loop di uscita a config.FPS → ArtNetSender.send().
+Stesso schema command/status/device-registry degli altri moduli "leggeri"
+del Pi (vedi pi/livestream/main.py, pi/mediaplayer/main.py): paho-mqtt
+diretto, non il protocollo gaia_client lato TD (quello è per TouchDesigner,
+qui non serve quel livello di complessità).
+"""
+import json
+import os
+import signal
+import threading
+import time
+
+import paho.mqtt.client as mqtt
+
+import config
+from artnet import ArtNetSender
+from ota import OtaHandler
+
+_running = True
+_current_room = config.ROOM
+
+_lock = threading.Lock()
+_palettes = {}            # nome -> [r,g,b] (o [r,g,b,w])
+
+_brightness = 1.0
+_current_palette_name = None   # None se l'output attuale non corrisponde a una palette nota (set_rgb custom, o timeline)
+
+# Crossfade: il loop di uscita interpola linearmente da _fade_from a _fade_to
+# fra _fade_start e _fade_start+_fade_dur (secondi). _output_rgb è il valore
+# live attualmente calcolato/mandato -- usato come punto di partenza del
+# PROSSIMO fade, cosi' un cambio durante un fade in corso non scatta mai di
+# colpo.
+_output_rgb = [0, 0, 0]
+_fade_from = [0, 0, 0]
+_fade_to = [0, 0, 0]
+_fade_start = 0.0
+_fade_dur = 0.0
+
+MANUAL_FADE_DEFAULT_S = 0.6
+TIMELINE_FADE_DEFAULT_S = 1.0
+
+_timeline_steps = []      # [{"palette"|"rgb", "duration", "fade"}, ...]
+_timeline_loop = True
+_timeline_running = False
+_timeline_index = -1
+_timeline_step_started = 0.0
+
+
+def _shutdown(sig, frame):
+    global _running
+    _running = False
+
+
+signal.signal(signal.SIGTERM, _shutdown)
+signal.signal(signal.SIGINT, _shutdown)
+
+
+# ── Palette ──────────────────────────────────────────────────────────────────
+def _load_palettes():
+    global _palettes
+    try:
+        with open(config.PALETTES_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+        _palettes = {str(k): [int(c) for c in v] for k, v in data.items()}
+        print(f"[DMX] {len(_palettes)} palette caricate da {config.PALETTES_FILE}")
+    except Exception as e:
+        print(f"[DMX] Impossibile leggere {config.PALETTES_FILE} ({e}), uso un set minimo di default")
+        _palettes = {"White": [255, 255, 255], "Off": [0, 0, 0]}
+
+
+def _resolve_color(step_or_cmd):
+    """Da un dict comando/step ({"palette": "Fire"} o {"rgb": [r,g,b]}) al
+    colore RGB reale, o None se non risolvibile (palette sconosciuta)."""
+    if "rgb" in step_or_cmd:
+        rgb = step_or_cmd["rgb"]
+        if isinstance(rgb, list) and len(rgb) >= 3:
+            return [int(rgb[0]), int(rgb[1]), int(rgb[2])]
+        return None
+    name = step_or_cmd.get("palette")
+    if name in _palettes:
+        return list(_palettes[name])
+    return None
+
+
+def _set_target(rgb, fade_s, palette_name=None):
+    """Punto unico di scrittura del target di output -- usato sia dai
+    comandi manuali sia dall'avanzamento della timeline, cosi' il fade
+    riparte sempre dal valore REALMENTE in uscita ora (_output_rgb), mai da
+    un valore stantio."""
+    global _fade_from, _fade_to, _fade_start, _fade_dur, _current_palette_name
+    with _lock:
+        _fade_from = list(_output_rgb)
+        _fade_to = list(rgb)
+        _fade_start = time.time()
+        _fade_dur = max(0.0, float(fade_s))
+        _current_palette_name = palette_name
+
+
+# ── Timeline ─────────────────────────────────────────────────────────────────
+def _timeline_advance_to(index):
+    """Fa partire lo step `index` della timeline (wrap/stop gestiti dal
+    chiamante) -- punto unico per non duplicare la logica di fade."""
+    global _timeline_index, _timeline_step_started
+    step = _timeline_steps[index]
+    color = _resolve_color(step)
+    if color is None:
+        print(f"[DMX] Timeline: step {index} non risolvibile ({step}), salto")
+        return False
+    fade = float(step.get("fade", TIMELINE_FADE_DEFAULT_S))
+    _set_target(color, fade, palette_name=step.get("palette"))
+    _timeline_index = index
+    _timeline_step_started = time.time()
+    return True
+
+
+def _timeline_start():
+    global _timeline_running
+    if not _timeline_steps:
+        print("[DMX] Timeline vuota, nessuno step da avviare")
+        return False
+    with _lock:
+        _timeline_running = True
+    _timeline_advance_to(0)
+    return True
+
+
+def _timeline_stop():
+    global _timeline_running
+    with _lock:
+        _timeline_running = False
+
+
+def _timeline_tick(now):
+    """Chiamato dal loop di uscita ad ogni frame. Avanza lo step corrente
+    se la sua durata è scaduta."""
+    if not _timeline_running or not _timeline_steps:
+        return
+    step = _timeline_steps[_timeline_index]
+    duration = float(step.get("duration", 5.0))
+    if now - _timeline_step_started < duration:
+        return
+    nxt = _timeline_index + 1
+    if nxt >= len(_timeline_steps):
+        if not _timeline_loop:
+            _timeline_stop()
+            return
+        nxt = 0
+    _timeline_advance_to(nxt)
+
+
+# ── Loop di uscita Art-Net ───────────────────────────────────────────────────
+_artnet = ArtNetSender(config.ARTNET_HOST, config.ARTNET_PORT,
+                       net=config.ARTNET_NET, subnet=config.ARTNET_SUBNET,
+                       universe=config.ARTNET_UNIVERSE)
+
+
+def _output_loop():
+    global _output_rgb
+    period = 1.0 / max(1.0, config.FPS)
+    warned_no_host = False
+    while _running:
+        now = time.time()
+        _timeline_tick(now)
+        with _lock:
+            t = 1.0 if _fade_dur <= 0 else min(1.0, (now - _fade_start) / _fade_dur)
+            frm, to = _fade_from, _fade_to
+        rgb = [frm[i] + (to[i] - frm[i]) * t for i in range(3)]
+        _output_rgb = rgb
+        channels = [max(0, min(255, round(c * _brightness))) for c in rgb]
+        if config.NUM_CHANNELS > 3:
+            channels += [0] * (config.NUM_CHANNELS - 3)
+        else:
+            channels = channels[:config.NUM_CHANNELS]
+        buf = [0] * 512
+        start = max(0, config.START_ADDRESS - 1)
+        for i, v in enumerate(channels):
+            if start + i < 512:
+                buf[start + i] = v
+        if config.ARTNET_HOST:
+            _artnet.send(buf)
+        elif not warned_no_host:
+            print("[DMX] ARTNET_HOST non impostato — nessun pacchetto Art-Net inviato "
+                  "(imposta /etc/gaia/dmx.conf, timeline/palette restano comunque attivi in stato)")
+            warned_no_host = True
+        time.sleep(period)
+
+
+# ── MQTT ──────────────────────────────────────────────────────────────────────
+try:
+    _mqtt = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
+                        client_id=f"gaia-dmx-{config.DEVICE_ID}")
+except AttributeError:
+    _mqtt = mqtt.Client(client_id=f"gaia-dmx-{config.DEVICE_ID}")
+_mqtt.reconnect_delay_set(min_delay=2, max_delay=30)
+
+
+class _OtaMqttAdapter:
+    def publish(self, topic, payload, retain=False):
+        _mqtt.publish(topic, json.dumps(payload, default=str), qos=0, retain=retain)
+
+
+_ota = OtaHandler(mqtt_client=_OtaMqttAdapter(), device_id=config.DEVICE_ID,
+                  device_type="dmx", base_dir=config._BASE,
+                  service_name="gaia-dmx")
+
+
+def _publish_status():
+    with _lock:
+        out = [round(c) for c in _output_rgb]
+        payload = {
+            "device_id": config.DEVICE_ID,
+            "stanza": _current_room,
+            "artnet_configured": bool(config.ARTNET_HOST),
+            "palettes": sorted(_palettes.keys()),
+            "current_palette": _current_palette_name,
+            "output_rgb": out,
+            "brightness": round(_brightness, 3),
+            "timeline_defined": len(_timeline_steps),
+            "timeline_running": _timeline_running,
+            "timeline_loop": _timeline_loop,
+            "timeline_step_index": _timeline_index if _timeline_running else None,
+            "ts": int(time.time() * 1000),
+        }
+    _mqtt.publish(f"gaia/dmx/{_current_room}/status", json.dumps(payload), retain=True)
+
+
+def _topic_command():
+    return f"gaia/dmx/{_current_room}/command"
+
+
+def _on_connect(client, userdata, flags, rc, properties=None):
+    client.subscribe(f"gaia/devices/{config.DEVICE_ID}/config", qos=1)
+    client.subscribe(_topic_command(), qos=1)
+    for t in _ota.topics():
+        client.subscribe(t)
+    _publish_status()
+    print(f"[MQTT] Connesso — stanza {_current_room}")
+
+
+def _on_message(client, userdata, msg):
+    global _current_room, _brightness, _timeline_steps, _timeline_loop
+    if msg.topic in _ota.topics():
+        _ota.handle(msg.topic, msg.payload)
+        return
+    if msg.topic.endswith("/command"):
+        try:
+            cmd = json.loads(msg.payload)
+        except ValueError:
+            return
+        action = cmd.get("action")
+        if action == "set_palette":
+            color = _resolve_color(cmd)
+            if color is None:
+                print(f"[DMX] set_palette: palette sconosciuta {cmd.get('palette')!r}")
+            else:
+                _timeline_stop()
+                _set_target(color, cmd.get("fade", MANUAL_FADE_DEFAULT_S), palette_name=cmd.get("palette"))
+        elif action == "set_rgb":
+            color = _resolve_color(cmd)
+            if color is None:
+                print(f"[DMX] set_rgb: payload non valido {cmd}")
+            else:
+                _timeline_stop()
+                _set_target(color, cmd.get("fade", MANUAL_FADE_DEFAULT_S), palette_name=None)
+        elif action == "blackout":
+            _timeline_stop()
+            _set_target([0, 0, 0], 0.0, palette_name=None)
+        elif action == "set_brightness":
+            try:
+                with _lock:
+                    _brightness = max(0.0, min(1.0, float(cmd.get("value", 1.0))))
+            except (TypeError, ValueError):
+                pass
+        elif action == "timeline_set":
+            steps = cmd.get("steps")
+            if isinstance(steps, list) and steps:
+                with _lock:
+                    _timeline_steps = steps
+                    _timeline_loop = bool(cmd.get("loop", True))
+                print(f"[DMX] Timeline impostata: {len(steps)} step, loop={_timeline_loop}")
+            else:
+                print("[DMX] timeline_set: 'steps' mancante o vuoto")
+        elif action == "timeline_start":
+            _timeline_start()
+        elif action == "timeline_stop":
+            _timeline_stop()
+        elif action == "reload_palettes":
+            _load_palettes()
+        else:
+            print(f"[DMX] Azione sconosciuta: {action!r}")
+        _publish_status()
+        return
+    try:
+        new_room = json.loads(msg.payload).get("room")
+    except ValueError:
+        return
+    if new_room and new_room != _current_room:
+        _mqtt.publish(f"gaia/dmx/{_current_room}/status", "", retain=True)
+        client.unsubscribe(_topic_command())
+        _current_room = new_room
+        client.subscribe(_topic_command(), qos=1)
+        _publish_status()
+
+
+_mqtt.on_connect = _on_connect
+_mqtt.on_message = _on_message
+
+
+def main():
+    _load_palettes()
+    _mqtt.connect_async(config.MQTT_HOST, config.MQTT_PORT, 60)
+    threading.Thread(target=_mqtt.loop_forever,
+                     kwargs={"retry_first_connection": True}, daemon=True).start()
+    threading.Thread(target=_output_loop, daemon=True).start()
+
+    last_status = 0.0
+    while _running:
+        now = time.time()
+        if now - last_status >= config.STATUS_EVERY_S:
+            last_status = now
+            _publish_status()
+        time.sleep(1)
+
+    _artnet.close()
+    _mqtt.publish(f"gaia/dmx/{_current_room}/status", "", retain=True)
+    print("[DMX] Terminato.")
+
+
+if __name__ == "__main__":
+    main()
