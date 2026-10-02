@@ -75,6 +75,7 @@ SERVICE_MAP = {
     "herbsim":     "gaia-herbarium-sim",        # note casuali (simulatore)
     "herbmp":      "gaia-herbarium-mediapipe",  # note da presenza/gesti/emozioni
     "livestream":  "gaia-livestream",  # il Pi trasmette (mic/libreria) via icecast2 locale
+    "dmx":         "gaia-dmx",         # fixture DMX via Art-Net (palette+timeline), vedi pi/dmx
 }
 
 # File di ambiente condiviso — agent lo scrive, i servizi lo leggono
@@ -94,6 +95,7 @@ SERVICE_DIRS = {
     "herbsim":     os.path.join(_GAIA_ROOT, "herbarium"),
     "herbmp":      os.path.join(_GAIA_ROOT, "herbarium"),
     "livestream":  os.path.join(_GAIA_ROOT, "livestream"),
+    "dmx":         os.path.join(_GAIA_ROOT, "dmx"),
 }
 
 # Se il manifest dichiara servizi, sostituisce ENTRAMBE le mappe (l'entry
