@@ -198,6 +198,7 @@ button.small{padding:3px 9px;font-size:.78rem;margin:0}
   <a href="patchdeck.html" class="topnav-link">🎛 PatchDeck</a>
   <a href="mixeraudio.html" class="topnav-link">🎚 MixerAudio</a>
   <a href="dmx.html" class="topnav-link">💡 DMX</a>
+  <a href="dmx-editor.html" class="topnav-link">✏️ Preset DMX Pi</a>
   <a href="madmapper.html" class="topnav-link">🗺 MadMapper</a>
   <a href="tccm.html" class="topnav-link">🎙 TCC M</a>
   <a href="voce-volti.html" class="topnav-link">🗣 Voce &amp; Volti</a>
@@ -1706,7 +1707,8 @@ function pmAdvancedHtml(d) {
   const showWatchdog = d.role==='installation'||d.role==='ops';
   const showMocap    = (d.role==='pi'||d.role==='core'||d.role==='ops') && pmSvcKeys(d).includes('mediapipe');
   const showKiosk    = pmSvcKeys(d).includes('kiosk');
-  if (!showShutdown && !showWatchdog && !showMocap && !showKiosk) return '';
+  const showDmxLinks = pmSvcKeys(d).includes('dmx');
+  if (!showShutdown && !showWatchdog && !showMocap && !showKiosk && !showDmxLinks) return '';
 
   const shutdownBlock = showShutdown ? `<div>
       <div class="pm-section-label">⏻ Spegnimento programmato</div>
@@ -1768,6 +1770,19 @@ function pmAdvancedHtml(d) {
       </div>
     </div>` : '';
 
+  // Link diretti alle pagine del servizio dmx di QUESTO device -- ?room=
+  // precompilato con la sua stanza, cosi' funzionano anche quando in
+  // futuro più Pi avranno gaia-dmx contemporaneamente (ognuno la sua).
+  const dmxLinksBlock = showDmxLinks ? `<div>
+      <div class="pm-section-label">💡 DMX — pagine</div>
+      <div class="pm-rename-row">
+        <a class="pm-btn gray" style="text-align:center;flex:1" target="_blank"
+           href="dmx-touch.html?room=${encodeURIComponent(d.stanza||'')}">📱 Mini menu touch</a>
+        <a class="pm-btn gray" style="text-align:center;flex:1" target="_blank"
+           href="dmx-editor.html?room=${encodeURIComponent(d.stanza||'')}">✏️ Editor preset</a>
+      </div>
+    </div>` : '';
+
   // Badge rapido nel <summary> cosi' si vede senza aprire se qualcosa di
   // non-default e' attivo (altrimenti bisognerebbe aprire ogni card per
   // scoprire se ha uno spegnimento programmato impostato, per esempio).
@@ -1779,7 +1794,7 @@ function pmAdvancedHtml(d) {
 
   return `<details class="pm-advanced">
     <summary>⚙️ Avanzate${hints.length?` · ${hints.join(' · ')}`:''}</summary>
-    <div class="pm-advanced-body">${shutdownBlock}${watchdogBlock}${mocapBlock}${kioskBlock}</div>
+    <div class="pm-advanced-body">${shutdownBlock}${watchdogBlock}${mocapBlock}${kioskBlock}${dmxLinksBlock}</div>
   </details>`;
 }
 
