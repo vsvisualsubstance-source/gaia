@@ -89,3 +89,13 @@ TIMELINES_FILE = _get("DMX_TIMELINES_FILE", os.path.join(_BASE, "timelines.json"
 # il device ce l'ha (qui confermato dal vivo: mic della webcam, card 4).
 AUDIO_DEVICE = _get("DMX_AUDIO_DEVICE", "default")
 AUDIO_SAMPLE_RATE = int(_get("DMX_AUDIO_RATE", "16000"))
+
+# Più fixture nello stesso universo (2026-10-03): se fixtures.json esiste,
+# definisce N fixture indipendenti (ognuna con il proprio start_address/
+# num_channels/dimmer_channel, stesso significato di
+# DMX_NUM_CHANNELS/DMX_START_ADDRESS/DMX_DIMMER_CHANNEL sopra, solo per
+# fixture invece che per il device intero). Se il file NON esiste, resta
+# il comportamento di sempre: UNA fixture ("a") costruita dalle variabili
+# sopra -- zero cambi richiesti per chi ha già un setup a fixture singola
+# (es. Pi Ingresso). Vedi fixtures.json.example per il formato.
+FIXTURES_FILE = _get("DMX_FIXTURES_FILE", os.path.join(_BASE, "fixtures.json"))

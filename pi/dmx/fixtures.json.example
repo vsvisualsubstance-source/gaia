@@ -1,0 +1,13 @@
+{
+  "_nota": "Più fixture nello stesso universo Art-Net. Copia (senza questa chiave _nota) in fixtures.json SOLO se hai davvero più di una fixture sul device -- senza questo file il servizio usa una sola fixture 'a' costruita da DMX_NUM_CHANNELS/DMX_START_ADDRESS/DMX_DIMMER_CHANNEL in dmx.conf (comportamento di sempre). start_address è 1-based (1-512). Le fixture NON devono sovrapporre i canali: la seconda deve iniziare dopo la fine della prima (start_address + num_channels).",
+  "a": {
+    "start_address": 1,
+    "num_channels": 4,
+    "dimmer_channel": 1
+  },
+  "b": {
+    "start_address": 5,
+    "num_channels": 6,
+    "dimmer_channel": 1
+  }
+}

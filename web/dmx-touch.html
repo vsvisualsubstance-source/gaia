@@ -22,6 +22,11 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 .dot.err{background:var(--red)}
 .swatch{margin-left:auto;width:36px;height:36px;border-radius:8px;border:2px solid var(--border);background:#000}
 
+.fixtures{display:flex;gap:6px;flex-shrink:0}
+.fx-btn{flex:1;border:2px solid var(--border);border-radius:10px;background:var(--card);color:var(--text);
+        font-size:.8rem;font-weight:700;padding:8px}
+.fx-btn.active{border-color:var(--accent);color:var(--accent)}
+
 .palettes{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;flex:1;min-height:0}
 .pal-btn{border:2px solid var(--border);border-radius:10px;font-size:.85rem;font-weight:600;
          color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6);display:flex;align-items:center;
@@ -53,6 +58,8 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
   <div class="swatch" id="swatch"></div>
 </div>
 
+<div class="fixtures" id="fixtures" style="display:none"></div>
+
 <div class="palettes" id="palettes"></div>
 
 <div class="timelines" id="timelines"></div>
@@ -71,8 +78,12 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 // presa da ?room=, default "ingresso" (primo Pi su cui gaia-dmx è stato
 // provato, 2026-10-02) -- riusabile su altri Pi passando un room diverso
 // nell'URL di kiosk.conf (KIOSK_URL), nessun nome hardcoded nella logica.
+// ?fixture= sceglie quale fixture controllare se il device ne ha più di
+// una (2026-10-03, vedi pi/dmx/fixtures.json) -- senza, parte da quella
+// di default (prima in ordine alfabetico) appena arriva il primo status.
 const params = new URLSearchParams(location.search);
 const ROOM = params.get('room') || 'ingresso';
+let FIXTURE = params.get('fixture') || null;
 document.getElementById('title').textContent = `GAIA DMX — ${ROOM}`;
 
 const PALETTE_COLORS = {
@@ -94,8 +105,12 @@ function setConn(ok) {
   document.getElementById('dot').className = 'dot ' + (ok ? 'ok' : 'err');
 }
 
-function sendCmd(cmd) {
+function sendCmd(cmd, shared) {
   if (!client || !client.connected) return;
+  // "shared" = azione non legata a una fixture (timeline_save/delete,
+  // reload_*) -- oggi questa pagina non le usa, ma il parametro resta per
+  // chiarezza/coerenza con l'editor (web/dmx-editor.html).
+  if (!shared && FIXTURE) cmd = { ...cmd, fixture: FIXTURE };
   client.publish(`gaia/dmx/${ROOM}/command`, JSON.stringify(cmd));
 }
 
@@ -109,6 +124,20 @@ function tlLoad(name) { sendCmd({ action: 'timeline_load', name }); }
 function onBrightness(v) { sendCmd({ action: 'set_brightness', value: v / 100 }); }
 function toggleAudio() {
   sendCmd({ action: lastAudioReactive ? 'audio_reactive_stop' : 'audio_reactive_start' });
+}
+
+function renderFixtures(fixtures) {
+  const ids = Object.keys(fixtures).sort();
+  const wrap = document.getElementById('fixtures');
+  if (ids.length <= 1) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'flex';
+  wrap.innerHTML = ids.map(id => {
+    const active = id === FIXTURE ? ' active' : '';
+    return `<button class="fx-btn${active}" data-fx="${id}">${id.toUpperCase()}</button>`;
+  }).join('');
+  wrap.querySelectorAll('[data-fx]').forEach(el => {
+    el.onclick = () => { FIXTURE = el.dataset.fx; applyStatus(lastStatus); };
+  });
 }
 
 function renderTimelines(presets) {
@@ -137,16 +166,23 @@ function renderPalettes(names) {
   });
 }
 
+let lastStatus = null;
+
 function applyStatus(d) {
-  lastPalette = d.current_palette;
-  lastTimelineRunning = !!d.timeline_running;
-  lastTimelinePreset = d.current_timeline_preset;
-  lastAudioReactive = !!d.audio_reactive;
+  lastStatus = d;
+  const fixtures = d.fixtures || {};
+  if (!FIXTURE || !fixtures[FIXTURE]) FIXTURE = d.default_fixture || Object.keys(fixtures).sort()[0];
+  const fx = fixtures[FIXTURE] || {};
+  lastPalette = fx.current_palette;
+  lastTimelineRunning = !!fx.timeline_running;
+  lastTimelinePreset = fx.current_timeline_preset;
+  lastAudioReactive = !!fx.audio_reactive;
+  renderFixtures(fixtures);
   renderPalettes(d.palettes || []);
   renderTimelines(d.timeline_presets || {});
-  const [r, g, b] = d.output_rgb || [0, 0, 0];
+  const [r, g, b] = fx.output_rgb || [0, 0, 0];
   document.getElementById('swatch').style.background = `rgb(${r},${g},${b})`;
-  document.getElementById('brightness').value = Math.round((d.brightness ?? 1) * 100);
+  document.getElementById('brightness').value = Math.round((fx.brightness ?? 1) * 100);
   document.getElementById('tl-start').classList.toggle('active', lastTimelineRunning);
   document.getElementById('audio-btn').classList.toggle('active', lastAudioReactive);
 }

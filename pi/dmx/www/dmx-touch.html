@@ -111,8 +111,11 @@ function toggleAudio() {
   sendCmd({ action: lastAudioReactive ? 'audio_reactive_stop' : 'audio_reactive_start' });
 }
 
-function renderTimelines(names) {
+function renderTimelines(presets) {
+  // presets: {nome: {steps, loop}} -- qui serve solo l'elenco dei nomi,
+  // il contenuto lo usa l'editor (web/dmx-editor.html).
   const wrap = document.getElementById('timelines');
+  const names = Object.keys(presets).sort();
   wrap.innerHTML = names.map(n => {
     const active = n === lastTimelinePreset ? ' active' : '';
     return `<button class="tl-preset${active}" data-tl="${n}">${n}</button>`;
@@ -140,7 +143,7 @@ function applyStatus(d) {
   lastTimelinePreset = d.current_timeline_preset;
   lastAudioReactive = !!d.audio_reactive;
   renderPalettes(d.palettes || []);
-  renderTimelines(d.timeline_presets || []);
+  renderTimelines(d.timeline_presets || {});
   const [r, g, b] = d.output_rgb || [0, 0, 0];
   document.getElementById('swatch').style.background = `rgb(${r},${g},${b})`;
   document.getElementById('brightness').value = Math.round((d.brightness ?? 1) * 100);
