@@ -351,7 +351,7 @@ _audio_peak = 4000.0     # picco stimato, si adatta da solo verso l'alto (mai so
 
 
 def _audio_capture_loop():
-    global _audio_proc, _audio_level, _audio_floor, _audio_peak
+    global _audio_proc, _audio_level, _audio_floor, _audio_peak, _audio_capture_on
     cmd = ["ffmpeg", "-nostdin", "-loglevel", "quiet",
            "-f", "alsa", "-i", config.AUDIO_DEVICE,
            "-f", "s16le", "-ar", str(config.AUDIO_SAMPLE_RATE), "-ac", "1", "-"]
@@ -393,6 +393,15 @@ def _audio_capture_loop():
                 _audio_proc.wait(timeout=2)
         with _lock:
             _audio_level = 0.0
+        # Bandiera riportata giù QUI, non solo da _stop_audio_if_unused --
+        # se il thread muore per un motivo imprevisto (ffmpeg sparito,
+        # eccezione sopra) mentre una fixture crede ancora che
+        # audio_reactive sia "on", senza questo la bandiera resterebbe
+        # bloccata su True con nessuna cattura reale dietro: _start_audio()
+        # non verrebbe mai richiamato (pensa sia già attiva) e
+        # _audio_level resterebbe fermo per sempre. Il watchdog nel loop
+        # di uscita (vedi _output_loop) la rialza da solo se serve ancora.
+        _audio_capture_on = False
         print("[DMX] Audio-reattività: cattura fermata")
 
 
@@ -410,14 +419,24 @@ def _start_audio():
 
 def _stop_audio_if_unused():
     """Ferma la cattura SOLO se nessuna fixture la vuole più -- audio_reactive
-    è per fixture, il microfono è uno per device."""
-    global _audio_capture_on, _audio_proc
+    è per fixture, il microfono è uno per device.
+
+    Bug reale trovato dal vivo (2026-10-03): qui si chiamava .terminate()
+    e si azzerava _audio_proc nello stesso momento, da un thread DIVERSO
+    da quello che possiede il processo (_audio_capture_loop, che gira in
+    un suo thread). Se questa funzione svuotava _audio_proc PRIMA che
+    _audio_capture_loop arrivasse al proprio `finally` (corsa tra i due
+    thread, nessuna garanzia sull'ordine), quel `finally` trovava
+    `_audio_proc` già None e saltava .wait()/.kill() -- il processo
+    terminato restava uno zombie mai raccolto (confermato con `ps`:
+    "[ffmpeg] <defunct>"). Fix: solo il thread che possiede il processo
+    (_audio_capture_loop) lo termina/aspetta/azzera; questa funzione si
+    limita ad abbassare la bandiera -- il loop la controlla ad ogni
+    iterazione (già cosi') e chiude da solo entro una lettura (~64ms)."""
     if any(fx.audio_reactive for fx in _fixtures.values()):
         return
+    global _audio_capture_on
     _audio_capture_on = False
-    if _audio_proc:
-        _audio_proc.terminate()
-        _audio_proc = None
 
 
 # ── Loop di uscita Art-Net ───────────────────────────────────────────────────
@@ -475,6 +494,7 @@ def _write_fixture_channels(buf, fx, now):
 def _output_loop():
     period = 1.0 / max(1.0, config.FPS)
     warned_no_host = False
+    last_audio_check = 0.0
     while _running:
         now = time.time()
         buf = [0] * 512
@@ -487,6 +507,17 @@ def _output_loop():
             print("[DMX] ARTNET_HOST non impostato — nessun pacchetto Art-Net inviato "
                   "(imposta /etc/gaia/dmx.conf, timeline/palette restano comunque attivi in stato)")
             warned_no_host = True
+        # Watchdog audio-reattività: se una fixture vuole audio_reactive ma
+        # la cattura condivisa non sta girando (thread morto per un motivo
+        # imprevisto -- vedi commento nel finally di _audio_capture_loop),
+        # la rialza da sola. Controllato 1 volta/secondo, non ad ogni
+        # frame: _start_audio() è un no-op se già attiva, ma non ha senso
+        # valutare la condizione 30 volte/secondo.
+        if now - last_audio_check >= 1.0:
+            last_audio_check = now
+            if any(fx.audio_reactive for fx in _fixtures.values()) and not _audio_capture_on:
+                print("[DMX] Audio-reattività: richiesta ma non attiva, riavvio cattura")
+                _start_audio()
         time.sleep(period)
 
 
@@ -543,6 +574,8 @@ def _publish_status():
         "default_fixture": _default_fixture_id,
         "fixtures": {fid: _fixture_status(fx) for fid, fx in _fixtures.items()},
         "audio_level": round(_audio_level, 3),   # condiviso, vedi classe Fixture
+        "audio_device": config.AUDIO_DEVICE,     # quale sorgente sta ascoltando (o ascolterebbe) la cattura
+        "audio_capturing": _audio_capture_on,    # cattura REALMENTE attiva ora, non solo "qualcuno la vuole"
         "ts": int(time.time() * 1000),
     }
     _mqtt.publish(f"gaia/dmx/{_current_room}/status", json.dumps(payload), retain=True)
