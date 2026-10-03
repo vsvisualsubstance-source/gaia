@@ -55,6 +55,10 @@ button:disabled{opacity:.4;cursor:default}
   <h1>GAIA DMX — Editor Timeline</h1>
 </div>
 <div class="subtitle" id="subtitle">stanza —</div>
+<div class="row" id="fixture-row" style="display:none;margin-top:-10px;margin-bottom:16px">
+  <label style="margin:0;white-space:nowrap">Fixture da provare:</label>
+  <select id="fixture-select" style="background:var(--card);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:5px 8px;font-size:.82rem"></select>
+</div>
 
 <div class="layout">
   <div class="card">
@@ -90,6 +94,7 @@ button:disabled{opacity:.4;cursor:default}
 // dmx-touch.html, nessun nome hardcoded nella logica.
 const params = new URLSearchParams(location.search);
 const ROOM = params.get('room') || 'ingresso';
+let FIXTURE = params.get('fixture') || null;   // null finché non arriva il primo status
 document.getElementById('subtitle').textContent = `stanza: ${ROOM}`;
 
 let client = null;
@@ -105,9 +110,23 @@ function setMsg(text, cls) {
   el.textContent = text;
   el.className = 'msg ' + (cls || '');
 }
-function sendCmd(cmd) {
+function sendCmd(cmd, shared) {
   if (!client || !client.connected) { setMsg('Non connesso al broker', 'err'); return; }
+  // "shared" = azione non legata a una fixture (timeline_save/delete sono
+  // condivisi: i preset sono nomi/colori, non stato di una fixture).
+  if (!shared && FIXTURE) cmd = { ...cmd, fixture: FIXTURE };
   client.publish(`gaia/dmx/${ROOM}/command`, JSON.stringify(cmd));
+}
+
+function renderFixtureSelect(fixtures) {
+  const ids = Object.keys(fixtures).sort();
+  const row = document.getElementById('fixture-row');
+  if (ids.length <= 1) { row.style.display = 'none'; return; }
+  row.style.display = 'flex';
+  const sel = document.getElementById('fixture-select');
+  sel.innerHTML = ids.map(id => `<option value="${id}">${id.toUpperCase()}</option>`).join('');
+  sel.value = FIXTURE;
+  sel.onchange = () => { FIXTURE = sel.value; };
 }
 
 function stepRow(step) {
@@ -182,9 +201,9 @@ function save() {
   // vecchio nome sul disco -- lo si cancella esplicitamente invece di
   // lasciare un preset orfano in giro.
   if (editingOriginalName && editingOriginalName !== name) {
-    sendCmd({ action: 'timeline_delete', name: editingOriginalName });
+    sendCmd({ action: 'timeline_delete', name: editingOriginalName }, true);
   }
-  sendCmd({ action: 'timeline_save', name, steps, loop });
+  sendCmd({ action: 'timeline_save', name, steps, loop }, true);
   editingOriginalName = name;
   setMsg(`Salvato "${name}"`, 'ok');
 }
@@ -200,13 +219,16 @@ function test() {
 
 function deletePreset(name) {
   if (!confirm(`Eliminare il preset "${name}"?`)) return;
-  sendCmd({ action: 'timeline_delete', name });
+  sendCmd({ action: 'timeline_delete', name }, true);
   if (editingOriginalName === name) newPreset();
 }
 
 function applyStatus(d) {
   palettes = d.palettes || [];
   presets = d.timeline_presets || {};   // {nome: {steps, loop}}, contenuto completo
+  const fixtures = d.fixtures || {};
+  if (!FIXTURE || !fixtures[FIXTURE]) FIXTURE = d.default_fixture || Object.keys(fixtures).sort()[0];
+  renderFixtureSelect(fixtures);
   renderPresetList();
 }
 
