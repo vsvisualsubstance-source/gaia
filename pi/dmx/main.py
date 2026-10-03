@@ -124,6 +124,50 @@ def _load_timelines():
         _timelines = {}
 
 
+def _save_timeline(name, steps, loop):
+    """Scrive/aggiorna un preset su disco e lo rende subito disponibile
+    (nessun restart, nessun reload_timelines separato richiesto) -- un
+    solo comando dall'editor web, salva e basta, l'avvio resta un'azione
+    separata (timeline_load) cosi' salvare non accende mai le luci da
+    solo a sorpresa."""
+    if not name or not isinstance(steps, list) or not steps:
+        print(f"[DMX] timeline_save: nome o step non validi (name={name!r})")
+        return False
+    bad = [s for s in steps if _resolve_color(s) is None]
+    if bad:
+        print(f"[DMX] timeline_save: step non risolvibili, salvataggio annullato: {bad}")
+        return False
+    with _lock:
+        _timelines[name] = {"steps": steps, "loop": bool(loop)}
+    try:
+        with open(config.TIMELINES_FILE, "w", encoding="utf-8") as f:
+            json.dump(_timelines, f, indent=2, ensure_ascii=False)
+    except OSError as e:
+        print(f"[DMX] timeline_save: scrittura {config.TIMELINES_FILE} fallita ({e})")
+        return False
+    print(f"[DMX] Preset '{name}' salvato ({len(steps)} step, loop={bool(loop)})")
+    return True
+
+
+def _delete_timeline(name):
+    global _current_timeline_name
+    if name not in _timelines:
+        print(f"[DMX] timeline_delete: preset sconosciuto {name!r}")
+        return False
+    with _lock:
+        del _timelines[name]
+        if _current_timeline_name == name:
+            _current_timeline_name = None
+    try:
+        with open(config.TIMELINES_FILE, "w", encoding="utf-8") as f:
+            json.dump(_timelines, f, indent=2, ensure_ascii=False)
+    except OSError as e:
+        print(f"[DMX] timeline_delete: scrittura {config.TIMELINES_FILE} fallita ({e})")
+        return False
+    print(f"[DMX] Preset '{name}' eliminato")
+    return True
+
+
 def _resolve_color(step_or_cmd):
     """Da un dict comando/step ({"palette": "Fire"} o {"rgb": [r,g,b]}) al
     colore RGB reale, o None se non risolvibile (palette sconosciuta)."""
@@ -388,7 +432,13 @@ def _publish_status():
             "timeline_running": _timeline_running,
             "timeline_loop": _timeline_loop,
             "timeline_step_index": _timeline_index if _timeline_running else None,
-            "timeline_presets": sorted(_timelines.keys()),
+            # Contenuto intero (non solo i nomi): piccolo (pochi preset,
+            # pochi step ciascuno) e cosi' l'editor web puo' mostrare/
+            # modificare un preset esistente senza un comando dedicato
+            # per leggerlo -- sempre la stessa fonte "verita'" di quando
+            # viene davvero eseguito, nessuna cache lato pagina che
+            # rischia di disallinearsi.
+            "timeline_presets": _timelines,
             "current_timeline_preset": _current_timeline_name,
             "audio_reactive": _audio_reactive,
             "audio_level": round(_audio_level, 3),
@@ -463,6 +513,10 @@ def _on_message(client, userdata, msg):
             name = cmd.get("name", "")
             if not _timeline_load(name):
                 print(f"[DMX] timeline_load: preset sconosciuto {name!r} (disponibili: {', '.join(_timelines)})")
+        elif action == "timeline_save":
+            _save_timeline(cmd.get("name", ""), cmd.get("steps"), cmd.get("loop", True))
+        elif action == "timeline_delete":
+            _delete_timeline(cmd.get("name", ""))
         elif action == "reload_palettes":
             _load_palettes()
         elif action == "reload_timelines":

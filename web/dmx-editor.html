@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GAIA DMX — Editor Timeline</title>
+<style>
+:root {
+  --bg:#08090f; --card:#0e1221; --border:#1e2840;
+  --accent:#00ffcc; --blue:#58a6ff; --green:#3fb950; --red:#f85149;
+  --yellow:#e3b341; --muted:#6b7a99; --text:#c9d1d9;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;padding:24px;max-width:860px;margin:0 auto}
+h1{color:var(--accent);font-size:1.3rem;margin-bottom:4px}
+.subtitle{color:var(--muted);font-size:.85rem;margin-bottom:20px}
+.topnav{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--muted)}
+.dot.ok{background:var(--accent);box-shadow:0 0 5px var(--accent)}
+.dot.err{background:var(--red)}
+.layout{display:grid;grid-template-columns:200px 1fr;gap:16px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px}
+h2{font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:12px}
+.preset-row{display:flex;align-items:center;gap:6px;padding:7px 0;border-bottom:1px solid var(--border);font-size:.85rem}
+.preset-row:last-child{border-bottom:none}
+.preset-row span{flex:1;cursor:pointer}
+.preset-row span:hover{color:var(--accent)}
+.preset-row button{background:none;border:none;color:var(--muted);cursor:pointer;font-size:.9rem;padding:2px 6px}
+.preset-row button:hover{color:var(--red)}
+.new-btn{width:100%;margin-top:10px}
+label{display:block;font-size:.8rem;color:var(--muted);margin-bottom:4px;margin-top:12px}
+label:first-of-type{margin-top:0}
+input[type=text]{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 10px;font-size:.9rem}
+.step{display:flex;gap:8px;align-items:center;margin-bottom:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px}
+.step select{flex:2;background:var(--card);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:6px 8px;font-size:.85rem}
+.step input[type=number]{width:70px;background:var(--card);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:6px 8px;font-size:.85rem}
+.step .lbl{font-size:.7rem;color:var(--muted);display:block;margin-bottom:2px}
+.step .rm{background:none;border:none;color:var(--muted);cursor:pointer;font-size:1rem;padding:0 4px;align-self:flex-start}
+.step .rm:hover{color:var(--red)}
+button{background:var(--accent);color:#000;border:none;border-radius:6px;padding:9px 16px;cursor:pointer;font-size:.85rem;font-weight:600}
+button.secondary{background:var(--border);color:var(--text)}
+button.green{background:var(--green);color:#02150a}
+button:disabled{opacity:.4;cursor:default}
+.row{display:flex;gap:8px;align-items:center;margin-top:16px;flex-wrap:wrap}
+.chk{display:flex;align-items:center;gap:6px;font-size:.85rem;color:var(--text);margin-top:12px}
+.msg{font-size:.82rem;margin-top:10px;min-height:1.1em;color:var(--muted)}
+.msg.ok{color:var(--green)}
+.msg.err{color:var(--red)}
+</style>
+</head>
+<body>
+
+<div class="topnav">
+  <span class="dot" id="dot"></span>
+  <h1>GAIA DMX — Editor Timeline</h1>
+</div>
+<div class="subtitle" id="subtitle">stanza —</div>
+
+<div class="layout">
+  <div class="card">
+    <h2>Preset salvati</h2>
+    <div id="preset-list"></div>
+    <button class="secondary new-btn" onclick="newPreset()">+ Nuovo</button>
+  </div>
+
+  <div class="card">
+    <h2 id="editor-title">Nuovo preset</h2>
+    <label>Nome</label>
+    <input type="text" id="name" placeholder="es. Festa">
+    <label style="margin-top:14px">Step (palette · durata in secondi · dissolvenza in secondi)</label>
+    <div id="steps"></div>
+    <button class="secondary" onclick="addStep()" style="margin-top:4px">+ Aggiungi step</button>
+    <div class="chk">
+      <input type="checkbox" id="loop" checked>
+      <label style="margin:0" for="loop">Ripeti in loop</label>
+    </div>
+    <div class="row">
+      <button onclick="save()">💾 Salva</button>
+      <button class="green" onclick="test()">▶ Prova ora</button>
+    </div>
+    <div class="msg" id="msg"></div>
+  </div>
+</div>
+
+<script>
+// Editor "evoluto" per i preset di gaia-dmx (pi/dmx/main.py) -- la pagina
+// touch (web/dmx-touch.html) resta per l'uso quotidiano dal display del
+// Pi, questa è per costruire/modificare i preset da un browser normale.
+// Stanza da ?room=, default "ingresso" -- stesso principio di
+// dmx-touch.html, nessun nome hardcoded nella logica.
+const params = new URLSearchParams(location.search);
+const ROOM = params.get('room') || 'ingresso';
+document.getElementById('subtitle').textContent = `stanza: ${ROOM}`;
+
+let client = null;
+let palettes = [];
+let presets = {};       // nome -> {steps, loop}, dalla status live
+let editingOriginalName = null;   // nome del preset in editing, per sapere se e' una rinomina
+
+function setConn(ok) {
+  document.getElementById('dot').className = 'dot ' + (ok ? 'ok' : 'err');
+}
+function setMsg(text, cls) {
+  const el = document.getElementById('msg');
+  el.textContent = text;
+  el.className = 'msg ' + (cls || '');
+}
+function sendCmd(cmd) {
+  if (!client || !client.connected) { setMsg('Non connesso al broker', 'err'); return; }
+  client.publish(`gaia/dmx/${ROOM}/command`, JSON.stringify(cmd));
+}
+
+function stepRow(step) {
+  const row = document.createElement('div');
+  row.className = 'step';
+  const opts = palettes.map(p => `<option value="${p}" ${p === step.palette ? 'selected' : ''}>${p}</option>`).join('');
+  row.innerHTML = `
+    <div style="flex:2"><span class="lbl">Palette</span><select class="s-pal">${opts}</select></div>
+    <div><span class="lbl">Durata (s)</span><input type="number" class="s-dur" min="0.1" step="0.1" value="${step.duration ?? 3}"></div>
+    <div><span class="lbl">Dissolvenza (s)</span><input type="number" class="s-fade" min="0" step="0.1" value="${step.fade ?? 1}"></div>
+    <button class="rm" title="Rimuovi">✕</button>`;
+  row.querySelector('.rm').onclick = () => row.remove();
+  return row;
+}
+
+function addStep(step) {
+  document.getElementById('steps').appendChild(stepRow(step || { palette: palettes[0], duration: 3, fade: 1 }));
+}
+
+function renderPresetList() {
+  const wrap = document.getElementById('preset-list');
+  const names = Object.keys(presets).sort();
+  wrap.innerHTML = names.length ? '' : '<div style="color:var(--muted);font-size:.8rem">Nessun preset ancora.</div>';
+  names.forEach(name => {
+    const row = document.createElement('div');
+    row.className = 'preset-row';
+    row.innerHTML = `<span>${name}</span><button title="Elimina">🗑</button>`;
+    row.querySelector('span').onclick = () => loadIntoEditor(name);
+    row.querySelector('button').onclick = () => deletePreset(name);
+    wrap.appendChild(row);
+  });
+}
+
+function loadIntoEditor(name) {
+  const preset = presets[name];
+  editingOriginalName = name;
+  document.getElementById('editor-title').textContent = `Modifica · ${name}`;
+  document.getElementById('name').value = name;
+  document.getElementById('loop').checked = preset?.loop !== false;
+  const stepsWrap = document.getElementById('steps');
+  stepsWrap.innerHTML = '';
+  (preset?.steps || []).forEach(s => addStep(s));
+  if (!preset?.steps?.length) addStep();
+  setMsg('');
+}
+
+function newPreset() {
+  editingOriginalName = null;
+  document.getElementById('editor-title').textContent = 'Nuovo preset';
+  document.getElementById('name').value = '';
+  document.getElementById('loop').checked = true;
+  document.getElementById('steps').innerHTML = '';
+  addStep();
+  setMsg('');
+}
+
+function collectSteps() {
+  return Array.from(document.querySelectorAll('#steps .step')).map(row => ({
+    palette: row.querySelector('.s-pal').value,
+    duration: parseFloat(row.querySelector('.s-dur').value) || 1,
+    fade: parseFloat(row.querySelector('.s-fade').value) || 0,
+  }));
+}
+
+function save() {
+  const name = document.getElementById('name').value.trim();
+  if (!name) { setMsg('Dai un nome al preset prima di salvare', 'err'); return; }
+  const steps = collectSteps();
+  if (!steps.length) { setMsg('Aggiungi almeno uno step', 'err'); return; }
+  const loop = document.getElementById('loop').checked;
+  // Una rinomina (nome cambiato rispetto a quello aperto) lascia il
+  // vecchio nome sul disco -- lo si cancella esplicitamente invece di
+  // lasciare un preset orfano in giro.
+  if (editingOriginalName && editingOriginalName !== name) {
+    sendCmd({ action: 'timeline_delete', name: editingOriginalName });
+  }
+  sendCmd({ action: 'timeline_save', name, steps, loop });
+  editingOriginalName = name;
+  setMsg(`Salvato "${name}"`, 'ok');
+}
+
+function test() {
+  const steps = collectSteps();
+  if (!steps.length) { setMsg('Aggiungi almeno uno step prima di provare', 'err'); return; }
+  const loop = document.getElementById('loop').checked;
+  sendCmd({ action: 'timeline_set', steps, loop });
+  sendCmd({ action: 'timeline_start' });
+  setMsg('In onda sulla fixture…', 'ok');
+}
+
+function deletePreset(name) {
+  if (!confirm(`Eliminare il preset "${name}"?`)) return;
+  sendCmd({ action: 'timeline_delete', name });
+  if (editingOriginalName === name) newPreset();
+}
+
+function applyStatus(d) {
+  palettes = d.palettes || [];
+  presets = d.timeline_presets || {};   // {nome: {steps, loop}}, contenuto completo
+  renderPresetList();
+}
+
+function start() {
+  client = mqtt.connect(`ws://192.168.1.142:9001`, { connectTimeout: 4000 });
+  client.on('connect', () => {
+    setConn(true);
+    client.subscribe(`gaia/dmx/${ROOM}/status`);
+  });
+  client.on('error',   () => setConn(false));
+  client.on('offline', () => setConn(false));
+  client.on('message', (topic, raw) => {
+    if (!raw || !raw.length) return;
+    try { applyStatus(JSON.parse(raw.toString())); } catch (e) {}
+  });
+}
+
+newPreset();
+if (typeof mqtt !== 'undefined') {
+  start();
+} else {
+  const s = document.createElement('script');
+  s.src = 'vendor/mqtt.min.js';
+  s.onload = start;
+  document.head.appendChild(s);
+}
+</script>
+</body>
+</html>
