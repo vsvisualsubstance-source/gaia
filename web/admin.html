@@ -1374,11 +1374,13 @@ const _pmMocapBySender = {};   // sender_device_id -> {td_device_id: {ip,name,st
 
 // Il mocap ha senso solo per istanze TD che RENDERIZZANO qualcosa che
 // reagisce al corpo (Gaia TD generica, PatchDeck) -- ControllerV7/
-// mixeraudio (audio) e DMX (luci) non lo usano mai, per design (confermato
-// dall'utente 2026-08-25). Il registry lato mediapipe_node.py li registra
-// comunque (qualunque role=="touchdesigner", nessun filtro per capability
-// oggi) -- filtrato qui solo per non offrirli come opt-in inutile/confuso,
-// non cambia cosa viene davvero inviato (di default enabled=false per
+// mixeraudio (audio) non lo usano mai, per design (confermato dall'utente
+// 2026-08-25). DMX invece sì da 2026-10-01: PTZ teste mobili pilotata dal
+// mocap (GAIA_INTERFACE.md "TD/Win-PD, 9/11") -- tolto dall'esclusione
+// 2026-10-05. Il registry lato mediapipe_node.py li registra comunque
+// (qualunque role=="touchdesigner", nessun filtro per capability oggi) --
+// filtrato qui solo per non offrirli come opt-in inutile/confuso, non
+// cambia cosa viene davvero inviato (di default enabled=false per
 // chiunque non sia sulla stessa macchina, quindi non riceverebbero nulla
 // comunque finché non abilitati a mano).
 // Prima un controllo sul device_id (rotto al primo rename, stesso motivo
@@ -1387,8 +1389,8 @@ const _pmMocapBySender = {};   // sender_device_id -> {td_device_id: {ip,name,st
 // nome. Fallback sul vecchio pattern finché i Pi/OPS non hanno ricevuto
 // l'aggiornamento e riavviato mediapipe (family manca nei target vecchi).
 function pmMocapIsRelevant(id, family) {
-  if (family) return family !== 'mixeraudio' && family !== 'dmx';
-  return id !== 'td-controllerv7-macbook-air-di-mauro' && !/^td-dmx/i.test(id);
+  if (family) return family !== 'mixeraudio';
+  return id !== 'td-controllerv7-macbook-air-di-mauro';
 }
 
 // Matrice sender × ricevitore (2026-09-30, sostituisce la lista piatta) —
@@ -1428,17 +1430,24 @@ function pmMocapRender() {
     const cells = targets.map(id => {
       const t = (_pmMocapBySender[sender] || {})[id];
       if (!t) return `<td style="text-align:center;color:var(--muted)">—</td>`;
+      // DMX (family 'dmx') riceve con un OSC In proprio dentro il progetto
+      // (porta 7010, PTZ teste mobili) -- non passa da oscin_mocap/
+      // Mocapingest del gaia_client, quindi Opsdevice/Mocapingest non sono
+      // un segnale valido lì: l'unico stato che Core conosce è se il
+      // sender ha il target abilitato (GAIA_INTERFACE.md "TD/Win-PD, 11").
+      const isDmx = t.family === 'dmx';
       const p = _pmDevices[id]?.params || {};
-      const live = t.enabled && p.Mocapingest === true && p.Opsdevice === sender;
-      const sentNotHeard = t.enabled && !live;
+      const live = isDmx ? t.enabled : (t.enabled && p.Mocapingest === true && p.Opsdevice === sender);
+      const sentNotHeard = !isDmx && t.enabled && !live;
       const dot = live ? '🟢' : sentNotHeard ? '🟡' : '⚪';
-      const title = live ? 'attivo — il client sta ascoltando proprio questo sender'
+      const title = isDmx ? (live ? 'sender abilitato — la ricezione (porta 7010) è gestita dentro DMX V8, non da Mocapingest' : 'non abilitato')
+                  : live ? 'attivo — il client sta ascoltando proprio questo sender'
                   : sentNotHeard ? 'inviato ma il client ascolta un altro sender (Opsdevice non combacia)'
                   : 'non abilitato';
       return `<td style="text-align:center;padding:4px">
         <button class="pm-btn ${t.enabled?'gray':'green'}" style="width:auto;padding:2px 10px;font-size:.75rem"
           title="${pmEsc(title)}"
-          onclick="pmMocapToggle('${pmEsc(sender)}','${pmEsc(id)}','${t.enabled ? 'disable' : 'enable'}')">
+          onclick="pmMocapToggle('${pmEsc(sender)}','${pmEsc(id)}','${t.enabled ? 'disable' : 'enable'}','${pmEsc(t.family||'')}')">
           ${dot} ${t.enabled ? 'Disabilita' : 'Abilita'}
         </button>
       </td>`;
@@ -1467,9 +1476,20 @@ function pmMocapRender() {
 // dal vivo da TD/Mac) -- un solo click, zero passaggi manuali in TD.
 // Disabilita e' simmetrico: spegne anche Mocapingest lato TD (Opsdevice
 // resta, e' solo un filtro, innocuo con ingest spento).
-function pmMocapToggle(sender, deviceId, action) {
+//
+// DMX V8 (family 'dmx') è un'eccezione, "solo sender" (GAIA_INTERFACE.md
+// "TD/Win-PD, 11", 2026-10-05): la sua PTZ ha un OSC In proprio sulla
+// stessa porta 7010 di oscin_mocap del gaia_client, non passa da
+// Mocapingest/Opsdevice. Mandarglieli comunque farebbe fallire il bind di
+// test della guardia in mocap_lifecycle.py (falso "PORT 7010 BUSY") e
+// accenderebbe una pipeline (oscin_mocap + 4 Script CHOP) che DMX non usa.
+function pmMocapToggle(sender, deviceId, action, family) {
   if (!_pmClient || !_pmClient.connected) { pmLog('err', 'MQTT non connesso'); return; }
   _pmClient.publish(`gaia/mocap-bridge/${sender}/command`, JSON.stringify({ device_id: deviceId, action }));
+  if (family === 'dmx') {
+    pmLog('out', `mocap ${sender}→${deviceId}: ${action} (solo sender — DMX riceve con il proprio OSC In, non tocco Mocapingest/Opsdevice)`);
+    return;
+  }
   const enabling = action === 'enable';
   const tdTopic = `gaia/device/${deviceId}/command`;
   if (enabling) {
