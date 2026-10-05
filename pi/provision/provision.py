@@ -194,6 +194,7 @@ GAIA_SERVICES = [
     ("yolo",        "👁️", "Visione YOLO"),
     ("mediapipe",   "🖐️", "MediaPipe — gesti e pose"),
     ("livestream",  "📡", "LiveStream — trasmetti la stanza"),
+    ("dmx",         "💡", "DMX — luci via Art-Net"),
 ]
 _SVC_NAMES       = {s[0] for s in GAIA_SERVICES}
 SVC_CONFLICTS    = {"screen": "kiosk", "kiosk": "screen"}  # Conflicts= reciproco nei .service
@@ -535,8 +536,15 @@ function send(f){
   return false;
 }
 function svcRow(s){
+  // Link al mini menu web locale del Pi (pi/dmx/main.py, porta 8099) --
+  // solo per dmx, stesso host di questa pagina qualunque sia la rete da
+  // cui la si apre (hotspot captive o LAN normale), vedi
+  // pi/CLAUDE.md "webserver locale" per il perché esiste.
+  var link = s.name==='dmx'
+    ? ' <a href="http://'+location.hostname+':8099/dmx-touch.html" target="_blank" style="color:#00ffcc;font-size:.75rem">🔗 web locale</a>'
+    : '';
   return '<div class="svc"><span class="dot '+(s.active?'on':'')+'"></span>'+
-    '<span class="nm">'+s.icon+' '+s.label+'</span>'+
+    '<span class="nm">'+s.icon+' '+s.label+link+'</span>'+
     '<button class="'+(s.active?'stop':'')+'" onclick="toggle(\\''+s.name+'\\','+s.active+',this)">'+
     (s.active?'Spegni':'Accendi')+'</button></div>';
 }

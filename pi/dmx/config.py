@@ -9,7 +9,7 @@ sovrascrive silenziosamente le modifiche fatte dal vivo sul device con la
 versione (vecchia) del repo: successo UNA VOLTA qui, ha cancellato un
 preset timeline personalizzato dell'utente senza errori visibili. Deploy
 di main.py/config.py: SEMPRE con
-`--exclude timelines.json --exclude palettes.json --exclude audio_tune.json --exclude fixtures.json`."""
+`--exclude timelines.json --exclude palettes.json --exclude audio_tune.json --exclude fixtures.json --exclude fixture_tune.json`."""
 import os
 import socket
 
@@ -107,6 +107,11 @@ AUDIO_SAMPLE_RATE = int(_get("DMX_AUDIO_RATE", "16000"))
 # MQTT/Touch LAN ma da una scheda audio esterna con livello di linea
 # molto diverso dal mic USB di riferimento.
 AUDIO_TUNE_FILE = _get("DMX_AUDIO_TUNE_FILE", os.path.join(_BASE, "audio_tune.json"))
+
+# Calibrazione power_min/power_max per fixture (0.0-1.0 ciascuno), persistita
+# a parte da fixtures.json (quello resta il layout canali, dichiarato a
+# mano/raramente cambiato; questo è taratura che si aggiusta più spesso).
+FIXTURE_TUNE_FILE = _get("DMX_FIXTURE_TUNE_FILE", os.path.join(_BASE, "fixture_tune.json"))
 
 # Più fixture nello stesso universo (2026-10-03): se fixtures.json esiste,
 # definisce N fixture indipendenti (ognuna con il proprio start_address/

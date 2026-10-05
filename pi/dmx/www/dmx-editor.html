@@ -132,6 +132,21 @@ input[type=color]{width:44px;height:38px;border:1px solid var(--border);border-r
   </div>
 </div>
 
+
+<div class="card audio-card">
+  <h2>📏 Calibrazione power min/max <span id="power-fixture-label" style="color:var(--muted);font-weight:400;text-transform:none;font-size:.8rem"></span></h2>
+  <div class="audio-grid">
+    <div class="band-row">
+      <label>Power min <span class="val" id="pmin-val">0%</span></label>
+      <input type="range" id="pmin-slider" min="0" max="100" value="0" oninput="onPowerMin(this.value)">
+    </div>
+    <div class="band-row">
+      <label>Power max <span class="val" id="pmax-val">100%</span></label>
+      <input type="range" id="pmax-slider" min="0" max="100" value="100" oninput="onPowerMax(this.value)">
+    </div>
+  </div>
+</div>
+
 <div class="card audio-card">
   <h2>🎨 Palette personalizzate</h2>
   <div id="palette-swatches" class="palette-swatches"></div>
@@ -179,12 +194,13 @@ function sendCmd(cmd, shared) {
 function renderFixtureSelect(fixtures) {
   const ids = Object.keys(fixtures).sort();
   const row = document.getElementById('fixture-row');
+  document.getElementById('power-fixture-label').textContent = ids.length > 1 ? `(${FIXTURE})` : '';
   if (ids.length <= 1) { row.style.display = 'none'; return; }
   row.style.display = 'flex';
   const sel = document.getElementById('fixture-select');
   sel.innerHTML = ids.map(id => `<option value="${id}">${id.toUpperCase()}</option>`).join('');
   sel.value = FIXTURE;
-  sel.onchange = () => { FIXTURE = sel.value; };
+  sel.onchange = () => { FIXTURE = sel.value; applyStatus(lastStatus); };
 }
 
 function stepRow(step) {
@@ -352,7 +368,22 @@ function deletePaletteCustom(name) {
   sendCmd({ action: 'palette_delete', name }, true);
 }
 
+// Calibrazione power min/max (2026-10-05): PER fixture (FIXTURE corrente),
+// a differenza di gain/bande che sono condivisi -- sendCmd senza "true"
+// inietta "fixture" da solo, stesso meccanismo di save()/test() sopra.
+function onPowerMin(v) { sendCmd({ action: 'set_power_range', min: v / 100 }); }
+function onPowerMax(v) { sendCmd({ action: 'set_power_range', max: v / 100 }); }
+function applyPowerRange(fx) {
+  const pmin = fx?.power_min ?? 0, pmax = fx?.power_max ?? 1;
+  document.getElementById('pmin-slider').value = Math.round(pmin * 100);
+  document.getElementById('pmin-val').textContent = Math.round(pmin * 100) + '%';
+  document.getElementById('pmax-slider').value = Math.round(pmax * 100);
+  document.getElementById('pmax-val').textContent = Math.round(pmax * 100) + '%';
+}
+
+let lastStatus = null;
 function applyStatus(d) {
+  lastStatus = d;
   palettes = d.palettes || [];
   presets = d.timeline_presets || {};   // {nome: {steps, loop}}, contenuto completo
   const fixtures = d.fixtures || {};
@@ -361,6 +392,7 @@ function applyStatus(d) {
   renderPresetList();
   renderPaletteSwatches(d.palettes_rgb || {});
   applyAudioTune(d);
+  applyPowerRange(fixtures[FIXTURE]);
 }
 
 function start() {

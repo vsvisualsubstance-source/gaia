@@ -109,6 +109,17 @@ class Fixture:
 
         self.audio_reactive = False   # applica _audio_level (condiviso) alla propria brillantezza
 
+        # Calibrazione (2026-10-05): la brillantezza finale (slider +
+        # eventuale audio-reattività, sempre 0-1) viene rimappata dentro
+        # [power_min, power_max] invece di andare 0-100% a tavoletta --
+        # utile per una fixture che sfarfalla/non è lineare agli estremi,
+        # o per non superare mai una certa intensità. 0.0-1.0 di sempre
+        # resta il comportamento di default (nessun cambio per chi non la
+        # tocca). Il blackout (forced_off) resta un azzeramento assoluto,
+        # bypassa questo range di proposito -- vedi _write_fixture_channels.
+        self.power_min = 0.0
+        self.power_max = 1.0
+
 
 _fixtures = {}        # id -> Fixture
 _default_fixture_id = None   # primo id in ordine -- usato quando un comando non specifica "fixture"
@@ -164,6 +175,35 @@ def _load_fixtures():
           ", ".join(f"{fid}(ch {f.start_address}-{f.start_address+f.num_channels-1}"
                      f"{',dimmer '+str(f.dimmer_channel) if f.dimmer_channel else ''})"
                      for fid, f in sorted(_fixtures.items())))
+
+
+def _load_fixture_tune():
+    """Applica power_min/power_max persistiti SOPRA ai default (0.0-1.0) di
+    ogni fixture appena caricata -- chiamata dopo _load_fixtures() in
+    main(). Una voce per un fixture_id non più esistente viene ignorata in
+    silenzio (fixtures.json può cambiare, questo file resta finché non lo
+    si pulisce a mano)."""
+    try:
+        with open(config.FIXTURE_TUNE_FILE, encoding="utf-8") as f:
+            d = json.load(f)
+    except Exception:
+        return   # nessun file ancora salvato, restano i default 0.0-1.0
+    for fid, t in d.items():
+        fx = _fixtures.get(fid)
+        if fx is None:
+            continue
+        fx.power_min = max(0.0, min(1.0, float(t.get("power_min", 0.0))))
+        fx.power_max = max(0.0, min(1.0, float(t.get("power_max", 1.0))))
+    print(f"[DMX] Calibrazione power_min/max caricata da {config.FIXTURE_TUNE_FILE}")
+
+
+def _save_fixture_tune():
+    try:
+        d = {fid: {"power_min": fx.power_min, "power_max": fx.power_max} for fid, fx in _fixtures.items()}
+        with open(config.FIXTURE_TUNE_FILE, "w", encoding="utf-8") as f:
+            json.dump(d, f, indent=2)
+    except OSError as e:
+        print(f"[DMX] fixture_tune: scrittura {config.FIXTURE_TUNE_FILE} fallita ({e})")
 
 
 def _fixture_for(cmd):
@@ -645,6 +685,11 @@ def _write_fixture_channels(buf, fx, now):
     # quanto di quel tetto si vede in ogni istante. Spenta = comportamento
     # di sempre (brightness da solo).
     eff_brightness = fx.brightness * _audio_level if fx.audio_reactive else fx.brightness
+    # Calibrazione (2026-10-05): rimappa 0-1 dentro [power_min, power_max]
+    # -- 0% slider = power_min, 100% slider = power_max, invariato (0.0-1.0)
+    # per chi non l'ha mai toccata. Il blackout sotto resta un azzeramento
+    # assoluto, non passa da qui (ignora eff_brightness del tutto).
+    eff_brightness = fx.power_min + eff_brightness * (fx.power_max - fx.power_min)
     if fx.forced_off:
         # buf resta a 0 sui canali di questa fixture -- spegnimento
         # garantito, vedi commento su forced_off nella classe Fixture.
@@ -732,6 +777,8 @@ def _fixture_status(fx):
             "current_palette": fx.current_palette_name,
             "output_rgb": out,
             "brightness": round(fx.brightness, 3),
+            "power_min": round(fx.power_min, 3),
+            "power_max": round(fx.power_max, 3),
             "timeline_defined": len(fx.timeline_steps),
             "timeline_running": fx.timeline_running,
             "timeline_loop": fx.timeline_loop,
@@ -878,6 +925,24 @@ def _on_message(client, userdata, msg):
                         fx.brightness = max(0.0, min(1.0, float(cmd.get("value", 1.0))))
                 except (TypeError, ValueError):
                     pass
+            elif action == "set_power_range":
+                # Calibrazione per fixture (0.0-1.0 ciascuno, vedi classe
+                # Fixture) -- "min"/"max" opzionali, si aggiorna solo quello
+                # presente. Se il risultato finale è min>max si rifiuta
+                # tutto il comando (nessun range invertito), non si applica
+                # a metà.
+                try:
+                    new_min = max(0.0, min(1.0, float(cmd["min"]))) if "min" in cmd else fx.power_min
+                    new_max = max(0.0, min(1.0, float(cmd["max"]))) if "max" in cmd else fx.power_max
+                except (TypeError, ValueError):
+                    print(f"[DMX] set_power_range: valori non numerici {cmd}")
+                else:
+                    if new_min > new_max:
+                        print(f"[DMX] set_power_range: min({new_min}) > max({new_max}), ignorato")
+                    else:
+                        with _lock:
+                            fx.power_min, fx.power_max = new_min, new_max
+                        _save_fixture_tune()
             elif action == "timeline_set":
                 steps = cmd.get("steps")
                 if isinstance(steps, list) and steps:
@@ -954,6 +1019,7 @@ def _start_local_webserver():
 
 def main():
     _load_fixtures()
+    _load_fixture_tune()
     _load_palettes()
     _load_timelines()
     _load_audio_tune()
