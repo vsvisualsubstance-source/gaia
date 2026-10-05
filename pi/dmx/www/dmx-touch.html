@@ -22,6 +22,11 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 .dot.err{background:var(--red)}
 .swatch{margin-left:auto;width:36px;height:36px;border-radius:8px;border:2px solid var(--border);background:#000}
 
+.fixtures{display:flex;gap:6px;flex-shrink:0}
+.fx-btn{flex:1;border:2px solid var(--border);border-radius:10px;background:var(--card);color:var(--text);
+        font-size:.8rem;font-weight:700;padding:8px}
+.fx-btn.active{border-color:var(--accent);color:var(--accent)}
+
 .palettes{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;flex:1;min-height:0}
 .pal-btn{border:2px solid var(--border);border-radius:10px;font-size:.85rem;font-weight:600;
          color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6);display:flex;align-items:center;
@@ -43,6 +48,22 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 .btn.audio{background:var(--card);border:2px solid var(--border);color:var(--text);min-width:56px}
 .btn.audio.active{border-color:var(--yellow);color:var(--yellow);background:#2a2010}
 .btn:active{opacity:.7}
+
+.icon-btn{border:2px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);
+          font-size:1rem;width:36px;height:36px;flex-shrink:0}
+
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;
+         justify-content:center;z-index:10}
+.overlay.open{display:flex}
+.sheet{background:var(--card);border:2px solid var(--border);border-radius:14px;padding:16px;
+       width:min(92vw,520px);max-height:90vh;overflow-y:auto;display:flex;flex-direction:column;gap:14px}
+.sheet h2{font-size:.95rem;color:var(--accent);display:flex;align-items:center;justify-content:space-between}
+.band-row{display:flex;flex-direction:column;gap:4px}
+.band-row label{display:flex;justify-content:space-between;font-size:.8rem;color:var(--muted)}
+.band-row label span.val{color:var(--text);font-weight:700}
+.band-row input[type=range]{width:100%;height:34px;accent-color:var(--accent)}
+.meter{height:8px;border-radius:4px;background:#000;overflow:hidden;border:1px solid var(--border)}
+.meter i{display:block;height:100%;background:var(--accent);width:0%;transition:width .08s linear}
 </style>
 </head>
 <body>
@@ -51,7 +72,36 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
   <span class="dot" id="dot"></span>
   <h1 id="title">GAIA DMX</h1>
   <div class="swatch" id="swatch"></div>
+  <button class="icon-btn" id="audio-settings-btn" onclick="openAudioSheet()" title="Audio: gain/bande">🎚️</button>
+  <button class="icon-btn" onclick="goEditor()" title="Editor preset">✏️</button>
 </div>
+
+<div class="overlay" id="audio-overlay" onclick="if(event.target===this) closeAudioSheet()">
+  <div class="sheet">
+    <h2>🎚️ Audio — gain &amp; bande <button class="icon-btn" onclick="closeAudioSheet()">✕</button></h2>
+    <div class="band-row">
+      <label>Gain <span class="val" id="gain-val">1.0x</span></label>
+      <input type="range" id="gain-slider" min="10" max="300" value="100" oninput="onGain(this.value)">
+    </div>
+    <div class="band-row">
+      <label>Bassi <span class="val" id="low-val">1.0x</span></label>
+      <div class="meter"><i id="low-meter"></i></div>
+      <input type="range" id="low-slider" min="10" max="300" value="100" oninput="onBandGain('low',this.value)">
+    </div>
+    <div class="band-row">
+      <label>Medi <span class="val" id="mid-val">1.0x</span></label>
+      <div class="meter"><i id="mid-meter"></i></div>
+      <input type="range" id="mid-slider" min="10" max="300" value="100" oninput="onBandGain('mid',this.value)">
+    </div>
+    <div class="band-row">
+      <label>Alti <span class="val" id="high-val">1.0x</span></label>
+      <div class="meter"><i id="high-meter"></i></div>
+      <input type="range" id="high-slider" min="10" max="300" value="100" oninput="onBandGain('high',this.value)">
+    </div>
+  </div>
+</div>
+
+<div class="fixtures" id="fixtures" style="display:none"></div>
 
 <div class="palettes" id="palettes"></div>
 
@@ -71,8 +121,12 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 // presa da ?room=, default "ingresso" (primo Pi su cui gaia-dmx è stato
 // provato, 2026-10-02) -- riusabile su altri Pi passando un room diverso
 // nell'URL di kiosk.conf (KIOSK_URL), nessun nome hardcoded nella logica.
+// ?fixture= sceglie quale fixture controllare se il device ne ha più di
+// una (2026-10-03, vedi pi/dmx/fixtures.json) -- senza, parte da quella
+// di default (prima in ordine alfabetico) appena arriva il primo status.
 const params = new URLSearchParams(location.search);
 const ROOM = params.get('room') || 'ingresso';
+let FIXTURE = params.get('fixture') || null;
 document.getElementById('title').textContent = `GAIA DMX — ${ROOM}`;
 
 const PALETTE_COLORS = {
@@ -94,8 +148,12 @@ function setConn(ok) {
   document.getElementById('dot').className = 'dot ' + (ok ? 'ok' : 'err');
 }
 
-function sendCmd(cmd) {
+function sendCmd(cmd, shared) {
   if (!client || !client.connected) return;
+  // "shared" = azione non legata a una fixture (timeline_save/delete,
+  // reload_*) -- oggi questa pagina non le usa, ma il parametro resta per
+  // chiarezza/coerenza con l'editor (web/dmx-editor.html).
+  if (!shared && FIXTURE) cmd = { ...cmd, fixture: FIXTURE };
   client.publish(`gaia/dmx/${ROOM}/command`, JSON.stringify(cmd));
 }
 
@@ -109,6 +167,33 @@ function tlLoad(name) { sendCmd({ action: 'timeline_load', name }); }
 function onBrightness(v) { sendCmd({ action: 'set_brightness', value: v / 100 }); }
 function toggleAudio() {
   sendCmd({ action: lastAudioReactive ? 'audio_reactive_stop' : 'audio_reactive_start' });
+}
+
+function goEditor() {
+  location.href = `dmx-editor.html?room=${encodeURIComponent(ROOM)}`;
+}
+
+// Gain + bande (2026-10-05): solo taratura/monitoraggio, azione condivisa
+// (non per fixture) -- vedi nota in pi/dmx/main.py. I valori mostrati
+// vengono SEMPRE da status (mai letti/scritti in locale), stesso pattern
+// del resto della pagina.
+function openAudioSheet() { document.getElementById('audio-overlay').classList.add('open'); }
+function closeAudioSheet() { document.getElementById('audio-overlay').classList.remove('open'); }
+function onGain(v) { sendCmd({ action: 'audio_tune', gain: v / 100 }, true); }
+function onBandGain(band, v) { sendCmd({ action: 'audio_tune', [band]: v / 100 }, true); }
+
+function renderFixtures(fixtures) {
+  const ids = Object.keys(fixtures).sort();
+  const wrap = document.getElementById('fixtures');
+  if (ids.length <= 1) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'flex';
+  wrap.innerHTML = ids.map(id => {
+    const active = id === FIXTURE ? ' active' : '';
+    return `<button class="fx-btn${active}" data-fx="${id}">${id.toUpperCase()}</button>`;
+  }).join('');
+  wrap.querySelectorAll('[data-fx]').forEach(el => {
+    el.onclick = () => { FIXTURE = el.dataset.fx; applyStatus(lastStatus); };
+  });
 }
 
 function renderTimelines(presets) {
@@ -137,18 +222,40 @@ function renderPalettes(names) {
   });
 }
 
+let lastStatus = null;
+
 function applyStatus(d) {
-  lastPalette = d.current_palette;
-  lastTimelineRunning = !!d.timeline_running;
-  lastTimelinePreset = d.current_timeline_preset;
-  lastAudioReactive = !!d.audio_reactive;
+  lastStatus = d;
+  const fixtures = d.fixtures || {};
+  if (!FIXTURE || !fixtures[FIXTURE]) FIXTURE = d.default_fixture || Object.keys(fixtures).sort()[0];
+  const fx = fixtures[FIXTURE] || {};
+  lastPalette = fx.current_palette;
+  lastTimelineRunning = !!fx.timeline_running;
+  lastTimelinePreset = fx.current_timeline_preset;
+  lastAudioReactive = !!fx.audio_reactive;
+  renderFixtures(fixtures);
   renderPalettes(d.palettes || []);
   renderTimelines(d.timeline_presets || {});
-  const [r, g, b] = d.output_rgb || [0, 0, 0];
+  const [r, g, b] = fx.output_rgb || [0, 0, 0];
   document.getElementById('swatch').style.background = `rgb(${r},${g},${b})`;
-  document.getElementById('brightness').value = Math.round((d.brightness ?? 1) * 100);
+  document.getElementById('brightness').value = Math.round((fx.brightness ?? 1) * 100);
   document.getElementById('tl-start').classList.toggle('active', lastTimelineRunning);
   document.getElementById('audio-btn').classList.toggle('active', lastAudioReactive);
+  applyAudioTune(d);
+}
+
+function applyAudioTune(d) {
+  const gain = d.audio_gain ?? 1.0;
+  const bg = d.audio_band_gain || {};
+  const bands = d.audio_bands || {};
+  document.getElementById('gain-slider').value = Math.round(gain * 100);
+  document.getElementById('gain-val').textContent = gain.toFixed(1) + 'x';
+  ['low', 'mid', 'high'].forEach(b => {
+    const g = bg[b] ?? 1.0;
+    document.getElementById(`${b}-slider`).value = Math.round(g * 100);
+    document.getElementById(`${b}-val`).textContent = g.toFixed(1) + 'x';
+    document.getElementById(`${b}-meter`).style.width = Math.round((bands[b] ?? 0) * 100) + '%';
+  });
 }
 
 function start() {

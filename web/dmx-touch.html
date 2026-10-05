@@ -48,6 +48,22 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 .btn.audio{background:var(--card);border:2px solid var(--border);color:var(--text);min-width:56px}
 .btn.audio.active{border-color:var(--yellow);color:var(--yellow);background:#2a2010}
 .btn:active{opacity:.7}
+
+.icon-btn{border:2px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);
+          font-size:1rem;width:36px;height:36px;flex-shrink:0}
+
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;
+         justify-content:center;z-index:10}
+.overlay.open{display:flex}
+.sheet{background:var(--card);border:2px solid var(--border);border-radius:14px;padding:16px;
+       width:min(92vw,520px);max-height:90vh;overflow-y:auto;display:flex;flex-direction:column;gap:14px}
+.sheet h2{font-size:.95rem;color:var(--accent);display:flex;align-items:center;justify-content:space-between}
+.band-row{display:flex;flex-direction:column;gap:4px}
+.band-row label{display:flex;justify-content:space-between;font-size:.8rem;color:var(--muted)}
+.band-row label span.val{color:var(--text);font-weight:700}
+.band-row input[type=range]{width:100%;height:34px;accent-color:var(--accent)}
+.meter{height:8px;border-radius:4px;background:#000;overflow:hidden;border:1px solid var(--border)}
+.meter i{display:block;height:100%;background:var(--accent);width:0%;transition:width .08s linear}
 </style>
 </head>
 <body>
@@ -56,6 +72,33 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
   <span class="dot" id="dot"></span>
   <h1 id="title">GAIA DMX</h1>
   <div class="swatch" id="swatch"></div>
+  <button class="icon-btn" id="audio-settings-btn" onclick="openAudioSheet()" title="Audio: gain/bande">🎚️</button>
+  <button class="icon-btn" onclick="goEditor()" title="Editor preset">✏️</button>
+</div>
+
+<div class="overlay" id="audio-overlay" onclick="if(event.target===this) closeAudioSheet()">
+  <div class="sheet">
+    <h2>🎚️ Audio — gain &amp; bande <button class="icon-btn" onclick="closeAudioSheet()">✕</button></h2>
+    <div class="band-row">
+      <label>Gain <span class="val" id="gain-val">1.0x</span></label>
+      <input type="range" id="gain-slider" min="10" max="300" value="100" oninput="onGain(this.value)">
+    </div>
+    <div class="band-row">
+      <label>Bassi <span class="val" id="low-val">1.0x</span></label>
+      <div class="meter"><i id="low-meter"></i></div>
+      <input type="range" id="low-slider" min="10" max="300" value="100" oninput="onBandGain('low',this.value)">
+    </div>
+    <div class="band-row">
+      <label>Medi <span class="val" id="mid-val">1.0x</span></label>
+      <div class="meter"><i id="mid-meter"></i></div>
+      <input type="range" id="mid-slider" min="10" max="300" value="100" oninput="onBandGain('mid',this.value)">
+    </div>
+    <div class="band-row">
+      <label>Alti <span class="val" id="high-val">1.0x</span></label>
+      <div class="meter"><i id="high-meter"></i></div>
+      <input type="range" id="high-slider" min="10" max="300" value="100" oninput="onBandGain('high',this.value)">
+    </div>
+  </div>
 </div>
 
 <div class="fixtures" id="fixtures" style="display:none"></div>
@@ -126,6 +169,19 @@ function toggleAudio() {
   sendCmd({ action: lastAudioReactive ? 'audio_reactive_stop' : 'audio_reactive_start' });
 }
 
+function goEditor() {
+  location.href = `dmx-editor.html?room=${encodeURIComponent(ROOM)}`;
+}
+
+// Gain + bande (2026-10-05): solo taratura/monitoraggio, azione condivisa
+// (non per fixture) -- vedi nota in pi/dmx/main.py. I valori mostrati
+// vengono SEMPRE da status (mai letti/scritti in locale), stesso pattern
+// del resto della pagina.
+function openAudioSheet() { document.getElementById('audio-overlay').classList.add('open'); }
+function closeAudioSheet() { document.getElementById('audio-overlay').classList.remove('open'); }
+function onGain(v) { sendCmd({ action: 'audio_tune', gain: v / 100 }, true); }
+function onBandGain(band, v) { sendCmd({ action: 'audio_tune', [band]: v / 100 }, true); }
+
 function renderFixtures(fixtures) {
   const ids = Object.keys(fixtures).sort();
   const wrap = document.getElementById('fixtures');
@@ -185,6 +241,21 @@ function applyStatus(d) {
   document.getElementById('brightness').value = Math.round((fx.brightness ?? 1) * 100);
   document.getElementById('tl-start').classList.toggle('active', lastTimelineRunning);
   document.getElementById('audio-btn').classList.toggle('active', lastAudioReactive);
+  applyAudioTune(d);
+}
+
+function applyAudioTune(d) {
+  const gain = d.audio_gain ?? 1.0;
+  const bg = d.audio_band_gain || {};
+  const bands = d.audio_bands || {};
+  document.getElementById('gain-slider').value = Math.round(gain * 100);
+  document.getElementById('gain-val').textContent = gain.toFixed(1) + 'x';
+  ['low', 'mid', 'high'].forEach(b => {
+    const g = bg[b] ?? 1.0;
+    document.getElementById(`${b}-slider`).value = Math.round(g * 100);
+    document.getElementById(`${b}-val`).textContent = g.toFixed(1) + 'x';
+    document.getElementById(`${b}-meter`).style.width = Math.round((bands[b] ?? 0) * 100) + '%';
+  });
 }
 
 function start() {

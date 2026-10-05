@@ -15,11 +15,21 @@ nessuna discovery di rete — l'host Art-Net si configura a mano
 
 Audio-reattività (2026-10-02, opt-in, per fixture): livello RMS dal
 microfono locale (webcam o scheda audio, via ffmpeg+pipewire-alsa) modula
-la brillantezza in tempo reale -- niente bande/kick-detection come DMX V8,
-quello resta il posto giusto per l'analisi vera. Il microfono è UNO per
-device (non per fixture): la cattura resta un thread condiviso, ogni
-fixture decide solo se applicarne il livello o no. Vedi
-_audio_capture_loop().
+la brillantezza in tempo reale. Il microfono è UNO per device (non per
+fixture): la cattura resta un thread condiviso, ogni fixture decide solo
+se applicarne il livello o no. Vedi _audio_capture_loop().
+
+Gain + 3 bande (2026-10-05, richiesto esplicitamente per quando l'audio
+non arriva dal Controller via MQTT/Touch LAN ma da una scheda audio
+esterna con livello di linea sconosciuto): un guadagno manuale pre-RMS
+(_audio_gain) e tre filtri passa-basso/passa-alto a un polo (niente FFT,
+pesi minimi) che separano basso/medio/alto, ciascuno col proprio
+guadagno regolabile e il proprio livello 0-1 esposto in status per un
+VU-meter. Restano SOLO per taratura/monitoraggio: la brillantezza
+audio-reattiva delle fixture continua a seguire il solo livello master
+(_audio_level) come da sempre — tre comportamenti reattivi separati per
+banda restano deliberatamente fuori scope qui, quello è il lavoro di
+DMX V8 su TD.
 
 Catena: comando MQTT (palette o timeline, con "fixture":"<id>") → stato
 della Fixture (fade_from/to, progresso crossfade) → loop di uscita a
@@ -30,8 +40,10 @@ pi/livestream/main.py, pi/mediaplayer/main.py): paho-mqtt diretto, non il
 protocollo gaia_client lato TD (quello è per TouchDesigner, qui non serve
 quel livello di complessità).
 """
+import array
 import audioop
 import json
+import math
 import os
 import signal
 import subprocess
@@ -349,6 +361,61 @@ _audio_thread = None
 _audio_floor = 200.0     # rumore di fondo stimato (RMS raw, scala int16), si adatta da solo verso il basso
 _audio_peak = 4000.0     # picco stimato, si adatta da solo verso l'alto (mai sotto un minimo, vedi funzione)
 
+# Gain manuale pre-RMS (moltiplica i campioni grezzi prima di qualunque
+# calcolo) + 3 bande, SOLO per taratura/monitoraggio (vedi nota in cima al
+# file) -- non pilotano nessuna fixture. Persistiti in config.AUDIO_TUNE_FILE,
+# caricati da _load_audio_tune() all'avvio.
+_audio_gain = 1.0
+_audio_band_gain = {"low": 1.0, "mid": 1.0, "high": 1.0}
+_audio_bands = {"low": 0.0, "mid": 0.0, "high": 0.0}         # 0-1, AGC+smoothing, per i VU-meter
+_audio_band_floor = {"low": 200.0, "mid": 200.0, "high": 200.0}
+_audio_band_peak = {"low": 4000.0, "mid": 4000.0, "high": 4000.0}
+
+# Tagli fissi (non esposti via MQTT, solo due costanti ragionevoli per
+# basso/medio/alto su musica -- niente FFT, due filtri passa-basso a un
+# polo: low = lowpass(250Hz), high = segnale - lowpass(3000Hz),
+# mid = lowpass(3000Hz) - lowpass(250Hz). Stato del filtro reinizializzato
+# ad ogni avvio cattura (_audio_capture_loop), non serve persisterlo.
+_BAND_LOW_HZ = 250.0
+_BAND_HIGH_HZ = 3000.0
+
+
+def _load_audio_tune():
+    global _audio_gain
+    try:
+        with open(config.AUDIO_TUNE_FILE, encoding="utf-8") as f:
+            d = json.load(f)
+        _audio_gain = float(d.get("gain", 1.0))
+        for b, v in (d.get("bands") or {}).items():
+            if b in _audio_band_gain:
+                _audio_band_gain[b] = float(v)
+        print(f"[DMX] Audio tune caricato: gain={_audio_gain}, bands={_audio_band_gain}")
+    except Exception:
+        pass   # nessun file ancora salvato, restano i default 1.0
+
+
+def _save_audio_tune():
+    try:
+        with open(config.AUDIO_TUNE_FILE, "w", encoding="utf-8") as f:
+            json.dump({"gain": _audio_gain, "bands": _audio_band_gain}, f, indent=2)
+    except OSError as e:
+        print(f"[DMX] audio_tune: scrittura {config.AUDIO_TUNE_FILE} fallita ({e})")
+
+
+def _agc_level(rms, floor, peak):
+    """Stesso identico AGC-lite già in uso per il livello master (floor
+    insegue in basso veloce/in alto lento, peak il contrario) --
+    fattorizzato qui per riuso su master + 3 bande senza quadruplicare la
+    logica."""
+    if rms < floor:
+        floor += (rms - floor) * 0.05
+    else:
+        floor += (rms - floor) * 0.002
+    peak = max(peak * 0.999, rms, floor + 500)
+    span = max(1.0, peak - floor)
+    level = max(0.0, min(1.0, (rms - floor) / span))
+    return level, floor, peak
+
 
 def _audio_capture_loop():
     global _audio_proc, _audio_level, _audio_floor, _audio_peak, _audio_capture_on
@@ -362,25 +429,54 @@ def _audio_capture_loop():
         return
     print(f"[DMX] Audio-reattività: cattura da '{config.AUDIO_DEVICE}' avviata")
     chunk_bytes = _AUDIO_CHUNK * 2   # 2 byte/campione, s16le
+    # Filtri a un polo per basso/alto (vedi _BAND_LOW_HZ/_BAND_HIGH_HZ) --
+    # alpha = dt/(RC+dt), costanti per tutta la cattura (sample rate fisso).
+    # Stato (lp_low/lp_high) reinizializzato ad ogni avvio: non serve
+    # persisterlo, un transiente di pochi campioni all'avvio è innocuo.
+    dt = 1.0 / config.AUDIO_SAMPLE_RATE
+    alpha_low = dt / (1.0 / (2 * math.pi * _BAND_LOW_HZ) + dt)
+    alpha_high = dt / (1.0 / (2 * math.pi * _BAND_HIGH_HZ) + dt)
+    lp_low = lp_high = 0.0
     try:
         while _audio_capture_on and _audio_proc and _audio_proc.poll() is None:
             data = _audio_proc.stdout.read(chunk_bytes)
             if not data:
                 break
-            rms = audioop.rms(data, 2)
-            # AGC-lite: il floor insegue verso il basso (rumore di fondo che
-            # cala), il peak verso l'alto (un picco reale alza il soffitto),
-            # entrambi lentamente -- cosi' un ambiente silenzioso resta
-            # sensibile e uno rumoroso non resta sempre "a tavoletta".
-            if rms < _audio_floor:
-                _audio_floor += (rms - _audio_floor) * 0.05
-            else:
-                _audio_floor += (rms - _audio_floor) * 0.002
-            _audio_peak = max(_audio_peak * 0.999, rms, _audio_floor + 500)
-            span = max(1.0, _audio_peak - _audio_floor)
-            level = max(0.0, min(1.0, (rms - _audio_floor) / span))
+            samples = array.array("h")
+            samples.frombytes(data)
+            gain = _audio_gain
+            if gain != 1.0:
+                for i in range(len(samples)):
+                    samples[i] = max(-32768, min(32767, int(samples[i] * gain)))
+            # Livello master: stesso identico calcolo di sempre, solo sui
+            # campioni già scalati dal gain -- audioop.rms resta il più
+            # veloce per questo (C, non Python puro).
+            rms = audioop.rms(samples.tobytes(), 2)
+            level, _audio_floor, _audio_peak = _agc_level(rms, _audio_floor, _audio_peak)
             with _lock:
                 _audio_level = _audio_level * 0.6 + level * 0.4   # smoothing, evita lo sfarfallio
+
+            # 3 bande, SOLO per taratura/monitoraggio (vedi nota in testa al
+            # file) -- un singolo passaggio sui campioni, due filtri passa-
+            # basso in cascata: low = lp_low, mid = lp_high-lp_low,
+            # high = campione-lp_high.
+            sum_low = sum_mid = sum_high = 0.0
+            for s in samples:
+                lp_low += alpha_low * (s - lp_low)
+                lp_high += alpha_high * (s - lp_high)
+                mid_v = lp_high - lp_low
+                high_v = s - lp_high
+                sum_low += lp_low * lp_low
+                sum_mid += mid_v * mid_v
+                sum_high += high_v * high_v
+            n = len(samples)
+            if n:
+                for band, total in (("low", sum_low), ("mid", sum_mid), ("high", sum_high)):
+                    rms_b = (total / n) ** 0.5 * _audio_band_gain[band]
+                    lvl, _audio_band_floor[band], _audio_band_peak[band] = _agc_level(
+                        rms_b, _audio_band_floor[band], _audio_band_peak[band])
+                    with _lock:
+                        _audio_bands[band] = _audio_bands[band] * 0.6 + lvl * 0.4
     except Exception as e:
         print(f"[DMX] Audio-reattività: errore cattura ({e})")
     finally:
@@ -393,6 +489,8 @@ def _audio_capture_loop():
                 _audio_proc.wait(timeout=2)
         with _lock:
             _audio_level = 0.0
+            for band in _audio_bands:
+                _audio_bands[band] = 0.0
         # Bandiera riportata giù QUI, non solo da _stop_audio_if_unused --
         # se il thread muore per un motivo imprevisto (ffmpeg sparito,
         # eccezione sopra) mentre una fixture crede ancora che
@@ -576,6 +674,9 @@ def _publish_status():
         "audio_level": round(_audio_level, 3),   # condiviso, vedi classe Fixture
         "audio_device": config.AUDIO_DEVICE,     # quale sorgente sta ascoltando (o ascolterebbe) la cattura
         "audio_capturing": _audio_capture_on,    # cattura REALMENTE attiva ora, non solo "qualcuno la vuole"
+        "audio_gain": round(_audio_gain, 2),
+        "audio_band_gain": {b: round(v, 2) for b, v in _audio_band_gain.items()},
+        "audio_bands": {b: round(v, 3) for b, v in _audio_bands.items()},   # VU-meter, solo monitoraggio
         "ts": int(time.time() * 1000),
     }
     _mqtt.publish(f"gaia/dmx/{_current_room}/status", json.dumps(payload), retain=True)
@@ -615,6 +716,28 @@ def _on_message(client, userdata, msg):
             _save_timeline(cmd.get("name", ""), cmd.get("steps"), cmd.get("loop", True))
         elif action == "timeline_delete":
             _delete_timeline(cmd.get("name", ""))
+        elif action == "audio_tune":
+            # Condivisa (non per fixture): gain + guadagno per banda, utile
+            # quando l'audio arriva da una scheda esterna con livello di
+            # linea diverso dal mic di riferimento (vedi nota in testa al
+            # file). Ogni campo è opzionale, si aggiorna solo quello presente.
+            global _audio_gain
+            changed = False
+            if "gain" in cmd:
+                try:
+                    _audio_gain = max(0.1, min(5.0, float(cmd["gain"])))
+                    changed = True
+                except (TypeError, ValueError):
+                    print(f"[DMX] audio_tune: gain non valido {cmd.get('gain')!r}")
+            for band in ("low", "mid", "high"):
+                if band in cmd:
+                    try:
+                        _audio_band_gain[band] = max(0.1, min(5.0, float(cmd[band])))
+                        changed = True
+                    except (TypeError, ValueError):
+                        print(f"[DMX] audio_tune: {band} non valido {cmd.get(band)!r}")
+            if changed:
+                _save_audio_tune()
         else:
             fx = _fixture_for(cmd)
             if fx is None:
@@ -689,16 +812,19 @@ _mqtt.on_message = _on_message
 
 
 # ── Webserver locale per il mini menu touch ─────────────────────────────────
-# Serve web/dmx-touch.html (copia in www/, vedi nota sotto) direttamente da
-# questo Pi, cosi' il kiosk non dipende da OPS/Node-RED per il semplice
-# HTML/JS -- resta comunque una dipendenza reale dal broker MQTT di Core
-# (192.168.1.142:9001, hardcoded nella pagina) per il controllo vero, ma
-# Core e' molto piu' stabile di OPS/Node-RED in questo progetto (vedi
-# pi/CLAUDE.md e il changelog TD4Gaia per i precedenti di OPS giu').
-# www/ e' una COPIA (dmx-touch.html + vendor/mqtt.min.js): tenerla allineata
-# a web/dmx-touch.html e web/vendor/mqtt.min.js a mano se quella pagina
-# cambia, stessa convenzione di duplicazione gia' in uso per ota.py fra i
-# moduli Pi (vedi pi/CLAUDE.md).
+# Serve web/dmx-touch.html E web/dmx-editor.html (copie in www/, vedi nota
+# sotto) direttamente da questo Pi, cosi' il kiosk — e il link "✏️" verso
+# l'editor dentro dmx-touch.html — non dipendono da OPS/Node-RED per il
+# semplice HTML/JS (2026-10-05: prima solo dmx-touch.html) -- resta
+# comunque una dipendenza reale dal broker MQTT di Core (192.168.1.142:9001,
+# hardcoded nella pagina) per il controllo vero, ma Core e' molto piu'
+# stabile di OPS/Node-RED in questo progetto (vedi pi/CLAUDE.md e il
+# changelog TD4Gaia per i precedenti di OPS giu').
+# www/ e' una COPIA (dmx-touch.html + dmx-editor.html + vendor/mqtt.min.js):
+# tenerla allineata a web/dmx-touch.html, web/dmx-editor.html e
+# web/vendor/mqtt.min.js a mano se quelle pagine cambiano, stessa
+# convenzione di duplicazione gia' in uso per ota.py fra i moduli Pi (vedi
+# pi/CLAUDE.md).
 def _start_local_webserver():
     import http.server
     www_dir = os.path.join(config._BASE, "www")
@@ -719,6 +845,7 @@ def main():
     _load_fixtures()
     _load_palettes()
     _load_timelines()
+    _load_audio_tune()
     _mqtt.connect_async(config.MQTT_HOST, config.MQTT_PORT, 60)
     threading.Thread(target=_mqtt.loop_forever,
                      kwargs={"retry_first_connection": True}, daemon=True).start()

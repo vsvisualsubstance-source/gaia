@@ -90,6 +90,13 @@ TIMELINES_FILE = _get("DMX_TIMELINES_FILE", os.path.join(_BASE, "timelines.json"
 AUDIO_DEVICE = _get("DMX_AUDIO_DEVICE", "default")
 AUDIO_SAMPLE_RATE = int(_get("DMX_AUDIO_RATE", "16000"))
 
+# Gain master + guadagno per banda (basso/medio/alto) -- regolabili a
+# runtime via MQTT (azione "audio_tune") e persistiti qui, stesso schema
+# di TIMELINES_FILE. Utile quando l'audio non arriva dal Controller via
+# MQTT/Touch LAN ma da una scheda audio esterna con livello di linea
+# molto diverso dal mic USB di riferimento.
+AUDIO_TUNE_FILE = _get("DMX_AUDIO_TUNE_FILE", os.path.join(_BASE, "audio_tune.json"))
+
 # Più fixture nello stesso universo (2026-10-03): se fixtures.json esiste,
 # definisce N fixture indipendenti (ognuna con il proprio start_address/
 # num_channels/dimmer_channel, stesso significato di
