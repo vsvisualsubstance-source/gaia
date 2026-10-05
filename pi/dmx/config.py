@@ -1,4 +1,15 @@
-"""Config gaia-dmx — layering: env > /etc/gaia/dmx.conf > default."""
+"""Config gaia-dmx — layering: env > /etc/gaia/dmx.conf > default.
+
+ATTENZIONE DEPLOY (trovato dal vivo 2026-10-05): PALETTES_FILE,
+TIMELINES_FILE, AUDIO_TUNE_FILE e FIXTURES_FILE sono stato RUNTIME del
+singolo device (l'utente le modifica dal vivo da dmx-touch.html/
+dmx-editor.html), non codice sorgente -- la copia nel repo è solo il seed
+per una PRIMA installazione. Un `rsync pi/dmx/ → Pi` senza esclusioni
+sovrascrive silenziosamente le modifiche fatte dal vivo sul device con la
+versione (vecchia) del repo: successo UNA VOLTA qui, ha cancellato un
+preset timeline personalizzato dell'utente senza errori visibili. Deploy
+di main.py/config.py: SEMPRE con
+`--exclude timelines.json --exclude palettes.json --exclude audio_tune.json --exclude fixtures.json`."""
 import os
 import socket
 

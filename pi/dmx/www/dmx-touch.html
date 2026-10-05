@@ -62,6 +62,8 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 .band-row label{display:flex;justify-content:space-between;font-size:.8rem;color:var(--muted)}
 .band-row label span.val{color:var(--text);font-weight:700}
 .band-row input[type=range]{width:100%;height:34px;accent-color:var(--accent)}
+.band-row select{width:100%;height:40px;background:var(--bg);border:2px solid var(--border);
+                  border-radius:8px;color:var(--text);font-size:.85rem;padding:0 8px}
 .meter{height:8px;border-radius:4px;background:#000;overflow:hidden;border:1px solid var(--border)}
 .meter i{display:block;height:100%;background:var(--accent);width:0%;transition:width .08s linear}
 </style>
@@ -79,6 +81,10 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 <div class="overlay" id="audio-overlay" onclick="if(event.target===this) closeAudioSheet()">
   <div class="sheet">
     <h2>🎚️ Audio — gain &amp; bande <button class="icon-btn" onclick="closeAudioSheet()">✕</button></h2>
+    <div class="band-row">
+      <label>Dispositivo</label>
+      <select id="audio-device-select" onchange="onAudioDevice(this.value)"></select>
+    </div>
     <div class="band-row">
       <label>Gain <span class="val" id="gain-val">1.0x</span></label>
       <input type="range" id="gain-slider" min="10" max="300" value="100" oninput="onGain(this.value)">
@@ -181,6 +187,17 @@ function openAudioSheet() { document.getElementById('audio-overlay').classList.a
 function closeAudioSheet() { document.getElementById('audio-overlay').classList.remove('open'); }
 function onGain(v) { sendCmd({ action: 'audio_tune', gain: v / 100 }, true); }
 function onBandGain(band, v) { sendCmd({ action: 'audio_tune', [band]: v / 100 }, true); }
+function onAudioDevice(id) { sendCmd({ action: 'audio_set_device', device: id }, true); }
+
+let lastAudioDeviceList = null;   // evita di ridisegnare il <select> ad ogni status (perderebbe il focus/la scelta a meta' tocco)
+function renderAudioDevices(devices, current) {
+  const key = JSON.stringify(devices) + '|' + current;
+  if (key === lastAudioDeviceList) return;
+  lastAudioDeviceList = key;
+  const sel = document.getElementById('audio-device-select');
+  sel.innerHTML = devices.map(d =>
+    `<option value="${d.id}"${d.id === current ? ' selected' : ''}>${d.label}</option>`).join('');
+}
 
 function renderFixtures(fixtures) {
   const ids = Object.keys(fixtures).sort();
@@ -210,10 +227,16 @@ function renderTimelines(presets) {
   });
 }
 
-function renderPalettes(names) {
+function renderPalettes(names, rgbMap) {
+  // Colore reale da status (palettes_rgb, 2026-10-05) se c'è -- cosi' una
+  // palette personalizzata aggiunta dall'editor (web/dmx-editor.html) ha
+  // subito il colore giusto qui, non il grigio di fallback. PALETTE_COLORS
+  // resta solo per compatibilità con un service vecchio che non manda
+  // ancora palettes_rgb.
   const wrap = document.getElementById('palettes');
   wrap.innerHTML = names.map(n => {
-    const bg = PALETTE_COLORS[n] || '#333';
+    const rgb = (rgbMap || {})[n];
+    const bg = rgb ? `rgb(${rgb[0]},${rgb[1]},${rgb[2]})` : (PALETTE_COLORS[n] || '#333');
     const active = n === lastPalette ? ' active' : '';
     return `<button class="pal-btn${active}" style="background:${bg}" data-pal="${n}">${n}</button>`;
   }).join('');
@@ -234,7 +257,7 @@ function applyStatus(d) {
   lastTimelinePreset = fx.current_timeline_preset;
   lastAudioReactive = !!fx.audio_reactive;
   renderFixtures(fixtures);
-  renderPalettes(d.palettes || []);
+  renderPalettes(d.palettes || [], d.palettes_rgb);
   renderTimelines(d.timeline_presets || {});
   const [r, g, b] = fx.output_rgb || [0, 0, 0];
   document.getElementById('swatch').style.background = `rgb(${r},${g},${b})`;
@@ -245,6 +268,7 @@ function applyStatus(d) {
 }
 
 function applyAudioTune(d) {
+  renderAudioDevices(d.audio_devices || [{ id: 'default', label: 'Automatico (default)' }], d.audio_device || 'default');
   const gain = d.audio_gain ?? 1.0;
   const bg = d.audio_band_gain || {};
   const bands = d.audio_bands || {};

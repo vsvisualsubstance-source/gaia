@@ -45,6 +45,7 @@ import audioop
 import json
 import math
 import os
+import re
 import signal
 import subprocess
 import threading
@@ -196,6 +197,47 @@ def _load_palettes():
     except Exception as e:
         print(f"[DMX] Impossibile leggere {config.PALETTES_FILE} ({e}), uso un set minimo di default")
         _palettes = {"White": [255, 255, 255], "Off": [0, 0, 0]}
+
+
+def _save_palette(name, rgb):
+    """Aggiunge/sovrascrive una palette personalizzata e la rende subito
+    disponibile -- stesso identico schema di _save_timeline (persisti +
+    aggiorna lo stato in memoria, nessuna distinzione fra palette
+    "di base" e personalizzate, sono solo nome->colore in un unico file)."""
+    if not name or not isinstance(rgb, list) or len(rgb) < 3:
+        print(f"[DMX] palette_save: nome o rgb non validi (name={name!r}, rgb={rgb!r})")
+        return False
+    try:
+        color = [max(0, min(255, int(c))) for c in rgb[:3]]
+    except (TypeError, ValueError):
+        print(f"[DMX] palette_save: valori rgb non numerici {rgb!r}")
+        return False
+    with _lock:
+        _palettes[name] = color
+    try:
+        with open(config.PALETTES_FILE, "w", encoding="utf-8") as f:
+            json.dump(_palettes, f, indent=2, ensure_ascii=False)
+    except OSError as e:
+        print(f"[DMX] palette_save: scrittura {config.PALETTES_FILE} fallita ({e})")
+        return False
+    print(f"[DMX] Palette '{name}' salvata (rgb={color})")
+    return True
+
+
+def _delete_palette(name):
+    if name not in _palettes:
+        print(f"[DMX] palette_delete: palette sconosciuta {name!r}")
+        return False
+    with _lock:
+        del _palettes[name]
+    try:
+        with open(config.PALETTES_FILE, "w", encoding="utf-8") as f:
+            json.dump(_palettes, f, indent=2, ensure_ascii=False)
+    except OSError as e:
+        print(f"[DMX] palette_delete: scrittura {config.PALETTES_FILE} fallita ({e})")
+        return False
+    print(f"[DMX] Palette '{name}' eliminata")
+    return True
 
 
 def _load_timelines():
@@ -371,6 +413,14 @@ _audio_bands = {"low": 0.0, "mid": 0.0, "high": 0.0}         # 0-1, AGC+smoothin
 _audio_band_floor = {"low": 200.0, "mid": 200.0, "high": 200.0}
 _audio_band_peak = {"low": 4000.0, "mid": 4000.0, "high": 4000.0}
 
+# Dispositivo audio EFFETTIVO (mutabile a runtime, 2026-10-05) --
+# config.AUDIO_DEVICE resta solo il default/fallback al primo avvio (env/
+# conf, come sempre); una volta scelto da MQTT/UI il valore vive qui e
+# viene persistito in config.AUDIO_TUNE_FILE insieme a gain/bande, cosi'
+# la scelta sopravvive a un restart del servizio.
+_audio_device = config.AUDIO_DEVICE
+_audio_devices_cache = []   # [{"id","label"}, ...], popolata da _scan_audio_devices()
+
 # Tagli fissi (non esposti via MQTT, solo due costanti ragionevoli per
 # basso/medio/alto su musica -- niente FFT, due filtri passa-basso a un
 # polo: low = lowpass(250Hz), high = segnale - lowpass(3000Hz),
@@ -380,8 +430,40 @@ _BAND_LOW_HZ = 250.0
 _BAND_HIGH_HZ = 3000.0
 
 
+def _scan_audio_devices():
+    """Elenco dispositivi di cattura audio reali via `arecord -l` (alsa-
+    utils, già presente -- nessuna dipendenza pip nuova, stesso principio
+    "modulo leggero" di ffmpeg sopra). "default" resta sempre la prima
+    opzione: passa dal plugin pipewire-alsa (vedi nota audio-reattività in
+    testa al file), funziona sempre anche con un solo dispositivo. Le
+    schede reali si aggiungono come plughw:CARD=N,DEV=M -- stesso formato
+    che ffmpeg -f alsa -i accetta direttamente. Cache aggiornata
+    all'avvio e su richiesta esplicita (azione audio_rescan_devices, utile
+    se si collega una scheda USB senza riavviare il servizio)."""
+    global _audio_devices_cache
+    devices = [{"id": "default", "label": "Automatico (default)"}]
+    try:
+        out = subprocess.run(["arecord", "-l"], capture_output=True, text=True, timeout=3).stdout
+        for line in out.splitlines():
+            # short-name può contenere spazi (es. "USB Audio") -- .+? non
+            # greedy invece di \S+, altrimenti la riga non combacia mai
+            # per schede con nome composto (bug trovato dal vivo 2026-10-05,
+            # unica scheda reale su Pi Ingresso scartata silenziosamente).
+            m = re.match(r"card (\d+): .+? \[(.*?)\], device (\d+): .+? \[(.*?)\]", line)
+            if m:
+                card, card_name, dev, dev_name = m.groups()
+                devices.append({
+                    "id": f"plughw:CARD={card},DEV={dev}",
+                    "label": f"{card_name} — {dev_name} (card {card})",
+                })
+    except Exception as e:
+        print(f"[DMX] audio: scan dispositivi fallita ({e}), resta solo 'default'")
+    _audio_devices_cache = devices
+    print(f"[DMX] {len(devices)} dispositivo/i audio trovati")
+
+
 def _load_audio_tune():
-    global _audio_gain
+    global _audio_gain, _audio_device
     try:
         with open(config.AUDIO_TUNE_FILE, encoding="utf-8") as f:
             d = json.load(f)
@@ -389,15 +471,16 @@ def _load_audio_tune():
         for b, v in (d.get("bands") or {}).items():
             if b in _audio_band_gain:
                 _audio_band_gain[b] = float(v)
-        print(f"[DMX] Audio tune caricato: gain={_audio_gain}, bands={_audio_band_gain}")
+        _audio_device = d.get("device") or _audio_device
+        print(f"[DMX] Audio tune caricato: gain={_audio_gain}, bands={_audio_band_gain}, device={_audio_device!r}")
     except Exception:
-        pass   # nessun file ancora salvato, restano i default 1.0
+        pass   # nessun file ancora salvato, restano i default
 
 
 def _save_audio_tune():
     try:
         with open(config.AUDIO_TUNE_FILE, "w", encoding="utf-8") as f:
-            json.dump({"gain": _audio_gain, "bands": _audio_band_gain}, f, indent=2)
+            json.dump({"gain": _audio_gain, "bands": _audio_band_gain, "device": _audio_device}, f, indent=2)
     except OSError as e:
         print(f"[DMX] audio_tune: scrittura {config.AUDIO_TUNE_FILE} fallita ({e})")
 
@@ -419,15 +502,16 @@ def _agc_level(rms, floor, peak):
 
 def _audio_capture_loop():
     global _audio_proc, _audio_level, _audio_floor, _audio_peak, _audio_capture_on
+    device = _audio_device   # letto una volta sola -- un cambio mentre questo loop gira si applica al prossimo restart (vedi audio_set_device)
     cmd = ["ffmpeg", "-nostdin", "-loglevel", "quiet",
-           "-f", "alsa", "-i", config.AUDIO_DEVICE,
+           "-f", "alsa", "-i", device,
            "-f", "s16le", "-ar", str(config.AUDIO_SAMPLE_RATE), "-ac", "1", "-"]
     try:
         _audio_proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     except FileNotFoundError:
         print("[DMX] ffmpeg non trovato, audio-reattività non disponibile")
         return
-    print(f"[DMX] Audio-reattività: cattura da '{config.AUDIO_DEVICE}' avviata")
+    print(f"[DMX] Audio-reattività: cattura da '{device}' avviata")
     chunk_bytes = _AUDIO_CHUNK * 2   # 2 byte/campione, s16le
     # Filtri a un polo per basso/alto (vedi _BAND_LOW_HZ/_BAND_HIGH_HZ) --
     # alpha = dt/(RC+dt), costanti per tutta la cattura (sample rate fisso).
@@ -663,6 +747,7 @@ def _publish_status():
         "stanza": _current_room,
         "artnet_configured": bool(config.ARTNET_HOST),
         "palettes": sorted(_palettes.keys()),
+        "palettes_rgb": _palettes,   # nome->[r,g,b] completo -- l'editor web lo usa per gli swatch/eliminazione, zero comandi dedicati per leggerli
         # Contenuto intero (non solo i nomi): piccolo (pochi preset, pochi
         # step ciascuno) e cosi' l'editor web puo' mostrare/modificare un
         # preset esistente senza un comando dedicato per leggerlo -- sempre
@@ -672,7 +757,8 @@ def _publish_status():
         "default_fixture": _default_fixture_id,
         "fixtures": {fid: _fixture_status(fx) for fid, fx in _fixtures.items()},
         "audio_level": round(_audio_level, 3),   # condiviso, vedi classe Fixture
-        "audio_device": config.AUDIO_DEVICE,     # quale sorgente sta ascoltando (o ascolterebbe) la cattura
+        "audio_device": _audio_device,           # quale sorgente sta ascoltando (o ascolterebbe) la cattura -- scelta runtime, non piu' solo config
+        "audio_devices": _audio_devices_cache,    # [{"id","label"}, ...] -- per il <select> lato UI
         "audio_capturing": _audio_capture_on,    # cattura REALMENTE attiva ora, non solo "qualcuno la vuole"
         "audio_gain": round(_audio_gain, 2),
         "audio_band_gain": {b: round(v, 2) for b, v in _audio_band_gain.items()},
@@ -716,6 +802,10 @@ def _on_message(client, userdata, msg):
             _save_timeline(cmd.get("name", ""), cmd.get("steps"), cmd.get("loop", True))
         elif action == "timeline_delete":
             _delete_timeline(cmd.get("name", ""))
+        elif action == "palette_save":
+            _save_palette(cmd.get("name", ""), cmd.get("rgb"))
+        elif action == "palette_delete":
+            _delete_palette(cmd.get("name", ""))
         elif action == "audio_tune":
             # Condivisa (non per fixture): gain + guadagno per banda, utile
             # quando l'audio arriva da una scheda esterna con livello di
@@ -738,6 +828,27 @@ def _on_message(client, userdata, msg):
                         print(f"[DMX] audio_tune: {band} non valido {cmd.get(band)!r}")
             if changed:
                 _save_audio_tune()
+        elif action == "audio_set_device":
+            # Condivisa: un device per Pi, non per fixture. Il device.id
+            # deve combaciare con uno di quelli in audio_devices (status),
+            # "default" è sempre valido. Cambio a runtime: se la cattura è
+            # attiva ora, basta abbassare la bandiera -- il watchdog in
+            # _output_loop la riaccende da sola entro ~1s leggendo il nuovo
+            # _audio_device (vedi _audio_capture_loop), stessa machinery
+            # già testata per il recupero da crash, nessuna nuova corsa fra
+            # thread introdotta.
+            device = cmd.get("device")
+            if device:
+                global _audio_device
+                _audio_device = device
+                _save_audio_tune()
+                if _audio_capture_on:
+                    _audio_capture_on = False
+                print(f"[DMX] audio_set_device: {device!r}")
+            else:
+                print("[DMX] audio_set_device: 'device' mancante")
+        elif action == "audio_rescan_devices":
+            _scan_audio_devices()
         else:
             fx = _fixture_for(cmd)
             if fx is None:
@@ -846,6 +957,7 @@ def main():
     _load_palettes()
     _load_timelines()
     _load_audio_tune()
+    _scan_audio_devices()
     _mqtt.connect_async(config.MQTT_HOST, config.MQTT_PORT, 60)
     threading.Thread(target=_mqtt.loop_forever,
                      kwargs={"retry_first_connection": True}, daemon=True).start()
