@@ -35,7 +35,20 @@ def _get(key, default):
 
 DEVICE_ID = _get("DEVICE_ID", socket.gethostname())
 ROOM      = _get("CAMERA_NAME", "cucina")        # stanza iniziale (registry può cambiarla)
-MQTT_HOST = _get("MQTT_HOST", "192.168.1.142")
+# Broker locale di default (2026-10-05, vedi install.sh "[3/3]"): gaia-dmx
+# e le pagine web/dmx-touch.html, web/dmx-editor.html servite da questo Pi
+# parlano SEMPRE con un mosquitto locale, cosi' funzionano anche senza
+# rete verso Core (pensato per uso "in giro" -- installazione touring,
+# nessun Gaia raggiungibile). Quando Core è raggiungibile, un bridge
+# mosquitto->mosquitto configurato da install.sh inoltra l'intero
+# namespace gaia/# in entrambe le direzioni, trasparente per questo
+# codice: Admin/Telegram continuano a funzionare come sempre. Un
+# MQTT_HOST esplicito in /etc/gaia/dmx.conf (installazioni da prima di
+# questa feature) resta valido e punta ancora dritto a Core, bypassando
+# il broker locale -- va aggiornato a mano a 127.0.0.1 se si vuole la
+# nuova architettura (install.sh lo fa da solo per chi lancia di nuovo
+# lo script).
+MQTT_HOST = _get("MQTT_HOST", "127.0.0.1")
 MQTT_PORT = int(_get("MQTT_PORT", "1883"))
 
 _BASE = os.path.dirname(os.path.abspath(__file__))

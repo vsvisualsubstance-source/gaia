@@ -315,7 +315,13 @@ function applyAudioTune(d) {
 }
 
 function start() {
-  client = mqtt.connect(`ws://192.168.1.142:9001`, { connectTimeout: 4000 });
+  // Broker locale (2026-10-05) se questa pagina è servita dal Pi stesso
+  // (porta 8099, vedi pi/dmx/main.py _start_local_webserver) -- funziona
+  // anche senza rete verso Core (uso "in giro"). Se invece la pagina
+  // arriva da un altro host (es. OPS via Admin), niente broker locale
+  // lì: resta il broker di Core come sempre.
+  const BROKER_HOST = location.port === '8099' ? location.hostname : '192.168.1.142';
+  client = mqtt.connect(`ws://${BROKER_HOST}:9001`, { connectTimeout: 4000 });
   client.on('connect', () => {
     setConn(true);
     client.subscribe(`gaia/dmx/${ROOM}/status`);

@@ -1,8 +1,17 @@
 # GAIA DMX (base) — configurazione
 # Copia in /etc/gaia/dmx.conf e modifica per ogni Raspberry Pi
 
-# Broker MQTT
-MQTT_HOST=192.168.1.142
+# Broker MQTT -- di default un mosquitto LOCALE su questo stesso Pi
+# (installato da install.sh, "[3/3]"), cosi' il servizio e le pagine web
+# locali funzionano anche senza rete verso Core (pensato per uso "in
+# giro"/touring). Un bridge verso il broker di Core si collega da solo
+# quando raggiungibile -- niente da cambiare qui per quello, è
+# configurato a parte in /etc/mosquitto/conf.d/gaia-dmx-broker.conf
+# (target CORE_MQTT_HOST, passato all'invocazione di install.sh se
+# diverso dal default 192.168.1.142). Cambia questo valore SOLO se vuoi
+# che il servizio parli dritto con un broker esterno, bypassando il
+# locale e la relativa resilienza offline.
+MQTT_HOST=127.0.0.1
 MQTT_PORT=1883
 
 # Nodo Art-Net di destinazione (es. l'IP di un dimmer/driver RGB in rete).
