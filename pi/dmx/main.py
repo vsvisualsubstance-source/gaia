@@ -366,16 +366,26 @@ def _set_target(fx, rgb, fade_s, palette_name=None):
 # ── Timeline ─────────────────────────────────────────────────────────────────
 def _timeline_advance_to(fx, index):
     """Fa partire lo step `index` della timeline di `fx` (wrap/stop gestiti
-    dal chiamante) -- punto unico per non duplicare la logica di fade."""
+    dal chiamante) -- punto unico per non duplicare la logica di fade.
+
+    index/step_started si aggiornano SEMPRE, anche se lo step non è
+    risolvibile -- bug reale trovato dal vivo 2026-10-09: prima si
+    usciva subito su un fallimento SENZA toccarli, quindi _timeline_tick
+    (che legge fx.timeline_index per decidere il prossimo passo)
+    ritentava lo STESSO indice ad ogni frame per sempre, inondando i log
+    a piena FPS invece di scartare quello step e passare al successivo
+    dopo la sua durata. Il colore in uscita resta quello di prima (nessun
+    _set_target) solo quando il passo è irrisolvibile -- "salto" per
+    davvero, non uno stallo."""
     step = fx.timeline_steps[index]
+    fx.timeline_index = index
+    fx.timeline_step_started = time.time()
     color = _resolve_color(step)
     if color is None:
         print(f"[DMX] {fx.id}: Timeline step {index} non risolvibile ({step}), salto")
         return False
     fade = float(step.get("fade", TIMELINE_FADE_DEFAULT_S))
     _set_target(fx, color, fade, palette_name=step.get("palette"))
-    fx.timeline_index = index
-    fx.timeline_step_started = time.time()
     return True
 
 

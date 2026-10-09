@@ -217,6 +217,19 @@ function stepRow(step) {
 }
 
 function addStep(step) {
+  // Bug reale trovato dal vivo 2026-10-09 (vsrasp01): se si clicca "+"
+  // PRIMA che arrivi il primo status MQTT, `palettes` è ancora [] ->
+  // palettes[0] è undefined -> lo <select> generato da stepRow() non ha
+  // NESSUNA <option> -> il suo .value è "" -> lo step salvato ha
+  // palette:"" , irrisolvibile per sempre (_resolve_color ritorna None
+  // ad ogni tick, inonda i log "non risolvibile" senza mai avanzare).
+  // Capita solo per uno step SENZA argomento (il bottone "+ Aggiungi
+  // step"/newPreset) -- un preset esistente già caricato (loadIntoEditor)
+  // passa sempre un oggetto step reale, non tocca questo path.
+  if (!step && !palettes.length) {
+    setMsg('Ancora in attesa delle palette dal device, riprova in un secondo', 'err');
+    return;
+  }
   document.getElementById('steps').appendChild(stepRow(step || { palette: palettes[0], duration: 3, fade: 1 }));
 }
 
