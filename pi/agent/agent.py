@@ -40,6 +40,31 @@ _capabilities  = {}
 _config_lock   = threading.Lock()
 
 
+def _write_file_safe(path: str, content: str):
+    """Scrive `content` in `path`, rimuovendolo prima se già esiste --
+    questo processo gira come utente normale (vedi pi/CLAUDE.md): se il
+    file è rimasto root (scritto a mano/via sudo in passato, es. un test
+    manuale), un semplice open(path,"w") fallisce in silenzio con
+    PermissionError anche se la DIRECTORY è scrivibile, perché la
+    proprietà del file conta più del permesso sulla directory.
+
+    Trovato dal vivo 2026-10-09 su vsrasp01/pi-b2c8db: mediapipe.conf era
+    rimasto root da un giro precedente, ogni riavvio di gaia-agent
+    crashava su apply_initial_config() -> _write_mediapipe_conf() con
+    questo identico errore, in crash-loop per settimane (nessun service
+    sopravviveva oltre pochi secondi). Lo stesso schema remove-poi-
+    riscrivi era già in uso SOLO in _set_kiosk per kiosk.conf -- qui
+    diventa condiviso per ogni file che questo modulo scrive, non solo
+    quello. Rimuove l'ambiguità alla radice: dopo questa funzione il
+    file è sempre di proprietà di questo processo, qualunque fosse
+    prima."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    if os.path.exists(path):
+        os.remove(path)
+    with open(path, "w") as f:
+        f.write(content)
+
+
 def _handle_signal(sig, frame):
     global _running
     _running = False
@@ -91,8 +116,7 @@ def load_config() -> dict:
 def save_config(cfg: dict):
     cfg["updated"] = datetime.now(timezone.utc).isoformat()
     with _config_lock:
-        with open(config.DEVICE_JSON, "w") as f:
-            json.dump(cfg, f, indent=2)
+        _write_file_safe(config.DEVICE_JSON, json.dumps(cfg, indent=2))
 
 
 def _write_device_env(cfg: dict):
@@ -117,9 +141,7 @@ def _write_device_env(cfg: dict):
         f"MQTT_PORT={config.MQTT_PORT}",
         f"DEVICE_ID={config.DEVICE_ID}",
     ]
-    os.makedirs(os.path.dirname(config.DEVICE_ENV_FILE), exist_ok=True)
-    with open(config.DEVICE_ENV_FILE, "w") as f:
-        f.write("\n".join(lines) + "\n")
+    _write_file_safe(config.DEVICE_ENV_FILE, "\n".join(lines) + "\n")
     print(f"[Agent] device.conf aggiornato → CAMERA_NAME={stanza}")
 
 
@@ -134,9 +156,7 @@ def _write_mediapipe_conf(cfg: dict):
     OSC_HOST/altri campi di quel modulo, aggiungerli qui allo stesso modo.
     Va chiamata PRIMA di un (re)start di 'mediapipe' perché il processo
     legge questo file solo all'avvio, non lo ri-controlla mentre gira."""
-    os.makedirs(os.path.dirname(MEDIAPIPE_CONF_FILE), exist_ok=True)
-    with open(MEDIAPIPE_CONF_FILE, "w") as f:
-        f.write(f"OSC_LANDMARKS={'1' if cfg.get('osc_landmarks') else '0'}\n")
+    _write_file_safe(MEDIAPIPE_CONF_FILE, f"OSC_LANDMARKS={'1' if cfg.get('osc_landmarks') else '0'}\n")
     print(f"[Agent] mediapipe.conf aggiornato → OSC_LANDMARKS={'1' if cfg.get('osc_landmarks') else '0'}")
 
 
@@ -172,17 +192,8 @@ def _set_kiosk(page: str, room: str = None) -> bool:
     else:
         print(f"[Agent] set_kiosk: pagina sconosciuta {page!r} (valide: welcome, {', '.join(KIOSK_PAGES)})")
         return False
-    # Il file può essere root (scritto a mano/via sudo in passato) --
-    # questo processo gira come utente normale (vedi pi/CLAUDE.md), quindi
-    # riscrivere un file di un altro proprietario fallirebbe in silenzio
-    # (PermissionError) anche se la DIRECTORY è scrivibile. Si toglie di
-    # mezzo e si riscrive da zero, cosi' resta sempre proprietà di questo
-    # processo da qui in avanti.
     try:
-        if os.path.exists(_KIOSK_CONF):
-            os.remove(_KIOSK_CONF)
-        with open(_KIOSK_CONF, "w") as f:
-            f.write(content)
+        _write_file_safe(_KIOSK_CONF, content)
     except OSError as e:
         print(f"[Agent] set_kiosk: impossibile scrivere {_KIOSK_CONF}: {e}")
         return False
