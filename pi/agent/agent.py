@@ -610,6 +610,31 @@ def _notify_telegram(text: str):
         print(f"[Agent] Errore notifica Telegram: {e}")
 
 
+def _clock_synced() -> bool:
+    """True solo se l'orologio di sistema è stato davvero sincronizzato
+    via NTP. Un Raspberry Pi non ha RTC: all'avvio l'ora parte da quella
+    salvata da fake-hwclock (tipicamente vicina all'ultimo spegnimento,
+    MAI quella vera) finché la rete non sincronizza — può volerci da
+    pochi secondi a parecchio, a seconda di quanto è lenta ad alzarsi.
+
+    Bug reale trovato dal vivo 2026-10-09 su un Pi appena clonato dalla
+    golden card: ereditava lo stesso `shutdown_at` ("02:0X") degli altri
+    Pi, e l'ora stantia di fake-hwclock combaciava per puro caso con
+    quel valore ad OGNI singolo boot, ben prima che NTP avesse la
+    possibilità di correggerla — il controllo sotto (prima di questo
+    fix) si fidava ciecamente di datetime.now() e spegneva il Pi quasi
+    subito dopo l'avvio. Sembrava un guasto hardware (si vedeva solo lo
+    schermo spegnersi su "plymouth poweroff"), non un bug software —
+    niente nei log suggeriva uno shutdown programmato finché non si è
+    guardato il boot dal vivo con un monitor."""
+    try:
+        r = subprocess.run(["timedatectl", "show", "-p", "NTPSynchronized", "--value"],
+                            capture_output=True, text=True, timeout=3)
+        return r.stdout.strip() == "yes"
+    except Exception:
+        return False   # non si sa -> non fidarsi, meglio saltare un giro che spegnere per errore
+
+
 def _do_shutdown(reason: str):
     """Unico punto che spegne davvero il Pi -- usato sia dal comando MQTT
     diretto sia dal trigger programmato (vedi main(), shutdown_at) cosi' i
@@ -950,7 +975,7 @@ def main():
             last_heartbeat = now
         _maybe_rediscover()
         shutdown_at = _device_config.get("shutdown_at")
-        if shutdown_at:
+        if shutdown_at and _clock_synced():
             nowdt = datetime.now()
             today = nowdt.strftime("%Y-%m-%d")
             if nowdt.strftime("%H:%M") == shutdown_at and last_scheduled_shutdown_date != today:
