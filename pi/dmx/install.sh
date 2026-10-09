@@ -20,6 +20,19 @@ echo "[1/2] Dipendenze Python (paho-mqtt)..."
 pip3 install --break-system-packages --quiet paho-mqtt
 echo "  ✓ paho-mqtt OK"
 
+# audioop rimosso dalla stdlib in Python 3.13+ (PEP 594) -- serve per il
+# livello RMS dell'audio-reattività (_audio_capture_loop in main.py).
+# Trovato dal vivo 2026-10-09 su un Pi Python 3.13 (crash immediato,
+# ModuleNotFoundError al primo avvio). Backport ufficiale (audioop-lts)
+# installato SOLO se manca davvero -- su Python <3.13 l'import nativo
+# basta, mai installarlo alla cieca (potrebbe non avere nemmeno una
+# wheel compatibile per versioni più vecchie).
+if ! python3 -c "import audioop" 2>/dev/null; then
+    echo "  audioop non nella stdlib (Python 3.13+) — installo il backport audioop-lts..."
+    pip3 install --break-system-packages --quiet audioop-lts
+    echo "  ✓ audioop-lts OK"
+fi
+
 # Unit generata con l'utente/percorso REALI di questa macchina (MAI un file
 # statico con un utente hardcoded -- trovato dal vivo un Pi il cui utente
 # reale non era quello presunto, causa di "status=217/USER" in systemd,
