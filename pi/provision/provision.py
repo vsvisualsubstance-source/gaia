@@ -33,6 +33,7 @@ Gira come root (nmcli + porta 80). Config via env / EnvironmentFile
   CHECK_S=30  OFFLINE_GRACE_S=60  AP_RETRY_S=600  RETRY_WINDOW_S=60
   GAIA_PROVISION_FORCE_AP=1   ← solo test: AP subito, ignora lo stato rete
 """
+import ipaddress
 import json
 import os
 import pwd
@@ -90,9 +91,33 @@ def _device_id_suffix() -> str:
 AP_SSID = f"Gaia-Setup-{_device_id_suffix()}"
 
 
+def _dmx_artnet_network():
+    """Rete Art-Net isolata (CIDR) se gaia-dmx è configurato su questo Pi
+    -- vedi pi/dmx/dmx.conf.example, DMX_ETH_ADDRESS. Nessuna rotta verso
+    Gaia/internet per costruzione (nodo DMX puro, spesso senza DHCP): un
+    eth0 con QUESTO indirizzo non deve mai contare come "online" per il
+    captive portal, altrimenti lo hotspot di soccorso non scatta più
+    quando il WiFi vero cade, anche se l'unica rete rimasta è quella
+    isolata del DMX. Trovato dal vivo 2026-10-09 (test esplicito
+    dell'utente: WiFi staccato, hotspot mai apparso)."""
+    try:
+        with open("/etc/gaia/dmx.conf") as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("DMX_ETH_ADDRESS="):
+                    val = line.split("=", 1)[1].strip()
+                    return ipaddress.ip_network(val, strict=False) if val else None
+    except (OSError, ValueError):
+        pass
+    return None
+
+
 def is_online() -> bool:
     """Online = un device ethernet/wifi attivo con IPv4, che non sia il
-    nostro hotspot. (Non richiede internet: basta la LAN, Gaia è locale.)"""
+    nostro hotspot NÉ la rete Art-Net isolata del DMX (vedi
+    _dmx_artnet_network). (Non richiede internet: basta la LAN, Gaia è
+    locale.)"""
+    artnet_net = _dmx_artnet_network()
     r = _nmcli("-t", "-f", "DEVICE,TYPE,STATE,CONNECTION", "device", "status")
     for line in r.stdout.splitlines():
         parts = line.split(":")
@@ -104,8 +129,16 @@ def is_online() -> bool:
         if not (st.startswith("connected") or st.startswith("collegato")):
             continue
         ip = _nmcli("-t", "-f", "IP4.ADDRESS", "device", "show", dev)
-        if "IP4.ADDRESS" in ip.stdout:
-            return True
+        m = re.search(r"IP4\.ADDRESS\[\d+\]:(\S+)", ip.stdout)
+        if not m:
+            continue
+        if artnet_net is not None:
+            try:
+                if ipaddress.ip_interface(m.group(1)).ip in artnet_net:
+                    continue   # solo la rete isolata del DMX, non conta come "online"
+            except ValueError:
+                pass
+        return True
     return False
 
 
