@@ -1897,6 +1897,7 @@ function pmBuildCard(id, d) {
     <div class="pm-card-actions">
       ${svcKeys.includes('livestream') ? `<button class="pm-btn blue" onclick="window.open('${d.services?.livestream?.endpoints?.stream||`http://${d.ip}:8000/stream.ogg`}','_blank')">🔊 Ascolta stream</button>` : ''}
       ${d.capabilities?.camera && d.stanza ? `<button class="pm-btn blue pm-btn-welcome" onclick="window.open('http://${location.hostname}:1880/welcome.html?cam=${encodeURIComponent(d.ip||'')}&room=${encodeURIComponent(d.stanza)}','_blank')">🖥 Apri Welcome</button>` : ''}
+      ${d.role === 'pi' && d.ip && d.ip !== '?' ? `<button class="pm-btn gray" title="Portale di rete/servizi del Pi (gaia-provision, porta 80) -- utile per trovarlo/configurarlo quando l'IP sopra non è quello giusto" onclick="window.open('http://${d.ip}/','_blank')">📶 Rete/Captive</button>` : ''}
       <button class="pm-btn gray pm-btn-status">Status</button>
       <button class="pm-btn amber pm-btn-reboot">Reboot</button>
       <button class="pm-btn red pm-btn-shutdown">⏻ Spegni</button>
