@@ -146,13 +146,25 @@ def _create_or_attach(name, size):
 
 
 
-def _open_camera():
+def _discover_cameras():
+    """Webcam USB stabili (by-id) disponibili su questa macchina -- solo
+    Linux/V4L2, stesso identificatore stabile che si usa per CAMERA_INDEX
+    nel conf (sopravvive a un replug, a differenza di /dev/video0 che può
+    rinumerarsi). Su Windows non esiste un equivalente comodo via sysfs,
+    resta il comportamento di sempre (nessun fallback automatico)."""
+    if sys.platform == 'win32':
+        return []
+    import glob
+    return sorted(glob.glob('/dev/v4l/by-id/*-video-index0'))
+
+
+def _open_camera(index):
     # Su Windows il backend MSMF di default fallisce silenziosamente il grab
     # (isOpened()==True ma read() non ritorna mai un frame) su alcune webcam
     # (es. HD Pro Webcam C920) — DSHOW funziona in modo affidabile. Su
     # Linux/Pi resta CAP_ANY (V4L2), comportamento invariato.
     backend = cv2.CAP_DSHOW if sys.platform == 'win32' else cv2.CAP_ANY
-    cap = cv2.VideoCapture(config.CAMERA_INDEX, backend)
+    cap = cv2.VideoCapture(index, backend)
     if not cap.isOpened():
         return None, 0, 0
     cap.set(cv2.CAP_PROP_FRAME_WIDTH,  config.FRAME_WIDTH)
@@ -168,9 +180,33 @@ def _open_camera():
 
 def main():
     log.info(f"Apertura camera index={config.CAMERA_INDEX}...")
-    cap, width, height = _open_camera()
+    used_index = config.CAMERA_INDEX
+    cap, width, height = _open_camera(used_index)
     if cap is None:
-        log.error(f"Camera {config.CAMERA_INDEX} non accessibile, esco")
+        # Fallback automatico (2026-10-13): CAMERA_INDEX punta spesso a un
+        # path/indice stabile di una webcam specifica -- se viene sostituita
+        # (es. cambio modello) il servizio restava in crash-loop finché
+        # qualcuno non aggiornava il conf a mano, trovato dal vivo. Se c'è
+        # ESATTAMENTE una webcam USB stabile disponibile la usiamo subito
+        # invece di fallire -- con più di una candidata non si indovina
+        # quale sia quella giusta, resta un errore esplicito che le elenca
+        # tutte (mai un valore indovinato, vedi pi/CLAUDE.md). Runtime-only:
+        # non riscrive camera.conf da solo, per non introdurre lo stesso
+        # rischio di permessi root-owned già visto su altri conf di questo
+        # progetto (pi/agent/agent.py _write_file_safe) solo per questo.
+        candidates = _discover_cameras()
+        if len(candidates) == 1:
+            log.warning(f"Camera configurata ({config.CAMERA_INDEX}) non accessibile — "
+                        f"uso l'unica webcam USB trovata: {candidates[0]} "
+                        f"(per renderlo permanente, aggiorna CAMERA_INDEX in camera.conf)")
+            used_index = candidates[0]
+            cap, width, height = _open_camera(used_index)
+        elif len(candidates) > 1:
+            log.error(f"Camera configurata ({config.CAMERA_INDEX}) non accessibile e ci sono "
+                      f"{len(candidates)} webcam candidate — imposta CAMERA_INDEX a mano, "
+                      f"non si indovina quale usare: {', '.join(candidates)}")
+    if cap is None:
+        log.error(f"Camera {used_index} non accessibile, esco")
         raise SystemExit(1)
 
     channels   = 3  # BGR
