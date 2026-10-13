@@ -153,8 +153,32 @@ WATCHDOG_DEFAULT = bool(_manifest.get("watchdog", False))
 
 CONFIG_FILE = os.path.join(_DIR, "agent_config.json")
 
-MQTT_HOST = os.getenv("MQTT_HOST", "192.168.1.142")
-MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
+# File di override opzionale per il broker (2026-10-13, pilot "Gaia
+# Portable", portato qui dalla copia gemella ops/agent/agent.py): un
+# MQTT_HOST/MQTT_PORT passato come env var al processo non arriva sempre al
+# processo che fa davvero il lavoro -- su OPS un meccanismo esterno (lo
+# stesso duplicato mai risolto, vedi project-architettura-core-ops) rilancia
+# questo stesso agent.py come figlio via un altro interprete Python senza
+# ereditare l'environment del genitore, quindi l'env var si perde. Il file
+# invece viene letto da QUALUNQUE processo che esegue questo script da
+# questa stessa cartella, a prescindere da come e' stato lanciato -- niente
+# redeploy per cambiarlo, basta scrivere mqtt_override.json accanto ad
+# agent.py. L'env var resta comunque la priorita' piu' alta dove arriva per
+# davvero (es. pi/agent.py su Linux).
+MQTT_OVERRIDE_FILE = os.path.join(_DIR, "mqtt_override.json")
+
+
+def _load_mqtt_override() -> dict:
+    try:
+        with open(MQTT_OVERRIDE_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+_mqtt_override = _load_mqtt_override()
+MQTT_HOST = os.getenv("MQTT_HOST", _mqtt_override.get("mqtt_host", "192.168.1.142"))
+MQTT_PORT = int(os.getenv("MQTT_PORT", _mqtt_override.get("mqtt_port", 1883)))
 _mqtt = None
 
 # Ri-scoperta automatica dopo disconnessione prolungata (2026-09-19, bug
@@ -1090,10 +1114,16 @@ def main():
     # trovano Core sulla LAN in un attimo), ma copre anche OPS ora: se l'IP
     # LAN di Core cambiasse, l'agent lo ritrova da solo invece di restare
     # puntato su un host morto (vedi commento su RECOVERY_THRESHOLD sopra).
-    info = discovery.discover(cached_host=MQTT_HOST)
-    if info and info.get("mqtt_host") and info["mqtt_host"] != MQTT_HOST:
-        print(f"[GAIA Installation Agent] Gaia Core trovato: {info['mqtt_host']} (default era {MQTT_HOST})")
-        MQTT_HOST = info["mqtt_host"]
+    # Un MQTT_HOST esplicito da env O da mqtt_override.json (vedi commento
+    # sopra MQTT_OVERRIDE_FILE) mantiene la priorità -- senza, un broker
+    # alternativo voluto apposta (es. "Gaia Portable" su OPS, 2026-10-13)
+    # verrebbe riscritto dalla discovery quasi subito, perché questa trova
+    # comunque Core sulla stessa LAN e lo considera "quello giusto".
+    if "MQTT_HOST" not in os.environ and not _mqtt_override.get("mqtt_host"):
+        info = discovery.discover(cached_host=MQTT_HOST)
+        if info and info.get("mqtt_host") and info["mqtt_host"] != MQTT_HOST:
+            print(f"[GAIA Installation Agent] Gaia Core trovato: {info['mqtt_host']} (default era {MQTT_HOST})")
+            MQTT_HOST = info["mqtt_host"]
 
     print(f"[GAIA Installation Agent] MQTT      : {MQTT_HOST}:{MQTT_PORT}")
     print(f"[GAIA Installation Agent] Servizi   : {list(_SERVICE_DEFS.keys())}")
