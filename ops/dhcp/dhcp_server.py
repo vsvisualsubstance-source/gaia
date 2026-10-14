@@ -24,7 +24,9 @@ import os
 import re
 import socket
 import struct
+import subprocess
 import sys
+import threading
 import time
 
 _DIR = os.path.dirname(os.path.abspath(__file__))
@@ -239,10 +241,42 @@ class ForeignServerDetected(Exception):
     pass
 
 
+NET_IFACE = os.getenv("GAIA_DHCP_IFACE", "Ethernet")
+
+
+def _network_category_watchdog():
+    """Windows rivaluta la categoria di rete (Public/Private) ad ogni evento
+    di rete significativo (es. un device che prende/rinnova un IP) e la
+    riporta a Public di default -- trovato dal vivo 2026-10-14: senza
+    Private, Docker/HNS smette di esporre le porte dei container sulla Gaia
+    LAN (vedi commento in gaia_lan_activate.ps1), quindi una sola
+    applicazione all'attivazione non basta per tutta la durata di un evento
+    in trasferta. Girare in background, non bloccare mai il server DHCP."""
+    while True:
+        try:
+            out = subprocess.run(
+                ["powershell", "-NoProfile", "-Command",
+                 f"(Get-NetConnectionProfile -InterfaceAlias '{NET_IFACE}').NetworkCategory"],
+                capture_output=True, text=True, timeout=10,
+            ).stdout.strip()
+            if out and out != "Private":
+                _log(f"categoria rete '{NET_IFACE}' = {out}, la rimetto a Private")
+                subprocess.run(
+                    ["powershell", "-NoProfile", "-Command",
+                     f"Set-NetConnectionProfile -InterfaceAlias '{NET_IFACE}' -NetworkCategory Private"],
+                    capture_output=True, text=True, timeout=10,
+                )
+        except Exception as e:
+            _log(f"network category watchdog: errore ({e})")
+        time.sleep(30)
+
+
 def main():
     sys.stdout = sys.stderr = _RotatingConsole(LOG_FILE)
     _log("GAIA LAN DHCP server in avvio")
     _log(f"bind={BIND_IP} mask={SUBNET_MASK} gateway={GATEWAY or '(nessuno)'} pool={POOL_START}-{POOL_END}")
+
+    threading.Thread(target=_network_category_watchdog, daemon=True).start()
 
     reservations = parse_reservations(RESERVATIONS_CONF)
     _log(f"{len(reservations)} reservation caricate da {RESERVATIONS_CONF}")
