@@ -252,19 +252,24 @@ def _network_category_watchdog():
     LAN (vedi commento in gaia_lan_activate.ps1), quindi una sola
     applicazione all'attivazione non basta per tutta la durata di un evento
     in trasferta. Girare in background, non bloccare mai il server DHCP."""
+    # CREATE_NO_WINDOW: senza questo, ogni chiamata a powershell.exe apre
+    # una finestra di console visibile per un istante -- pythonw.exe non ne
+    # ha una propria, ma un figlio console-mode come powershell.exe la crea
+    # comunque di default. Segnalato dal vivo 2026-10-14 (finestra ogni 30s).
+    CREATE_NO_WINDOW = 0x08000000
     while True:
         try:
             out = subprocess.run(
                 ["powershell", "-NoProfile", "-Command",
                  f"(Get-NetConnectionProfile -InterfaceAlias '{NET_IFACE}').NetworkCategory"],
-                capture_output=True, text=True, timeout=10,
+                capture_output=True, text=True, timeout=10, creationflags=CREATE_NO_WINDOW,
             ).stdout.strip()
             if out and out != "Private":
                 _log(f"categoria rete '{NET_IFACE}' = {out}, la rimetto a Private")
                 subprocess.run(
                     ["powershell", "-NoProfile", "-Command",
                      f"Set-NetConnectionProfile -InterfaceAlias '{NET_IFACE}' -NetworkCategory Private"],
-                    capture_output=True, text=True, timeout=10,
+                    capture_output=True, text=True, timeout=10, creationflags=CREATE_NO_WINDOW,
                 )
         except Exception as e:
             _log(f"network category watchdog: errore ({e})")
