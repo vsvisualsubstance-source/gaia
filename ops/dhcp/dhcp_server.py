@@ -254,7 +254,22 @@ def main():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-    sock.bind((BIND_IP, DHCP_SERVER_PORT))
+    # Retry sul bind: appena dopo gaia_lan_activate.ps1 assegna l'IP statico
+    # e avvia la Scheduled Task, Windows a volte non ha ancora finito di
+    # applicarlo a livello di stack di rete -- bind fallisce con WinError
+    # 10049 "indirizzo non valido nel proprio contesto" anche se l'IP e'
+    # gia' visibile un attimo dopo via Get-NetIPConfiguration (trovato dal
+    # vivo 2026-10-14, primo test reale in trasferta).
+    for attempt in range(10):
+        try:
+            sock.bind((BIND_IP, DHCP_SERVER_PORT))
+            break
+        except OSError as e:
+            _log(f"bind su {BIND_IP} fallito ({e}), riprovo tra 2s ({attempt + 1}/10)")
+            time.sleep(2)
+    else:
+        _log(f"bind su {BIND_IP} fallito dopo 10 tentativi, esco")
+        return
     _log(f"in ascolto su {BIND_IP}:{DHCP_SERVER_PORT}")
 
     my_server_id = socket.inet_aton(BIND_IP)
