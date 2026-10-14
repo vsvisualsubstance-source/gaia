@@ -40,6 +40,15 @@ Get-NetIPAddress -InterfaceAlias $IFACE -AddressFamily IPv4 -ErrorAction Silentl
 Set-NetIPInterface -InterfaceAlias $IFACE -Dhcp Disabled
 New-NetIPAddress -InterfaceAlias $IFACE -IPAddress $STATIC_IP -PrefixLength $PREFIX -ErrorAction Stop | Out-Null
 
+# New-NetIPAddress classifica di default la rete come "Public" -- Docker
+# Desktop (HNS, WSL2 networkingMode=mirrored) non espone le porte dei
+# container sulle interfacce Public, quindi senza questo passo
+# gaia-portable-nodered/mosquitto resterebbero raggiungibili solo in
+# loopback (127.0.0.1), non dal resto della Gaia LAN. Trovato dal vivo
+# 2026-10-14, primo test reale in trasferta (router staccato).
+Write-Output "=== Categoria rete '$IFACE' -> Private (serve a Docker/HNS per esporre le porte) ==="
+Set-NetConnectionProfile -InterfaceAlias $IFACE -NetworkCategory Private
+
 Write-Output "=== Avvio GAIA-OPS-DHCP (Scheduled Task) ==="
 schtasks /run /tn GAIA-OPS-DHCP
 
