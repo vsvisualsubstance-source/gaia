@@ -1,19 +1,28 @@
 # Attiva la "Gaia LAN" su OPS: IP statico sull'adattatore Ethernet + avvio
 # del mini DHCP server Python (dhcp_server.py) per gli altri device Gaia.
 #
-# Passo ESPLICITO, mai automatico: prima di toccare la config di rete
-# controlla che non ci sia GIA' un DHCP server attivo su questo link (rete
+# Richiamato in automatico ogni 5 minuti dalla Scheduled Task
+# GAIA-OPS-LAN-Activate (2026-10-14, richiesto dopo il test reale in
+# trasferta: prima andava rilanciato a mano ad ogni riavvio di OPS) --
+# per questo e' scritto per essere IDEMPOTENTE, sicuro da richiamare anche
+# se e' gia' tutto attivo. Prima di toccare la config di rete controlla
+# sempre che non ci sia GIA' un DHCP server estraneo su questo link (rete
 # di casa, es. router) -- se c'e', un secondo DHCP server darebbe IP in
 # conflitto a QUALSIASI device della rete, non solo quelli Gaia. In quel
 # caso esce senza cambiare nulla.
-#
-# Uso: aprire PowerShell come amministratore, eseguire questo script.
 
 $ErrorActionPreference = "Stop"
 $IFACE = "Ethernet"
 $STATIC_IP = "192.168.1.240"
 $MASK = "255.255.255.0"
 $PREFIX = 24
+
+$alreadyRunning = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -like "python*" -and $_.CommandLine -like "*dhcp_server.py*" }
+if ($alreadyRunning) {
+    Write-Output "Gia' attivo (dhcp_server.py in esecuzione), nessuna modifica."
+    exit 0
+}
 
 Write-Output "=== Controllo rete attuale su '$IFACE' ==="
 $cfg = Get-NetIPConfiguration -InterfaceAlias $IFACE -ErrorAction SilentlyContinue
