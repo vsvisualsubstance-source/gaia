@@ -1,0 +1,47 @@
+# Stack "Gaia Portable" su OPS -- mosquitto/qdrant/nodered containerizzati
+# per la Gaia LAN in trasferta (vedi ops/dhcp/). Deployato su OPS in
+# C:\gaia-docker-cfg\gaia-portable\docker-compose.yml -- prima d'ora
+# esisteva solo li', non versionato: aggiunto al repo il 2026-10-14 dopo
+# una giornata di debug per tenerne traccia e non perdere il fix sotto.
+#
+# mosquitto: ports con bind esplicito a 0.0.0.0 -- senza, le porte
+# restavano raggiungibili solo in loopback (127.0.0.1) e non dall'IP
+# esterno di OPS (192.168.1.240), nonostante tutto il resto (container,
+# WSL2, Docker Desktop, persino un riavvio completo di Windows e un reset
+# di fabbrica di Docker) risultasse sano. Trovato dal vivo in trasferta
+# col router di casa staccato, corretto a mano su OPS e riportato qui.
+services:
+  mosquitto:
+    image: eclipse-mosquitto:latest
+    container_name: gaia-portable-mosquitto
+    ports:
+      - "0.0.0.0:11883:1883"
+      - "0.0.0.0:19001:9001"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: gaia-portable-qdrant
+    ports:
+      - "16333:6333"
+      - "16334:6334"
+    volumes:
+      - ./qdrant:/qdrant/storage
+    restart: unless-stopped
+
+  nodered:
+    image: nodered/node-red:latest
+    container_name: gaia-portable-nodered
+    ports:
+      - "1881:1880"
+    volumes:
+      - C:/gaia-docker-cfg/gaia-portable-web:/media/core/D/gaia-web
+      - C:/gaia-docker-cfg/core-node-0/musica:/media/core/D/musica
+      - C:/gaia-docker-cfg/gaia-portable-nodered-data:/data
+      - C:/gaia-docker-cfg/core-node-0:/home/core/core-node-0
+      - C:/gaia-docker-cfg/gaia-home:/home/core/gaia
+    restart: unless-stopped
