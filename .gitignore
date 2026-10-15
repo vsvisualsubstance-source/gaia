@@ -1,6 +1,9 @@
 # Claude Code sessions (privato)
 .claude/
 
+# Node (plancia/bridge.js)
+node_modules/
+
 # Python
 venv/
 venv
