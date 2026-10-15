@@ -117,24 +117,55 @@ quel meccanismo generico invece di inventare un quinto canale OSC.
    stesso identico pattern di `patchdeck_matrix`/`dmx_matrix` già
    documentato per gli altri device TD.
 
-**Schema PROPOSTO, da confermare/adattare insieme a DMX Master** (il
-rig è in ricostruzione in questi giorni — non dare per definitivo
-finché non confermato dal vivo):
+**Schema REALE trovato dal vivo su DMX Master (2026-10-15, aggiornato)**
+— `status.params.dmx_fixtures` esiste già con dati veri, diverso da
+quanto proposto qui inizialmente:
 
+```json
+{"id": 11, "name": "Head 1", "group": "heads", "unit": 1,
+ "profile": "Generic Spot 11ch 16bit", "port_id": "2.1.1.2:2",
+ "address": 100, "x": -9.0, "y": -3.5, "enabled": 1, "palette": "", "uid": ""}
 ```
-value (dmx_fixture_add / dmx_fixture_update): {
-  "id": "mh-01",            # univoco, scelto da chi crea la fixture
-  "name": "Head 1",
-  "group": "heads",          # raggruppamento per i fader di gruppo (canale 3, /dmx/group/...)
-  "profile": "Generic Spot 11ch 16bit",
-  "universe": 1, "address": 100,
-  "x": -9.0, "y": -3.5        # posizione in pianta, per il widget Design palco
-}
-value (dmx_fixture_remove): {"id": "mh-01"}
 
-# DMX Master ripubblica in status.params.dmx_fixtures: [ {...stessi campi, + "enabled"} ]
-# e in status.params.dmx_patch_report: [ {"id","status":"ok"|"conflict"|"offline","universe","start","end"} ]
-```
+Differenze dalla proposta iniziale: `id` numerico (non stringa);
+l'indirizzamento è per **`port_id`** (IP:porta del nodo Art-Net, es.
+`2.1.1.2:1`), non un `universe` astratto; `profile` è il nome del
+profilo fixture (i canali si derivano da lì, nessun campo `ch`
+separato); `group` qui sono raggruppamenti fisici del rig (`heads`,
+`rig_a`, `rig_b`...) — **vocabolario DIVERSO** da quello usato dagli
+indirizzi live `/dmx/group/...` del canale 3, non confonderli; `enabled`
+è `0`/`1`; in più `palette` e `uid` (vuoti oggi). `dmx_fixture_add`/
+`update`/`remove` esistono come slot comando (oggi `null`, write-only,
+coerente con la proposta). `dmx_patch_report`: `{"id","status":"off"|
+"offline"|"conflict"(forse "ok" a patch risolto),"port_id","universe",
+"start","end"}`.
+
+**DOMANDA APERTA PER CHI LAVORA LATO TD** (nessuna sessione Claude
+raggiungibile lì in questo momento — da relayare a mano): il modello
+costruito lato Plancia (`plancia/index.html`, nuovo editor "Pianta e
+patch") oggi è più semplice del vostro — ogni fixture ha solo
+`type`/`universe`(numero)/`address`/`x`/`y`, pensato per un utente che
+piazza "una testa mobile" senza sapere nulla di profili o nodi Art-Net
+specifici. Due strade per far combaciare le due parti, quale è più
+semplice da costruire lato vostro?
+  - **(A)** Plancia adotta i VOSTRI campi reali as-is (`port_id`,
+    `profile` con lista vera dei profili disponibili, `unit`,
+    `palette`) — Plancia deve conoscere/scoprire quali `port_id`
+    (nodi Art-Net) e `profile` esistono davvero sul rig, probabilmente
+    leggendoli da un campo nuovo che DMX Master pubblica (lista
+    profili/nodi disponibili?).
+  - **(B)** Plancia resta semplice (tipo generico + indirizzo
+    astratto), e chi riceve `dmx_fixture_add` lato DMX Master traduce
+    lui il tipo generico in un `profile`/`port_id` reali (con un
+    default sensato o chiedendo conferma), scrivendo lui i campi veri
+    nello stato che poi tutti leggono.
+
+Se la (A) richiede comunque poco lavoro in più (es. un campo
+`dmx_available_profiles`/`dmx_available_ports` da aggiungere allo
+stato, già che si pubblica `dmx_fixtures`), probabilmente è la scelta
+più robusta a lungo termine — ma lo chiediamo perché non sappiamo
+quanto lavoro in più costi lato TD rispetto a tradurre lì un comando
+già semplificato.
 
 **Non ancora implementato da nessuna delle due parti** — questa
 sezione è il punto di partenza per costruirlo in parallelo (Plancia:
