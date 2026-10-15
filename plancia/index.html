@@ -377,6 +377,47 @@ const TLCUES=`0:00 Walk-in > 1
 4:28 Buio > 12`;
 const RIG={heads:8,uplights:6,bars:8,wall:true,speakers:true};
 
+/* ---------- fixture del palco (patch vero, non solo conteggi) ---------- */
+// Ogni fixture: {id,type,name,group,universe,address,x,y,enabled}. "group"
+// combacia con gli indirizzi /dmx/group/<group> del canale 3 (vedi
+// plancia/README.md). x/y in metri, stesso sistema di coordinate di drawPlot
+// (X(m)/Y(m)) -- 0,0 e' il centro del palco sul fondo.
+const FIX_TYPES={
+  mh:     {label:'Testa mobile', group:'mh',      ch:16},
+  par:    {label:'PAR / Wash',   group:'front',   ch:8},
+  bar:    {label:'Barra LED',    group:'ledbar',  ch:24},
+  wall:   {label:'LED wall',     group:'ledwall', ch:0},
+  blinder:{label:'Blinder',      group:'blinder', ch:4},
+  haze:   {label:'Haze',         group:'haze',    ch:2},
+  speaker:{label:'Cassa',        group:'',        ch:0}
+};
+const FIX_COLOR={mh:'#58a6ff',par:'#ffb23e',bar:'#3fb950',wall:'#ff6fae',blinder:'#f85149',haze:'#8a92a0',speaker:'#c9ced8'};
+const mkFix=(type,name,x,y,universe,address)=>({id:uid(),type,name,group:FIX_TYPES[type].group,universe,address,x,y,enabled:true});
+function defaultFixtures(){
+  // Migrazione dal vecchio modello a sole quantita' (RIG, 2026-10):
+  // stessa disposizione automatica di prima, cosi' un layout salvato
+  // prima di questa modifica continua a mostrare lo stesso rig invece
+  // di partire vuoto.
+  const R=RIG, out=[]; let a=1;
+  for(let i=0;i<R.heads;i++){out.push(mkFix('mh','MH'+(i+1),-5+10*(R.heads>1?i/(R.heads-1):.5),2,1,a));a+=FIX_TYPES.mh.ch}
+  for(let i=0;i<R.uplights;i++){out.push(mkFix('par','UP'+(i+1),-5.2+10.4*(R.uplights>1?i/(R.uplights-1):.5),1.05,1,a));a+=FIX_TYPES.par.ch}
+  let b=1;
+  for(let i=0;i<R.bars;i++){out.push(mkFix('bar','BAR'+(i+1),-5.2+(10.4/R.bars)*(i+.5),7.6,2,b));b+=FIX_TYPES.bar.ch}
+  if(R.wall) out.push(mkFix('wall','LED WALL',0,.4,3,1));
+  if(R.speakers){out.push(mkFix('speaker','L ARRAY',-7.2,6.1,0,0));out.push(mkFix('speaker','R ARRAY',7.2,6.1,0,0))}
+  return out;
+}
+function fixCounts(){ // conteggi per tipo, usati da drawRender/legenda invece dei vecchi R.heads ecc.
+  const c={mh:0,par:0,bar:0,wall:0,blinder:0,haze:0,speaker:0};
+  for(const f of (L.fixtures||[])) if(f.enabled!==false) c[f.type]=(c[f.type]||0)+1;
+  return c;
+}
+function nextAddress(type,universe){ // primo indirizzo libero per quel tipo+universo, mai sovrapposto a una fixture esistente
+  const ch=FIX_TYPES[type].ch||1, used=(L.fixtures||[]).filter(f=>f.universe===universe).map(f=>[f.address,f.address+(FIX_TYPES[f.type].ch||1)-1]);
+  let a=1;
+  for(;;){const end=a+ch-1;if(end>512)return 1;if(!used.some(([s,e])=>a<=e&&end>=s))return a;a=Math.max(...used.filter(([s,e])=>a<=e&&end>=s).map(([,e])=>e))+1}
+}
+
 /* ---------- template ---------- */
 function W(type,x,y,w,h,o={}){return Object.assign({id:uid(),type,x,y,w,h,label:NAMES[type],addr:'',min:0,max:1,color:SWATCH[0],value:0,valueY:.5,mode:'push',midi:{ch:1,cc:''}},o)}
 const P=(name,widgets)=>({id:uid(),name,widgets});
@@ -452,10 +493,11 @@ TPL.gaia={name:'Gaia live',desc:'Agent Gaia (mood, pensieri, chat), PatchDeck V8
   P('DMX V8',[W('tddevice',0,0,10,10,{label:'DMX V8',fam:'dmx',color:SWATCH[0]}),W('gaiadmx',10,0,6,10,{label:'DMX stanza',color:SWATCH[4]})])]};
 TPL.full={name:'Show completo',desc:'Tutte le pagine insieme: Gaia, PatchDeck, DMX V8, panoramica show, DMX, teste mobili, timeline, palco, mix.',
   pages:()=>['gaia','show','dmx','mh','timeline','palco','mix'].flatMap(k=>TPL[k].pages())};
-const sample=()=>({pages:TPL.full.pages(),rig:{...RIG}});
+const sample=()=>({pages:TPL.full.pages(),rig:{...RIG},fixtures:defaultFixtures()});
 
 let L=store.get(KEY)||sample();
 if(!L.rig)L.rig={...RIG};
+if(!L.fixtures)L.fixtures=defaultFixtures();
 // host/port: destinazione OSC generica (/dmx/..., /mh/..., /led/..., /show/...)
 // -- DMX Master (TD, famiglia dmx) riceve questi indirizzi DIRETTAMENTE, non
 // passa da osc_bridge.py (quello e' solo per /gaia/..., vedi GAIA_PLANCIA_INTEGRATION.md).
@@ -672,7 +714,9 @@ function bind(el,w){
     if(GAIA_TYPES.has(w.type)) return gBind(e,el,w);
     if(w.type==='label'||w.type==='meter'||w.type==='clock') return;
     const end=()=>{el.classList.remove('active','press');el.onpointermove=null;el.onpointerup=el.onpointercancel=null;save()};
-    if(w.type==='stage'){const b=e.target.closest('[data-v]');if(b){w.view=b.dataset.v;el.querySelectorAll('.seg button').forEach(x=>x.setAttribute('aria-pressed',x===b));save()}return}
+    if(w.type==='stage'){const b=e.target.closest('[data-v]');if(b){w.view=b.dataset.v;el.querySelectorAll('.seg button').forEach(x=>x.setAttribute('aria-pressed',x===b));save()}
+      else if(w.view==='plot')stageDown(e,el,w);
+      return}
     if(w.type==='timeline'){
       const b=e.target.closest('[data-act]'); if(b){e.preventDefault();tlAct(w,b.dataset.act);return}
       const lane=e.target.closest('.tl-lane'); if(!lane)return;
@@ -777,11 +821,11 @@ function renderInsp(){
     ${T==='clock'?`<label>Modalità<select id="fCMode"><option value="tod">Ora del giorno</option><option value="show">Timecode show (25 fps)</option><option value="countdown">Countdown a orario</option></select></label>
       <label>Orario di fine<input id="fTarget" type="time"></label>`:''}
     ${T==='stage'?`<label>Vista<select id="fView"><option value="render">Render</option><option value="plot">Pianta e patch</option></select></label>
-      <h3 style="font-size:14px">Rig</h3>
+      <h3 style="font-size:14px">Rig del Render</h3>
       <div class="two"><label>Teste mobili<input id="rH" type="number" min="2" max="12"></label><label>Uplight<input id="rU" type="number" min="0" max="12"></label></div>
       <label>Barre LED<input id="rB" type="number" min="0" max="16"></label>
       <label class="chk"><input id="rW" type="checkbox"> LED wall</label><label class="chk"><input id="rS" type="checkbox"> Line array e sub</label>
-      <p class="hint">Il rig vale per tutto lo show: render, pianta e patch DMX si aggiornano insieme.</p>`:''}
+      <p class="hint">Questi conteggi valgono SOLO per la simulazione visiva (vista Render) — sono indipendenti dalla Pianta e patch, dove ogni fixture è vera, posizionata e indirizzata a mano (tocca il palco in quella vista per aggiungere/spostare/modificare).</p>`:''}
     ${GAIA_TYPES.has(T)&&T!=='gaia'?`<label>${T==='gaiadmx'?'Stanza':'Device'}<select id="gDev"><option value="">Automatico</option>${(T==='gaiadmx'?Object.keys(G.dmx).sort():devIds('')).map(x=>`<option>${esc(x)}</option>`).join('')}</select></label>`:''}
     ${T==='patchdeck'?`<label>Deck<select id="gDeck"><option value="a">Deck A</option><option value="b">Deck B</option></select></label>`:''}
     ${T==='tddevice'?`<label>Tipo di device (per la scelta automatica)<select id="gFam"><option value="">Qualsiasi</option><option value="patchdeck">PatchDeck</option><option value="mixeraudio">Controller (mixeraudio)</option><option value="dmx">DMX V8</option></select></label>`:''}
@@ -976,10 +1020,15 @@ function drawRender(g,W,H,t,level){
     if(showPlaying&&level>.75&&hash(k,Math.floor(t/400))>.8){g.strokeStyle='#020203';g.lineWidth=4;g.beginPath();g.moveTo(x+r,y+r);g.lineTo(x+r*2,y-r*2.5);g.stroke()}
     g.strokeStyle=rgba(bl>.05?[1,.9,.75]:fw,bl>.05?.6*bl:.3*fk);g.lineWidth=1.2;g.beginPath();g.arc(x,y,r,Math.PI*1.1,Math.PI*1.9);g.stroke()}
 }
-function drawPlot(g,W,H,t){
-  const R=L.rig;
+// Stato di interazione della Pianta per widget id -- MAI dentro l'oggetto
+// w stesso: w vive in L (salvato via JSON.stringify), hits/proj/selFix sono
+// usa-e-getta (ricalcolati ogni frame, legati solo a questa sessione).
+const _stageUI={};
+function drawPlot(g,W,H,t,w){
   g.globalCompositeOperation='source-over';g.fillStyle='#0b0d11';g.fillRect(0,0,W,H);
   const s=Math.min(W/17,H/13),cx=W/2,oy=H*.1;           // 1 m = s px; origine fondo palco
+  const ui=w&&(_stageUI[w.id]||(_stageUI[w.id]={}));
+  if(ui)ui.proj={s,cx,oy};
   g.strokeStyle='#161a20';g.lineWidth=1;
   for(let x=cx%s;x<W;x+=s){g.beginPath();g.moveTo(x,0);g.lineTo(x,H);g.stroke()}
   for(let y=oy%s;y<H;y+=s){g.beginPath();g.moveTo(0,y);g.lineTo(W,y);g.stroke()}
@@ -992,41 +1041,102 @@ function drawPlot(g,W,H,t){
   g.strokeStyle='#5d6573';g.lineWidth=1;g.beginPath();g.moveTo(X(-6),Y(8.6));g.lineTo(X(6),Y(8.6));g.stroke();
   [[-6,1],[6,-1]].forEach(([m,d])=>{g.beginPath();g.moveTo(X(m),Y(8.6));g.lineTo(X(m)+d*5,Y(8.6)-3);g.lineTo(X(m)+d*5,Y(8.6)+3);g.fill()});
   txt('12.00 m',cx,Y(8.6)-4,'#868e9b');
-  // LED wall
-  if(R.wall){g.fillStyle=rgba(SH.wall.c,.9,.6*SH.g.ledwall);g.fillRect(X(-3),Y(.25),6*s,.3*s);g.strokeStyle='#8a92a0';g.strokeRect(X(-3),Y(.25),6*s,.3*s);
-    txt('LED WALL 6 × 3.5 m · P3.9 · Art-Net U3–U8',cx,Y(.2)-4,'#c9ced8')}
   // truss
   g.setLineDash([5,4]);g.strokeStyle='#6b7280';g.beginPath();g.moveTo(X(-5.5),Y(2));g.lineTo(X(5.5),Y(2));g.stroke();g.setLineDash([]);
   txt('TRUSS',X(6.2),Y(2)-2,'#5d6573','left');txt('+7.0 m',X(6.2),Y(2)+11,'#5d6573','left');
-  // teste mobili
-  const n=R.heads;
-  for(let i=0;i<n;i++){const h=SH.heads[i],p=h.T.c,x=X(-5+10*(n>1?i/(n-1):.5)),y=Y(2),col=[p[2],p[3],p[4]],k=p[5];
-    g.strokeStyle=rgba(col,.9,.4+.6*k);g.lineWidth=2;const a=p[0]*1.15,l=s*(1.2+Math.max(0,p[1])*3)*(p[1]<0?.5:1);
-    g.beginPath();g.moveTo(x,y);g.lineTo(x+Math.sin(a)*l,y+Math.abs(Math.cos(a))*l*(p[1]<0?-.4:1));g.stroke();
-    g.fillStyle='#1c2027';g.strokeStyle='#c9ced8';g.lineWidth=1.3;g.beginPath();g.arc(x,y,s*.28,0,Math.PI*2);g.fill();g.stroke();
-    g.fillStyle=rgba(col,1,.25+.75*k);g.beginPath();g.arc(x,y,s*.13,0,Math.PI*2);g.fill();
-    txt('MH'+(i+1),x,y-s*.38,'#e9ebef');txt('1.'+String(1+i*16).padStart(3,'0'),x,y+s*.55)}
-  // uplight
-  const ua=1+n*16;
-  for(let i=0;i<R.uplights;i++){const x=X(-5.2+10.4*(R.uplights>1?i/(R.uplights-1):.5)),y=Y(1.05);g.fillStyle=rgba(SH.back.c,1,.3+.7*SH.g.back);
-    g.beginPath();g.moveTo(x,y-s*.18);g.lineTo(x+s*.16,y+s*.12);g.lineTo(x-s*.16,y+s*.12);g.closePath();g.fill();
-    txt('UP'+(i+1),x,y-s*.28,'#5d6573')}
-  // barre LED
-  for(let i=0;i<R.bars;i++){const w=10.4/R.bars,x=X(-5.2+i*w);g.fillStyle=rgba(SH.bar.c,1,.25+.75*SH.g.ledbar);g.fillRect(x+2,Y(7.6),w*s-4,s*.16);
-    if(i===0||i===R.bars-1)txt('BAR'+(i+1)+' 2.'+String(1+i*24).padStart(3,'0'),x+w*s/2,Y(7.6)-5,'#5d6573')}
-  // audio
-  if(R.speakers){[-1,1].forEach(sd=>{const x=X(sd*7.2);g.fillStyle='#1b1f26';g.strokeStyle='#8a92a0';g.lineWidth=1.2;
-    g.fillRect(x-s*.45,Y(5.6),s*.9,s*1.1);g.strokeRect(x-s*.45,Y(5.6),s*.9,s*1.1);txt(sd<0?'L ARRAY':'R ARRAY',x,Y(5.6)-5,'#c9ced8');
-    g.fillRect(x-s*.5,Y(7.1),s,s*.7);g.strokeRect(x-s*.5,Y(7.1),s,s*.7);txt('SUB ×2',x,Y(8.15),'#868e9b')})}
   // FOH
   const fy=Math.min(H-s*.9,Y(11.2));g.strokeStyle='#ffb23e';g.lineWidth=1.3;g.strokeRect(cx-s*.9,fy-s*.4,s*1.8,s*.8);txt('FOH',cx,fy+4,'#ffb23e');
   g.setLineDash([2,4]);g.strokeStyle='#4a515e';g.beginPath();g.moveTo(cx,Y(8.8));g.lineTo(cx,fy-s*.45);g.stroke();g.setLineDash([]);
   txt('18 m',cx+6,(Y(8.8)+fy)/2,'#868e9b','left');
-  // legenda patch
-  const lg=[[`MH ×${n}`,'16 ch',`U1 001–${String(n*16).padStart(3,'0')}`],[`Uplight ×${R.uplights}`,'8 ch',R.uplights?`U1 ${String(ua).padStart(3,'0')}–${String(ua+R.uplights*8-1).padStart(3,'0')}`:'—'],
-    [`LED bar ×${R.bars}`,'24 ch',R.bars?`U2 001–${String(R.bars*24).padStart(3,'0')}`:'—'],['LED wall',R.wall?'pixel':'—',R.wall?'U3–U8':'—']];
-  const lx=s*.5,ly=H-s*.4-lg.length*14;txt('PATCH DMX',lx,ly-6,'#e9ebef','left');lg.forEach((r,i)=>{txt(r[0],lx,ly+10+i*14,'#c9ced8','left');txt(r[1],lx+s*3.4,ly+10+i*14,'#868e9b','left');txt(r[2],lx+s*4.8,ly+10+i*14,'#868e9b','left')});
+  // fixture vere (patch editabile) -- ogni fixture ha una posizione propria
+  // in L.fixtures, non piu' un conteggio con disposizione automatica.
+  const hits=[],sel=ui&&ui.selFix;
+  for(const f of (L.fixtures||[])){
+    const x=X(f.x),y=Y(f.y),col=FIX_COLOR[f.type]||'#c9ced8',r=s*.26,on=f.enabled!==false;
+    g.globalAlpha=on?1:.35;
+    if(f.type==='wall'){g.fillStyle=col+'40';g.fillRect(x-3*s,y-.15*s,6*s,.3*s);g.strokeStyle=col;g.lineWidth=1.3;g.strokeRect(x-3*s,y-.15*s,6*s,.3*s)}
+    else if(f.type==='bar'){g.fillStyle=col;g.fillRect(x-.9*s,y-.08*s,1.8*s,.16*s)}
+    else if(f.type==='speaker'){g.fillStyle='#1b1f26';g.strokeStyle=col;g.lineWidth=1.2;g.fillRect(x-s*.32,y-s*.4,s*.64,s*.8);g.strokeRect(x-s*.32,y-s*.4,s*.64,s*.8)}
+    else{g.fillStyle='#1c2027';g.strokeStyle=col;g.lineWidth=f.id===sel?2.6:1.3;g.beginPath();g.arc(x,y,r,0,Math.PI*2);g.fill();g.stroke();
+      g.fillStyle=col;g.beginPath();g.arc(x,y,r*.4,0,Math.PI*2);g.fill()}
+    if(f.id===sel){g.strokeStyle='#00ffcc';g.lineWidth=1.5;g.beginPath();g.arc(x,y,r+5,0,Math.PI*2);g.stroke()}
+    g.globalAlpha=1;
+    txt(f.name,x,y-r-6,'#e9ebef');
+    if(FIX_TYPES[f.type].ch)txt(f.universe+'.'+String(f.address).padStart(3,'0'),x,y+r+12,'#5d6573');
+    hits.push({f,x,y,r:Math.max(r,s*.4)});
+  }
+  if(ui)ui.hits=hits;
+  // legenda patch (conteggi reali, non piu' da L.rig)
+  const cnt=fixCounts();
+  const lg=Object.entries(FIX_TYPES).filter(([k,ft])=>cnt[k]&&ft.ch).map(([k,ft])=>[`${ft.label} ×${cnt[k]}`,ft.ch+' ch']);
+  const lx=s*.5,ly=H-s*.4-Math.max(1,lg.length)*14;
+  txt('PATCH DMX — tocca una fixture per modificarla, un punto vuoto per aggiungerne una',lx,ly-8,'#e9ebef','left',9);
+  lg.forEach((r,i)=>{txt(r[0],lx,ly+10+i*14,'#c9ced8','left');txt(r[1],lx+s*3.4,ly+10+i*14,'#868e9b','left')});
 }
+
+/* ---------- interazione pianta/patch (aggiungi, sposta, modifica fixture) ---------- */
+// Lavora SOLO su L.fixtures, in locale -- non richiede TD. Vedi
+// plancia/GAIA_PLANCIA_INTEGRATION.md "Canale 1b" per come (in futuro)
+// questi dati verranno mandati a DMX Master.
+function stageDown(e,el,w){
+  const ui=_stageUI[w.id]; const c=el.querySelector('canvas'),r=c.getBoundingClientRect();
+  if(!r.width||!ui||!ui.proj)return;
+  const toLocal=ev=>({x:(ev.clientX-r.left)*(c.width/c._d)/r.width,y:(ev.clientY-r.top)*(c.height/c._d)/r.height});
+  const toM=p=>({x:(p.x-ui.proj.cx)/ui.proj.s,y:(p.y-ui.proj.oy)/ui.proj.s});
+  const p0=toLocal(e);
+  const hit=(ui.hits||[]).find(h=>Math.hypot(p0.x-h.x,p0.y-h.y)<=h.r);
+  const start={x:e.clientX,y:e.clientY}; let moved=false; const dragF=hit&&hit.f;
+  e.preventDefault(); el.setPointerCapture(e.pointerId);
+  const mv=ev=>{
+    if(!moved&&Math.hypot(ev.clientX-start.x,ev.clientY-start.y)>6)moved=true;
+    if(dragF&&moved){const m=toM(toLocal(ev));dragF.x=clamp(m.x,-6,6);dragF.y=clamp(m.y,0,10)}
+  };
+  const up=()=>{
+    el.onpointermove=null;el.onpointerup=el.onpointercancel=null;
+    if(dragF&&moved)save();
+    else if(dragF&&!moved)openFixEditor(w,dragF);
+    else if(!moved)openFixAdd(w,toM(p0));
+  };
+  el.onpointermove=mv; el.onpointerup=el.onpointercancel=up;
+}
+function openFixAdd(w,pos){
+  const s=$('#scrim'); s.hidden=false;
+  s.innerHTML=`<div class="sheet" role="dialog" aria-label="Aggiungi fixture">
+    <div class="top"><h3>Aggiungi fixture</h3><button class="btn ghost" id="faClose">Chiudi</button></div>
+    <div class="row" style="flex-wrap:wrap;gap:8px">${Object.entries(FIX_TYPES).map(([k,ft])=>`<button class="btn sm" data-ft="${k}">${esc(ft.label)}</button>`).join('')}</div>
+    <p class="hint">Aggiunge la fixture nel punto del palco che hai toccato — potrai spostarla e modificarla dopo.</p>
+  </div>`;
+  s.querySelectorAll('[data-ft]').forEach(b=>b.onclick=()=>{
+    const type=b.dataset.ft, ft=FIX_TYPES[type];
+    const universe=type==='bar'?2:type==='wall'?3:1;
+    const count=(L.fixtures||[]).filter(x=>x.type===type).length+1;
+    const f=mkFix(type,ft.label.slice(0,3).toUpperCase()+count,clamp(pos.x,-6,6),clamp(pos.y,0,10),universe,ft.ch?nextAddress(type,universe):0);
+    L.fixtures.push(f); (_stageUI[w.id]||(_stageUI[w.id]={})).selFix=f.id; save(); closeSheet();
+  });
+  s.onpointerdown=e=>{if(e.target===s)closeSheet()};
+  $('#faClose').onclick=closeSheet;
+}
+function openFixEditor(w,f){
+  const s=$('#scrim'); s.hidden=false;
+  s.innerHTML=`<div class="sheet" role="dialog" aria-label="Fixture">
+    <div class="top"><h3>${esc(FIX_TYPES[f.type].label)}</h3><button class="btn ghost" id="feClose">Chiudi</button></div>
+    <label>Nome<input id="feName"></label>
+    ${FIX_TYPES[f.type].ch?`<label>Gruppo <em>/dmx/group/...</em><input id="feGroup" class="mono"></label>
+    <div class="two"><label>Universo<input id="feUni" type="number" min="0"></label><label>Indirizzo<input id="feAddr" type="number" min="1" max="512"></label></div>`:''}
+    <label class="chk"><input id="feOn" type="checkbox"> Attiva</label>
+    <div class="row"><button class="btn danger" id="feDel">Elimina</button></div>
+  </div>`;
+  val2('#feName',f.name); if($('#feGroup')){val2('#feGroup',f.group);val2('#feUni',f.universe);val2('#feAddr',f.address)} $('#feOn').checked=f.enabled!==false;
+  const upd=()=>{f.name=$('#feName').value.trim()||f.name;
+    if($('#feGroup')){f.group=$('#feGroup').value.trim();f.universe=+$('#feUni').value||0;f.address=clamp(+$('#feAddr').value||1,1,512)}
+    f.enabled=$('#feOn').checked; save()};
+  ['feName','feGroup','feUni','feAddr'].forEach(id=>{const n=$('#'+id);if(n)n.addEventListener('input',upd)});
+  $('#feOn').addEventListener('change',upd);
+  $('#feDel').onclick=()=>{L.fixtures=L.fixtures.filter(x=>x.id!==f.id); const ui=_stageUI[w.id];if(ui&&ui.selFix===f.id)ui.selFix=null; save(); closeSheet()};
+  s.onpointerdown=e=>{if(e.target===s)closeSheet()};
+  $('#feClose').onclick=closeSheet;
+}
+function val2(sel,v){const n=$(sel);if(n)n.value=v??''}
 
 
 /* ---------- Gaia: MQTT su WebSocket, stesso schema di patchdeck.html / dmx.html / mixeraudio.html ---------- */
@@ -1376,7 +1486,7 @@ function loop(){
   for(const el of stage.children){const w=byId.get(el.dataset.id);if(!w)continue;
     if(GAIA_TYPES.has(w.type)){if(gp)gPaint(el,w);if(w.type==='gaia')gOrb(el,n)}
     else if(w.type==='stage'){const c=el.querySelector('canvas'),g=c.getContext('2d');if(!c._d)continue;g.setTransform(c._d,0,0,c._d,0,0);
-      const W=c.width/c._d,H=c.height/c._d;(w.view==='plot'?drawPlot:drawRender)(g,W,H,n,level);
+      const W=c.width/c._d,H=c.height/c._d;if(w.view==='plot')drawPlot(g,W,H,n,w);else drawRender(g,W,H,n,level);
       const hud=w.view==='plot'?'':`${SH.blackout?'<b>BLACKOUT</b> · ':''}SC ${SH.scene+1} ${esc(LOOKS[SH.scene]?.n||'')} · fade ${SH.fade.toFixed(1)}s · chase ${CHASE[SH.chase]||'Off'}${SH.strobe?' · <b>STROBO</b>':''}`;
       const h=el.querySelector('.hud');if(h._v!==hud){h.innerHTML=hud;h._v=hud}}
     else if(w.type==='timeline'){const r=rt(w),D=w.duration||1,cues=parseCues(w);
@@ -1459,13 +1569,13 @@ function openSheet(){
   const tmsg=t=>$('#tMsg').textContent=t;
   s.querySelectorAll('[data-tadd]').forEach(b=>b.onclick=()=>{const t=TPL[b.dataset.tadd],ps=t.pages();L.pages.push(...ps);pi=L.pages.length-ps.length;selId=null;save();render();initShow();tmsg(`Aggiunto "${t.name}" (${ps.length} ${ps.length>1?'pagine':'pagina'}).`);$('#sJson').value=JSON.stringify(L,null,1)});
   s.querySelectorAll('[data-trep]').forEach(b=>{let armed=false;b.onclick=()=>{if(!armed){armed=true;b.textContent='Conferma';b.classList.add('danger');return}
-    const t=TPL[b.dataset.trep];L={pages:t.pages(),rig:L.rig||{...RIG}};pi=0;selId=null;save();render();initShow();tmsg(`Layout sostituito con "${t.name}".`);$('#sJson').value=JSON.stringify(L,null,1);
+    const t=TPL[b.dataset.trep];L={pages:t.pages(),rig:L.rig||{...RIG},fixtures:L.fixtures||defaultFixtures()};pi=0;selId=null;save();render();initShow();tmsg(`Layout sostituito con "${t.name}".`);$('#sJson').value=JSON.stringify(L,null,1);
     armed=false;b.textContent='Sostituisci';b.classList.remove('danger')}});
   $('#sApply').onclick=()=>{C={...C,url:$('#sUrl').value.trim(),host:$('#sHost').value.trim()||'127.0.0.1',port:+$('#sPort').value||7000};store.set(CKEY,C);connect();closeSheet()};
   const msg=t=>$('#sMsg').textContent=t;
   $('#sCopy').onclick=()=>{const ta=$('#sJson');const fb=()=>{ta.select();msg('Testo selezionato: copialo con Ctrl/Cmd+C.')};
     if(navigator.clipboard)navigator.clipboard.writeText(ta.value).then(()=>msg('Layout copiato negli appunti.'),fb);else fb()};
-  $('#sLoad').onclick=()=>{try{const j=JSON.parse($('#sJson').value);if(!Array.isArray(j.pages)||!j.pages.length)throw 0;L=j;if(!L.rig)L.rig={...RIG};pi=0;selId=null;save();render();initShow();msg('Layout applicato.')}catch{msg('JSON non valido: serve un oggetto con un elenco "pages".')}};
+  $('#sLoad').onclick=()=>{try{const j=JSON.parse($('#sJson').value);if(!Array.isArray(j.pages)||!j.pages.length)throw 0;L=j;if(!L.rig)L.rig={...RIG};if(!L.fixtures)L.fixtures=defaultFixtures();pi=0;selId=null;save();render();initShow();msg('Layout applicato.')}catch{msg('JSON non valido: serve un oggetto con un elenco "pages".')}};
 }
 function closeSheet(){$('#scrim').hidden=true;$('#scrim').innerHTML=''}
 $('#menuBtn').onclick=openSheet; $('#conn').onclick=openSheet; $('#gconn').onclick=openSheet;
