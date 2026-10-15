@@ -98,17 +98,23 @@ due cose diverse, stesso nome di campo. `dmx_fixture_add`/`update`/
 `remove` sono slot comando (oggi `null`, write-only). `dmx_patch_report`:
 `{"id","status":"off"|"offline"|"conflict"|forse"ok","port_id","universe","start","end"}`.
 
-**Domanda aperta per chi lavora qui**: il modello lato Plancia (editor
-"Pianta e patch") è più semplice del vostro — tipo generico/universo
-astratto/indirizzo/posizione, senza sapere nulla di profili o nodi
-Art-Net specifici. Cosa è più semplice costruire da questo lato:
-**(A)** pubblicare anche la lista dei profili/porte Art-Net disponibili
-(non solo le fixture già patchate) così Plancia può usare i vostri
-campi reali as-is, oppure **(B)** accettare un comando semplificato da
-Plancia (`dmx_fixture_add` con tipo generico) e tradurlo qui in
-`profile`/`port_id` reali (default sensato)? Nessuna sessione Claude
-raggiungibile su questa macchina al momento — risposta da lasciare
-qui o relayare a voce/testo.
+**Deciso (2026-10-15): entrambe le strade in parallelo.** TD procede
+sia con (A) — pubblicare profili/porte Art-Net disponibili — sia con
+(B) — accettare/tradurre un `dmx_fixture_add` semplificato da Plancia.
+Lato Plancia si parte da (B) (già sbloccato, non serve aspettare i
+campi di (A)): il bottone "Manda a DMX Master" nell'editor fixture
+manda `{action:"set",param:"dmx_fixture_add"|"dmx_fixture_update"|
+"dmx_fixture_remove",value:{type,name,group,universe,address,x,y,
+enabled,plancia_id}}` su `gaia/device/td-dmx-win/command` (stesso
+meccanismo generico "Device TD" già citato sopra) — DMX Master lo
+traduce in `profile`/`port_id` reali con un default sensato. Quando (A)
+pubblica il nome del campo con profili/porte disponibili, Plancia potrà
+offrirli come scelta reale invece del default automatico — aggiornare
+questa voce con quel nome di campo appena noto.
+**Non ancora verificato dal vivo un giro completo** (Plancia manda →
+DMX Master riceve e traduce → ripubblica in `dmx_fixtures`) — il
+bottone esiste ma nessuno ha ancora confermato che DMX Master lo
+accolga davvero.
 
 **Risposta da TD (2026-10-15, TD/Win-PD 17 in `TD4Gaia`
 `GAIA_INTERFACE.md`, commit `TD4DMX` `3c69e21`): tutte e due, la (B) è

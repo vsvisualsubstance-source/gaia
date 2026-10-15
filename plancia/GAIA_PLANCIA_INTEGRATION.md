@@ -160,18 +160,27 @@ semplice da costruire lato vostro?
     default sensato o chiedendo conferma), scrivendo lui i campi veri
     nello stato che poi tutti leggono.
 
-Se la (A) richiede comunque poco lavoro in più (es. un campo
-`dmx_available_profiles`/`dmx_available_ports` da aggiungere allo
-stato, già che si pubblica `dmx_fixtures`), probabilmente è la scelta
-più robusta a lungo termine — ma lo chiediamo perché non sappiamo
-quanto lavoro in più costi lato TD rispetto a tradurre lì un comando
-già semplificato.
+**Deciso (2026-10-15): entrambe le strade in parallelo**, non una
+scelta esclusiva. TD procede sia con (A) sia con (B).
 
-**Non ancora implementato da nessuna delle due parti** — questa
-sezione è il punto di partenza per costruirlo in parallelo (Plancia:
-widget Design palco che parla MQTT invece di solo simulare; DMX
-Master: subscribe a `gaia/device/td-dmx-win/command` per questi param
-+ publish del patch nello status).
+**Implementato lato Plancia (parte B, non serve aspettare la A)**:
+l'editor fixture (`openFixEditor`) ha un bottone "Manda a DMX Master"
+che pubblica su `gaia/device/td-dmx-win/command`:
+```
+{action:"set", param:"dmx_fixture_add"|"dmx_fixture_update"|"dmx_fixture_remove",
+ value:{type,name,group,universe,address,x,y,enabled,plancia_id}}
+```
+(`plancia_id` = l'id locale della fixture in Plancia, per permettere a
+DMX Master di correlare un update/remove successivo alla stessa
+fixture). Stesso meccanismo "Device TD" generico già in uso altrove
+(`devCmd()`/`gPub()` in `plancia/index.html`), nessun nuovo trasporto.
+**Non ancora verificato dal vivo un giro completo** (serve confermare
+che DMX Master riceva davvero e ripubblichi in `dmx_fixtures`).
+
+Quando (A) pubblica il nome del campo con profili/porte Art-Net
+disponibili, Plancia potrà offrirli come scelta reale nell'editor
+invece di lasciare che DMX Master assegni un default — da implementare
+quando quel campo esiste, aggiornare questa sezione con il nome esatto.
 
 ## Config di deploy (valori attuali, 2026-10-15)
 
