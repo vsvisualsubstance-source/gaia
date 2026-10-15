@@ -77,12 +77,38 @@ del canale 5 è sempre OPS (`192.168.1.240`), non Core.
 (non ancora costruita) per creare/patchare le fixture DIRETTAMENTE da
 Plancia invece che a mano in TD — via lo stesso meccanismo "Device TD"
 già esistente (`gaia/device/td-dmx-win/command`,
-`{action:"set",param,value}`), non la 7020. Schema proposto completo in
-`plancia/GAIA_PLANCIA_INTEGRATION.md`, sezione "Canale 1b" — da
-confermare/adattare insieme, il rig è in ricostruzione in questi
-giorni. Una volta che le fixture esistono (create da Plancia o a mano
-in TD, indifferentemente), il canale 5 sopra (7020) le controlla dal
-vivo in entrambi i casi.
+`{action:"set",param,value}`), non la 7020. Una volta che le fixture
+esistono (create da Plancia o a mano in TD, indifferentemente), il
+canale 5 sopra (7020) le controlla dal vivo in entrambi i casi. Schema
+completo e cronologia in `plancia/GAIA_PLANCIA_INTEGRATION.md`, sezione
+"Canale 1b" — qui solo il riassunto per chi legge solo questo file.
+
+**Schema reale già presente su DMX Master** (`status.params`, trovato
+dal vivo 2026-10-15, diverso dalla prima proposta):
+```json
+{"id": 11, "name": "Head 1", "group": "heads", "unit": 1,
+ "profile": "Generic Spot 11ch 16bit", "port_id": "2.1.1.2:2",
+ "address": 100, "x": -9.0, "y": -3.5, "enabled": 1, "palette": "", "uid": ""}
+```
+Indirizzamento per `port_id` (IP:porta Art-Net reale), non un
+`universe` astratto; `profile` è il nome del profilo (canali derivati
+da lì); `group` qui è un raggruppamento fisico del rig (`heads`,
+`rig_a`...), **non** il vocabolario `/dmx/group/...` del canale 3 —
+due cose diverse, stesso nome di campo. `dmx_fixture_add`/`update`/
+`remove` sono slot comando (oggi `null`, write-only). `dmx_patch_report`:
+`{"id","status":"off"|"offline"|"conflict"|forse"ok","port_id","universe","start","end"}`.
+
+**Domanda aperta per chi lavora qui**: il modello lato Plancia (editor
+"Pianta e patch") è più semplice del vostro — tipo generico/universo
+astratto/indirizzo/posizione, senza sapere nulla di profili o nodi
+Art-Net specifici. Cosa è più semplice costruire da questo lato:
+**(A)** pubblicare anche la lista dei profili/porte Art-Net disponibili
+(non solo le fixture già patchate) così Plancia può usare i vostri
+campi reali as-is, oppure **(B)** accettare un comando semplificato da
+Plancia (`dmx_fixture_add` con tipo generico) e tradurlo qui in
+`profile`/`port_id` reali (default sensato)? Nessuna sessione Claude
+raggiungibile su questa macchina al momento — risposta da lasciare
+qui o relayare a voce/testo.
 
 Il canale 4 non è OSC (per questo non ha una porta nella tabella nel senso
 degli altri) ed è l'unico dei quattro in cui TD *scrive* verso Gaia invece
