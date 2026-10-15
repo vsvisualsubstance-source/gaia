@@ -10,9 +10,9 @@ sostituisce.
 
 ## I canali tra Gaia e TD — non confonderli
 
-Sulla stessa infrastruttura esistono **tre canali OSC indipendenti** (dati)
-più **un canale MQTT** (presenza/controllo, non dati) che hanno poco a che
-fare tra loro. Confonderli è l'errore più facile da fare:
+Sulla stessa infrastruttura esistono **quattro canali OSC indipendenti**
+(dati) più **un canale MQTT** (presenza/controllo, non dati) che hanno
+poco a che fare tra loro. Confonderli è l'errore più facile da fare:
 
 | Canale | Chi parla | Porta | Cosa porta |
 |---|---|---|---|
@@ -20,10 +20,54 @@ fare tra loro. Confonderli è l'errore più facile da fare:
 | **2. Mocap diretto** | OPS → TD | 7010 default, **personalizzabile per istanza** dal 2026-10-15 (vedi sotto) | Landmark grezzi viso/mani/pose in tempo reale |
 | **3. Driver Solaro DSP** | Solaro QR1 ↔ driver esterno utente | 4554-4558, 52381, ecc. | Angoli mic array, livelli audio, preset camera — **NIENTE a che fare con Gaia**, sistema audio a parte |
 | **4. Controllo dispositivi** | TD (dentro il progetto) ↔ Core | MQTT, non OSC — `gaia/device/{id}/status\|command` | Non dati: presenza/controllo. Due direzioni indipendenti, vedi sotto |
+| **5. Plancia → DMX Master** | Plancia (bridge.js) → **DMX Master** (TD, famiglia `dmx`), DIRETTO | **7020**, nuovo, da costruire — vedi sotto | Show control generico: scene, teste mobili, LED, blackout |
 
 Il canale 3 non è documentato qui: è un progetto separato dell'utente, non
 passa da Node-RED/MQTT. Se un lavoro riguarda quel driver, il riferimento è
 altrove (memoria di progetto lato Core, non in questo repo).
+
+### Canale 5 — Plancia → DMX Master (lavoro da fare, 2026-10-15)
+
+Contratto completo in `plancia/GAIA_PLANCIA_INTEGRATION.md` — qui solo il
+riassunto per chi prepara l'OSC In lato TD, senza dover aprire anche
+quel file.
+
+**Chi manda**: Plancia (superficie di controllo web per tablet, bridge
+Node `plancia/bridge.js`) — NON passa da Gaia/MQTT per questo canale,
+`bridge.js` è un relay OSC puro che instrada per prefisso (`/gaia/...`
+va al canale 1 sopra, tutto il resto — `/dmx/`, `/mh/`, `/led/`,
+`/show/` — va qui).
+
+**Cosa serve costruire in DMX Master**: un **OSC In DAT nuovo**, in
+ascolto sulla porta **7020** (fissa, non auto-profilata come il mocap —
+un solo DMX Master alla volta), che interpreta gli indirizzi qui sotto
+e li traduce in output Art-Net reale sul rig vero (oggi quegli stessi
+indirizzi li simula solo in locale, nel browser, il widget "Palco" di
+Plancia — DMX Master deve fare la stessa cosa ma sulle teste/LED fisici).
+
+Mappa indirizzi completa (copiata da `plancia/README.md`, "Mappa
+indirizzi dello show" — fare riferimento lì se cambia):
+
+```
+/dmx/scene                indice        richiama la scena con crossfade
+/dmx/fade                 secondi       tempo di crossfade
+/dmx/master                0-1          master generale
+/dmx/blackout, /dmx/strobe 0/1          blackout, strobo generale
+/dmx/strobe/rate           Hz           velocità strobo
+/dmx/chase                 indice        Off/Lento/Veloce/Rainbow/Random/Sound
+/dmx/group/front|back|mh|ledbar|ledwall|haze|blinder   0-1   livello di gruppo
+/mh/select                 elenco 0/1    teste selezionate
+/mh/pantilt                x y (-1..1)   pan/tilt delle teste selezionate
+/mh/color                  r g b         colore
+/mh/dimmer, /mh/zoom, /mh/focus   0-1    parametri
+/mh/gobo, /mh/position     indice        gobo, posizione preset
+/mh/strobe, /mh/home       0/1           strobo teste, reset
+/led/color, /led/mode, /led/bright   r g b / indice / 0-1   contenuto LED wall
+```
+
+Tutti i numeri arrivano come float OSC (anche gli indici/0-1). Nessun
+MQTT coinvolto in questo canale — è OSC puro, locale alla rete, come il
+canale 2 (mocap).
 
 Il canale 4 non è OSC (per questo non ha una porta nella tabella nel senso
 degli altri) ed è l'unico dei quattro in cui TD *scrive* verso Gaia invece
