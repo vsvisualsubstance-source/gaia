@@ -66,9 +66,19 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
                   border-radius:8px;color:var(--text);font-size:.85rem;padding:0 8px}
 .meter{height:8px;border-radius:4px;background:#000;overflow:hidden;border:1px solid var(--border)}
 .meter i{display:block;height:100%;background:var(--accent);width:0%;transition:width .08s linear}
+
+/* Sempre sopra a tutto (overlay audio/power compresi, z-index:10) --
+   altrimenti col Pi acceso direttamente su DMX non c'e' modo dal
+   touchscreen di tornare al menu rete/servizi se un overlay resta aperto. */
+.home-btn{position:fixed;top:10px;right:10px;z-index:50;width:44px;height:44px;
+          border:2px solid var(--accent);border-radius:50%;background:var(--card);
+          color:var(--accent);font-size:1.2rem;box-shadow:0 2px 10px rgba(0,0,0,.5)}
+.home-btn:active{opacity:.7}
 </style>
 </head>
 <body>
+
+<button class="home-btn" onclick="location.href='http://localhost/'" title="Menu rete/servizi del Pi">🏠</button>
 
 <div class="topbar">
   <span class="dot" id="dot"></span>

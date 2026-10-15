@@ -1017,7 +1017,19 @@ def _start_local_webserver():
     if not os.path.isdir(www_dir):
         print(f"[DMX] {www_dir} non trovato, webserver locale non avviato")
         return
-    handler = lambda *a, **kw: http.server.SimpleHTTPRequestHandler(*a, directory=www_dir, **kw)
+
+    class _NoCacheHandler(http.server.SimpleHTTPRequestHandler):
+        # Senza questo, Chromium in kiosk mode (nessuna UI per un hard
+        # reload) tiene la pagina in cache disco e non si accorge mai di
+        # un rsync di una versione nuova -- trovato dal vivo 2026-10-15
+        # (bottone home aggiunto a dmx-touch.html, servito correttamente
+        # col Content-Length giusto, ma il kiosk continuava a mostrare la
+        # versione vecchia finche' non si riavviava gaia-kiosk a mano).
+        def end_headers(self):
+            self.send_header("Cache-Control", "no-store")
+            super().end_headers()
+
+    handler = lambda *a, **kw: _NoCacheHandler(*a, directory=www_dir, **kw)
     try:
         httpd = http.server.ThreadingHTTPServer(("0.0.0.0", config.TOUCH_PORT), handler)
     except OSError as e:

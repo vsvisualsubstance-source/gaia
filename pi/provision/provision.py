@@ -42,7 +42,7 @@ import socket
 import subprocess
 import threading
 import time
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
 
 # ── Config ────────────────────────────────────────────────────────────
@@ -409,6 +409,71 @@ def _ensure_camera(cfg: dict):
     cfg.setdefault("services", {}).setdefault("camera", {})["enabled"] = True
 
 
+# ── Profilo eth0 — DMX (Art-Net) vs normale (DHCP) ─────────────────────
+# Copia gemella di _dmx_eth_address/_eth_connection_name/_set_eth_profile
+# in pi/agent/agent.py (stessa convenzione di duplicazione di ota.py fra i
+# moduli Pi, vedi pi/CLAUDE.md): quella logica girava SOLO lì (hook in
+# enable_service/disable_service), ma il toggle "dmx" del portale qui
+# sotto fa systemctl start/stop direttamente, bypassandola -- trovato dal
+# vivo 2026-10-15 (Pi Ingresso: spegnendo dmx da MQTT/Admin eth0 torna a
+# DHCP correttamente, ma il toggle del portale lascia la rete dov'era).
+def _dmx_eth_address() -> str:
+    path = "/etc/gaia/dmx.conf"
+    if not os.path.exists(path):
+        return ""
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith("DMX_ETH_ADDRESS="):
+                return line.split("=", 1)[1].strip()
+    return ""
+
+
+def _eth_connection_name() -> str:
+    try:
+        r = subprocess.run(["nmcli", "-t", "-f", "NAME,TYPE", "connection", "show"],
+                            capture_output=True, text=True, timeout=10)
+        for line in r.stdout.splitlines():
+            if ":" not in line:
+                continue
+            name, ctype = line.rsplit(":", 1)
+            if ctype == "802-3-ethernet":
+                return name
+    except Exception as e:
+        log(f"_eth_connection_name: errore ({e})")
+    return ""
+
+
+def _set_eth_profile(mode: str):
+    """mode='dmx' -> IP statico da DMX_ETH_ADDRESS, never-default; 'normal'
+    -> DHCP. Avvolta in try/except apposta: una rete Art-Net senza DHCP fa
+    restare appeso `nmcli connection up` finche' non scade il suo stesso
+    timeout -- la riconfigurazione di rete non deve mai poter bloccare
+    l'azione sul servizio."""
+    try:
+        name = _eth_connection_name()
+        if not name:
+            return
+        if mode == "dmx":
+            addr = _dmx_eth_address()
+            if not addr:
+                log("DMX_ETH_ADDRESS non impostato in /etc/gaia/dmx.conf, profilo eth invariato")
+                return
+            args = ["ipv4.method", "manual", "ipv4.addresses", addr,
+                    "ipv4.gateway", "", "ipv4.never-default", "yes"]
+        else:
+            args = ["ipv4.method", "auto", "ipv4.addresses", "", "ipv4.never-default", "no"]
+        subprocess.run(["nmcli", "connection", "modify", name] + args,
+                        capture_output=True, timeout=10)
+        subprocess.run(["nmcli", "-w", "5", "connection", "down", name],
+                        capture_output=True, timeout=10)
+        ok = subprocess.run(["nmcli", "-w", "5", "connection", "up", name],
+                             capture_output=True, timeout=10).returncode == 0
+        log(f"Profilo eth '{name}' → {mode} ({'OK' if ok else 'parziale (normale senza DHCP sulla rete DMX)'})")
+    except Exception as e:
+        log(f"_set_eth_profile({mode!r}): errore non bloccante ({e})")
+
+
 def toggle_service(name: str, action: str) -> tuple[bool, str]:
     """systemctl start/stop + persistenza enabled in device.json."""
     if name not in _SVC_NAMES or action not in ("start", "stop"):
@@ -418,6 +483,8 @@ def toggle_service(name: str, action: str) -> tuple[bool, str]:
     if action == "start" and name in SVC_CONFLICTS:
         # systemd ferma l'altro da solo (Conflicts=): allinea solo il flag
         services.setdefault(SVC_CONFLICTS[name], {})["enabled"] = False
+    if name == "dmx":
+        _set_eth_profile("dmx" if action == "start" else "normal")
     r = _systemctl(action, f"gaia-{name}")
     if r.returncode != 0:
         return False, (r.stderr or r.stdout).strip()[:200]
@@ -654,6 +721,11 @@ CAPTIVE_PROBES = ("/generate_204", "/gen_204", "/hotspot-detect.html",
 
 class PortalHandler(BaseHTTPRequestHandler):
 
+    timeout = 30  # difesa aggiuntiva: una read() ferma (es. POST con
+    # Content-Length dichiarato ma corpo mai arrivato tutto) chiude il
+    # thread invece di tenerlo bloccato per sempre -- vedi nota in
+    # start_portal().
+
     def _send_json(self, obj, code=200):
         body = json.dumps(obj).encode()
         self.send_response(code)
@@ -801,8 +873,15 @@ class PortalHandler(BaseHTTPRequestHandler):
         pass
 
 
-def start_portal() -> HTTPServer:
-    srv = HTTPServer(("0.0.0.0", PORTAL_PORT), PortalHandler)
+def start_portal() -> ThreadingHTTPServer:
+    # ThreadingHTTPServer (non HTTPServer): con un server a thread singolo,
+    # un client rimasto appeso a meta' richiesta (es. rfile.read() di una
+    # POST con Content-Length dichiarato ma corpo mai arrivato tutto --
+    # niente timeout sul socket) blocca l'intero accept loop e nessuno
+    # risponde piu', nemmeno da localhost (trovato dal vivo 2026-10-15 su
+    # Pi Ingresso: coda di accept piena, 0% CPU, nessun processo figlio --
+    # il thread del server era bloccato in una read, non in una nmcli).
+    srv = ThreadingHTTPServer(("0.0.0.0", PORTAL_PORT), PortalHandler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     log(f"Portale HTTP attivo su :{PORTAL_PORT}")
     return srv
