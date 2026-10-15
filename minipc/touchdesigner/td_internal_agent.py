@@ -15,6 +15,7 @@ SETUP IN TD
      Name      (Str)  es. "AV Herbarium"
      Mqtthost  (Str)  default 192.168.1.142
      Mqttport  (Int)  default 1883
+     Mocapport (Int)  facoltativo -- vedi sotto, "Porta mocap per istanza"
 2. Dentro quel COMP: un Text DAT chiamato "gaia_device_agent" — parametro
    File = path di QUESTO .py, "Sync to OS" ON cosi' TD ricarica da solo
    quando lo modifichi fuori da TD (repo git, editor esterno).
@@ -25,6 +26,20 @@ SETUP IN TD
        def onExit():
            op('gaia_device_agent').module.stop()
            return
+
+PORTA MOCAP PER ISTANZA (2026-10-15)
+Il mocap diretto (pi/mediapipe/mediapipe_node.py, OSC_LANDMARKS=1) mandava
+di default a TUTTE le istanze sulla STESSA porta fissa (7010) -- con più
+istanze TD sulla stessa macchina, ognuna col proprio OSC In sulla stessa
+7010, si bind-ano in conflitto fra loro (non con Gaia). Fix: se questa
+istanza imposta il parametro `Mocapport` (es. 7011 per una, 7012 per
+un'altra...) e lo fa ascoltare al proprio OSC In, `_MocapTargetRegistry`
+lato mediapipe legge il campo `mocap_port` qui sotto pubblicato e manda
+il mocap LI' invece che sul default -- senza bisogno di nessuna mappa
+device→porta mantenuta a mano lato Gaia. Lasciare `Mocapport` vuoto per
+restare sul comportamento di sempre (7010, condiviso). Il cambio ha
+effetto dal prossimo heartbeat (ogni 30s, o subito a un comando ricevuto),
+nessun riavvio necessario di questo agent.
 
 GOTCHA con Embody (esternalizzazione TD in git, verificato dal vivo
 2026-08-05 in un progetto reale): un Execute DAT creato DENTRO un
@@ -91,12 +106,16 @@ def _read_config():
         except Exception:
             return default
 
+    mocap_port = par("Mocapport", None)
     return {
-        "device_id": par("Deviceid", f"td-{project.name}"),
-        "stanza":    par("Stanza", "unknown"),
-        "name":      par("Name", project.name),
-        "mqtt_host": par("Mqtthost", "192.168.1.142"),
-        "mqtt_port": int(par("Mqttport", 1883) or 1883),
+        "device_id":  par("Deviceid", f"td-{project.name}"),
+        "stanza":     par("Stanza", "unknown"),
+        "name":       par("Name", project.name),
+        "mqtt_host":  par("Mqtthost", "192.168.1.142"),
+        "mqtt_port":  int(par("Mqttport", 1883) or 1883),
+        # None/non impostato = comportamento di sempre (porta fissa lato
+        # mediapipe, 7010) -- vedi "PORTA MOCAP PER ISTANZA" in cima al file.
+        "mocap_port": int(mocap_port) if mocap_port else None,
     }
 
 
@@ -124,6 +143,8 @@ def _publish_status():
         "uptime":    int(time.time() - _start_ts) if _start_ts else 0,
         "ts":        int(time.time() * 1000),
     }
+    if cfg["mocap_port"]:
+        payload["mocap_port"] = cfg["mocap_port"]
     _client.publish(f"gaia/device/{cfg['device_id']}/status", json.dumps(payload), retain=True)
 
 

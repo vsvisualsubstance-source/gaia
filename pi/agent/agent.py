@@ -151,12 +151,33 @@ MEDIAPIPE_CONF_FILE = "/etc/gaia/mediapipe.conf"
 def _write_mediapipe_conf(cfg: dict):
     """Scrive /etc/gaia/mediapipe.conf — letto direttamente da
     pi/mediapipe/mediapipe_node.py all'avvio (_load_conf, stesso pattern
-    INI di camera.conf), non via systemd EnvironmentFile. Contiene solo
-    OSC_LANDMARKS oggi: se in futuro serve rendere remoto anche
-    OSC_HOST/altri campi di quel modulo, aggiungerli qui allo stesso modo.
-    Va chiamata PRIMA di un (re)start di 'mediapipe' perché il processo
-    legge questo file solo all'avvio, non lo ri-controlla mentre gira."""
-    _write_file_safe(MEDIAPIPE_CONF_FILE, f"OSC_LANDMARKS={'1' if cfg.get('osc_landmarks') else '0'}\n")
+    INI di camera.conf), non via systemd EnvironmentFile. Gestisce solo
+    OSC_LANDMARKS: se in futuro serve rendere remoto anche OSC_HOST/altri
+    campi di quel modulo, aggiungerli qui allo stesso modo. Va chiamata
+    PRIMA di un (re)start di 'mediapipe' perché il processo legge questo
+    file solo all'avvio, non lo ri-controlla mentre gira.
+
+    PRESERVA le righe non gestite qui (es. MQTT_HOST/MQTT_PORT scritti a
+    mano per puntare a un broker diverso da quello di discovery) invece
+    di sovrascrivere tutto il file -- trovato dal vivo 2026-10-15 su Pi
+    Ingresso: ogni riavvio di gaia-agent (apply_initial_config) chiamava
+    questa funzione con un content fisso di una sola riga, cancellando
+    silenziosamente un MQTT_HOST impostato a mano poco prima e rompendo
+    la connessione MQTT di mediapipe senza nessun errore visibile qui."""
+    osc_line = f"OSC_LANDMARKS={'1' if cfg.get('osc_landmarks') else '0'}\n"
+    lines = []
+    found = False
+    if os.path.exists(MEDIAPIPE_CONF_FILE):
+        with open(MEDIAPIPE_CONF_FILE) as f:
+            for line in f:
+                if line.strip().startswith("OSC_LANDMARKS="):
+                    lines.append(osc_line)
+                    found = True
+                else:
+                    lines.append(line if line.endswith("\n") else line + "\n")
+    if not found:
+        lines.append(osc_line)
+    _write_file_safe(MEDIAPIPE_CONF_FILE, "".join(lines))
     print(f"[Agent] mediapipe.conf aggiornato → OSC_LANDMARKS={'1' if cfg.get('osc_landmarks') else '0'}")
 
 

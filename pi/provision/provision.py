@@ -433,6 +433,62 @@ def _dmx_eth_address() -> str:
     return _dmx_conf_value("DMX_ETH_ADDRESS")
 
 
+def _set_dmx_conf_value(key: str, value: str):
+    """Scrive/aggiorna una riga key=value in /etc/gaia/dmx.conf,
+    preservando il resto del file (commenti, altre chiavi) -- stesso
+    file letto da _dmx_conf_value, pi/dmx/main.py e pi/agent/agent.py."""
+    path = "/etc/gaia/dmx.conf"
+    try:
+        lines = []
+        found = False
+        if os.path.exists(path):
+            with open(path) as f:
+                for line in f:
+                    if line.strip().startswith(f"{key}="):
+                        lines.append(f"{key}={value}\n")
+                        found = True
+                    else:
+                        lines.append(line)
+        if not found:
+            lines.append(f"{key}={value}\n")
+        with open(path, "w") as f:
+            f.writelines(lines)
+    except OSError as e:
+        log(f"_set_dmx_conf_value({key!r}): errore ({e})")
+
+
+def _list_eth_devices() -> list[dict]:
+    """Porte Ethernet fisiche presenti su questo Pi (es. eth0 + un secondo
+    NIC USB per il DMX, caso reale 2026-10-15 su Pi Ingresso) con l'IP
+    attuale se presente -- per poter scegliere a mano dal portale quale
+    usare per il DMX se quella di default non funziona."""
+    devices = []
+    try:
+        r = subprocess.run(["nmcli", "-t", "-f", "DEVICE,TYPE", "device", "status"],
+                            capture_output=True, text=True, timeout=10)
+        for line in r.stdout.splitlines():
+            if ":" not in line:
+                continue
+            dev, dtype = line.rsplit(":", 1)
+            if dtype != "ethernet":
+                continue
+            ip = ""
+            try:
+                rr = subprocess.run(["nmcli", "-g", "IP4.ADDRESS", "device", "show", dev],
+                                     capture_output=True, text=True, timeout=10)
+                ip = rr.stdout.strip().splitlines()[0] if rr.stdout.strip() else ""
+            except Exception:
+                pass
+            devices.append({"device": dev, "ip": ip})
+    except Exception as e:
+        log(f"_list_eth_devices: errore ({e})")
+    return devices
+
+
+def _dmx_eth_info() -> dict:
+    return {"devices": _list_eth_devices(), "selected": _dmx_conf_value("DMX_ETH_IFACE")}
+
+
 def _eth_connection_name() -> str:
     # DMX_ETH_IFACE (es. 'eth1', secondo NIC dedicato al DMX) sceglie il
     # device esatto quando ce n'è più di uno Ethernet -- senza, "la prima
@@ -559,6 +615,7 @@ def services_state() -> dict:
         "herb_drum_volume": get_drum_volume(),
         "livestream_source": get_livestream_source(),
         "stream_url": get_stream_url(),
+        "dmx_eth": _dmx_eth_info(),
     }
 
 
@@ -608,6 +665,13 @@ PORTAL_HTML = """<!DOCTYPE html>
 %ERROR%
 <h2>Servizi</h2>
 <div id="svcs" style="color:#8b949e;font-size:.9rem">carico…</div>
+<div id="dmxnet" style="display:none;margin:-2px 0 8px;padding:10px 12px;background:#161b22;border:1px solid #30363d;border-radius:10px;font-size:.85rem">
+  <div style="color:#8b949e;margin-bottom:6px">💡 Porta rete DMX</div>
+  <select id="dmxiface" style="margin-bottom:6px"></select>
+  <div id="dmxifaceinfo" style="color:#8b949e;font-size:.75rem;margin:-2px 0 8px"></div>
+  <button style="width:auto;margin:0;padding:8px 14px;min-height:40px;font-size:.85rem;border-radius:8px"
+    onclick="setDmxIface()">Applica</button>
+</div>
 <div class="volrow" style="margin-top:6px">🎼<select id="herbpreset" style="flex:1"></select>
   <button style="width:auto;margin:0;padding:8px 14px;min-height:40px;font-size:.85rem;border-radius:8px"
     onclick="setPreset(this)">Applica</button></div>
@@ -698,6 +762,35 @@ function render(d){
   if(d.livestream_source && document.activeElement!==ls) ls.value = d.livestream_source;
   if(d.stream_url) document.getElementById('streamlink').innerHTML =
     'Link stream: <a href="'+d.stream_url+'" style="color:#00ffcc" target="_blank">'+d.stream_url+'</a>';
+  // Selettore porta DMX -- visibile SOLO se ci sono 2+ porte Ethernet
+  // (un solo NIC non lascia nulla da scegliere). Vedi _dmx_eth_info()
+  // in provision.py: "selected" è DMX_ETH_IFACE da dmx.conf, vuoto se
+  // non impostato (comportamento storico "prima trovata").
+  var box = document.getElementById('dmxnet');
+  var devs = (d.dmx_eth && d.dmx_eth.devices) || [];
+  if(devs.length > 1){
+    box.style.display = '';
+    var sel = document.getElementById('dmxiface');
+    if(document.activeElement !== sel){
+      sel.innerHTML = devs.map(function(e){
+        return '<option value="'+e.device+'"'+(e.device===d.dmx_eth.selected?' selected':'')+'>'+
+          e.device+(e.ip?' — '+e.ip:' — nessun IP')+'</option>';
+      }).join('');
+    }
+    document.getElementById('dmxifaceinfo').textContent = d.dmx_eth.selected
+      ? 'In uso ora: ' + d.dmx_eth.selected
+      : 'Nessuna scelta esplicita — userò la prima Ethernet trovata (rischioso con più porte)';
+  } else {
+    box.style.display = 'none';
+  }
+}
+function setDmxIface(){
+  var sel = document.getElementById('dmxiface');
+  if(!sel.value) return;
+  fetch('/dmx/eth',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({iface: sel.value})})
+  .then(r=>r.json()).then(d=>{ render(d); if(d.error) alert(d.error); })
+  .catch(()=>loadSvcs());
 }
 function loadSvcs(){ fetch('/services').then(r=>r.json()).then(render).catch(()=>{}); }
 function setPreset(btn){
@@ -748,6 +841,15 @@ class PortalHandler(BaseHTTPRequestHandler):
     # Content-Length dichiarato ma corpo mai arrivato tutto) chiude il
     # thread invece di tenerlo bloccato per sempre -- vedi nota in
     # start_portal().
+
+    def end_headers(self):
+        # Senza questo, un browser (kiosk Chromium o web da un altro
+        # device) puo' servire una pagina vecchia dalla cache -- stesso
+        # problema gia' trovato su pi/dmx/main.py (webserver locale del
+        # menu touch), stesso fix qui: il portale e' dinamico (stato
+        # servizi, scan WiFi), non va mai cachato.
+        self.send_header("Cache-Control", "no-store")
+        super().end_headers()
 
     def _send_json(self, obj, code=200):
         body = json.dumps(obj).encode()
@@ -876,6 +978,26 @@ class PortalHandler(BaseHTTPRequestHandler):
             if err:
                 resp["error"] = err
             self._send_json(resp)
+            return
+
+        if path == "/dmx/eth":
+            new_iface = (body.get("iface") or "").strip()
+            if not new_iface:
+                self._send_json({"ok": False, "error": "iface mancante"}, 400)
+                return
+            old_iface = _dmx_conf_value("DMX_ETH_IFACE")
+            if old_iface and old_iface != new_iface:
+                # Libera la vecchia porta (torna a DHCP) PRIMA di scrivere
+                # il nuovo valore -- _set_eth_profile legge DMX_ETH_IFACE
+                # da dmx.conf ad ogni chiamata, deve ancora leggere quello
+                # vecchio qui.
+                _set_eth_profile("normal")
+            _set_dmx_conf_value("DMX_ETH_IFACE", new_iface)
+            if _svc_active("dmx"):
+                _set_eth_profile("dmx")  # ora risolve sulla nuova porta
+            state = services_state()
+            state["ok"] = True
+            self._send_json(state)
             return
 
         if path == "/reboot":

@@ -1072,6 +1072,32 @@ def apply_initial_config():
 
 # ── Helpers ───────────────────────────────────────────────────────────
 def _get_ip() -> str:
+    # Preferisce l'IP della porta LAN dedicata (GAIA_DHCP_IFACE, default
+    # "Ethernet" -- stessa convenzione di ops/dhcp/dhcp_server.py) invece
+    # del trucco "connetti un socket UDP verso 8.8.8.8 e leggi
+    # getsockname()": quel trucco restituisce l'interfaccia con la
+    # DEFAULT GATEWAY, che su OPS è deliberatamente il WiFi (Ethernet è
+    # 'never-default', per non competere con la rotta internet — vedi
+    # ops/dhcp/gaia_lan_activate.ps1). Risultato trovato dal vivo
+    # 2026-10-15: OPS si autoannunciava con l'IP WiFi (irraggiungibile da
+    # chi è solo sulla LAN) invece di quello Ethernet vero -- e lo
+    # faceva ANCHE col WiFi momentaneamente disconnesso, perché Windows
+    # lascia la sua configurazione IP assegnata all'adattatore oltre la
+    # perdita del link fisico.
+    iface = os.getenv("GAIA_DHCP_IFACE", "Ethernet")
+    if os.name == "nt":
+        try:
+            r = subprocess.run(
+                ["powershell", "-NoProfile", "-Command",
+                 f"(Get-NetIPAddress -InterfaceAlias '{iface}' -AddressFamily IPv4 "
+                 f"-ErrorAction SilentlyContinue).IPAddress"],
+                capture_output=True, text=True, timeout=5,
+                creationflags=subprocess.CREATE_NO_WINDOW)
+            ip = r.stdout.strip().splitlines()[0] if r.stdout.strip() else ""
+            if ip:
+                return ip
+        except Exception:
+            pass
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.connect(("8.8.8.8", 80))

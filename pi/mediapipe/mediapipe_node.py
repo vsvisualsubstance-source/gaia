@@ -168,14 +168,25 @@ class _MocapTargetRegistry:
         # dallo stesso giorno. None se il device non lo pubblica ancora o
         # non ha Tailscale attivo -- innocuo, enabled_clients() lo salta.
         tailscale_ip = d.get('tailscale_ip')
+        # Auto-profiling porta (2026-10-15): ogni TD annuncia la PROPRIA
+        # porta di ascolto mocap in 'mocap_port' (campo nuovo, opzionale --
+        # un TD che non lo manda ancora cade sul default self._port,
+        # comportamento identico a prima). Elimina la necessità di una
+        # tabella device_id->porta mantenuta a mano qui: TD si descrive da
+        # solo, stesso principio di DEVICE_ID/CAMERA_NAME altrove nel
+        # progetto. Pensato per risolvere il conflitto noto (più istanze
+        # TD sulla stessa macchina, stesso 7010 fisso per tutte) facendo
+        # scegliere a ciascuna la propria porta lato TD.
+        port = d.get('mocap_port')
+        port = port if isinstance(port, int) and 0 < port < 65536 else self._port
         prev = self._targets.get(td_id)
         is_new = prev is None
         # autoabilitata solo la prima volta che la vediamo E solo se è la
         # stessa macchina — se l'utente l'ha poi disabilitata a mano, i
         # heartbeat successivi non la riaccendono da soli.
         enabled = (prev or {}).get('enabled', is_new and self._is_same_host(td_id))
-        if prev and (prev.get('ip') != ip or prev.get('tailscale_ip') != tailscale_ip):
-            self._clients.pop(td_id, None)   # ip/tailscale_ip cambiati, ricrea i client
+        if prev and (prev.get('ip') != ip or prev.get('tailscale_ip') != tailscale_ip or prev.get('port') != port):
+            self._clients.pop(td_id, None)   # ip/tailscale_ip/porta cambiati, ricrea i client
         # Timestamp del MESSAGGIO (ts, ms), non l'orario di ricezione locale
         # — stesso motivo del fix in osc_bridge.py/TDDeviceRegistry: un
         # riavvio di mediapipe fa consegnare subito l'ultimo status
@@ -184,7 +195,7 @@ class _MocapTargetRegistry:
         raw_ts = d.get('ts')
         last_seen = raw_ts / 1000 if isinstance(raw_ts, (int, float)) and raw_ts > 0 else time.time()
         self._targets[td_id] = {
-            'ip': ip, 'tailscale_ip': tailscale_ip,
+            'ip': ip, 'tailscale_ip': tailscale_ip, 'port': port,
             'name': d.get('name') or td_id, 'stanza': d.get('stanza'),
             'family': d.get('family'), 'enabled': enabled, 'last_seen': last_seen,
         }
@@ -216,10 +227,11 @@ class _MocapTargetRegistry:
                 continue
             clients = self._clients.get(td_id)
             if clients is None:
-                clients = [SimpleUDPClient(t['ip'], self._port)]
+                port = t.get('port', self._port)
+                clients = [SimpleUDPClient(t['ip'], port)]
                 ts_ip = t.get('tailscale_ip')
                 if ts_ip and ts_ip != t['ip']:
-                    clients.append(SimpleUDPClient(ts_ip, self._port))
+                    clients.append(SimpleUDPClient(ts_ip, port))
                 self._clients[td_id] = clients
             out.extend(clients)
         return out
@@ -228,6 +240,7 @@ class _MocapTargetRegistry:
         now = time.time()
         return {'targets': {
             td_id: {'ip': t['ip'], 'tailscale_ip': t.get('tailscale_ip'),
+                    'port': t.get('port', self._port),
                     'name': t['name'], 'stanza': t['stanza'],
                     'family': t.get('family'), 'enabled': t['enabled'],
                     'offline': (now - t['last_seen']) > self.OFFLINE_AFTER_S}
@@ -389,6 +402,16 @@ _mqtt.reconnect_delay_set(min_delay=2, max_delay=30)
 _mqtt.on_connect    = _on_connect
 _mqtt.on_message    = _on_message
 _mqtt.on_disconnect = _on_disconnect
+if _mocap:
+    # Senza questo, un crash/kill -9/mancanza corrente lascia per sempre
+    # su gaia/mocap-bridge/{device_id}/status un "sono vivo" retained --
+    # trovato dal vivo 2026-10-15: minipc-core-node-0 compariva ancora
+    # come sorgente mocap in TD giorni dopo aver spento OSC_LANDMARKS,
+    # nessuno lo ripuliva. Il Will lo cancella SOLO sui disconnect non
+    # pulit (la cleanup esplicita qui sotto in fondo al file copre lo
+    # stop pulito, che manda un vero DISCONNECT e quindi non fa scattare
+    # il Will per spec MQTT).
+    _mqtt.will_set(_mocap.status_topic, payload="", retain=True)
 
 try:
     _mqtt.connect(MQTT_HOST, MQTT_PORT, keepalive=60)
@@ -806,5 +829,9 @@ if _pose_landmarker:
     _pose_landmarker.close()
 if not HEADLESS:
     cv2.destroyAllWindows()
+if _mocap:
+    # Stop pulito: manda un vero DISCONNECT, quindi il Will (vedi sopra)
+    # non scatta -- pulizia esplicita qui per lo stesso motivo.
+    _mqtt.publish(_mocap.status_topic, payload="", retain=True)
 _mqtt.loop_stop()
 _mqtt.disconnect()

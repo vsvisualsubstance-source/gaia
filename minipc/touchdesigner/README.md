@@ -94,8 +94,10 @@ possibile né sensato.
 **Setup** (istruzioni complete e commentate nella docstring in cima al
 file):
 1. COMP contenitore (es. `gaia_agent`) con Custom Page: `Deviceid`,
-   `Stanza`, `Name`, `Mqtthost`, `Mqttport` (tutti opzionali, default
-   sensati se assenti).
+   `Stanza`, `Name`, `Mqtthost`, `Mqttport`, `Mocapport` (tutti opzionali,
+   default sensati se assenti — `Mocapport` serve solo se questa istanza
+   riceve mocap diretto e vuoi una porta dedicata invece del default
+   condiviso 7010, vedi `GAIA_TD_INTEGRATION.md` "Porta per istanza").
 2. Text DAT `gaia_device_agent` dentro quel COMP, File = path di
    `td_internal_agent.py` (Sync to OS ON per ricaricare le modifiche fatte
    fuori da TD).

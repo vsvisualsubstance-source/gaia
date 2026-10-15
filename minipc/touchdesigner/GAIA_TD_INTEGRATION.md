@@ -17,7 +17,7 @@ fare tra loro. Confonderli è l'errore più facile da fare:
 | Canale | Chi parla | Porta | Cosa porta |
 |---|---|---|---|
 | **1. Bridge Gaia↔TD** | Core (miniPC) ↔ TD | 7000 (flatten grezzo) + 7001 (canvas curato + eventi) out / 9008 in | Stato della casa: mood, stanze, luci, persone, lessico |
-| **2. Mocap diretto** | OPS → TD | 7000 (stessa porta del flatten grezzo, indirizzi diversi) | Landmark grezzi viso/mani/pose in tempo reale |
+| **2. Mocap diretto** | OPS → TD | 7010 default, **personalizzabile per istanza** dal 2026-10-15 (vedi sotto) | Landmark grezzi viso/mani/pose in tempo reale |
 | **3. Driver Solaro DSP** | Solaro QR1 ↔ driver esterno utente | 4554-4558, 52381, ecc. | Angoli mic array, livelli audio, preset camera — **NIENTE a che fare con Gaia**, sistema audio a parte |
 | **4. Controllo dispositivi** | TD (dentro il progetto) ↔ Core | MQTT, non OSC — `gaia/device/{id}/status\|command` | Non dati: presenza/controllo. Due direzioni indipendenti, vedi sotto |
 
@@ -254,11 +254,14 @@ modifica al bridge — il trasporto è già generico.
 ## Canale 2 — Mocap diretto (`pi/mediapipe/mediapipe_node.py`, `OSC_LANDMARKS=1`)
 
 Chi manda: **OPS** (non i Pi — flag acceso solo lì), direttamente all'IP di
-TD sulla porta 7000 (stessa porta del canale 1, indirizzi però nel namespace
-`/gaia/mocap/...` — TD li distingue per prefisso). I DATI bypassano
-Core/Node-RED (è mocap ad alta frequenza, ~12Hz, non un evento semantico
-per il brain) — la SCOPERTA/abilitazione delle destinazioni invece passa
-da MQTT (vedi sotto), come tutto il resto del Device Registry.
+TD sulla porta **7010 di default** (indirizzi nel namespace `/gaia/mocap/...`
+— TD li distingue dal canale 1 per porta, non più per prefisso sulla
+stessa 7000 come in origine: cambiato il 2026-09-29 perché un progetto
+con sia un OSC In CHOP del canale 1 sia il mocap entrambi sulla 7000
+falliva il bind per davvero). I DATI bypassano Core/Node-RED (è mocap ad
+alta frequenza, ~12Hz, non un evento semantico per il brain) — la
+SCOPERTA/abilitazione delle destinazioni invece passa da MQTT (vedi
+sotto), come tutto il resto del Device Registry.
 
 **Multi-istanza, opt-in (2026-08-06)**: a differenza del canale 1 (che ora
 va a TUTTE le istanze TD automaticamente), il mocap NON fa fan-out
@@ -271,6 +274,24 @@ generato su OPS) va abilitata esplicitamente da Admin (Pi Devices →
 `{"device_id":"<td-id>","action":"enable"|"disable"}`, stato su
 `gaia/mocap-bridge/{sender_device_id}/status` (retained) — `{sender}` è il
 `device_id` di chi genera il mocap (es. `ops-silvermini2`), non della TD.
+
+**Porta per istanza (2026-10-15)** — risolve il conflitto reale di più
+istanze TD sulla stessa macchina che vogliono ricevere mocap: ognuna
+ascoltava di default sulla stessa 7010 fissa, bind in conflitto fra loro.
+Ogni istanza TD può ora annunciare la propria porta col campo opzionale
+`mocap_port` (intero) dentro il proprio `gaia/device/{id}/status` — se
+presente e valido, `_MocapTargetRegistry` (lato mediapipe) manda il
+mocap lì invece che sul default 7010, per QUELLA istanza. Senza il
+campo (o con `mocap_port` assente/non valido), comportamento di sempre.
+Lato TD basta impostare il parametro `Mocapport` sul COMP dell'agent
+(`minipc/touchdesigner/td_internal_agent.py`, già aggiornato per
+pubblicarlo) e far ascoltare il proprio OSC In su quel numero — fatto
+questo, l'istanza riceve il mocap sulla porta giusta al prossimo
+heartbeat (max 30s), senza nessuna mappa device→porta da mantenere né
+lato TD né lato Gaia. **Attenzione**: cambiare SOLO `Mocapport` senza
+spostare anche l'OSC In reale di TD su quella porta interrompe il mocap
+per quell'istanza (Gaia manda dove annunci, se lì non ascolta nessuno il
+dato si perde silenziosamente).
 
 ```
 /gaia/mocap/{device_id}/meta/room                      stanza corrente
