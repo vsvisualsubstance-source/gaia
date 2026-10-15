@@ -160,27 +160,41 @@ semplice da costruire lato vostro?
     default sensato o chiedendo conferma), scrivendo lui i campi veri
     nello stato che poi tutti leggono.
 
-**Deciso (2026-10-15): entrambe le strade in parallelo**, non una
-scelta esclusiva. TD procede sia con (A) sia con (B).
+**Risposta da TD (2026-10-15)**: entrambe le strade, non una scelta
+esclusiva — e la (B) è già attiva su DMX Master:
+- **(B)**: `dmx_fixture_add`/`dmx_fixtures` accettano la fixture
+  Plancia COSÌ COM'È — `{id, type, name, group, universe, address, x,
+  y, enabled}`. `id` (stringa) diventa il loro `uid`; `universe` viene
+  tradotto in `port_id`; un `group` mancante/non riconosciuto viene
+  dedotto dal `type`. `wall`/`speaker` vengono saltati (non
+  DMX-patchabili — bottone "Manda a DMX Master" nemmeno mostrato per
+  questi tipi nell'editor).
+- **(A)**: già pubblicato. Profili per gruppo in
+  `dmx_matrix.fixtures.groups[].profiles`; nodi Art-Net disponibili in
+  `dmx_matrix.patch.ports` — stesso topic `gaia/devices/+/dmx_matrix`
+  che Plancia già sottoscrive per il widget "Device TD" generico,
+  nessuna nuova sottoscrizione necessaria per leggerli.
+- `front`/`back`/`mh` (vocabolario del canale 3, live-control) sono
+  alias di `rig_a`/`rig_b`/`heads` (vocabolario fisico del canale
+  1b/TD) — stessi nomi accettati su entrambi i canali, non sono due
+  vocabolari davvero separati come temevo.
 
-**Implementato lato Plancia (parte B, non serve aspettare la A)**:
-l'editor fixture (`openFixEditor`) ha un bottone "Manda a DMX Master"
-che pubblica su `gaia/device/td-dmx-win/command`:
+**Implementato lato Plancia**: l'editor fixture (`openFixEditor`) ha
+un bottone "Manda a DMX Master" (assente per `wall`/`speaker`) che
+pubblica su `gaia/device/td-dmx-win/command`:
 ```
 {action:"set", param:"dmx_fixture_add"|"dmx_fixture_update"|"dmx_fixture_remove",
- value:{type,name,group,universe,address,x,y,enabled,plancia_id}}
+ value:{id,type,name,group,universe,address,x,y,enabled}}
 ```
-(`plancia_id` = l'id locale della fixture in Plancia, per permettere a
-DMX Master di correlare un update/remove successivo alla stessa
-fixture). Stesso meccanismo "Device TD" generico già in uso altrove
+Stesso meccanismo "Device TD" generico già in uso altrove
 (`devCmd()`/`gPub()` in `plancia/index.html`), nessun nuovo trasporto.
 **Non ancora verificato dal vivo un giro completo** (serve confermare
 che DMX Master riceva davvero e ripubblichi in `dmx_fixtures`).
 
-Quando (A) pubblica il nome del campo con profili/porte Art-Net
-disponibili, Plancia potrà offrirli come scelta reale nell'editor
-invece di lasciare che DMX Master assegni un default — da implementare
-quando quel campo esiste, aggiornare questa sezione con il nome esatto.
+**Non ancora fatto**: leggere `dmx_matrix.fixtures.groups[].profiles`/
+`dmx_matrix.patch.ports` (A, già pubblicati) per offrire una scelta
+REALE di profilo/porta nell'editor invece di lasciare che DMX Master
+assegni un default — prossimo passo naturale, dati già disponibili.
 
 ## Config di deploy (valori attuali, 2026-10-15)
 

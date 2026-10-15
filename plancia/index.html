@@ -1124,8 +1124,8 @@ function openFixEditor(w,f){
     ${FIX_TYPES[f.type].ch?`<label>Gruppo <em>/dmx/group/...</em><input id="feGroup" class="mono"></label>
     <div class="two"><label>Universo<input id="feUni" type="number" min="0"></label><label>Indirizzo<input id="feAddr" type="number" min="1" max="512"></label></div>`:''}
     <label class="chk"><input id="feOn" type="checkbox"> Attiva</label>
-    <div class="row"><button class="btn" id="feSync">${f._synced?'Aggiorna su DMX Master':'Manda a DMX Master'}</button></div>
-    <p class="hint" id="feSyncMsg"></p>
+    ${FIX_TYPES[f.type].ch?`<div class="row"><button class="btn" id="feSync">${f._synced?'Aggiorna su DMX Master':'Manda a DMX Master'}</button></div>
+    <p class="hint" id="feSyncMsg"></p>`:'<p class="hint">Tipo non patchabile via DMX -- DMX Master lo salta (confermato da TD).</p>'}
     <div class="row"><button class="btn danger" id="feDel">Elimina</button></div>
   </div>`;
   val2('#feName',f.name); if($('#feGroup')){val2('#feGroup',f.group);val2('#feUni',f.universe);val2('#feAddr',f.address)} $('#feOn').checked=f.enabled!==false;
@@ -1134,18 +1134,18 @@ function openFixEditor(w,f){
     f.enabled=$('#feOn').checked; save()};
   ['feName','feGroup','feUni','feAddr'].forEach(id=>{const n=$('#'+id);if(n)n.addEventListener('input',upd)});
   $('#feOn').addEventListener('change',upd);
-  // Canale 1b (proposta B, GAIA_PLANCIA_INTEGRATION.md): comando
-  // semplificato via lo stesso meccanismo "Device TD" generico -- DMX
-  // Master traduce type/group/universe/address in profile/port_id
-  // reali. plancia_id correla un update/remove successivo alla stessa
-  // fixture. Non ancora verificato dal vivo un giro completo.
-  $('#feSync').onclick=()=>{
+  // Canale 1b, confermato da TD (GAIA_TD_INTEGRATION.md, risposta
+  // 2026-10-15): dmx_fixture_add/dmx_fixtures accettano la fixture
+  // Plancia COSI' COM'E' -- id stringa (il loro uid), universe tradotto
+  // in port_id, group mancante dedotto dal type. wall/speaker saltati
+  // (bottone nemmeno mostrato, vedi sopra).
+  if($('#feSync'))$('#feSync').onclick=()=>{
     const ok=devCmd('td-dmx-win',{action:'set',param:f._synced?'dmx_fixture_update':'dmx_fixture_add',
-      value:{type:f.type,name:f.name,group:f.group,universe:f.universe,address:f.address,x:f.x,y:f.y,enabled:f.enabled!==false,plancia_id:f.id}});
+      value:{id:f.id,type:f.type,name:f.name,group:f.group,universe:f.universe,address:f.address,x:f.x,y:f.y,enabled:f.enabled!==false}});
     $('#feSyncMsg').textContent=ok?'Mandato (nessuna conferma di ricezione da DMX Master).':'Non collegata a Gaia — apri ⋯ → Gaia e collegati prima.';
     if(ok){f._synced=true; save(); $('#feSync').textContent='Aggiorna su DMX Master'}
   };
-  $('#feDel').onclick=()=>{if(f._synced)devCmd('td-dmx-win',{action:'set',param:'dmx_fixture_remove',value:{plancia_id:f.id}});
+  $('#feDel').onclick=()=>{if(f._synced)devCmd('td-dmx-win',{action:'set',param:'dmx_fixture_remove',value:{id:f.id}});
     L.fixtures=L.fixtures.filter(x=>x.id!==f.id); const ui=_stageUI[w.id];if(ui&&ui.selFix===f.id)ui.selFix=null; save(); closeSheet()};
   s.onpointerdown=e=>{if(e.target===s)closeSheet()};
   $('#feClose').onclick=closeSheet;

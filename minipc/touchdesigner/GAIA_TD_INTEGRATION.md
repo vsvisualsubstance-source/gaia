@@ -98,36 +98,34 @@ due cose diverse, stesso nome di campo. `dmx_fixture_add`/`update`/
 `remove` sono slot comando (oggi `null`, write-only). `dmx_patch_report`:
 `{"id","status":"off"|"offline"|"conflict"|forse"ok","port_id","universe","start","end"}`.
 
-**Deciso (2026-10-15): entrambe le strade in parallelo.** TD procede
-sia con (A) — pubblicare profili/porte Art-Net disponibili — sia con
-(B) — accettare/tradurre un `dmx_fixture_add` semplificato da Plancia.
-Lato Plancia si parte da (B) (già sbloccato, non serve aspettare i
-campi di (A)): il bottone "Manda a DMX Master" nell'editor fixture
-manda `{action:"set",param:"dmx_fixture_add"|"dmx_fixture_update"|
-"dmx_fixture_remove",value:{type,name,group,universe,address,x,y,
-enabled,plancia_id}}` su `gaia/device/td-dmx-win/command` (stesso
-meccanismo generico "Device TD" già citato sopra) — DMX Master lo
-traduce in `profile`/`port_id` reali con un default sensato. Quando (A)
-pubblica il nome del campo con profili/porte disponibili, Plancia potrà
-offrirli come scelta reale invece del default automatico — aggiornare
-questa voce con quel nome di campo appena noto.
-**Non ancora verificato dal vivo un giro completo** (Plancia manda →
-DMX Master riceve e traduce → ripubblica in `dmx_fixtures`) — il
-bottone esiste ma nessuno ha ancora confermato che DMX Master lo
-accolga davvero.
-
 **Risposta da TD (2026-10-15, TD/Win-PD 17 in `TD4Gaia`
-`GAIA_INTERFACE.md`, commit `TD4DMX` `3c69e21`): tutte e due, la (B) è
-già attiva.** Il canale 1b esiste già su DMX Master (nota 16).
-- **(B)**: `dmx_fixture_add` / `dmx_fixtures` accettano la fixture
-  Plancia così com'è (`{id, type, name, group, universe, address, x, y,
-  enabled}`). `id` stringa → `uid`, `universe` → `port_id`, gruppo
-  mancante creato da TD dal `type`. `wall` e `speaker` sono saltati.
+`GAIA_INTERFACE.md`, commit `TD4DMX` `3c69e21`): entrambe le strade,
+la (B) è già attiva.** Il canale 1b esiste già su DMX Master (nota 16).
+- **(B)**: `dmx_fixture_add`/`dmx_fixtures` accettano la fixture
+  Plancia così com'è — `{id, type, name, group, universe, address, x,
+  y, enabled}`. `id` stringa → diventa il loro `uid`; `universe` →
+  tradotto in `port_id`; `group` mancante/non riconosciuto dedotto dal
+  `type`. `wall` e `speaker` sono saltati (non DMX-patchabili).
 - **(A)**: già pubblicato. Profili per gruppo in
-  `dmx_matrix.fixtures.groups[].profiles`; nodi Art-Net in
-  `dmx_matrix.patch.ports`.
-- `front`/`back`/`mh` sono alias di `rig_a`/`rig_b`/`heads`: canale 3 e
-  canale 1b accettano gli stessi nomi.
+  `dmx_matrix.fixtures.groups[].profiles`; nodi Art-Net disponibili in
+  `dmx_matrix.patch.ports` — stesso topic `gaia/devices/+/dmx_matrix`
+  già sottoscritto da Plancia per il widget "Device TD" generico.
+- `front`/`back`/`mh` (vocabolario live-control, canale 3) sono alias
+  di `rig_a`/`rig_b`/`heads` (vocabolario fisico, canale 1b/TD): stessi
+  nomi accettati su entrambi i canali, non due vocabolari davvero
+  separati.
+
+**Implementato lato Plancia**: il bottone "Manda a DMX Master"
+nell'editor fixture (assente per `wall`/`speaker`) manda
+`{action:"set",param:"dmx_fixture_add"|"dmx_fixture_update"|
+"dmx_fixture_remove",value:{id,type,name,group,universe,address,x,y,
+enabled}}` su `gaia/device/td-dmx-win/command` (stesso meccanismo
+generico "Device TD" già citato sopra). **Non ancora verificato dal
+vivo un giro completo** (Plancia manda → DMX Master riceve e traduce →
+ripubblica in `dmx_fixtures`). **Non ancora fatto**: leggere
+`dmx_matrix.fixtures.groups[].profiles`/`dmx_matrix.patch.ports` (A,
+già pubblicati) per offrire una scelta reale di profilo/porta
+nell'editor invece del default automatico di DMX Master.
 
 Il canale 4 non è OSC (per questo non ha una porta nella tabella nel senso
 degli altri) ed è l'unico dei quattro in cui TD *scrive* verso Gaia invece
