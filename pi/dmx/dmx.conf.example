@@ -22,13 +22,24 @@ MQTT_PORT=1883
 ARTNET_HOST=
 ARTNET_PORT=6454
 
-# IP statico (CIDR) che pi/agent/agent.py mette su eth0 SOLO mentre questo
+# IP statico (CIDR) che pi/agent/agent.py (e il toggle del portale
+# gaia-provision) mettono sulla porta Ethernet DMX SOLO mentre questo
 # servizio è attivo (nmcli, mai in competizione col WiFi per la default
 # route) -- molte reti Art-Net non hanno DHCP. Deve stare nella stessa
 # subnet del nodo sopra; su un'altra rete Art-Net, o un altro Pi sulla
 # STESSA rete, serve un indirizzo diverso -- mai un default indovinato.
-# Quando il servizio è spento, eth0 torna da solo a DHCP normale.
+# Quando il servizio è spento, quella porta torna da sola a DHCP normale.
 DMX_ETH_ADDRESS=
+
+# Nome del device (es. 'eth1') SOLO se questo Pi ha PIÙ di una porta
+# Ethernet e vuoi dedicarne una al DMX lasciando l'altra (es. eth0)
+# sempre libera per la LAN normale -- trovato dal vivo 2026-10-15 su Pi
+# Ingresso (NIC USB aggiuntivo). Senza questa riga, "la prima Ethernet
+# trovata" è un indovinello che con due porte potrebbe scegliere quella
+# sbagliata e staccare la LAN invece della rete Art-Net -- mai un
+# default indovinato, stesso principio di DMX_ETH_ADDRESS. Lascia vuoto
+# se questo Pi ha solo una porta Ethernet (comportamento storico).
+DMX_ETH_IFACE=
 
 # Indirizzamento Art-Net a 3 campi -- lascia a 0 se la rete ha un solo
 # universo (caso comune per una fixture singola).

@@ -417,28 +417,51 @@ def _ensure_camera(cfg: dict):
 # sotto fa systemctl start/stop direttamente, bypassandola -- trovato dal
 # vivo 2026-10-15 (Pi Ingresso: spegnendo dmx da MQTT/Admin eth0 torna a
 # DHCP correttamente, ma il toggle del portale lascia la rete dov'era).
-def _dmx_eth_address() -> str:
+def _dmx_conf_value(key: str) -> str:
     path = "/etc/gaia/dmx.conf"
     if not os.path.exists(path):
         return ""
     with open(path) as f:
         for line in f:
             line = line.strip()
-            if line.startswith("DMX_ETH_ADDRESS="):
+            if line.startswith(f"{key}="):
                 return line.split("=", 1)[1].strip()
     return ""
 
 
+def _dmx_eth_address() -> str:
+    return _dmx_conf_value("DMX_ETH_ADDRESS")
+
+
 def _eth_connection_name() -> str:
+    # DMX_ETH_IFACE (es. 'eth1', secondo NIC dedicato al DMX) sceglie il
+    # device esatto quando ce n'è più di uno Ethernet -- senza, "la prima
+    # trovata" da nmcli è un indovinello che con due porte potrebbe
+    # azzeccare quella sbagliata. Il campo DEVICE di `connection show`
+    # (senza --active) è vuoto per un profilo non attivo in quel momento
+    # (es. rete Art-Net senza DHCP, NetworkManager lo lascia
+    # 'disconnesso' dopo il tentativo fallito) -- si usa invece il campo
+    # statico `connection.interface-name`, sempre pinnato al device.
+    # Vedi pi/agent/agent.py per i dettagli, stessa logica duplicata qui.
+    iface = _dmx_conf_value("DMX_ETH_IFACE")
     try:
         r = subprocess.run(["nmcli", "-t", "-f", "NAME,TYPE", "connection", "show"],
                             capture_output=True, text=True, timeout=10)
+        candidates = []
         for line in r.stdout.splitlines():
             if ":" not in line:
                 continue
             name, ctype = line.rsplit(":", 1)
             if ctype == "802-3-ethernet":
+                candidates.append(name)
+        if not iface:
+            return candidates[0] if candidates else ""
+        for name in candidates:
+            rr = subprocess.run(["nmcli", "-t", "-f", "connection.interface-name", "connection", "show", name],
+                                 capture_output=True, text=True, timeout=10)
+            if rr.stdout.strip().split(":", 1)[-1] == iface:
                 return name
+        log(f"_eth_connection_name: DMX_ETH_IFACE={iface!r} non trovato tra le connessioni Ethernet")
     except Exception as e:
         log(f"_eth_connection_name: errore ({e})")
     return ""
