@@ -13,18 +13,30 @@ Progetto importato il 2026-10-15 da un downlaod esterno
 corretti per Gaia Portable (vedi `web/README`-equivalente in
 [[project-plancia-control-ui]] in memoria per la cronologia dei fix).
 
-## Tre canali, non uno
+## Vincolo di deploy: SOLO OPS, mai Core (2026-10-15)
 
-Plancia parla con Gaia su **tre canali indipendenti**, con destinazioni
-diverse — non confonderli (stesso principio di
+`bridge.js` e la pagina (`index.html`) girano **esclusivamente su OPS**
+(`C:\gaia\plancia\`, Scheduled Task `GAIA-OPS-Plancia`). Non è una
+preferenza, è un vincolo: Core resta fisso a casa (non viaggia), mentre
+OPS è la macchina che segue l'installazione/il tour. Si può *sviluppare*
+puntando a un bridge locale su Core per comodità, ma il **servizio
+reale** — quello che un tablet apre davvero durante un show — deve
+sempre essere quello su OPS (`http://192.168.1.240:8080`). Se mai serve
+testare qualcosa su Core, è un deploy temporaneo, non quello buono.
+
+## Quattro canali, non uno
+
+Plancia parla con Gaia su **quattro canali indipendenti**, con
+destinazioni diverse — non confonderli (stesso principio di
 `minipc/touchdesigner/GAIA_TD_INTEGRATION.md`, "I canali tra Gaia e TD
 — non confonderli"):
 
 | Canale | Trasporto | Da → a | Cosa porta |
 |---|---|---|---|
 | **1. Widget Gaia-nativi** | MQTT su WebSocket, dal browser diretto al broker | Plancia (browser) ↔ broker Gaia (Core `.142:9001` o OPS `.240:19001`) | mood/pensieri, PatchDeck, device TD, DMX stanza (`gaia/dmx/+/...`) |
+| **1b. Design dello show** (nuovo, in costruzione) | stesso trasporto del canale 1 (MQTT su WS), stesso meccanismo "Device TD" già esistente | Plancia ↔ **DMX Master**, bidirezionale | creazione/patch fixture — vedi sezione dedicata sotto |
 | **2. `/gaia/...` via bridge.js** | OSC/UDP | Plancia → `bridge.js` → **osc_bridge.py** (porta 9008) → MQTT `gaia/touchdesigner/<path>` | qualunque comando semantico Gaia (luci OpenHAB, mood delta, ecc. — stesso ingresso "canale 4" di TD, vedi `GAIA_TD_INTEGRATION.md`) |
-| **3. Show control generico (`/dmx/`, `/mh/`, `/led/`, `/show/`)** | OSC/UDP | Plancia → `bridge.js` → **DMX Master** (TD, famiglia `dmx`), DIRETTO | teste mobili, LED, scene, timeline — non passa da Gaia/MQTT per niente |
+| **3. Show control generico (`/dmx/`, `/mh/`, `/led/`, `/show/`)** | OSC/UDP, bidirezionale (feedback su `OSC_IN`, porta 9000 di `bridge.js`) | Plancia → `bridge.js` → **DMX Master** (TD, famiglia `dmx`), DIRETTO | teste mobili, LED, scene, timeline — non passa da Gaia/MQTT per niente |
 
 Il canale 1 funziona già out-of-the-box (stesso schema di
 `patchdeck.html`/`dmx.html`/`mixeraudio.html`), nessun lavoro lato Gaia.
@@ -77,6 +89,59 @@ cosa ma sul rig vero). Non e' un `mocap_port` auto-annunciato: la 7020
 e' fissa per convenzione (un solo DMX Master alla volta, non serve
 profiling dinamico come per il mocap multi-istanza).
 
+## Canale 1b — design dello show, bidirezionale (proposta, 2026-10-15)
+
+Obiettivo esplicito dell'utente: progettare lo show (fixture, patch,
+scene) **da Plancia** (widget "Design palco", vedi `plancia/README.md`
+— oggi simula solo in locale), mandare quella definizione a **DMX
+Master** che crea davvero le fixture nel rig, e poi controllarle
+indifferentemente **sia da TD sia da Plancia** — stato sempre
+sincronizzato tra i due.
+
+**Perché MQTT (canale 1) e non OSC (canale 3)**: il canale 3 porta
+*valori di controllo live* (pan/tilt, colore, dimmer — float semplici,
+alta frequenza, nessuno stato persistente). La definizione di una
+fixture (id, profilo, indirizzo DMX, posizione) è invece *dato
+strutturato e persistente* — stesso genere di cosa che "Device TD" (già
+nel README di Plancia, tabella dei widget) manda oggi con
+`{action:"set", param, value}` su `gaia/device/<id>/command`. Riusare
+quel meccanismo generico invece di inventare un quinto canale OSC.
+
+**Flusso**:
+1. Plancia (Design palco) manda a `gaia/device/td-dmx-win/command`:
+   `{"action":"set","param":"dmx_fixture_add","value":{...}}` (o
+   `dmx_fixture_update`/`dmx_fixture_remove`).
+2. DMX Master applica, salva nel proprio stato interno.
+3. DMX Master ripubblica il patch intero in `gaia/device/td-dmx-win/status`
+   (retained) — Plancia (e qualunque altro TD/widget) lo legge da lì,
+   stesso identico pattern di `patchdeck_matrix`/`dmx_matrix` già
+   documentato per gli altri device TD.
+
+**Schema PROPOSTO, da confermare/adattare insieme a DMX Master** (il
+rig è in ricostruzione in questi giorni — non dare per definitivo
+finché non confermato dal vivo):
+
+```
+value (dmx_fixture_add / dmx_fixture_update): {
+  "id": "mh-01",            # univoco, scelto da chi crea la fixture
+  "name": "Head 1",
+  "group": "heads",          # raggruppamento per i fader di gruppo (canale 3, /dmx/group/...)
+  "profile": "Generic Spot 11ch 16bit",
+  "universe": 1, "address": 100,
+  "x": -9.0, "y": -3.5        # posizione in pianta, per il widget Design palco
+}
+value (dmx_fixture_remove): {"id": "mh-01"}
+
+# DMX Master ripubblica in status.params.dmx_fixtures: [ {...stessi campi, + "enabled"} ]
+# e in status.params.dmx_patch_report: [ {"id","status":"ok"|"conflict"|"offline","universe","start","end"} ]
+```
+
+**Non ancora implementato da nessuna delle due parti** — questa
+sezione è il punto di partenza per costruirlo in parallelo (Plancia:
+widget Design palco che parla MQTT invece di solo simulare; DMX
+Master: subscribe a `gaia/device/td-dmx-win/command` per questi param
++ publish del patch nello status).
+
 ## Config di deploy (valori attuali, 2026-10-15)
 
 `plancia/bridge.js` via env (vedi `plancia/run_plancia.bat` se
@@ -98,7 +163,9 @@ mocap).
 ## Cosa NON è ancora stato fatto
 
 - L'OSC In su DMX Master (7020) che interpreta `/dmx/...`/`/mh/...` è
-  lato TD (TD4Gaia, non in questo repo) — da costruire.
+  lato TD (TD4Gaia, non in questo repo) — **in costruzione ora**.
+- Canale 1b (design dello show, sopra): schema solo proposto, nessun
+  codice né lato Plancia né lato DMX Master.
 - Nessun fallback/simulazione se DMX Master è irraggiungibile: il
   widget Palco di Plancia *già* simula in locale (vedi README), quindi
   l'operatore vede comunque qualcosa anche a canale 3 morto — ma non è

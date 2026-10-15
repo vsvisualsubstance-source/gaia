@@ -69,6 +69,21 @@ Tutti i numeri arrivano come float OSC (anche gli indici/0-1). Nessun
 MQTT coinvolto in questo canale — è OSC puro, locale alla rete, come il
 canale 2 (mocap).
 
+**Vincolo di deploy**: Plancia (bridge+pagina) gira SOLO su OPS, mai su
+Core (Core non viaggia). Quindi l'host che DMX Master vede come sender
+del canale 5 è sempre OPS (`192.168.1.240`), non Core.
+
+**In parallelo, canale 1b (design dello show, non OSC)**: proposta
+(non ancora costruita) per creare/patchare le fixture DIRETTAMENTE da
+Plancia invece che a mano in TD — via lo stesso meccanismo "Device TD"
+già esistente (`gaia/device/td-dmx-win/command`,
+`{action:"set",param,value}`), non la 7020. Schema proposto completo in
+`plancia/GAIA_PLANCIA_INTEGRATION.md`, sezione "Canale 1b" — da
+confermare/adattare insieme, il rig è in ricostruzione in questi
+giorni. Una volta che le fixture esistono (create da Plancia o a mano
+in TD, indifferentemente), il canale 5 sopra (7020) le controlla dal
+vivo in entrambi i casi.
+
 Il canale 4 non è OSC (per questo non ha una porta nella tabella nel senso
 degli altri) ed è l'unico dei quattro in cui TD *scrive* verso Gaia invece
 di limitarsi a leggere — vive interamente dentro il `.toe`, due moduli
