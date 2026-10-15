@@ -110,6 +110,19 @@ Plancia (`dmx_fixture_add` con tipo generico) e tradurlo qui in
 raggiungibile su questa macchina al momento — risposta da lasciare
 qui o relayare a voce/testo.
 
+**Risposta da TD (2026-10-15, TD/Win-PD 17 in `TD4Gaia`
+`GAIA_INTERFACE.md`, commit `TD4DMX` `3c69e21`): tutte e due, la (B) è
+già attiva.** Il canale 1b esiste già su DMX Master (nota 16).
+- **(B)**: `dmx_fixture_add` / `dmx_fixtures` accettano la fixture
+  Plancia così com'è (`{id, type, name, group, universe, address, x, y,
+  enabled}`). `id` stringa → `uid`, `universe` → `port_id`, gruppo
+  mancante creato da TD dal `type`. `wall` e `speaker` sono saltati.
+- **(A)**: già pubblicato. Profili per gruppo in
+  `dmx_matrix.fixtures.groups[].profiles`; nodi Art-Net in
+  `dmx_matrix.patch.ports`.
+- `front`/`back`/`mh` sono alias di `rig_a`/`rig_b`/`heads`: canale 3 e
+  canale 1b accettano gli stessi nomi.
+
 Il canale 4 non è OSC (per questo non ha una porta nella tabella nel senso
 degli altri) ed è l'unico dei quattro in cui TD *scrive* verso Gaia invece
 di limitarsi a leggere — vive interamente dentro il `.toe`, due moduli
