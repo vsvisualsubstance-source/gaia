@@ -430,3 +430,17 @@ Modello ML (LogisticRegression su AudioFeatures di openWakeWord) per rilevare il
 ---
 
 Autore: Mauro Spagnoli — GAIA, coscienza artificiale per la casa.
+
+## Plancia Video Service
+
+Plancia's Video Service provides low-latency browser previews of NDI video sources using GStreamer and WebRTC.
+
+The service is intended for video monitoring and preview, not for critical show control. Its failure or restart must not interrupt TouchDesigner, Resolume, DMX, laser control, or other show-critical processes.
+
+The architecture proposal and implementation plan are maintained in TD4PatchDeck:
+
+- [Plancia Video Service — Architecture Proposal](https://github.com/vsvisualsubstance-source/TD4PatchDeck/blob/main/docs/architecture/plancia-video-service.md)
+
+**Initial scope:** NDI ingestion, low-latency video processing, H.264 encoding, WebRTC browser delivery, HTTP API, diagnostics, and multi-client previews.
+
+**Status:** Architecture proposed; proof of concept pending.
