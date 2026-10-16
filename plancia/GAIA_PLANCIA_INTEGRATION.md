@@ -244,3 +244,27 @@ mocap).
   widget Palco di Plancia *già* simula in locale (vedi README), quindi
   l'operatore vede comunque qualcosa anche a canale 3 morto — ma non è
   un segnale di errore esplicito lato Plancia oggi.
+
+## Nota TD 19 (2026-10-16): catalogo fixture condiviso — NON ANCORA FATTO
+
+TD ha costruito un catalogo condiviso di **modelli** (`{model, kind,
+channels, footprint, ...}`) e **tipi** (`{type, label, group, kind,
+model, source}`) — sostituisce i canali fissi di `FIX_TYPES.ch` qui con
+qualcosa di vero e condiviso, letto da `status.params.dmx_models`/
+`dmx_types` e `dmx_matrix.catalog`. Comandi: `dmx_model_add`/`update`/
+`remove`, `dmx_types`/`dmx_type_set`/`dmx_type_remove` su
+`gaia/device/td-dmx-win/command`, stessa conferma-per-presenza-nello-
+stato della nota 18 (non sul semplice invio).
+
+**5 cose da fare lato Plancia (dalla nota, non ancora iniziate)**:
+1. Mandare `dmx_types` con la tassonomia vera di Plancia invece di
+   lasciare i tipi builtin.
+2. Togliere `FIX_TYPES.ch` fisso — i canali di una fixture diventano il
+   `footprint` del suo modello in `dmx_matrix.catalog.models` (uso
+   anche in `nextAddress()` e in pianta).
+3. Editor fixture: menu "Modello" (i modelli del `kind` del gruppo) +
+   campo `model` mandato a TD.
+4. Possibilità di creare un modello nuovo dall'editor (`dmx_model_add`).
+5. Stessa conferma-per-presenza della nota 18, applicata a modelli/tipi.
+
+Dettaglio completo nel commit TD4Gaia `65805d5` (nota interface 19).
