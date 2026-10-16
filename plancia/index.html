@@ -386,15 +386,21 @@ const RIG={heads:8,uplights:6,bars:8,wall:true,speakers:true};
 // combacia con gli indirizzi /dmx/group/<group> del canale 3 (vedi
 // plancia/README.md). x/y in metri, stesso sistema di coordinate di drawPlot
 // (X(m)/Y(m)) -- 0,0 e' il centro del palco sul fondo.
+// kind/model: tassonomia di partenza come da TD (nota interface 19) --
+// "kind" e' il motore DMX che pilota il tipo (chase/level/heads/none),
+// "model" il profilo di default. Sono solo i valori INIZIALI: appena
+// DMX Master risponde con status.params.dmx_models/dmx_types, i canali
+// veri si leggono da li' (vedi footprintFor), questi restano un
+// fallback offline/prima-connessione.
 const FIX_TYPES={
-  mh:     {label:'Testa mobile', group:'mh',      ch:16},
-  par:    {label:'PAR / Wash',   group:'front',   ch:8},
-  bar:    {label:'Barra LED',    group:'ledbar',  ch:24},
-  wall:   {label:'LED wall',     group:'ledwall', ch:0},
-  blinder:{label:'Blinder',      group:'blinder', ch:4},
-  haze:   {label:'Haze',         group:'haze',    ch:2},
+  mh:     {label:'Testa mobile', group:'mh',      ch:16, kind:'heads', model:'Generic Spot 11ch 16bit'},
+  par:    {label:'PAR / Wash',   group:'front',   ch:8,  kind:'chase', model:'D+RGB 4CH'},
+  bar:    {label:'Barra LED',    group:'ledbar',  ch:24, kind:'chase', model:'D+RGB 4CH'},
+  wall:   {label:'LED wall',     group:'ledwall', ch:0,  kind:'none'},
+  blinder:{label:'Blinder',      group:'blinder', ch:4,  kind:'level', model:'Dimmer 1CH'},
+  haze:   {label:'Haze',         group:'haze',    ch:2,  kind:'level', model:'Haze 2CH'},
   laser:  {label:'Laser (solo render)',group:'',   ch:0},
-  speaker:{label:'Cassa',        group:'',        ch:0}
+  speaker:{label:'Cassa',        group:'',        ch:0,  kind:'none'}
 };
 const FIX_COLOR={mh:'#58a6ff',par:'#ffb23e',bar:'#3fb950',wall:'#ff6fae',blinder:'#f85149',haze:'#8a92a0',laser:'#ff365c',speaker:'#c9ced8'};
 // DMX Master risolve i gruppi "live" (mh/front/back) negli ALIAS fisici
@@ -455,7 +461,7 @@ function ensureStageData(layout){
     }
   }
 }
-const mkFix=(type,name,x,y,universe,address)=>({id:'p-'+uid(),type,name,group:FIX_TYPES[type].group,universe,address,x,y,
+const mkFix=(type,name,x,y,universe,address)=>({id:'p-'+uid(),type,name,group:FIX_TYPES[type].group,model:FIX_TYPES[type].model,universe,address,x,y,
   z:fixtureZDefault(type),w:type==='wall'?6:undefined,h:type==='wall'?3.5:undefined,rot:type==='wall'?0:undefined,
   sourceType:type==='wall'?'procedural':undefined,sourceRef:type==='wall'?'':undefined,
   angle:type==='laser'?0:undefined,spread:type==='laser'?28:undefined,mountToTruss:type==='mh',enabled:true});
@@ -529,7 +535,7 @@ function projLoadTemplate(tid){
   pi=0;selId=null;save();render();initShow();
 }
 function nextAddress(type,universe){ // primo indirizzo libero per quel tipo+universo, mai sovrapposto a una fixture esistente
-  const ch=FIX_TYPES[type].ch||1, used=(L.fixtures||[]).filter(f=>f.universe===universe).map(f=>[f.address,f.address+(FIX_TYPES[f.type].ch||1)-1]);
+  const ch=footprintFor(type)||1, used=(L.fixtures||[]).filter(f=>f.universe===universe).map(f=>[f.address,f.address+(footprintFor(f)||1)-1]);
   let a=1;
   for(;;){const end=a+ch-1;if(end>512)return 1;if(!used.some(([s,e])=>a<=e&&end>=s))return a;a=Math.max(...used.filter(([s,e])=>a<=e&&end>=s).map(([,e])=>e))+1}
 }
@@ -548,6 +554,36 @@ function tdFixtures(){
 /* ---------- universi/indirizzi reali, patch TD come fonte unica (nota 19/20) ---------- */
 const tdParams=()=>(G.devices['td-dmx-win']||{}).params||{};
 const universeMap=()=>tdParams().dmx_universe_map||null;
+// Catalogo condiviso (nota 19): modelli/tipi che DMX Master conosce
+// davvero, letti da status.params -- sostituisce i canali fissi di
+// FIX_TYPES.ch ovunque conta il numero vero di indirizzi occupati.
+const tdModels=()=>tdParams().dmx_models||[];
+const tdTypes=()=>tdParams().dmx_types||[];
+function modelFootprint(name){
+  const m=tdModels().find(x=>x.model===name);
+  if(!m)return null;
+  if(Number.isFinite(+m.footprint))return+m.footprint;
+  if(Array.isArray(m.channels))return m.channels.length;
+  if(Number.isFinite(+m.channels))return+m.channels;
+  return null;
+}
+// Modello di default di un tipo: quello che DMX Master ha assegnato al
+// tipo (se la tassonomia e' stata mandata/confermata), altrimenti il
+// valore di partenza di FIX_TYPES.
+function typeDefaultModel(type){
+  const t=tdTypes().find(x=>x.type===type);
+  return(t&&t.model)||(FIX_TYPES[type]&&FIX_TYPES[type].model)||null;
+}
+// Canali veri di una fixture (footprint del suo modello, nota 19) --
+// f puo' essere una fixture {type,model} o solo il type come stringa.
+// Fallback a FIX_TYPES.ch se il catalogo non e' ancora arrivato
+// (offline, o prima connessione) o il modello non e' ancora noto a TD.
+function footprintFor(f){
+  const type=typeof f==='string'?f:f.type;
+  const modelName=(f&&typeof f==='object'&&f.model)||typeDefaultModel(type);
+  const fp=modelName&&modelFootprint(modelName);
+  return fp||(FIX_TYPES[type]&&FIX_TYPES[type].ch)||0;
+}
 function portIdToUniverse(port_id){
   const u=(universeMap()?.universes||[]).find(x=>x.port_id===port_id);
   return u?u.universe:1;
@@ -577,10 +613,11 @@ function importFromTD(silent){
   if(!silent&&!confirm(`Sostituisce le ${(L.fixtures||[]).length} fixture locali con le ${mine.length} trovate su DMX Master. Continuare?`))return false;
   L.fixtures=mine.map(x=>({
     id:x.uid,type:GROUP_TO_TYPE[x.group]||'par',name:x.name||x.uid,
-    group:x.group,universe:portIdToUniverse(x.port_id),address:x.address,
+    group:x.group,model:x.profile||undefined,universe:portIdToUniverse(x.port_id),address:x.address,
     x:typeof x.x==='number'?x.x:0,y:typeof x.y==='number'?x.y:0,
     enabled:x.enabled!==0&&x.enabled!==false,_synced:true
   }));
+  ensureStageData(L); // altezza/truss/sorgente LED di default -- import non li aveva mai riempiti
   save();
   if(!silent)alert(`Importate ${mine.length} fixture da DMX Master.`);
   return true;
@@ -807,7 +844,7 @@ function inner(w){
         <span class="tl-tc">00:00:00:00</span><span class="tl-cue"><span class="k">CUE</span><b>—</b></span><span class="tl-bpm">${w.bpm||120} BPM · ${Math.floor(D/60)}:${String(Math.round(D%60)).padStart(2,'0')}</span></div>
         <div class="tl-lane"><div class="tl-ruler">${ticks}</div><div class="tl-cues">${blocks}</div><div class="tl-ph"></div></div></div>`}
     case 'clock': return '<div class="clk"><div class="clk-main">--:--:--</div><div class="clk-sub"></div></div>';
-    case 'stage': return `<canvas></canvas><div class="seg"><button data-v="render" aria-pressed="${w.view!=='plot'}">Render</button><button data-v="plot" aria-pressed="${w.view==='plot'}">Pianta</button><button data-act="syncall" title="Manda tutte le fixture patchabili a DMX Master">⇪ TD</button><button data-act="importtd" title="Ricarica il palco dalla patch reale di DMX Master (fonte unica, evita doppioni)">⇩ TD</button><button data-act="resolve" title="Pulisci i doppioni su DMX Master e ricarica">🧹 TD</button></div><div class="hud"></div>`;
+    case 'stage': return `<canvas></canvas><div class="seg"><button data-v="render" aria-pressed="${w.view!=='plot'}">Render</button><button data-v="plot" aria-pressed="${w.view==='plot'}">Pianta</button><button data-act="syncall" title="Manda tutte le fixture patchabili a DMX Master">⇪ TD</button><button data-act="importtd" title="Ricarica il palco dalla patch reale di DMX Master (fonte unica, evita doppioni)">⇩ TD</button><button data-act="resolve" title="Pulisci i doppioni su DMX Master e ricarica">🧹 TD</button><button data-act="types" title="Manda la tassonomia (tipi/modelli) di Plancia a DMX Master -- sostituisce quella attuale">📋 TD</button></div><div class="hud"></div>`;
     default: return gInner(w);
   }
 }
@@ -895,6 +932,7 @@ function bind(el,w){
       else if(e.target.closest('[data-act="syncall"]'))syncAllFixtures();
       else if(e.target.closest('[data-act="importtd"]'))importFromTD();
       else if(e.target.closest('[data-act="resolve"]'))resolveDuplicates();
+      else if(e.target.closest('[data-act="types"]'))syncTypesToTD();
       else if(w.view==='plot')stageDown(e,el,w);
       else if(e.target.closest('canvas'))(L.fixtures||[]).forEach(f=>{
         const state=wallVideoPlayers.get(f.id);
@@ -1451,7 +1489,7 @@ function drawPlot(g,W,H,t,w){
   if(ui)ui.hits=hits;
   // legenda patch (conteggi reali, non piu' da L.rig)
   const cnt=fixCounts();
-  const lg=Object.entries(FIX_TYPES).filter(([k,ft])=>cnt[k]&&ft.ch).map(([k,ft])=>[`${ft.label} ×${cnt[k]}`,ft.ch+' ch']);
+  const lg=Object.entries(FIX_TYPES).filter(([k,ft])=>cnt[k]&&ft.ch).map(([k,ft])=>[`${ft.label} ×${cnt[k]}`,footprintFor(k)+' ch']);
   const lx=10,ly=H-10-Math.max(1,lg.length)*14;
   // Testo corto apposta: visto dal vivo (screenshot Playwright) che la
   // versione lunga di prima si sovrapponeva al marcatore FOH, disegnato
@@ -1480,7 +1518,7 @@ function syncAllFixtures(){
     // suggerimento -- meglio di scrivere comunque e aggiungere un
     // altro doppione (come successo ieri, 19+ gruppi).
     const ok=devCmd('td-dmx-win',{action:'set',param:f._synced?'dmx_fixture_update':'dmx_fixture_add',
-      value:{id:f.id,type:f.type,name:f.name,group:f.group,universe:f.universe,address:f.address,x:f.x,y:f.y,enabled:f.enabled!==false,on_conflict:'reject'}});
+      value:{id:f.id,type:f.type,name:f.name,group:f.group,model:f.model,universe:f.universe,address:f.address,x:f.x,y:f.y,enabled:f.enabled!==false,on_conflict:'reject'}});
     if(ok)sent++;
   }
   if(sent)list.forEach(f=>f._synced=true);
@@ -1509,6 +1547,33 @@ function resolveDuplicates(){
       return;
     }
     if(tries>=10){alert('Nessuna conferma da DMX Master entro qualche secondo — riprova più tardi.');return}
+    setTimeout(check,500);
+  };
+  setTimeout(check,500);
+}
+// Nota 19, punto 1 ("Costruzione del palco"): manda la tassonomia vera
+// di Plancia a DMX Master. dmx_types SOSTITUISCE tutta la tassonomia
+// (non un merge) -- per questo e' un bottone esplicito, mai automatico
+// come l'import fixture della nota 20 (li' Plancia legge soltanto,
+// qui scrive sopra quello che TD ha gia').
+function syncTypesToTD(){
+  if(!confirm('Manda la tassonomia di Plancia (tipi di fixture) a DMX Master: SOSTITUISCE tutti i tipi già definiti lì. Continuare?'))return;
+  const types=Object.entries(FIX_TYPES).filter(([k])=>k!=='laser').map(([type,ft])=>({
+    type,label:ft.label,group:ft.group,kind:ft.kind||'none',model:ft.model
+  }));
+  const ok=devCmd('td-dmx-win',{action:'set',param:'dmx_types',value:types});
+  if(!ok){alert('Non collegata a Gaia — apri ⋯ → Gaia e collegati prima.');return}
+  let tries=0;
+  const check=()=>{
+    tries++;
+    const have=tdTypes();
+    if(have.length&&types.every(t=>have.some(h=>h.type===t.type))){
+      alert(`Tassonomia confermata da DMX Master (${have.length} tipi).`);return;
+    }
+    if(tries>=10){
+      const err=G.devices['td-dmx-win']?.last_error;
+      alert('Nessuna conferma completa da DMX Master'+(err?' — '+err:' — riprova più tardi.'));return;
+    }
     setTimeout(check,500);
   };
   setTimeout(check,500);
@@ -1567,19 +1632,21 @@ function openFixAdd(w,pos){
     // tiene conto anche di quello gia' patchato in TD, non solo delle
     // fixture locali di Plancia -- nota 20, evita i doppioni di ieri).
     // Fallback al calcolo solo-locale se non ancora collegata/sincronizzata.
-    const addr=ft.ch?(freeAddressTD(universe,ft.ch)??nextAddress(type,universe)):0;
+    const fp=footprintFor(type);
+    const addr=ft.ch?(freeAddressTD(universe,fp)??nextAddress(type,universe)):0;
     const f=mkFix(type,ft.label.slice(0,3).toUpperCase()+count,clamp(pos.x,-L.stage.width/2-4,L.stage.width/2+4),clamp(pos.y,-2,L.stage.depth+20),universe,addr);
+    f.model=typeDefaultModel(type)||f.model; // preferisce il modello che TD ha davvero per questo tipo (nota 19)
     L.fixtures.push(f); (_stageUI[w.id]||(_stageUI[w.id]={})).selFix=f.id; save(); closeSheet();
     // Manda subito con on_conflict:"auto" (nota 20, "per gli inserimenti
     // rapidi"): TD piazza davvero al primo posto libero (autorevole, non
     // la nostra stima) e noi riallineiamo appena arriva la conferma.
     if(ft.ch&&devCmd('td-dmx-win',{action:'set',param:'dmx_fixture_add',
-      value:{id:f.id,type:f.type,name:f.name,group:f.group,universe:f.universe,address:f.address,x:f.x,y:f.y,enabled:true,on_conflict:'auto'}})){
+      value:{id:f.id,type:f.type,name:f.name,group:f.group,model:f.model,universe:f.universe,address:f.address,x:f.x,y:f.y,enabled:true,on_conflict:'auto'}})){
       let tries=0;
       const check=()=>{
         tries++;
         const found=(tdParams().dmx_fixtures||[]).find(x=>x.uid===f.id);
-        if(found){f._synced=true;f.universe=portIdToUniverse(found.port_id);f.address=found.address;save();return}
+        if(found){f._synced=true;f.universe=portIdToUniverse(found.port_id);f.address=found.address;f.model=found.profile||f.model;save();return}
         if(tries<6)setTimeout(check,500);
       };
       setTimeout(check,500);
@@ -1605,6 +1672,7 @@ function openFixEditor(w,f){
     ${f.type==='laser'?`<div class="two"><label>Orientamento (gradi)<input id="feAngle" type="number" min="-180" max="180" step="1"></label><label>Apertura pattern (gradi)<input id="feSpread" type="number" min="1" max="120" step="1"></label></div>
     <p class="hint">Visualizzazione locale, senza comandi OSC/DMX. Il trasporto verso TouchDesigner sarà definito separatamente.</p>`:''}
     ${FIX_TYPES[f.type].ch?`<label>Gruppo <em>/dmx/group/...</em><input id="feGroup" class="mono"></label>
+    <label>Modello <em>profilo DMX, nota 19</em><select id="feModel"></select></label>
     <div class="two"><label>Universo<select id="feUni"></select></label><label>Indirizzo<input id="feAddr" type="number" min="1" max="512"></label></div>
     <div class="row"><button class="btn sm ghost" id="feAuto">Primo indirizzo libero (da DMX Master)</button></div>`:''}
     <label class="chk"><input id="feOn" type="checkbox"> Attiva</label>
@@ -1630,6 +1698,19 @@ function openFixEditor(w,f){
     $('#feUni').innerHTML=opts.map(u=>`<option value="${u.universe}"${u.universe===f.universe?' selected':''}>${esc(u.label||('Universo '+u.universe))}</option>`).join('');
     if(!opts.some(u=>u.universe===f.universe))$('#feUni').insertAdjacentHTML('afterbegin',`<option value="${f.universe}" selected>Universo ${f.universe} (attuale)</option>`);
   }
+  if($('#feModel')){
+    // Modelli reali da DMX Master (dmx_models, nota 19), filtrati sul
+    // "kind" del tipo -- se il catalogo non e' ancora arrivato (offline
+    // o prima connessione) resta solo il modello attuale, editabile
+    // comunque creandone uno nuovo.
+    const kind=FIX_TYPES[f.type].kind;
+    const models=tdModels().filter(m=>!kind||m.kind===kind);
+    const current=f.model||typeDefaultModel(f.type)||'';
+    let html=models.map(m=>`<option value="${esc(m.model)}"${m.model===current?' selected':''}>${esc(m.model)}${m.complete===false?' (canali da completare)':''}</option>`).join('');
+    if(!models.length)html='<option value="">(nessun modello noto a DMX Master)</option>'+html;
+    if(current&&!models.some(m=>m.model===current))html+=`<option value="${esc(current)}" selected>${esc(current)} (attuale)</option>`;
+    $('#feModel').innerHTML=html+'<option value="__new__">+ Nuovo modello…</option>';
+  }
   if($('#feW')){val2('#feW',f.w||6);val2('#feH',f.h||3.5);val2('#feRot',f.rot||0)} $('#feOn').checked=f.enabled!==false;
   const upd=()=>{f.name=$('#feName').value.trim()||f.name;
     const z=Number($('#feZ').value);if(Number.isFinite(z))f.z=clamp(z,-5,30);
@@ -1645,10 +1726,38 @@ function openFixEditor(w,f){
   ['feName','feZ','feGroup','feUni','feAddr','feW','feH','feRot','feSource','feSourceRef','feAngle','feSpread'].forEach(id=>{const n=$('#'+id);if(n){n.addEventListener('input',upd);n.addEventListener('change',upd)}});
   $('#feOn').addEventListener('change',upd);if($('#feTruss'))$('#feTruss').addEventListener('change',upd);
   if($('#feAuto'))$('#feAuto').onclick=()=>{
-    const a=freeAddressTD(+$('#feUni').value||f.universe,FIX_TYPES[f.type].ch);
+    const a=freeAddressTD(+$('#feUni').value||f.universe,footprintFor(f));
     if(a==null){alert('Nessuno spazio libero trovato per questo universo (o DMX Master non ha ancora mandato la mappa — prova a collegarti prima).');return}
     $('#feAddr').value=a; upd();
   };
+  // Modello (nota 19): "+ Nuovo modello..." crea un modello vero su DMX
+  // Master (dmx_model_add) invece di lasciar scrivere un nome a caso che
+  // TD non riconoscerebbe mai -- stessa conferma-per-presenza delle
+  // fixture, non ancora cliccato = non ancora creato.
+  if($('#feModel'))$('#feModel').addEventListener('change',e=>{
+    if(e.target.value!=='__new__'){f.model=e.target.value||f.model; save(); return}
+    const revert=()=>{e.target.value=f.model||''};
+    const name=prompt('Nome nuovo modello (come lo conoscerà DMX Master), es. "RGB 3CH"');
+    if(!name){revert();return}
+    const chStr=prompt('Numero di canali DMX (footprint) — i ruoli si completano dopo in TD o da qui','8');
+    const ch=Number(chStr);
+    if(!Number.isFinite(ch)||ch<1){alert('Numero di canali non valido.');revert();return}
+    const kind=FIX_TYPES[f.type].kind||'chase';
+    const ok=devCmd('td-dmx-win',{action:'set',param:'dmx_model_add',value:{model:name,kind,channels:ch}});
+    if(!ok){alert('Non collegata a Gaia — apri ⋯ → Gaia e collegati prima.');revert();return}
+    let tries=0;
+    const check=()=>{
+      tries++;
+      if(tdModels().some(m=>m.model===name)){f.model=name; save(); openFixEditor(w,f); return}
+      if(tries>=6){
+        const err=G.devices['td-dmx-win']?.last_error;
+        alert('Nessuna conferma da DMX Master per il nuovo modello'+(err?' — '+err:'.'));
+        revert();return;
+      }
+      setTimeout(check,500);
+    };
+    setTimeout(check,500);
+  });
   // Canale 1b, confermato dal vivo da TD (GAIA_TD_INTEGRATION.md, note
   // interface 17/18): dmx_fixture_add/dmx_fixtures accettano la
   // fixture Plancia COSI' COM'E' -- id stringa (il loro uid), universe
@@ -1665,7 +1774,7 @@ function openFixEditor(w,f){
     // scelto a mano, un conflitto deve dare un errore leggibile (con
     // suggerimento) invece di scrivere comunque sopra un'altra fixture.
     const ok=devCmd('td-dmx-win',{action:'set',param:f._synced?'dmx_fixture_update':'dmx_fixture_add',
-      value:{id:f.id,type:f.type,name:f.name,group:f.group,universe:f.universe,address:f.address,x:f.x,y:f.y,enabled:f.enabled!==false,on_conflict:'reject'}});
+      value:{id:f.id,type:f.type,name:f.name,group:f.group,model:f.model,universe:f.universe,address:f.address,x:f.x,y:f.y,enabled:f.enabled!==false,on_conflict:'reject'}});
     if(!ok){$('#feSyncMsg').textContent='Non collegata a Gaia — apri ⋯ → Gaia e collegati prima.';return}
     const btn=$('#feSync'); btn.disabled=true; $('#feSyncMsg').textContent='Mandato, verifico la conferma da DMX Master…';
     let tries=0;
@@ -1674,7 +1783,7 @@ function openFixEditor(w,f){
       const list=(G.devices['td-dmx-win']?.params||{}).dmx_fixtures||[];
       const found=list.find(x=>x.uid===f.id);
       if(found){
-        f._synced=true; save();
+        f._synced=true; f.model=found.profile||f.model; save();
         const rep=((G.devices['td-dmx-win']?.params||{}).dmx_patch_report||[]).find(x=>x.id===found.id);
         $('#feSyncMsg').textContent='Confermato da DMX Master'+(rep&&rep.status==='conflict'?' — ATTENZIONE: indirizzo in conflitto con un\'altra fixture già patchata.':'.');
         btn.textContent='Aggiorna su DMX Master'; btn.disabled=false; return;
