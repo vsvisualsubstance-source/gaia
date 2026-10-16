@@ -1712,6 +1712,22 @@ function openFixEditor(w,f){
     $('#feModel').innerHTML=html+'<option value="__new__">+ Nuovo modello…</option>';
   }
   if($('#feW')){val2('#feW',f.w||6);val2('#feH',f.h||3.5);val2('#feRot',f.rot||0)} $('#feOn').checked=f.enabled!==false;
+  // Rilevamento modifiche non mandate (bug reale trovato il 2026-10-16:
+  // spostare l'universo nell'editor sembrava "non salvare" -- in realta'
+  // salvava SOLO in locale, l'indirizzo restava quello vecchio (valido
+  // nell'universo di prima, quasi sempre in conflitto nel nuovo), TD
+  // rifiutava la scrittura (on_conflict:"reject") e il prossimo
+  // auto-import da TD (fonte unica, nota 20) riportava tutto com'era
+  // prima senza che fosse chiaro il perche'. Instantanea dei campi che
+  // contano per TD al momento dell'apertura, confrontata ad ogni
+  // modifica: se diverge e la fixture era gia' sincronizzata, avviso
+  // subito -- non solo dopo aver premuto "Aggiorna" e aspettato l'esito.
+  let syncedSnap=f._synced?JSON.stringify({group:f.group,model:f.model,universe:f.universe,address:f.address}):null;
+  const checkDirty=()=>{
+    if(!syncedSnap||!$('#feSyncMsg'))return;
+    const now=JSON.stringify({group:f.group,model:f.model,universe:f.universe,address:f.address});
+    $('#feSyncMsg').textContent=now!==syncedSnap?'Modifiche non ancora mandate a DMX Master — premi "Aggiorna su DMX Master" per salvarle davvero, altrimenti si perdono al prossimo aggiornamento del palco.':'';
+  };
   const upd=()=>{f.name=$('#feName').value.trim()||f.name;
     const z=Number($('#feZ').value);if(Number.isFinite(z))f.z=clamp(z,-5,30);
     if($('#feTruss')){f.mountToTruss=$('#feTruss').checked;$('#feZ').disabled=f.mountToTruss}
@@ -1722,9 +1738,20 @@ function openFixEditor(w,f){
       const hint=$('#fePreviewStatus');hint.textContent=wallPreviewMessage(f);hint.className='hint preview-status';
     }
     if($('#feAngle')){f.angle=clamp(+$('#feAngle').value||0,-180,180);f.spread=clamp(+$('#feSpread').value||28,1,120)}
-    f.enabled=$('#feOn').checked; save()};
-  ['feName','feZ','feGroup','feUni','feAddr','feW','feH','feRot','feSource','feSourceRef','feAngle','feSpread'].forEach(id=>{const n=$('#'+id);if(n){n.addEventListener('input',upd);n.addEventListener('change',upd)}});
+    f.enabled=$('#feOn').checked; save(); checkDirty()};
+  ['feName','feZ','feGroup','feAddr','feW','feH','feRot','feSource','feSourceRef','feAngle','feSpread'].forEach(id=>{const n=$('#'+id);if(n){n.addEventListener('input',upd);n.addEventListener('change',upd)}});
   $('#feOn').addEventListener('change',upd);if($('#feTruss'))$('#feTruss').addEventListener('change',upd);
+  // Universo: cambiarlo da solo non basta, l'indirizzo scelto per
+  // l'universo vecchio quasi sempre collide nel nuovo -- ricalcola
+  // SUBITO il primo indirizzo libero reale (da TD) per l'universo
+  // appena scelto, cosi' "Aggiorna" ha gia' una coppia universo/
+  // indirizzo valida invece di uno quasi certamente da rifiutare.
+  if($('#feUni'))$('#feUni').addEventListener('change',()=>{
+    const u=+$('#feUni').value||f.universe;
+    const a=freeAddressTD(u,footprintFor(f));
+    if(a!=null)$('#feAddr').value=a;
+    upd();
+  });
   if($('#feAuto'))$('#feAuto').onclick=()=>{
     const a=freeAddressTD(+$('#feUni').value||f.universe,footprintFor(f));
     if(a==null){alert('Nessuno spazio libero trovato per questo universo (o DMX Master non ha ancora mandato la mappa — prova a collegarti prima).');return}
@@ -1735,7 +1762,7 @@ function openFixEditor(w,f){
   // TD non riconoscerebbe mai -- stessa conferma-per-presenza delle
   // fixture, non ancora cliccato = non ancora creato.
   if($('#feModel'))$('#feModel').addEventListener('change',e=>{
-    if(e.target.value!=='__new__'){f.model=e.target.value||f.model; save(); return}
+    if(e.target.value!=='__new__'){f.model=e.target.value||f.model; save(); checkDirty(); return}
     const revert=()=>{e.target.value=f.model||''};
     const name=prompt('Nome nuovo modello (come lo conoscerà DMX Master), es. "RGB 3CH"');
     if(!name){revert();return}
@@ -1784,6 +1811,7 @@ function openFixEditor(w,f){
       const found=list.find(x=>x.uid===f.id);
       if(found){
         f._synced=true; f.model=found.profile||f.model; save();
+        syncedSnap=JSON.stringify({group:f.group,model:f.model,universe:f.universe,address:f.address});
         const rep=((G.devices['td-dmx-win']?.params||{}).dmx_patch_report||[]).find(x=>x.id===found.id);
         $('#feSyncMsg').textContent='Confermato da DMX Master'+(rep&&rep.status==='conflict'?' — ATTENZIONE: indirizzo in conflitto con un\'altra fixture già patchata.':'.');
         btn.textContent='Aggiorna su DMX Master'; btn.disabled=false; return;
