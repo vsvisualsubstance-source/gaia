@@ -146,13 +146,25 @@ già presenti. Verificato dal vivo (import automatico silenzioso,
 import manuale, editor con indirizzo reale). Dettaglio completo in
 `plancia/GAIA_PLANCIA_INTEGRATION.md`, nota TD 20.
 
+**Nota interface 19 (TD4Gaia, 2026-10-16) — fatto lato Plancia**:
+catalogo modelli/tipi condiviso. `FIX_TYPES.ch` resta solo come
+fallback offline/prima connessione; i canali veri vengono dal
+`footprint` del modello letto da `dmx_models`/`dmx_types`
+(`footprintFor()`), usato per indirizzo libero e legenda. Editor con
+menu "Modello" (filtrato per `kind`) e "+ Nuovo modello…"
+(`dmx_model_add` col solo numero di canali, ruoli da completare dopo).
+Bottone "📋 TD" manda `dmx_types` con la tassonomia di Plancia — azione
+esplicita (sostituisce tutta la tassonomia di TD, non la fonde), mai
+automatica. Verificato dal vivo: editor di una testa mobile mostra
+"Generic Spot 11ch 16bit" (modello reale), legenda passa da 16/8/24 ch
+fissi a 11/4/4 ch reali.
+
 **Non ancora fatto**: leggere `dmx_matrix.fixtures.groups[].profiles`
-per offrire una scelta reale di profilo nell'editor invece del default
-automatico di DMX Master; catalogo modelli/tipi condiviso (nota
-interface 19) — `FIX_TYPES.ch` è ancora fisso lato Plancia, non legge
-`dmx_models`/`dmx_types`/`dmx_matrix.catalog`; `dmx_patch_check`
-(anteprima batch) non usato, si manda `on_conflict` diretto su ogni
-add/update.
+per offrire una scelta reale di profilo/porta Art-Net indipendente dal
+default automatico di DMX Master; `dmx_matrix.catalog.kinds.<kind>.
+roles` non usato — un modello nuovo si crea sempre col solo numero di
+canali, mai con ruoli espliciti; `dmx_patch_check` (anteprima batch)
+non usato, si manda `on_conflict` diretto su ogni add/update.
 
 Il canale 4 non è OSC (per questo non ha una porta nella tabella nel senso
 degli altri) ed è l'unico dei quattro in cui TD *scrive* verso Gaia invece

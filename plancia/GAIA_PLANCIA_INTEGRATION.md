@@ -245,7 +245,7 @@ mocap).
   l'operatore vede comunque qualcosa anche a canale 3 morto — ma non è
   un segnale di errore esplicito lato Plancia oggi.
 
-## Nota TD 19 (2026-10-16): catalogo fixture condiviso — NON ANCORA FATTO
+## Nota TD 19 (2026-10-16): catalogo fixture condiviso — FATTO lato Plancia
 
 TD ha costruito un catalogo condiviso di **modelli** (`{model, kind,
 channels, footprint, ...}`) e **tipi** (`{type, label, group, kind,
@@ -256,16 +256,33 @@ qualcosa di vero e condiviso, letto da `status.params.dmx_models`/
 `gaia/device/td-dmx-win/command`, stessa conferma-per-presenza-nello-
 stato della nota 18 (non sul semplice invio).
 
-**5 cose da fare lato Plancia (dalla nota, non ancora iniziate)**:
-1. Mandare `dmx_types` con la tassonomia vera di Plancia invece di
-   lasciare i tipi builtin.
-2. Togliere `FIX_TYPES.ch` fisso — i canali di una fixture diventano il
-   `footprint` del suo modello in `dmx_matrix.catalog.models` (uso
-   anche in `nextAddress()` e in pianta).
-3. Editor fixture: menu "Modello" (i modelli del `kind` del gruppo) +
-   campo `model` mandato a TD.
-4. Possibilità di creare un modello nuovo dall'editor (`dmx_model_add`).
-5. Stessa conferma-per-presenza della nota 18, applicata a modelli/tipi.
+**Implementato lato Plancia** (`plancia/index.html`):
+1. `syncTypesToTD()` manda `dmx_types` con la tassonomia di Plancia —
+   bottone esplicito "📋 TD", mai automatico: `dmx_types` sostituisce
+   tutta la tassonomia di TD, non la fonde.
+2. `FIX_TYPES.ch` fisso resta solo come fallback offline/prima
+   connessione. I canali veri vengono da `footprintFor()`
+   (`modelFootprint()`+`typeDefaultModel()`, che leggono
+   `dmx_models`/`dmx_types`) — usato in `nextAddress()`, nell'indirizzo
+   libero di creazione rapida e nella legenda della Pianta.
+3. Editor fixture: menu "Modello" con i modelli del `kind` del tipo
+   (da `dmx_models`), più un'opzione "+ Nuovo modello…".
+4. "+ Nuovo modello…" chiede nome e numero di canali, manda
+   `dmx_model_add` con solo `channels: N` (ruoli da completare dopo,
+   come previsto dalla nota) e conferma-per-presenza in `dmx_models`.
+5. Stessa conferma-per-presenza della nota 18, applicata anche al
+   modello: dopo ogni add/update fixture, `f.model` si aggiorna col
+   `profile` reale tornato da TD in `dmx_fixtures`.
+
+**Verificato dal vivo** via Playwright: editor di una testa mobile già
+patchata mostra "Generic Spot 11ch 16bit" (il modello vero letto da
+TD) e universo/porta Art-Net reali; la legenda della Pianta passa da
+16/8/24 ch (valori fissi di prima) a 11/4/4 ch (footprint vero dal
+catalogo).
+
+**Non fatto**: la lista dei `roles` per kind (`dmx_matrix.catalog.kinds.
+<kind>.roles`) non è ancora usata — il nuovo modello si crea sempre col
+solo numero di canali, mai con i ruoli espliciti.
 
 Dettaglio completo nel commit TD4Gaia `65805d5` (nota interface 19).
 
