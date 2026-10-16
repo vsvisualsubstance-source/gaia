@@ -187,6 +187,10 @@ button{cursor:pointer}
 .swb[aria-pressed="true"]{border-color:var(--fg)}
 .hint{margin:0;font-size:13px;color:var(--dim);line-height:1.45}
 .hint code{font-family:var(--mono);font-size:12px;color:var(--fg)}
+.preview-status{padding:8px 10px;border-left:2px solid var(--line2);background:var(--bg)}
+.preview-status.live{border-color:var(--ok);color:var(--ok)}
+.preview-status.error,.preview-status.invalid,.preview-status.blocked{border-color:var(--bad);color:var(--fg)}
+.preview-status.loading,.preview-status.ready,.preview-status.buffering{border-color:var(--accent)}
 
 /* ---------- monitor ---------- */
 .mon{display:flex;gap:18px;align-items:center;padding-block:8px;font-family:var(--mono);font-size:12px;color:var(--dim);min-width:0}
@@ -378,7 +382,7 @@ const TLCUES=`0:00 Walk-in > 1
 const RIG={heads:8,uplights:6,bars:8,wall:true,speakers:true};
 
 /* ---------- fixture del palco (patch vero, non solo conteggi) ---------- */
-// Ogni fixture: {id,type,name,group,universe,address,x,y,enabled}. "group"
+// Ogni fixture: {id,type,name,group,universe,address,x,y,z,enabled}. "group"
 // combacia con gli indirizzi /dmx/group/<group> del canale 3 (vedi
 // plancia/README.md). x/y in metri, stesso sistema di coordinate di drawPlot
 // (X(m)/Y(m)) -- 0,0 e' il centro del palco sul fondo.
@@ -389,9 +393,15 @@ const FIX_TYPES={
   wall:   {label:'LED wall',     group:'ledwall', ch:0},
   blinder:{label:'Blinder',      group:'blinder', ch:4},
   haze:   {label:'Haze',         group:'haze',    ch:2},
+  laser:  {label:'Laser (solo render)',group:'',   ch:0},
   speaker:{label:'Cassa',        group:'',        ch:0}
 };
-const FIX_COLOR={mh:'#58a6ff',par:'#ffb23e',bar:'#3fb950',wall:'#ff6fae',blinder:'#f85149',haze:'#8a92a0',speaker:'#c9ced8'};
+const FIX_COLOR={mh:'#58a6ff',par:'#ffb23e',bar:'#3fb950',wall:'#ff6fae',blinder:'#f85149',haze:'#8a92a0',laser:'#ff365c',speaker:'#c9ced8'};
+// DMX Master risolve i gruppi "live" (mh/front/back) negli ALIAS fisici
+// del rig (heads/rig_a/rig_b) prima di salvarli in dmx_fixtures (nota TD
+// 19/20) -- per ricostruire il "type" di Plancia da li' serve la mappa
+// inversa. Gruppo non riconosciuto -> 'par' (generico), meglio di niente.
+const GROUP_TO_TYPE={heads:'mh',mh:'mh',rig_a:'par',rig_b:'par',front:'par',back:'par',ledbar:'bar',blinder:'blinder',haze:'haze'};
 // "p-" davanti: uid() e' 7 caratteri base36, ~1 volta su 10000 esce
 // tutto cifre -- DMX Master lo leggerebbe come id numerico (i SUOI,
 // non quelli creati da Plancia), confuso con una fixture sua. Trovato
@@ -399,8 +409,56 @@ const FIX_COLOR={mh:'#58a6ff',par:'#ffb23e',bar:'#3fb950',wall:'#ff6fae',blinder
 // w/h/rot (metri, metri, gradi) hanno senso solo per 'wall' oggi --
 // richiesto esplicitamente ("altezza lunghezza rotazione"), innocui e
 // ignorati per gli altri tipi.
+const STAGE_DEFAULT={width:12,depth:8,floorHeight:0,trussHeight:7,
+  audience:{x:0,y:9,width:12,depth:6},foh:{x:-1,y:11.2,width:2,depth:1}};
+const stageDefaults=()=>JSON.parse(JSON.stringify(STAGE_DEFAULT));
+const fixtureZDefault=(type,stage=STAGE_DEFAULT)=>type==='mh'||type==='laser'?(stage?.trussHeight||STAGE_DEFAULT.trussHeight):
+  type==='wall' ? 0 : type==='bar' ? 0.15 : type==='speaker' ? 0.6 : type==='haze' ? 0.8 : type==='blinder' ? 1 : 1.2;
+function ensureStageData(layout){
+  const current=layout.stage||{};
+  const defaults=stageDefaults();
+  layout.stage={...defaults,...current,
+    audience:{...defaults.audience,...current.audience},
+    foh:{...defaults.foh,...current.foh}};
+  for(const key of ['width','depth','floorHeight','trussHeight']){
+    const fallback=defaults[key];
+    if(!Number.isFinite(+layout.stage[key]))layout.stage[key]=fallback;
+    else layout.stage[key]=+layout.stage[key];
+  }
+  layout.stage.width=clamp(layout.stage.width,2,60);
+  layout.stage.depth=clamp(layout.stage.depth,2,60);
+  layout.stage.floorHeight=clamp(layout.stage.floorHeight,0,20);
+  layout.stage.trussHeight=clamp(layout.stage.trussHeight,1,30);
+  for(const [area,defaultArea,bounds] of [
+    [layout.stage.audience,defaults.audience,{x:100,y:200,width:200,depth:200}],
+    [layout.stage.foh,defaults.foh,{x:100,y:200,width:50,depth:50}]
+  ]){
+    for(const key of ['x','y','width','depth']){
+      if(!Number.isFinite(+area[key]))area[key]=defaultArea[key];
+      else area[key]=+area[key];
+      area[key]=clamp(area[key],(key==='width'||key==='depth') ? 0.5 : -bounds[key],bounds[key]);
+    }
+  }
+  for(const f of layout.fixtures||[]){
+    if(!Number.isFinite(+f.x))f.x=0;else f.x=+f.x;
+    if(!Number.isFinite(+f.y))f.y=0;else f.y=+f.y;
+    if(!Number.isFinite(+f.z))f.z=fixtureZDefault(f.type,layout.stage);
+    else f.z=+f.z;
+    if(typeof f.mountToTruss!=='boolean')f.mountToTruss=f.type==='mh';
+    if(f.type==='wall'){
+      f.sourceType=f.sourceType||'procedural';
+      f.sourceRef=f.sourceRef||'';
+    }
+    if(f.type==='laser'){
+      if(!Number.isFinite(+f.angle))f.angle=0;
+      if(!Number.isFinite(+f.spread))f.spread=28;
+    }
+  }
+}
 const mkFix=(type,name,x,y,universe,address)=>({id:'p-'+uid(),type,name,group:FIX_TYPES[type].group,universe,address,x,y,
-  w:type==='wall'?6:undefined,h:type==='wall'?3.5:undefined,rot:type==='wall'?0:undefined,enabled:true});
+  z:fixtureZDefault(type),w:type==='wall'?6:undefined,h:type==='wall'?3.5:undefined,rot:type==='wall'?0:undefined,
+  sourceType:type==='wall'?'procedural':undefined,sourceRef:type==='wall'?'':undefined,
+  angle:type==='laser'?0:undefined,spread:type==='laser'?28:undefined,mountToTruss:type==='mh',enabled:true});
 function defaultFixtures(rig){
   // Migrazione dal vecchio modello a sole quantita' (RIG, 2026-10):
   // stessa disposizione automatica di prima, cosi' un layout salvato
@@ -412,7 +470,12 @@ function defaultFixtures(rig){
   for(let i=0;i<R.uplights;i++){out.push(mkFix('par','UP'+(i+1),-5.2+10.4*(R.uplights>1?i/(R.uplights-1):.5),1.05,1,a));a+=FIX_TYPES.par.ch}
   let b=1;
   for(let i=0;i<R.bars;i++){out.push(mkFix('bar','BAR'+(i+1),-5.2+(10.4/R.bars)*(i+.5),7.6,2,b));b+=FIX_TYPES.bar.ch}
-  if(R.wall) out.push(mkFix('wall','LED WALL',0,.4,3,1));
+  const walls=Number.isFinite(+R.walls)?clamp(Math.floor(+R.walls),0,8):R.wall?1:0;
+  for(let i=0;i<walls;i++){
+    const f=mkFix('wall',walls>1?`LED WALL ${i+1}`:'LED WALL',walls>1?(i-(walls-1)/2)*5.6:0,.4,3,i+1);
+    if(walls>1)f.w=5;
+    out.push(f);
+  }
   if(R.speakers){out.push(mkFix('speaker','L ARRAY',-7.2,6.1,0,0));out.push(mkFix('speaker','R ARRAY',7.2,6.1,0,0))}
   return out;
 }
@@ -421,7 +484,6 @@ function fixCounts(){ // conteggi per tipo, usati da drawRender/legenda invece d
   for(const f of (L.fixtures||[])) if(f.enabled!==false) c[f.type]=(c[f.type]||0)+1;
   return c;
 }
-const wallFixture=()=>(L.fixtures||[]).find(f=>f.type==='wall'&&f.enabled!==false)||null;
 
 /* ---------- progetti salvati (più show, da ricaricare) ---------- */
 // Richiesto esplicitamente: poter salvare più progetti (pagine+fixture
@@ -432,7 +494,7 @@ const PROJKEY='plancia.projects.v1';
 const PROJECT_TEMPLATES=[
   {tid:'tpl-small',name:'Palco piccolo (4 teste)',rig:{heads:4,uplights:2,bars:2,wall:false,speakers:true}},
   {tid:'tpl-standard',name:'Palco standard (8 teste + LED wall)',rig:{heads:8,uplights:6,bars:8,wall:true,speakers:true}},
-  {tid:'tpl-large',name:'Palco grande (12 teste + 2 LED wall)',rig:{heads:12,uplights:8,bars:12,wall:true,speakers:true}}
+  {tid:'tpl-large',name:'Palco grande (12 teste + 2 LED wall)',rig:{heads:12,uplights:8,bars:12,walls:2,speakers:true}}
 ];
 const projList=()=>store.get(PROJKEY)||[];
 const projSnapshot=()=>JSON.parse(JSON.stringify(L));
@@ -450,6 +512,7 @@ function projUpdate(id){
 function projLoad(id){
   const data=store.get('plancia.project.'+id);if(!data)return false;
   L=data;if(!L.fixtures)L.fixtures=defaultFixtures(L.rig);
+  ensureStageData(L);
   L._projectId=id;const e=projList().find(x=>x.id===id);L._projectName=e?e.name:'';
   pi=0;selId=null;save();render();initShow();
   return true;
@@ -461,7 +524,7 @@ function projDelete(id){
 }
 function projLoadTemplate(tid){
   const t=PROJECT_TEMPLATES.find(x=>x.tid===tid);if(!t)return;
-  L={pages:TPL.full.pages(),fixtures:defaultFixtures(t.rig)};
+  L={pages:TPL.full.pages(),fixtures:defaultFixtures(t.rig),stage:stageDefaults()};
   delete L._projectId;delete L._projectName;
   pi=0;selId=null;save();render();initShow();
 }
@@ -480,6 +543,47 @@ function tdFixtures(){
   if(!Array.isArray(list))return[];
   const mine=new Set((L.fixtures||[]).map(f=>f.id));
   return list.filter(x=>!x.uid||!mine.has(x.uid));
+}
+
+/* ---------- universi/indirizzi reali, patch TD come fonte unica (nota 19/20) ---------- */
+const tdParams=()=>(G.devices['td-dmx-win']||{}).params||{};
+const universeMap=()=>tdParams().dmx_universe_map||null;
+function portIdToUniverse(port_id){
+  const u=(universeMap()?.universes||[]).find(x=>x.port_id===port_id);
+  return u?u.universe:1;
+}
+// Primo spazio libero vero (letto da TD), non piu' calcolato solo sulle
+// fixture locali di Plancia -- evita conflitti con cio' che e' gia'
+// patchato in TD (bug di fondo dietro i doppioni della nota 20).
+function freeAddressTD(universe,ch){
+  const u=(universeMap()?.universes||[]).find(x=>x.universe===universe);
+  if(!u)return null;
+  for(const [a,b] of (u.free||[]))if(b-a+1>=ch)return a;
+  return null;
+}
+// Fonte unica per il palco (richiesto esplicitamente da TD, nota 20,
+// "Una fonte sola per il palco"): ricostruisce L.fixtures da
+// status.params.dmx_fixtures invece che dalla copia locale -- cosi'
+// due dispositivi con Plancia aperta vedono lo stesso palco e non
+// generano piu' doppioni (ognuno aveva il proprio uid locale). Importa
+// SOLO le fixture con uid "p-..." (create da Plancia, qualunque
+// dispositivo); quelle native di TD restano in sola lettura via
+// tdFixtures().
+function importFromTD(silent){
+  const list=tdParams().dmx_fixtures;
+  if(!Array.isArray(list)){if(!silent)alert('Nessun dato da DMX Master ancora (non collegata, o TD non ha ancora risposto).');return false}
+  const mine=list.filter(x=>x.uid&&x.uid.startsWith('p-'));
+  if(!mine.length){if(!silent)alert('DMX Master non ha ancora fixture create da Plancia — nulla da importare.');return false}
+  if(!silent&&!confirm(`Sostituisce le ${(L.fixtures||[]).length} fixture locali con le ${mine.length} trovate su DMX Master. Continuare?`))return false;
+  L.fixtures=mine.map(x=>({
+    id:x.uid,type:GROUP_TO_TYPE[x.group]||'par',name:x.name||x.uid,
+    group:x.group,universe:portIdToUniverse(x.port_id),address:x.address,
+    x:typeof x.x==='number'?x.x:0,y:typeof x.y==='number'?x.y:0,
+    enabled:x.enabled!==0&&x.enabled!==false,_synced:true
+  }));
+  save();
+  if(!silent)alert(`Importate ${mine.length} fixture da DMX Master.`);
+  return true;
 }
 
 /* ---------- template ---------- */
@@ -557,7 +661,7 @@ TPL.gaia={name:'Gaia live',desc:'Agent Gaia (mood, pensieri, chat), PatchDeck V8
   P('DMX V8',[W('tddevice',0,0,10,10,{label:'DMX V8',fam:'dmx',color:SWATCH[0]}),W('gaiadmx',10,0,6,10,{label:'DMX stanza',color:SWATCH[4]})])]};
 TPL.full={name:'Show completo',desc:'Tutte le pagine insieme: Gaia, PatchDeck, DMX V8, panoramica show, DMX, teste mobili, timeline, palco, mix.',
   pages:()=>['gaia','show','dmx','mh','timeline','palco','mix'].flatMap(k=>TPL[k].pages())};
-const sample=()=>({pages:TPL.full.pages(),fixtures:defaultFixtures()});
+const sample=()=>({pages:TPL.full.pages(),fixtures:defaultFixtures(),stage:stageDefaults()});
 
 let L=store.get(KEY)||sample();
 // Se L.rig esiste (show salvato PRIMA di oggi, quando il rig erano solo
@@ -568,6 +672,7 @@ let L=store.get(KEY)||sample();
 // quello disegnato" -- era anche questo: la migrazione ripartiva dal
 // default invece di quello che aveva davvero configurato).
 if(!L.fixtures)L.fixtures=defaultFixtures(L.rig);
+ensureStageData(L);
 // host/port: destinazione OSC generica (/dmx/..., /mh/..., /led/..., /show/...)
 // -- DMX Master (TD, famiglia dmx) riceve questi indirizzi DIRETTAMENTE, non
 // passa da osc_bridge.py (quello e' solo per /gaia/..., vedi GAIA_PLANCIA_INTEGRATION.md).
@@ -580,6 +685,7 @@ const page=()=>L.pages[pi];
 const allW=()=>L.pages.flatMap(p=>p.widgets);
 const findW=id=>allW().find(w=>w.id===id)||null;
 const save=()=>store.set(KEY,L);
+save();
 const out=(w,v)=>w.min+(w.max-w.min)*v;
 const fmt=n=>{const a=Math.abs(n);return a>=100?Math.round(n).toString():a>=10?n.toFixed(1):n.toFixed(2)};
 const items=w=>String(w.items||'').split('\n').map(s=>s.trim()).filter(Boolean);
@@ -597,18 +703,19 @@ const SH={master:1,fade:1.5,blackout:0,strobe:0,rate:8,chase:0,scene:-1,t0:0,
   led:{mode:1,bright:.9},sel:new Set([0,1,2,3,4,5,6,7]),
   wash:mkT([0,0,0]),back:mkT([0,0,0]),bar:mkT([0,0,0]),wall:mkT([0,0,0]),
   heads:Array.from({length:12},()=>({T:mkT([0,.5,1,1,1,0,.3,.7]),gobo:0,strobe:0}))};
+function ensureHeadPool(n){while(SH.heads.length<n)SH.heads.push({T:mkT([0,.5,1,1,1,0,.3,.7]),gobo:0,strobe:0})}
 function posOf(p,i,n){const u=n>1?i/(n-1)*2-1:0;
   switch(p){case 0:return[-u*.32,.62];case 1:return[u*.25,.98];case 2:return[-u*.12,.45];case 3:return[u*.45,-.75];case 4:return[i%2?.42:-.42,.55];case 5:return[u*.85,.5];default:return[0,.5]}}
 function goScene(i,d=SH.fade){
   const l=LOOKS[i]; if(!l)return; SH.scene=i; SH.t0=now();
   goT(SH.wash,l.wash,d);goT(SH.back,l.back,d);goT(SH.bar,l.bar,d);goT(SH.wall,l.wall.col,d);SH.led.mode=l.wall.mode;
-  const n=Math.min(12,fixCounts().mh);
-  SH.heads.forEach((h,k)=>{const [p,t]=posOf(l.mh.pos,k,n);const mid=Math.abs(k-(n-1)/2)<1;
-    goT(h.T,[p,t,...l.mh.col,l.mh.only&&!mid?0:l.mh.dim,l.mh.zoom,h.T.t[7]],d);h.gobo=l.mh.gobo;h.strobe=0});
+  const n=fixCounts().mh;ensureHeadPool(n);
+  for(let k=0;k<n;k++){const h=SH.heads[k],[p,t]=posOf(l.mh.pos,k,n);const mid=Math.abs(k-(n-1)/2)<1;
+    goT(h.T,[p,t,...l.mh.col,l.mh.only&&!mid?0:l.mh.dim,l.mh.zoom,h.T.t[7]],d);h.gobo=l.mh.gobo;h.strobe=0}
   syncLedWidgets();
 }
 function syncLedWidgets(){for(const w of allW())if(w.type==='scenes'&&w.addr==='/led/mode'){w.value=SH.led.mode;paint(elOf(w.id),w)}}
-const selHeads=()=>SH.heads.filter((h,k)=>SH.sel.has(k)&&k<Math.min(12,fixCounts().mh));
+const selHeads=()=>{const n=fixCounts().mh;ensureHeadPool(n);return SH.heads.filter((h,k)=>SH.sel.has(k)&&k<n)};
 function model(a,args){
   const v=+args[0];
   if(a.startsWith('/dmx/group/')){const g=a.slice(11);if(g in SH.g)SH.g[g]=v;return}
@@ -628,7 +735,7 @@ function model(a,args){
     case '/mh/focus':selHeads().forEach(h=>setI(h.T,7,v));break;
     case '/mh/gobo':selHeads().forEach(h=>h.gobo=Math.round(v));break;
     case '/mh/strobe':selHeads().forEach(h=>h.strobe=v>.5);break;
-    case '/mh/position':{const n=Math.min(12,fixCounts().mh);SH.heads.forEach((h,k)=>{if(!SH.sel.has(k))return;const [p,t]=posOf(Math.round(v),k,n);const tt=h.T.t.slice();tt[0]=p;tt[1]=t;goT(h.T,tt,.7)});break}
+    case '/mh/position':{const n=fixCounts().mh;ensureHeadPool(n);SH.heads.forEach((h,k)=>{if(!SH.sel.has(k)||k>=n)return;const [p,t]=posOf(Math.round(v),k,n);const tt=h.T.t.slice();tt[0]=p;tt[1]=t;goT(h.T,tt,.7)});break}
     case '/mh/home':if(v>.5)selHeads().forEach(h=>{goT(h.T,[0,.5,1,1,1,1,.3,.7],.6);h.gobo=0;h.strobe=0});break;
     case '/led/color':[0,1,2].forEach(j=>setI(SH.wall,j,+args[j]));break;
     case '/led/mode':SH.led.mode=Math.round(v);break;
@@ -700,7 +807,7 @@ function inner(w){
         <span class="tl-tc">00:00:00:00</span><span class="tl-cue"><span class="k">CUE</span><b>—</b></span><span class="tl-bpm">${w.bpm||120} BPM · ${Math.floor(D/60)}:${String(Math.round(D%60)).padStart(2,'0')}</span></div>
         <div class="tl-lane"><div class="tl-ruler">${ticks}</div><div class="tl-cues">${blocks}</div><div class="tl-ph"></div></div></div>`}
     case 'clock': return '<div class="clk"><div class="clk-main">--:--:--</div><div class="clk-sub"></div></div>';
-    case 'stage': return `<canvas></canvas><div class="seg"><button data-v="render" aria-pressed="${w.view!=='plot'}">Render</button><button data-v="plot" aria-pressed="${w.view==='plot'}">Pianta</button><button data-act="syncall" title="Manda tutte le fixture patchabili a DMX Master">⇪ TD</button></div><div class="hud"></div>`;
+    case 'stage': return `<canvas></canvas><div class="seg"><button data-v="render" aria-pressed="${w.view!=='plot'}">Render</button><button data-v="plot" aria-pressed="${w.view==='plot'}">Pianta</button><button data-act="syncall" title="Manda tutte le fixture patchabili a DMX Master">⇪ TD</button><button data-act="importtd" title="Ricarica il palco dalla patch reale di DMX Master (fonte unica, evita doppioni)">⇩ TD</button><button data-act="resolve" title="Pulisci i doppioni su DMX Master e ricarica">🧹 TD</button></div><div class="hud"></div>`;
     default: return gInner(w);
   }
 }
@@ -786,7 +893,13 @@ function bind(el,w){
     const end=()=>{el.classList.remove('active','press');el.onpointermove=null;el.onpointerup=el.onpointercancel=null;save()};
     if(w.type==='stage'){const b=e.target.closest('[data-v]');if(b){w.view=b.dataset.v;el.querySelectorAll('.seg button').forEach(x=>x.setAttribute('aria-pressed',x===b));save()}
       else if(e.target.closest('[data-act="syncall"]'))syncAllFixtures();
+      else if(e.target.closest('[data-act="importtd"]'))importFromTD();
+      else if(e.target.closest('[data-act="resolve"]'))resolveDuplicates();
       else if(w.view==='plot')stageDown(e,el,w);
+      else if(e.target.closest('canvas'))(L.fixtures||[]).forEach(f=>{
+        const state=wallVideoPlayers.get(f.id);
+        if(f.type==='wall'&&state&&['blocked','error'].includes(state.status))retryWallVideo(f);
+      });
       return}
     if(w.type==='timeline'){
       const b=e.target.closest('[data-act]'); if(b){e.preventDefault();tlAct(w,b.dataset.act);return}
@@ -892,7 +1005,21 @@ function renderInsp(){
     ${T==='clock'?`<label>Modalità<select id="fCMode"><option value="tod">Ora del giorno</option><option value="show">Timecode show (25 fps)</option><option value="countdown">Countdown a orario</option></select></label>
       <label>Orario di fine<input id="fTarget" type="time"></label>`:''}
     ${T==='stage'?`<label>Vista<select id="fView"><option value="render">Render</option><option value="plot">Pianta e patch</option></select></label>
-      <p class="hint">Il Render mostra sempre lo stesso NUMERO di fixture e la stessa LED wall disegnati in Pianta e patch — nessun conteggio separato da impostare qui. La POSIZIONE invece no: il Render dispone teste/uplight/barre sempre su una riga automatica, non segue dove le hai messe in Pianta (in pausa per ora).</p>`:''}
+      <h4>Dimensioni reali (m)</h4><div class="two">
+        <label>Larghezza palco<input id="stWidth" type="number" min="2" max="60" step="0.1"></label>
+        <label>Profondità palco<input id="stDepth" type="number" min="2" max="60" step="0.1"></label>
+        <label>Quota piano palco<input id="stFloor" type="number" min="0" max="20" step="0.1"></label>
+        <label>Altezza truss<input id="stTruss" type="number" min="1" max="30" step="0.1"></label></div>
+      <details><summary>Aree: platea e FOH</summary><div class="two">
+        <label>Platea X (centro)<input id="audX" type="number" step="0.1"></label>
+        <label>Platea Y (inizio)<input id="audY" type="number" step="0.1"></label>
+        <label>Platea larghezza<input id="audW" type="number" min="1" step="0.1"></label>
+        <label>Platea profondità<input id="audD" type="number" min="1" step="0.1"></label>
+        <label>FOH X (centro)<input id="fohX" type="number" step="0.1"></label>
+        <label>FOH Y<input id="fohY" type="number" step="0.1"></label>
+        <label>FOH larghezza<input id="fohW" type="number" min="0.5" step="0.1"></label>
+        <label>FOH profondità<input id="fohD" type="number" min="0.5" step="0.1"></label></div></details>
+      <p class="hint">Posizioni e altezze delle fixture sono locali a Plancia. La sorgente LED è configurabile; anteprima NDI/RTSP richiede ancora un bridge video compatibile col browser. I laser sono solo visuali, senza invio OSC/DMX.</p>`:''}
     ${GAIA_TYPES.has(T)&&T!=='gaia'?`<label>${T==='gaiadmx'?'Stanza':'Device'}<select id="gDev"><option value="">Automatico</option>${(T==='gaiadmx'?Object.keys(G.dmx).sort():devIds('')).map(x=>`<option>${esc(x)}</option>`).join('')}</select></label>`:''}
     ${T==='patchdeck'?`<label>Deck<select id="gDeck"><option value="a">Deck A</option><option value="b">Deck B</option></select></label>`:''}
     ${T==='tddevice'?`<label>Tipo di device (per la scelta automatica)<select id="gFam"><option value="">Qualsiasi</option><option value="patchdeck">PatchDeck</option><option value="mixeraudio">Controller (mixeraudio)</option><option value="dmx">DMX V8</option></select></label>`:''}
@@ -913,7 +1040,22 @@ function renderInsp(){
   if(T==='timeline'){val('#fDur',w.duration);val('#fBpm',w.bpm);val('#fCues',w.cues);
     on('#fDur',v=>{if(+v>=10)w.duration=+v});on('#fBpm',v=>{if(+v>0)w.bpm=+v});on('#fCues',v=>w.cues=v)}
   if(T==='clock'){val('#fCMode',w.mode);val('#fTarget',w.target||'23:30');on('#fCMode',v=>w.mode=v,'change');on('#fTarget',v=>w.target=v)}
-  if(T==='stage'){val('#fView',w.view);on('#fView',v=>w.view=v,'change')}
+  if(T==='stage'){
+    val('#fView',w.view);on('#fView',v=>w.view=v,'change');
+    const st=L.stage;
+    const stageFields=[
+      ['#stWidth',st,'width',2,60],['#stDepth',st,'depth',2,60],['#stFloor',st,'floorHeight',0,20],['#stTruss',st,'trussHeight',1,30],
+      ['#audX',st.audience,'x',-100,100],['#audY',st.audience,'y',-100,200],['#audW',st.audience,'width',1,200],['#audD',st.audience,'depth',1,200],
+      ['#fohX',st.foh,'x',-100,100],['#fohY',st.foh,'y',-100,200],['#fohW',st.foh,'width',.5,50],['#fohD',st.foh,'depth',.5,50]];
+    for(const [selector,target,key,min,max] of stageFields){
+      val(selector,target[key]);
+      $(selector).addEventListener('change',e=>{
+        const n=Number(e.target.value);
+        if(!Number.isFinite(n)){e.target.value=target[key];return}
+        target[key]=clamp(n,min,max);e.target.value=target[key];save();
+      });
+    }
+  }
   if($('#gDev')){val('#gDev',T==='gaiadmx'?(w.stanza||''):(w.device||''));on('#gDev',v=>{if(T==='gaiadmx')w.stanza=v;else w.device=v},'change')}
   if(T==='patchdeck'){val('#gDeck',w.deck||'a');on('#gDeck',v=>w.deck=v,'change')}
   if(T==='tddevice'){val('#gFam',w.fam||'');on('#gFam',v=>w.fam=v,'change')}
@@ -993,142 +1135,280 @@ function beam(g,x,y,ang,len,wd,col,a){
   g.fillStyle=gr;g.beginPath();g.moveTo(x+px*1.5,y+py*1.5);g.lineTo(x-px*1.5,y-py*1.5);g.lineTo(ex-px*wd,ey-py*wd);g.lineTo(ex+px*wd,ey+py*wd);g.closePath();g.fill();
 }
 function glow(g,x,y,r,col,a){const gr=g.createRadialGradient(x,y,0,x,y,r);gr.addColorStop(0,rgba(col,a));gr.addColorStop(1,rgba(col,0));g.fillStyle=gr;g.fillRect(x-r,y-r,r*2,r*2)}
+const wallVideoPlayers=new Map();
+function wallPreviewMessage(f,state=wallVideoPlayers.get(f.id)){
+  if(f.sourceType!=='url')return f.sourceType==='procedural'?'Contenuto LED procedurale.':
+    `${(f.sourceType||'Sorgente').toUpperCase()}: preview in attesa del Video Service.`;
+  if(!f.sourceRef?.trim())return 'Inserisci un URL diretto HTTP(S) a un video MP4/WebM.';
+  if(!state)return 'Preview disponibile nella vista Render.';
+  return state.message;
+}
+function setWallPreviewState(f,state,status,message){
+  if(wallVideoPlayers.get(f.id)!==state)return;
+  state.status=status;state.message=message;
+  const hint=$('#fePreviewStatus');
+  if(hint?.dataset.wallId===f.id){
+    hint.textContent=message;
+    hint.className=`hint preview-status ${status}`;
+  }
+}
+function disposeWallVideo(state){
+  if(!state.video)return;
+  state.video.pause();state.video.removeAttribute('src');state.video.load();
+}
+function createWallVideoState(f){
+  const raw=f.sourceRef.trim(),state={raw,status:'loading',message:'Avvio preview…',video:null};
+  let url;
+  try{url=new URL(raw,location.href)}catch{
+    state.status='invalid';state.message='URL non valido. Inserisci un indirizzo HTTP(S) diretto a un video MP4/WebM.';
+    return state;
+  }
+  if(url.protocol!=='http:'&&url.protocol!=='https:'){
+    state.status='invalid';state.message='Protocollo non supportato: usa un URL HTTP(S) diretto a un video MP4/WebM.';
+    return state;
+  }
+  const video=document.createElement('video');
+  state.video=video;video.muted=true;video.loop=true;video.autoplay=true;video.playsInline=true;
+  video.preload='auto';video.disablePictureInPicture=true;
+  video.addEventListener('loadeddata',()=>setWallPreviewState(f,state,'ready','Video caricato; connessione in avvio…'));
+  video.addEventListener('playing',()=>setWallPreviewState(f,state,'live','Preview attiva · audio disattivato.'));
+  video.addEventListener('waiting',()=>setWallPreviewState(f,state,'buffering','La preview sta attendendo dati video…'));
+  video.addEventListener('error',()=>{
+    const unsupported=video.error?.code===4;
+    setWallPreviewState(f,state,unsupported?'unsupported':'error',unsupported?
+      'Formato o codec non supportato dal browser. Usa un MP4/H.264 o un WebM compatibile.':
+      'Preview non disponibile: verifica URL e connessione.');
+  });
+  video.src=url.href;video.load();
+  video.play().catch(error=>{
+    if(error?.name==='NotAllowedError')setWallPreviewState(f,state,'blocked','Avvio automatico bloccato; fai clic sul pannello Render per avviare la preview.');
+    else if(error?.name==='NotSupportedError')setWallPreviewState(f,state,'unsupported','Formato o codec non supportato dal browser. Usa un MP4/H.264 o un WebM compatibile.');
+    else setWallPreviewState(f,state,'error','Avvio preview non riuscito: verifica URL e connessione.');
+  });
+  return state;
+}
+function syncWallVideoPlayers(fixtures){
+  const wanted=new Map(fixtures.filter(f=>f.type==='wall'&&f.enabled!==false&&f.sourceType==='url'&&f.sourceRef?.trim()).map(f=>[f.id,f]));
+  for(const [id,state] of wallVideoPlayers){
+    const f=wanted.get(id);
+    if(f&&state.raw===f.sourceRef.trim())continue;
+    disposeWallVideo(state);wallVideoPlayers.delete(id);
+  }
+  for(const f of wanted.values()){
+    if(wallVideoPlayers.has(f.id))continue;
+    const state=createWallVideoState(f);wallVideoPlayers.set(f.id,state);
+  }
+}
+function retryWallVideo(f){
+  const old=wallVideoPlayers.get(f.id);if(old){disposeWallVideo(old);wallVideoPlayers.delete(f.id)}
+  if(f.enabled!==false&&f.sourceType==='url'&&f.sourceRef?.trim()){
+    const state=createWallVideoState(f);wallVideoPlayers.set(f.id,state);
+  }
+}
+function drawVideoCover(g,video,x,y,w,h,alpha){
+  if(!video||video.readyState<2||!video.videoWidth||!video.videoHeight)return false;
+  const sourceAspect=video.videoWidth/video.videoHeight,targetAspect=w/h;
+  let sx=0,sy=0,sw=video.videoWidth,sh=video.videoHeight;
+  if(sourceAspect>targetAspect){sw=sh*targetAspect;sx=(video.videoWidth-sw)/2}
+  else{sh=sw/targetAspect;sy=(video.videoHeight-sh)/2}
+  g.save();g.globalCompositeOperation='source-over';g.globalAlpha=alpha;
+  g.drawImage(video,sx,sy,sw,sh,x,y,w,h);g.restore();
+  return true;
+}
 function drawRender(g,W,H,t,level){
-  // Conteggi/dimensioni dalla patch REALE (L.fixtures), non piu' da
-  // L.rig -- cosi' Render e Pianta mostrano sempre lo stesso rig
-  // disegnato dall'utente (richiesto esplicitamente, "deve coincidere").
-  // LIMITE NOTO (2026-10-16, in pausa apposta): questa funzione NON
-  // legge le posizioni x/y delle fixture -- dispone teste/uplight/
-  // barre sempre su una riga automatica, come prima. Spostare una luce
-  // nella Pianta non ha nessun effetto qui (solo il CONTEGGIO e le
-  // dimensioni della LED wall coincidono, non la posizione). Farlo per
-  // bene richiede una vista/un browser per verificare il risultato
-  // visivamente -- rimandato, non e' un bug.
-  // Teste mobili limitate a 12: SH.heads e' un pool pre-allocato a quella
-  // dimensione (vedi sopra), oltre non c'e' stato animato pronto.
-  const cnt=fixCounts(), wallF=wallFixture(), uplights=cnt.par, bars=cnt.bar, speakers=cnt.speaker>0;
+  const fixtures=(L.fixtures||[]).filter(f=>f.enabled!==false);
+  const fixturesOf=type=>fixtures.filter(f=>f.type===type);
+  const wallFixtures=fixturesOf('wall'), uplights=fixturesOf('par'), bars=fixturesOf('bar');
+  const headsF=fixturesOf('mh'), blinderF=fixturesOf('blinder'), speakers=fixturesOf('speaker'), lasers=fixturesOf('laser');
+  const geom=L.stage, depth=Math.max(1,geom.depth), halfStage=Math.max(1,geom.width/2);
   const gate=SH.strobe?(((t/1000*SH.rate)%1)<.22?1:0):1, M=(SH.blackout?0:SH.master)*gate, hz=.3+.9*SH.g.haze;
   g.globalCompositeOperation='source-over';
   const bg=g.createLinearGradient(0,0,0,H);bg.addColorStop(0,'#04050a');bg.addColorStop(1,'#090b10');g.fillStyle=bg;g.fillRect(0,0,W,H);
-  const fb=H*.66,ff=H*.86,ty=H*.1;
+  const fb=H*.66,ff=H*.86,zScale=H*.48/Math.max(1,geom.trussHeight);
+  const project=(x,y,z=0)=>{
+    const d=clamp(y/depth,-.2,1.8),halfWidth=W*(.34+.13*d);
+    return{x:W/2+x/halfStage*halfWidth,y:fb+(ff-fb)*d-z*zScale,groundY:fb+(ff-fb)*d,scale:halfWidth/halfStage};
+  };
+  const fixtureZ=f=>f.mountToTruss?geom.trussHeight:f.z;
   g.globalCompositeOperation='lighter';
   glow(g,W/2,H*.35,W*.6,SH.back.c,.12*hz*M*SH.g.back);
-  // LED wall -- dimensioni (larghezza/altezza, metri) dalla fixture reale,
-  // non piu' una regione fissa: un muro piu' corto/piu' basso occupa
-  // meno schermo, proporzionato a un riferimento 12x6m.
-  if(wallF){
-    const ww=clamp((wallF.w||6)/12,.15,1),wh=clamp((wallF.h||3.5)/6,.15,1);
-    const wcx=W*.5,wx0=wcx-W*.22*ww,wx1=wcx+W*.22*ww,wy0=H*.41-((H*.62-H*.2)*wh)/2,wy1=wy0+(H*.62-H*.2)*wh;
+  for(const wallF of wallFixtures){
+    const wp=project(wallF.x,wallF.y,wallF.z),rot=(wallF.rot||0)*Math.PI/180;
+    const wallWidth=(wallF.w||6)*wp.scale*Math.max(.08,Math.abs(Math.cos(rot)));
+    const wallHeight=(wallF.h||3.5)*zScale;
+    const wx0=wp.x-wallWidth/2,wx1=wp.x+wallWidth/2,wy1=wp.y,wy0=wy1-wallHeight;
     g.globalCompositeOperation='source-over';g.fillStyle='#07080b';g.fillRect(wx0-4,wy0-4,wx1-wx0+8,wy1-wy0+8);
-    g.globalCompositeOperation='lighter';
-    const cols=36,rows=Math.max(8,Math.round(cols*(wy1-wy0)/(wx1-wx0))),pw=(wx1-wx0)/cols,ph=(wy1-wy0)/rows,b=SH.led.bright*SH.g.ledwall*(SH.blackout?0:SH.master),c=SH.wall.c;
+    const cols=36,rows=Math.max(8,Math.round(cols*(wy1-wy0)/(wx1-wx0))),pw=(wx1-wx0)/cols,ph=(wy1-wy0)/rows;
+    const b=SH.led.bright*SH.g.ledwall*(SH.blackout?0:SH.master),c=SH.wall.c;
     let avg=0;
-    for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
-      let col=c,k=1;
-      switch(SH.led.mode){
-        case 1:col=hsv2rgb((rgb2hsv(...c)[0]+x/cols*.18+Math.sin(t*.0006)*.05+1)%1,rgb2hsv(...c)[1],Math.max(...c));k=.55+.45*Math.sin(x*.18+t*.0015);break;
-        case 2:k=Math.pow(.5+.5*Math.sin(x*.32+y*.22-t*.003),1.6);break;
-        case 3:k=hash(x*7+y,Math.floor(t/120))>.82?1:.06;break;
-        case 4:k=(Math.floor(t/80)%2)?1:0;break;
-        case 5:{const dx=(x-cols/2+.5)/(rows/2),dy=(y-rows/2+.5)/(rows/2),d=Math.hypot(dx,dy),an=Math.atan2(dy,dx);
-          k=Math.exp(-Math.pow((d-.62)*7,2))*(.6+.4*Math.sin(an*3+t*.002))+(d<.18?.9:0);k*=.85+.15*level;break}
+    if(wallF.sourceType==='url'){
+      const preview=wallVideoPlayers.get(wallF.id);
+      g.fillStyle='#101319';g.fillRect(wx0,wy0,wx1-wx0,wy1-wy0);
+      if(!drawVideoCover(g,preview?.video,wx0,wy0,wx1-wx0,wy1-wy0,clamp(b))){
+        const message=preview?.message||wallPreviewMessage(wallF);
+        g.fillStyle='#c9ced8';g.font='10px JetBrains Mono, monospace';g.textAlign='center';
+        g.fillText(message.slice(0,64),wp.x,(wy0+wy1)/2);
       }
-      k*=b; avg+=k; if(k<.02)continue;
-      g.fillStyle=rgba(col,1,k);g.fillRect(wx0+x*pw+.5,wy0+y*ph+.5,pw-1.2,ph-1.2);
+    }else if(wallF.sourceType&&wallF.sourceType!=='procedural'){
+      g.fillStyle='#101319';g.fillRect(wx0,wy0,wx1-wx0,wy1-wy0);
+      g.fillStyle='#c9ced8';g.font='10px JetBrains Mono, monospace';g.textAlign='center';
+      g.fillText(wallPreviewMessage(wallF).slice(0,64),wp.x,(wy0+wy1)/2);
+    }else{
+      g.globalCompositeOperation='lighter';
+      const hsv=rgb2hsv(...c), hue=hsv[0],sat=hsv[1],val=Math.max(...c),timeHue=Math.sin(t*.0006)*.05;
+      for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
+        let col=c,k=1;
+        switch(SH.led.mode){
+          case 1:col=hsv2rgb((hue+x/cols*.18+timeHue+1)%1,sat,val);k=.55+.45*Math.sin(x*.18+t*.0015);break;
+          case 2:k=Math.pow(.5+.5*Math.sin(x*.32+y*.22-t*.003),1.6);break;
+          case 3:k=hash(x*7+y,Math.floor(t/120))>.82?1:.06;break;
+          case 4:k=(Math.floor(t/80)%2)?1:0;break;
+          case 5:{const dx=(x-cols/2+.5)/(rows/2),dy=(y-rows/2+.5)/(rows/2),d=Math.hypot(dx,dy),an=Math.atan2(dy,dx);
+            k=Math.exp(-Math.pow((d-.62)*7,2))*(.6+.4*Math.sin(an*3+t*.002))+(d<.18?.9:0);k*=.85+.15*level;break}
+        }
+        k*=b;avg+=k;if(k<.02)continue;
+        g.fillStyle=rgba(col,1,k);g.fillRect(wx0+x*pw+.5,wy0+y*ph+.5,Math.max(1,pw-1.2),Math.max(1,ph-1.2));
+      }
+      avg/=cols*rows;glow(g,wp.x,wp.y,W*.42,c,.35*avg*hz);
     }
-    avg/=cols*rows; glow(g,W/2,fb,W*.42,c,.35*avg*hz);
+    g.globalCompositeOperation='lighter';
   }
   // pavimento
   g.globalCompositeOperation='source-over';
   const fl=g.createLinearGradient(0,fb,0,ff);fl.addColorStop(0,'#0c0d11');fl.addColorStop(1,'#15171d');g.fillStyle=fl;
-  g.beginPath();g.moveTo(W*.03,ff);g.lineTo(W*.97,ff);g.lineTo(W*.86,fb);g.lineTo(W*.14,fb);g.closePath();g.fill();
-  g.fillStyle='#050608';g.fillRect(W*.03,ff,W*.94,H*.025);g.strokeStyle='#2a2e37';g.lineWidth=1;g.beginPath();g.moveTo(W*.03,ff+.5);g.lineTo(W*.97,ff+.5);g.stroke();
+  const rearL=project(-halfStage,0),rearR=project(halfStage,0),frontL=project(-halfStage,depth),frontR=project(halfStage,depth);
+  g.beginPath();g.moveTo(frontL.x,frontL.y);g.lineTo(frontR.x,frontR.y);g.lineTo(rearR.x,rearR.y);g.lineTo(rearL.x,rearL.y);g.closePath();g.fill();
+  g.fillStyle='#050608';g.beginPath();g.moveTo(frontL.x,frontL.y);g.lineTo(frontR.x,frontR.y);g.lineTo(frontR.x,frontR.y+H*.025);g.lineTo(frontL.x,frontL.y+H*.025);g.closePath();g.fill();
+  const fascia=Math.min(H*.08,Math.max(0,geom.floorHeight)*zScale*.35);
+  if(fascia>0){g.fillStyle='#090a0d';g.beginPath();g.moveTo(frontL.x,frontL.y);g.lineTo(frontR.x,frontR.y);g.lineTo(frontR.x,frontR.y+fascia);g.lineTo(frontL.x,frontL.y+fascia);g.closePath();g.fill()}
+  g.strokeStyle='#2a2e37';g.lineWidth=1;g.beginPath();g.moveTo(frontL.x,frontL.y+.5);g.lineTo(frontR.x,frontR.y+.5);g.stroke();
   g.globalCompositeOperation='lighter';
   // front wash
   const fw=SH.wash.c,fk=SH.g.front*M*(SH.chase===5?.4+.6*level:1);
-  if(fk>.01){g.save();g.beginPath();g.moveTo(W*.03,ff);g.lineTo(W*.97,ff);g.lineTo(W*.86,fb);g.lineTo(W*.14,fb);g.closePath();g.clip();
+  if(fk>.01){g.save();g.beginPath();g.moveTo(frontL.x,frontL.y);g.lineTo(frontR.x,frontR.y);g.lineTo(rearR.x,rearR.y);g.lineTo(rearL.x,rearL.y);g.closePath();g.clip();
     const pg=g.createRadialGradient(W/2,(fb+ff)/2,0,W/2,(fb+ff)/2,W*.42);pg.addColorStop(0,rgba(fw,.55*fk));pg.addColorStop(1,rgba(fw,0));g.fillStyle=pg;g.fillRect(0,fb,W,ff-fb);g.restore()}
   // uplight
-  for(let i=0;i<uplights;i++){const x=W*(.16+.68*(uplights>1?i/(uplights-1):.5)),col=chaseCol(SH.back.c,i,uplights,t),k=SH.g.back*M*chaseK(i,uplights,t,level);
-    if(k<.01)continue; beam(g,x,fb,Math.PI+(x<W/2?-.08:.08),H*.62,H*.09,col,.22*k*hz); glow(g,x,fb,10,col,.9*k);
-    g.fillStyle=rgba([.1,.1,.12],1);}
+  for(let i=0;i<uplights.length;i++){
+    const f=uplights[i],group=f.group==='back'||f.group==='rig_b'?'back':'front',p=project(f.x,f.y,f.z);
+    const col=chaseCol(group==='back'?SH.back.c:SH.wash.c,i,uplights.length,t),k=SH.g[group]*M*chaseK(i,uplights.length,t,level);
+    if(k<.01)continue;
+    beam(g,p.x,p.y,Math.PI+(p.x<W/2?-.08:.08),H*.48,H*.07,col,.22*k*hz);glow(g,p.x,p.y,10,col,.9*k);
+  }
   // truss
   g.globalCompositeOperation='source-over';g.strokeStyle='#30353f';g.lineWidth=1.5;
-  const tx0=W*.12,tx1=W*.88;g.beginPath();g.moveTo(tx0,ty);g.lineTo(tx1,ty);g.moveTo(tx0,ty+9);g.lineTo(tx1,ty+9);
-  for(let x=tx0;x<tx1;x+=12){g.moveTo(x,ty);g.lineTo(x+6,ty+9);g.lineTo(x+12,ty)}g.stroke();
+  const trussL=project(-halfStage*.92,0,geom.trussHeight),trussR=project(halfStage*.92,0,geom.trussHeight);
+  g.beginPath();g.moveTo(trussL.x,trussL.y);g.lineTo(trussR.x,trussR.y);
+  g.moveTo(trussL.x,trussL.y+8);g.lineTo(trussR.x,trussR.y+8);
+  for(let x=trussL.x;x<trussR.x;x+=12){g.moveTo(x,trussL.y);g.lineTo(x+6,trussL.y+8);g.lineTo(x+12,trussL.y)}g.stroke();
   // teste mobili
-  const n=Math.min(12,cnt.mh),heads=[];
-  for(let i=0;i<n;i++){const h=SH.heads[i],p=h.T.c,x=W*(.17+.66*(n>1?i/(n-1):.5)),y=ty+24;heads.push([x,y,h,p]);
+  const n=headsF.length;ensureHeadPool(n);const heads=[];
+  for(let i=0;i<n;i++){const f=headsF[i],h=SH.heads[i],p=h.T.c,pos=project(f.x,f.y,fixtureZ(f)),x=pos.x,y=pos.y,size=clamp(pos.scale*.7,8,18);heads.push([x,y,h,p,size]);
     g.fillStyle='#1c2027';g.strokeStyle='#3a404c';g.lineWidth=1;
-    g.beginPath();g.roundRect(x-9,ty+9,18,5,2);g.fill();g.stroke();
-    g.beginPath();g.moveTo(x-9,ty+14);g.lineTo(x-9,y);g.moveTo(x+9,ty+14);g.lineTo(x+9,y);g.stroke();
-    g.save();g.translate(x,y);g.rotate(-p[0]*.9);g.beginPath();g.roundRect(-7,-6,14,14,3);g.fill();g.stroke();g.restore()}
+    g.beginPath();g.roundRect(x-size,y-size*.35,size*2,size*.7,2);g.fill();g.stroke();
+    g.save();g.translate(x,y);g.rotate(-p[0]*.9);g.beginPath();g.roundRect(-size*.45,-size*.4,size*.9,size*.9,3);g.fill();g.stroke();g.restore()}
   g.globalCompositeOperation='lighter';
-  for(const [x,y,h,p] of heads){
+  for(const [x,y,h,p,size] of heads){
     const k=p[5]*SH.g.mh*M*(h.strobe?(((t/1000*13)%1)<.3?1:0):1); if(k<.01)continue;
     const col=[p[2],p[3],p[4]],pan=p[0],tl=p[1],z=p[6],soft=1-p[7]*.5;
-    let ang,len; if(tl>=0){ang=pan*1.15;len=H*(.52+.62*tl)}else{ang=Math.PI-pan*1.15;len=H*(.3+.55*-tl)}
+    let ang,len; if(tl>=0){ang=pan*1.15;len=H*(.42+.45*tl)}else{ang=Math.PI-pan*1.15;len=H*(.3+.4*-tl)}
     const wd=len*(.035+z*.22), subs=h.gobo===3?[0,1,2].map(j=>[Math.sin(t*.0012+j*2.1)*.06,.35+.2*j,.7]):GOBO[h.gobo]||GOBO[0];
     for(const [o,wf,a] of subs)beam(g,x,y,ang+o*(.6+z*2.2),len,wd*wf*(.8+soft*.4),col,.42*k*hz*a);
-    glow(g,x,y,16,col,.95*k);
+    glow(g,x,y,size,col,.95*k);
     const ex=x+Math.sin(ang)*len,ey=y+Math.cos(ang)*len;
     if(tl>=0&&ey>fb&&ey<ff+H*.05){g.save();g.translate(ex,ey);g.scale(1,.32);glow(g,0,0,wd*1.1,col,.5*k);g.restore()}
   }
   // casse
   g.globalCompositeOperation='source-over';
-  if(speakers){
-    for(const side of [-1,1]){const cx=side<0?W*.065:W*.935;
-      for(let j=0;j<6;j++){const y=H*(.12+j*.052),rot=side*j*.035;g.save();g.translate(cx,y);g.rotate(rot);
-        g.fillStyle='#101216';g.strokeStyle='#2c313b';g.lineWidth=1;g.beginPath();g.roundRect(-W*.035,0,W*.07,H*.045,2);g.fill();g.stroke();
-        g.strokeStyle='#1d2128';for(let s=1;s<4;s++){g.beginPath();g.moveTo(-W*.03,H*.045*s/4);g.lineTo(W*.03,H*.045*s/4);g.stroke()}g.restore()}
-      const mx=cx-side*W*.05;for(let s=0;s<10;s++){const on=level>s/10;g.fillStyle=on?(s>7?'#ff5d5d':s>5?'#ffb23e':'#4fd18b'):'#1a1d23';g.fillRect(mx-2,H*.42-s*H*.026,4,H*.02)}
-      const sx=side<0?W*.09:W*.91,sy=ff-H*.12;g.fillStyle='#0d0f13';g.strokeStyle='#2c313b';g.beginPath();g.roundRect(sx-W*.045,sy,W*.09,H*.115,3);g.fill();g.stroke();
-      const rr=H*.04*(1+level*.06);g.strokeStyle='#3a404c';g.lineWidth=2;g.beginPath();g.arc(sx,sy+H*.058,rr,0,Math.PI*2);g.stroke();
-      g.fillStyle='#181b21';g.beginPath();g.arc(sx,sy+H*.058,rr*.35,0,Math.PI*2);g.fill()}
+  for(const f of speakers){
+    const p=project(f.x,f.y,f.z),sx=clamp(p.x,W*.025,W*.975),sy=p.y,sw=clamp(W*.07*p.scale,.025*W,.085*W),sh=H*.07;
+    g.fillStyle='#101216';g.strokeStyle='#2c313b';g.lineWidth=1;g.beginPath();g.roundRect(sx-sw/2,sy-sh/2,sw,sh,3);g.fill();g.stroke();
+    g.strokeStyle='#1d2128';for(let i=1;i<4;i++){g.beginPath();g.moveTo(sx-sw*.4,sy-sh*.5+sh*i/4);g.lineTo(sx+sw*.4,sy-sh*.5+sh*i/4);g.stroke()}
+    const rr=sh*.34;g.strokeStyle='#3a404c';g.lineWidth=2;g.beginPath();g.arc(sx,sy,rr,0,Math.PI*2);g.stroke();
+    g.fillStyle='#181b21';g.beginPath();g.arc(sx,sy,rr*.35,0,Math.PI*2);g.fill();
+  }
+  const foh=geom.foh,fohP=project(foh.x,foh.y+foh.depth/2,.8),fohW=foh.width*fohP.scale,fohH=Math.max(6,H*.014);
+  g.fillStyle='#111318';g.strokeStyle='#ffb23e';g.lineWidth=1.2;
+  g.fillRect(fohP.x-fohW/2,fohP.y-fohH/2,fohW,fohH);g.strokeRect(fohP.x-fohW/2,fohP.y-fohH/2,fohW,fohH);
+  for(const f of lasers){
+    const origin=project(f.x,f.y,fixtureZ(f)),spread=(f.spread||28)*Math.PI/180,base=(f.angle||0)*Math.PI/180;
+    g.strokeStyle='rgba(255,54,92,.72)';g.lineWidth=1.2;g.shadowColor='#ff365c';g.shadowBlur=8;
+    for(let ray=-2;ray<=2;ray++){
+      const angle=base+ray*spread/4,distance=depth*1.8;
+      const target=project(f.x+Math.sin(angle)*distance,f.y+Math.cos(angle)*distance,0);
+      g.beginPath();g.moveTo(origin.x,origin.y);g.lineTo(target.x,target.y);g.stroke();
+    }
+    g.shadowBlur=0;g.fillStyle='#ff365c';g.beginPath();g.arc(origin.x,origin.y,3,0,Math.PI*2);g.fill();
   }
   // barre LED
   g.globalCompositeOperation='lighter';
-  if(bars>0){const span=W*.66,x0=W*.17,bw=span/bars,px=8;
-    for(let i=0;i<bars;i++)for(let j=0;j<px;j++){const idx=i*px+j,col=chaseCol(SH.bar.c,idx,bars*px,t),k=SH.g.ledbar*M*chaseK(SH.chase===2?idx:i,SH.chase===2?bars*px:bars,t,level);
-      const x=x0+i*bw+(j+.5)*(bw-6)/px+3,y=ff-6;g.fillStyle=k>.02?rgba(col,1,k):'#15171c';g.fillRect(x-(bw-6)/px/2+.5,y-2,(bw-6)/px-1,4);
-      if(k>.02)glow(g,x,y,10,col,.5*k)}}
+  if(bars.length){const px=8;
+    for(let i=0;i<bars.length;i++){const f=bars[i];
+      for(let j=0;j<px;j++){const idx=i*px+j,col=chaseCol(SH.bar.c,idx,bars.length*px,t),k=SH.g.ledbar*M*chaseK(SH.chase===2?idx:i,SH.chase===2?bars.length*px:bars.length,t,level);
+        const span=f.w||1.8,p=project(f.x+(j+.5-px/2)*span/px,f.y,f.z),x=p.x,y=p.y;
+        g.fillStyle=k>.02?rgba(col,1,k):'#15171c';g.fillRect(x-p.scale*span/px/2+.5,y-2,Math.max(1,p.scale*span/px-1),4);
+        if(k>.02)glow(g,x,y,10,col,.5*k)}}
+  }
   // pubblico e blinder
   const bl=SH.g.blinder*(SH.blackout?0:1);
-  if(bl>.01)glow(g,W/2,H*1.05,W*.7,[1,.85,.6],.55*bl);
+  if(bl>.01){
+    for(const f of blinderF){const p=project(f.x,f.y,f.z);glow(g,p.x,p.y,Math.max(12,p.scale*1.5),[1,.85,.6],.55*bl)}
+    if(!blinderF.length)glow(g,W/2,H*1.05,W*.7,[1,.85,.6],.55*bl);
+  }
   g.globalCompositeOperation='source-over';
-  for(let k=0;k<Math.ceil(W/22);k++){const x=k*22+hash(k,1)*12,y=H*.955+hash(k,2)*H*.02,r=H*.026+hash(k,3)*3;
+  const audience=geom.audience,seatCols=12,seatRows=4;
+  for(let row=0;row<seatRows;row++)for(let col=0;col<seatCols;col++){
+    const xw=audience.x-audience.width/2+(col+.5)*audience.width/seatCols;
+    const yw=audience.y+(row+.5)*audience.depth/seatRows,p=project(xw,yw,0),x=p.x,y=p.y,r=clamp(H*.003,1,3),idx=row*seatCols+col;
     g.fillStyle='#020203';g.beginPath();g.arc(x,y,r,0,Math.PI*2);g.fill();g.beginPath();g.ellipse(x,y+r*2.4,r*2,r*1.6,0,0,Math.PI*2);g.fill();
-    if(showPlaying&&level>.75&&hash(k,Math.floor(t/400))>.8){g.strokeStyle='#020203';g.lineWidth=4;g.beginPath();g.moveTo(x+r,y+r);g.lineTo(x+r*2,y-r*2.5);g.stroke()}
-    g.strokeStyle=rgba(bl>.05?[1,.9,.75]:fw,bl>.05?.6*bl:.3*fk);g.lineWidth=1.2;g.beginPath();g.arc(x,y,r,Math.PI*1.1,Math.PI*1.9);g.stroke()}
+    if(showPlaying&&level>.75&&hash(idx,Math.floor(t/400))>.8){g.strokeStyle='#020203';g.lineWidth=4;g.beginPath();g.moveTo(x+r,y+r);g.lineTo(x+r*2,y-r*2.5);g.stroke()}
+    g.strokeStyle=rgba(bl>.05?[1,.9,.75]:fw,bl>.05?.6*bl:.3*fk);g.lineWidth=1.2;g.beginPath();g.arc(x,y,r,Math.PI*1.1,Math.PI*1.9);g.stroke();
+  }
 }
 // Stato di interazione della Pianta per widget id -- MAI dentro l'oggetto
 // w stesso: w vive in L (salvato via JSON.stringify), hits/proj/selFix sono
 // usa-e-getta (ricalcolati ogni frame, legati solo a questa sessione).
 const _stageUI={};
+function plotProjection(W,H,stage,fixtures){
+  const xs=[-stage.width/2-2,stage.width/2+2],ys=[-1,stage.depth+1];
+  for(const area of [stage.audience,stage.foh]){
+    xs.push(area.x-area.width/2-1,area.x+area.width/2+1);
+    ys.push(area.y-1,area.y+area.depth+1);
+  }
+  for(const f of fixtures){xs.push(f.x-1,f.x+1);ys.push(f.y-1,f.y+1)}
+  for(const f of tdFixtures())if(Number.isFinite(f.x)&&Number.isFinite(f.y)){xs.push(f.x-1,f.x+1);ys.push(f.y-1,f.y+1)}
+  const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
+  const s=Math.max(.1,Math.min((W-28)/(maxX-minX),(H-48)/(maxY-minY)));
+  return{s,cx:W/2,oy:24-minY*s,minX,maxX,minY,maxY};
+}
 function drawPlot(g,W,H,t,w){
   g.globalCompositeOperation='source-over';g.fillStyle='#0b0d11';g.fillRect(0,0,W,H);
-  const s=Math.min(W/17,H/13),cx=W/2,oy=H*.1;           // 1 m = s px; origine fondo palco
+  const geom=L.stage;
+  const sproj=plotProjection(W,H,geom,L.fixtures||[]),{s,cx,oy}=sproj;
   const ui=w&&(_stageUI[w.id]||(_stageUI[w.id]={}));
-  if(ui)ui.proj={s,cx,oy};
+  if(ui)ui.proj=sproj;
   g.strokeStyle='#161a20';g.lineWidth=1;
-  for(let x=cx%s;x<W;x+=s){g.beginPath();g.moveTo(x,0);g.lineTo(x,H);g.stroke()}
-  for(let y=oy%s;y<H;y+=s){g.beginPath();g.moveTo(0,y);g.lineTo(W,y);g.stroke()}
+  const gx=((cx%s)+s)%s,gy=((oy%s)+s)%s;
+  for(let x=gx;x<W;x+=s){g.beginPath();g.moveTo(x,0);g.lineTo(x,H);g.stroke()}
+  for(let y=gy;y<H;y+=s){g.beginPath();g.moveTo(0,y);g.lineTo(W,y);g.stroke()}
   const X=m=>cx+m*s,Y=m=>oy+m*s;
   const txt=(t,x,y,c='#868e9b',al='center',sz=10)=>{g.fillStyle=c;g.font=`${sz*(W>700?1.1:1)}px JetBrains Mono, monospace`;g.textAlign=al;g.fillText(t,x,y)};
-  // palco 12 x 8 m
-  g.fillStyle='#12151a';g.strokeStyle='#4a515e';g.lineWidth=1.5;g.fillRect(X(-6),Y(0),12*s,8*s);g.strokeRect(X(-6),Y(0),12*s,8*s);
-  txt('PALCO 12 × 8 m',X(-5.8),Y(0)+14,'#5d6573','left');
-  // quote
-  g.strokeStyle='#5d6573';g.lineWidth=1;g.beginPath();g.moveTo(X(-6),Y(8.6));g.lineTo(X(6),Y(8.6));g.stroke();
-  [[-6,1],[6,-1]].forEach(([m,d])=>{g.beginPath();g.moveTo(X(m),Y(8.6));g.lineTo(X(m)+d*5,Y(8.6)-3);g.lineTo(X(m)+d*5,Y(8.6)+3);g.fill()});
-  txt('12.00 m',cx,Y(8.6)-4,'#868e9b');
-  // truss
-  g.setLineDash([5,4]);g.strokeStyle='#6b7280';g.beginPath();g.moveTo(X(-5.5),Y(2));g.lineTo(X(5.5),Y(2));g.stroke();g.setLineDash([]);
-  txt('TRUSS',X(6.2),Y(2)-2,'#5d6573','left');txt('+7.0 m',X(6.2),Y(2)+11,'#5d6573','left');
-  // FOH
-  const fy=Math.min(H-s*.9,Y(11.2));g.strokeStyle='#ffb23e';g.lineWidth=1.3;g.strokeRect(cx-s*.9,fy-s*.4,s*1.8,s*.8);txt('FOH',cx,fy+4,'#ffb23e');
-  g.setLineDash([2,4]);g.strokeStyle='#4a515e';g.beginPath();g.moveTo(cx,Y(8.8));g.lineTo(cx,fy-s*.45);g.stroke();g.setLineDash([]);
-  txt('18 m',cx+6,(Y(8.8)+fy)/2,'#868e9b','left');
+  const stageX=-geom.width/2,stageY=0,stageW=geom.width,stageD=geom.depth;
+  const drawArea=(area,label,color)=>{
+    const left=X(area.x-area.width/2),top=Y(area.y);
+    g.fillStyle=color+'18';g.strokeStyle=color;g.lineWidth=1.2;g.setLineDash([4,3]);
+    g.fillRect(left,top,area.width*s,area.depth*s);g.strokeRect(left,top,area.width*s,area.depth*s);g.setLineDash([]);
+    txt(label,left+5,top+13,color,'left',9);
+  };
+  drawArea(geom.audience,'PLATEA','#7b8493');
+  drawArea(geom.foh,'FOH','#ffb23e');
+  g.fillStyle='#12151a';g.strokeStyle='#4a515e';g.lineWidth=1.5;
+  g.fillRect(X(stageX),Y(stageY),stageW*s,stageD*s);g.strokeRect(X(stageX),Y(stageY),stageW*s,stageD*s);
+  txt(`PALCO ${stageW.toFixed(1)} × ${stageD.toFixed(1)} m · quota ${geom.floorHeight.toFixed(1)} m`,X(stageX)+5,Y(stageY)+14,'#5d6573','left');
+  g.strokeStyle='#5d6573';g.lineWidth=1;g.beginPath();g.moveTo(X(stageX),Y(stageD+.35));g.lineTo(X(-stageX),Y(stageD+.35));g.stroke();
+  txt(`${stageW.toFixed(2)} m`,cx,Y(stageD+.35)-4,'#868e9b');
+  const trussY=stageD*.25;
+  g.setLineDash([5,4]);g.strokeStyle='#6b7280';g.beginPath();g.moveTo(X(stageX*.92),Y(trussY));g.lineTo(X(-stageX*.92),Y(trussY));g.stroke();g.setLineDash([]);
+  txt(`TRUSS +${geom.trussHeight.toFixed(1)} m`,X(-stageX*.92),Y(trussY)-3,'#5d6573','left',9);
   // Fixture già in TD, non create da Plancia -- SOLO LETTURA (tratteggio
   // grigio, nessun drag/edit): evita di ricrearle per sbaglio (vedi
   // tdFixtures()). Posizione reale (x/y pubblicati da TD).
@@ -1172,7 +1452,7 @@ function drawPlot(g,W,H,t,w){
   // legenda patch (conteggi reali, non piu' da L.rig)
   const cnt=fixCounts();
   const lg=Object.entries(FIX_TYPES).filter(([k,ft])=>cnt[k]&&ft.ch).map(([k,ft])=>[`${ft.label} ×${cnt[k]}`,ft.ch+' ch']);
-  const lx=s*.5,ly=H-s*.4-Math.max(1,lg.length)*14;
+  const lx=10,ly=H-10-Math.max(1,lg.length)*14;
   // Testo corto apposta: visto dal vivo (screenshot Playwright) che la
   // versione lunga di prima si sovrapponeva al marcatore FOH, disegnato
   // su questa stessa fascia verticale del palco.
@@ -1195,13 +1475,43 @@ function syncAllFixtures(){
   if(!list.length){alert('Nessuna fixture patchabile da mandare (wall/speaker sono esclusi, TD li salta).');return}
   let sent=0;
   for(const f of list){
+    // on_conflict:"reject" (nota TD 20): se l'indirizzo e' occupato NON
+    // scrive, torna un errore leggibile in status.last_error col
+    // suggerimento -- meglio di scrivere comunque e aggiungere un
+    // altro doppione (come successo ieri, 19+ gruppi).
     const ok=devCmd('td-dmx-win',{action:'set',param:f._synced?'dmx_fixture_update':'dmx_fixture_add',
-      value:{id:f.id,type:f.type,name:f.name,group:f.group,universe:f.universe,address:f.address,x:f.x,y:f.y,enabled:f.enabled!==false}});
+      value:{id:f.id,type:f.type,name:f.name,group:f.group,universe:f.universe,address:f.address,x:f.x,y:f.y,enabled:f.enabled!==false,on_conflict:'reject'}});
     if(ok)sent++;
   }
   if(sent)list.forEach(f=>f._synced=true);
   save();
-  alert(sent?`Mandate ${sent}/${list.length} fixture a DMX Master.`:'Non collegata a Gaia — apri ⋯ → Gaia e collegati prima.');
+  alert(sent?`Mandate ${sent}/${list.length} fixture a DMX Master (eventuali conflitti sono stati rifiutati, non scritti — controlla con "⇩ TD" o in TD).`:'Non collegata a Gaia — apri ⋯ → Gaia e collegati prima.');
+}
+// Nota TD 20, "Pulizia di oggi": dmx_patch_resolve con apply:true toglie
+// i doppioni (resta la fixture piu' vecchia/nativa di TD) e sposta le
+// sovrapposte. Dopo, ricarica SUBITO da TD (importFromTD silenzioso):
+// altrimenti Plancia terrebbe ancora in locale gli uid appena tolti e
+// il prossimo "Aggiorna" fallirebbe con "fixture non trovata" (lo
+// stesso avviso che TD ha scritto nella nota).
+function resolveDuplicates(){
+  if(!confirm('Chiede a DMX Master di togliere i doppioni e sistemare gli indirizzi sovrapposti, poi ricarica il palco da li\'. Continuare?'))return;
+  const reqId='p-'+uid();
+  const ok=devCmd('td-dmx-win',{action:'set',param:'dmx_patch_resolve',value:{request_id:reqId,apply:true}});
+  if(!ok){alert('Non collegata a Gaia — apri ⋯ → Gaia e collegati prima.');return}
+  let tries=0;
+  const check=()=>{
+    tries++;
+    const r=tdParams().dmx_patch_resolve_result;
+    if(r&&r.request_id===reqId){
+      const n=(r.actions||[]).length;
+      importFromTD(true);
+      alert(`Risolto: ${n} azioni applicate (rimozioni/spostamenti). Palco ricaricato da DMX Master.`);
+      return;
+    }
+    if(tries>=10){alert('Nessuna conferma da DMX Master entro qualche secondo — riprova più tardi.');return}
+    setTimeout(check,500);
+  };
+  setTimeout(check,500);
 }
 function stageDown(e,el,w){
   const ui=_stageUI[w.id]; const c=el.querySelector('canvas'),r=c.getBoundingClientRect();
@@ -1215,7 +1525,7 @@ function stageDown(e,el,w){
   e.preventDefault(); el.setPointerCapture(e.pointerId);
   const mv=ev=>{
     if(!moved&&Math.hypot(ev.clientX-start.x,ev.clientY-start.y)>6)moved=true;
-    if(dragF&&moved){const m=toM(toLocal(ev));dragF.x=clamp(m.x,-6,6);dragF.y=clamp(m.y,0,10)}
+    if(dragF&&moved){const m=toM(toLocal(ev));dragF.x=clamp(m.x,-L.stage.width/2-4,L.stage.width/2+4);dragF.y=clamp(m.y,-2,L.stage.depth+20)}
   };
   const up=()=>{
     el.onpointermove=null;el.onpointerup=el.onpointercancel=null;
@@ -1253,8 +1563,27 @@ function openFixAdd(w,pos){
     const type=b.dataset.ft, ft=FIX_TYPES[type];
     const universe=type==='bar'?2:type==='wall'?3:1;
     const count=(L.fixtures||[]).filter(x=>x.type===type).length+1;
-    const f=mkFix(type,ft.label.slice(0,3).toUpperCase()+count,clamp(pos.x,-6,6),clamp(pos.y,0,10),universe,ft.ch?nextAddress(type,universe):0);
+    // Indirizzo libero: preferisce il dato VERO da TD (dmx_universe_map,
+    // tiene conto anche di quello gia' patchato in TD, non solo delle
+    // fixture locali di Plancia -- nota 20, evita i doppioni di ieri).
+    // Fallback al calcolo solo-locale se non ancora collegata/sincronizzata.
+    const addr=ft.ch?(freeAddressTD(universe,ft.ch)??nextAddress(type,universe)):0;
+    const f=mkFix(type,ft.label.slice(0,3).toUpperCase()+count,clamp(pos.x,-L.stage.width/2-4,L.stage.width/2+4),clamp(pos.y,-2,L.stage.depth+20),universe,addr);
     L.fixtures.push(f); (_stageUI[w.id]||(_stageUI[w.id]={})).selFix=f.id; save(); closeSheet();
+    // Manda subito con on_conflict:"auto" (nota 20, "per gli inserimenti
+    // rapidi"): TD piazza davvero al primo posto libero (autorevole, non
+    // la nostra stima) e noi riallineiamo appena arriva la conferma.
+    if(ft.ch&&devCmd('td-dmx-win',{action:'set',param:'dmx_fixture_add',
+      value:{id:f.id,type:f.type,name:f.name,group:f.group,universe:f.universe,address:f.address,x:f.x,y:f.y,enabled:true,on_conflict:'auto'}})){
+      let tries=0;
+      const check=()=>{
+        tries++;
+        const found=(tdParams().dmx_fixtures||[]).find(x=>x.uid===f.id);
+        if(found){f._synced=true;f.universe=portIdToUniverse(found.port_id);f.address=found.address;save();return}
+        if(tries<6)setTimeout(check,500);
+      };
+      setTimeout(check,500);
+    }
   });
   s.onpointerdown=e=>{if(e.target===s)closeSheet()};
   $('#faClose').onclick=closeSheet;
@@ -1264,24 +1593,62 @@ function openFixEditor(w,f){
   s.innerHTML=`<div class="sheet" role="dialog" aria-label="Fixture">
     <div class="top"><h3>${esc(FIX_TYPES[f.type].label)}</h3><button class="btn ghost" id="feClose">Chiudi</button></div>
     <label>Nome<input id="feName"></label>
+    <label>Altezza dal piano palco (m)<input id="feZ" type="number" min="-5" max="30" step="0.1"></label>
+    ${f.type==='mh'||f.type==='laser'?`<label class="chk"><input id="feTruss" type="checkbox"> Segue altezza del truss</label>`:''}
     ${f.type==='wall'?`<div class="two"><label>Lunghezza (m)<input id="feW" type="number" min="1" max="20" step="0.1"></label><label>Altezza (m)<input id="feH" type="number" min="0.5" max="10" step="0.1"></label></div>
     <label>Rotazione (gradi)<input id="feRot" type="number" min="-180" max="180" step="5"></label>
-    <p class="hint">L'altezza non si vede in pianta (vista dall'alto) ma conta per il Render.</p>`:''}
+    <label>Sorgente LED<select id="feSource"><option value="procedural">Procedurale</option><option value="file">File (Video Service futuro)</option><option value="ndi">NDI (Video Service futuro)</option><option value="rtsp">RTSP (Video Service futuro)</option><option value="url">URL video diretto</option></select></label>
+    <label>Riferimento sorgente (URL, percorso o nome NDI)<input id="feSourceRef" spellcheck="false" autocapitalize="off"></label>
+    <p class="hint">La preview diretta richiede un URL HTTP(S) a un video MP4/H.264 o WebM compatibile col browser. Se l'avvio automatico è bloccato, fai clic sul pannello Render. Per pagine web, NDI, RTSP e file locali servirà il Video Service: la sua API WebRTC è ancora in progettazione. Audio disattivato.</p>
+    <p id="fePreviewStatus" class="hint preview-status" role="status" aria-live="polite"></p>
+    <p class="hint">L'altezza dal piano è separata dall'altezza fisica del pannello.</p>`:''}
+    ${f.type==='laser'?`<div class="two"><label>Orientamento (gradi)<input id="feAngle" type="number" min="-180" max="180" step="1"></label><label>Apertura pattern (gradi)<input id="feSpread" type="number" min="1" max="120" step="1"></label></div>
+    <p class="hint">Visualizzazione locale, senza comandi OSC/DMX. Il trasporto verso TouchDesigner sarà definito separatamente.</p>`:''}
     ${FIX_TYPES[f.type].ch?`<label>Gruppo <em>/dmx/group/...</em><input id="feGroup" class="mono"></label>
-    <div class="two"><label>Universo<input id="feUni" type="number" min="0"></label><label>Indirizzo<input id="feAddr" type="number" min="1" max="512"></label></div>`:''}
+    <div class="two"><label>Universo<select id="feUni"></select></label><label>Indirizzo<input id="feAddr" type="number" min="1" max="512"></label></div>
+    <div class="row"><button class="btn sm ghost" id="feAuto">Primo indirizzo libero (da DMX Master)</button></div>`:''}
     <label class="chk"><input id="feOn" type="checkbox"> Attiva</label>
     ${FIX_TYPES[f.type].ch?`<div class="row"><button class="btn" id="feSync">${f._synced?'Aggiorna su DMX Master':'Manda a DMX Master'}</button></div>
     <p class="hint" id="feSyncMsg"></p>`:'<p class="hint">Tipo non patchabile via DMX -- DMX Master lo salta (confermato da TD).</p>'}
     <div class="row"><button class="btn danger" id="feDel">Elimina</button></div>
   </div>`;
-  val2('#feName',f.name); if($('#feGroup')){val2('#feGroup',f.group);val2('#feUni',f.universe);val2('#feAddr',f.address)}
+  val2('#feName',f.name);val2('#feZ',f.z);
+  if($('#feTruss')){$('#feTruss').checked=!!f.mountToTruss;$('#feZ').disabled=!!f.mountToTruss}
+  if($('#feSource')){
+    val2('#feSource',f.sourceType||'procedural');val2('#feSourceRef',f.sourceRef||'');
+    const hint=$('#fePreviewStatus');hint.dataset.wallId=f.id;hint.textContent=wallPreviewMessage(f);
+  }
+  if($('#feAngle')){val2('#feAngle',f.angle);val2('#feSpread',f.spread)}
+  if($('#feGroup')){
+    val2('#feGroup',f.group);val2('#feAddr',f.address);
+    // Universi reali da DMX Master (dmx_universe_map, nota 20) -- solo
+    // le porte Art-Net vere. Se non ancora disponibile (offline/mai
+    // sincronizzata), ripiega su un'unica opzione col valore attuale,
+    // cosi' il campo resta comunque editabile come numero puro.
+    const um=universeMap();
+    const opts=(um&&um.universes&&um.universes.length)?um.universes:[{universe:f.universe,label:'Universo '+f.universe}];
+    $('#feUni').innerHTML=opts.map(u=>`<option value="${u.universe}"${u.universe===f.universe?' selected':''}>${esc(u.label||('Universo '+u.universe))}</option>`).join('');
+    if(!opts.some(u=>u.universe===f.universe))$('#feUni').insertAdjacentHTML('afterbegin',`<option value="${f.universe}" selected>Universo ${f.universe} (attuale)</option>`);
+  }
   if($('#feW')){val2('#feW',f.w||6);val2('#feH',f.h||3.5);val2('#feRot',f.rot||0)} $('#feOn').checked=f.enabled!==false;
   const upd=()=>{f.name=$('#feName').value.trim()||f.name;
+    const z=Number($('#feZ').value);if(Number.isFinite(z))f.z=clamp(z,-5,30);
+    if($('#feTruss')){f.mountToTruss=$('#feTruss').checked;$('#feZ').disabled=f.mountToTruss}
     if($('#feGroup')){f.group=$('#feGroup').value.trim();f.universe=+$('#feUni').value||0;f.address=clamp(+$('#feAddr').value||1,1,512)}
     if($('#feW')){f.w=clamp(+$('#feW').value||6,1,20);f.h=clamp(+$('#feH').value||3.5,.5,10);f.rot=clamp(+$('#feRot').value||0,-180,180)}
+    if($('#feSource')){
+      f.sourceType=$('#feSource').value;f.sourceRef=$('#feSourceRef').value.trim();
+      const hint=$('#fePreviewStatus');hint.textContent=wallPreviewMessage(f);hint.className='hint preview-status';
+    }
+    if($('#feAngle')){f.angle=clamp(+$('#feAngle').value||0,-180,180);f.spread=clamp(+$('#feSpread').value||28,1,120)}
     f.enabled=$('#feOn').checked; save()};
-  ['feName','feGroup','feUni','feAddr','feW','feH','feRot'].forEach(id=>{const n=$('#'+id);if(n)n.addEventListener('input',upd)});
-  $('#feOn').addEventListener('change',upd);
+  ['feName','feZ','feGroup','feUni','feAddr','feW','feH','feRot','feSource','feSourceRef','feAngle','feSpread'].forEach(id=>{const n=$('#'+id);if(n){n.addEventListener('input',upd);n.addEventListener('change',upd)}});
+  $('#feOn').addEventListener('change',upd);if($('#feTruss'))$('#feTruss').addEventListener('change',upd);
+  if($('#feAuto'))$('#feAuto').onclick=()=>{
+    const a=freeAddressTD(+$('#feUni').value||f.universe,FIX_TYPES[f.type].ch);
+    if(a==null){alert('Nessuno spazio libero trovato per questo universo (o DMX Master non ha ancora mandato la mappa — prova a collegarti prima).');return}
+    $('#feAddr').value=a; upd();
+  };
   // Canale 1b, confermato dal vivo da TD (GAIA_TD_INTEGRATION.md, note
   // interface 17/18): dmx_fixture_add/dmx_fixtures accettano la
   // fixture Plancia COSI' COM'E' -- id stringa (il loro uid), universe
@@ -1294,8 +1661,11 @@ function openFixEditor(w,f){
   // scartato, e il successivo "Aggiorna" falliva con "fixture non
   // trovata" (bug trovato da TD, non qui).
   if($('#feSync'))$('#feSync').onclick=()=>{
+    // on_conflict:"reject" (nota 20): dall'editor, dove l'indirizzo e'
+    // scelto a mano, un conflitto deve dare un errore leggibile (con
+    // suggerimento) invece di scrivere comunque sopra un'altra fixture.
     const ok=devCmd('td-dmx-win',{action:'set',param:f._synced?'dmx_fixture_update':'dmx_fixture_add',
-      value:{id:f.id,type:f.type,name:f.name,group:f.group,universe:f.universe,address:f.address,x:f.x,y:f.y,enabled:f.enabled!==false}});
+      value:{id:f.id,type:f.type,name:f.name,group:f.group,universe:f.universe,address:f.address,x:f.x,y:f.y,enabled:f.enabled!==false,on_conflict:'reject'}});
     if(!ok){$('#feSyncMsg').textContent='Non collegata a Gaia — apri ⋯ → Gaia e collegati prima.';return}
     const btn=$('#feSync'); btn.disabled=true; $('#feSyncMsg').textContent='Mandato, verifico la conferma da DMX Master…';
     let tries=0;
@@ -1342,7 +1712,7 @@ if(!GC.profiles[GC.profile])GC.profile='casa';
   if(q.get('stanza'))GC.stanza=q.get('stanza');store.set(GKEY,GC)}catch{}})();
 const net=()=>GC.profiles[GC.profile]||NET_DEFAULT.casa;
 const bridgeCfg=()=>({type:'config',host:C.host,port:+C.port,gaiaHost:net().osc,gaiaPort:+net().oscPort});
-const G={client:null,ok:false,host:null,sim:false,nr:null,nrWs:null,nrOk:false,dirty:true,lastPaint:0,devices:{},pdm:{},dxm:{},dmx:{},levels:{},canvas:null,brain:null,dream:null,chat:[],chatV:0,lastSent:null,offSince:null};
+const G={client:null,ok:false,host:null,sim:false,nr:null,nrWs:null,nrOk:false,dirty:true,lastPaint:0,devices:{},pdm:{},dxm:{},dmx:{},levels:{},canvas:null,brain:null,dream:null,chat:[],chatV:0,lastSent:null,offSince:null,tdAutoSynced:false};
 const MOOD_INKS={neutra:[0,255,204],calm:[80,230,190],stress:[255,115,85],social:[255,195,100],curiosity:[190,135,255]};
 const MOOD_ALIAS={serena:'calm',sofferente:'stress',instabile:'stress',viva:'social',stabile:'neutra',neutrale:'neutra'};
 const MOOD_IT={neutra:'Neutra',calm:'Calma',stress:'Stress',social:'Sociale',curiosity:'Curiosità'};
@@ -1387,7 +1757,8 @@ function gStatus(){
 }
 function gIn(t,p){
   const seg=t.split('/'),obj=p&&typeof p==='object';
-  if(seg[1]==='device'&&seg[3]==='status'){if(obj){p._seen=Date.now();G.devices[seg[2]]=p}}
+  if(seg[1]==='device'&&seg[3]==='status'){if(obj){p._seen=Date.now();G.devices[seg[2]]=p;
+    if(seg[2]==='td-dmx-win'&&!G.tdAutoSynced&&Array.isArray(p.params?.dmx_fixtures)){G.tdAutoSynced=true;importFromTD(true)}}}
   else if(t.endsWith('/patchdeck_matrix')){if(obj)G.pdm[p.device_id||seg[2]]=p}
   else if(t.endsWith('/dmx_matrix')){if(obj)G.dxm[p.device_id||seg[2]]=p}
   else if(t.endsWith('/audio_levels'))G.levels[seg[2]]=p;
@@ -1658,6 +2029,8 @@ const tc=s=>{const f=Math.floor((s%1)*25),S=Math.floor(s);return[Math.floor(S/36
 let lastT=now();
 function loop(){
   const n=now(),dt=(n-lastT)/1000;lastT=n;
+  const previewVisible=page().widgets.some(w=>w.type==='stage'&&w.view!=='plot');
+  syncWallVideoPlayers(previewVisible?(L.fixtures||[]):[]);
   [SH.wash,SH.back,SH.bar,SH.wall].forEach(T=>stepT(T,n));SH.heads.forEach(h=>stepT(h.T,n));
   // timeline
   const seen=new Set();showPlaying=false;
@@ -1762,13 +2135,13 @@ function openSheet(){
   const tmsg=t=>$('#tMsg').textContent=t;
   s.querySelectorAll('[data-tadd]').forEach(b=>b.onclick=()=>{const t=TPL[b.dataset.tadd],ps=t.pages();L.pages.push(...ps);pi=L.pages.length-ps.length;selId=null;save();render();initShow();tmsg(`Aggiunto "${t.name}" (${ps.length} ${ps.length>1?'pagine':'pagina'}).`);$('#sJson').value=JSON.stringify(L,null,1)});
   s.querySelectorAll('[data-trep]').forEach(b=>{let armed=false;b.onclick=()=>{if(!armed){armed=true;b.textContent='Conferma';b.classList.add('danger');return}
-    const t=TPL[b.dataset.trep];L={pages:t.pages(),fixtures:L.fixtures||defaultFixtures(L.rig)};pi=0;selId=null;save();render();initShow();tmsg(`Layout sostituito con "${t.name}".`);$('#sJson').value=JSON.stringify(L,null,1);
+    const t=TPL[b.dataset.trep];L={pages:t.pages(),fixtures:L.fixtures||defaultFixtures(L.rig),stage:L.stage||stageDefaults()};ensureStageData(L);pi=0;selId=null;save();render();initShow();tmsg(`Layout sostituito con "${t.name}".`);$('#sJson').value=JSON.stringify(L,null,1);
     armed=false;b.textContent='Sostituisci';b.classList.remove('danger')}});
   $('#sApply').onclick=()=>{C={...C,url:$('#sUrl').value.trim(),host:$('#sHost').value.trim()||'127.0.0.1',port:+$('#sPort').value||7000};store.set(CKEY,C);connect();closeSheet()};
   const msg=t=>$('#sMsg').textContent=t;
   $('#sCopy').onclick=()=>{const ta=$('#sJson');const fb=()=>{ta.select();msg('Testo selezionato: copialo con Ctrl/Cmd+C.')};
     if(navigator.clipboard)navigator.clipboard.writeText(ta.value).then(()=>msg('Layout copiato negli appunti.'),fb);else fb()};
-  $('#sLoad').onclick=()=>{try{const j=JSON.parse($('#sJson').value);if(!Array.isArray(j.pages)||!j.pages.length)throw 0;L=j;if(!L.fixtures)L.fixtures=defaultFixtures(L.rig);pi=0;selId=null;save();render();initShow();msg('Layout applicato.')}catch{msg('JSON non valido: serve un oggetto con un elenco "pages".')}};
+  $('#sLoad').onclick=()=>{try{const j=JSON.parse($('#sJson').value);if(!Array.isArray(j.pages)||!j.pages.length)throw 0;L=j;if(!L.fixtures)L.fixtures=defaultFixtures(L.rig);ensureStageData(L);pi=0;selId=null;save();render();initShow();msg('Layout applicato.')}catch{msg('JSON non valido: serve un oggetto con un elenco "pages".')}};
   function renderProjList(){
     $('#pCur').textContent=L._projectId?`Progetto corrente: ${L._projectName||'(senza nome)'}`:'Progetto corrente: non salvato (solo autosave locale su questo dispositivo).';
     const list=projList();

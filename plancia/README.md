@@ -100,4 +100,8 @@ Il widget Palco simula il rig in locale ascoltando questi indirizzi, gli stessi 
 | `/mh/strobe`, `/mh/home` | 0/1 | strobo teste, reset |
 | `/led/color`, `/led/mode`, `/led/bright` | r g b / indice / 0–1 | contenuto LED wall |
 
-Il rig (numero di teste, uplight, barre LED, LED wall, casse) si imposta dall'ispettore del widget Palco e aggiorna insieme render, pianta e patch.
+Il layout del palco include dimensioni in metri (larghezza, profondità, quota del piano e altezza truss) e aree configurabili per platea e FOH. Nella Pianta si possono posizionare le fixture; il Render ne segue le coordinate, le altezze e, per le teste mobili, il truss.
+
+Ogni LED wall può usare il contenuto procedurale oppure un URL diretto HTTP(S) a un video MP4/H.264 o WebM compatibile col browser; l’anteprima è muta e la luminosità segue master/gruppo LED. Se il browser blocca l’avvio automatico, fai clic sul pannello Render per avviare o riprovare la preview; gli errori di formato/codec sono indicati sul Render. URL di pagine web, HLS non supportato dal browser, file locali, NDI e RTSP richiedono il Video Service. Il documento di riferimento in TD4PatchDeck (`docs/architecture/plancia-video-service.md`) è ancora una proposta: API e signaling WebRTC vanno integrati quando il contratto sarà stabile. Le preview non devono diventare una dipendenza del controllo show. Sono supportate più LED wall nel layout, ciascuna con sorgente indipendente.
+
+I laser sono visualizzati localmente e non inviano comandi OSC/DMX.
