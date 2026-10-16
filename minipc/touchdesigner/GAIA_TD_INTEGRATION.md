@@ -132,12 +132,27 @@ cifre, confuso con un `id` numerico di TD); l'editor mostra ora (solo
 lettura) anche le fixture già patchate in TD, per non duplicarle.
 Dettaglio completo in `plancia/GAIA_PLANCIA_INTEGRATION.md`.
 
-**Non ancora fatto**: leggere `dmx_matrix.fixtures.groups[].profiles`/
-`dmx_matrix.patch.ports` (A, già pubblicati) per offrire una scelta
-reale di profilo/porta nell'editor invece del default automatico di
-DMX Master; `nextAddress()` lato Plancia considera solo le proprie
-fixture, non ancora `dmx_patch_report` di TD (oggi il conflitto si
-vede solo dopo l'invio, accettato da TD come alternativa).
+**Nota interface 20 (TD4Gaia, 2026-10-16) — fatto lato Plancia**: TD ha
+trovato 19 gruppi di doppioni sulla patch reale (ogni dispositivo con
+Plancia aperta generava fixture locali con `uid` diverso) e costruito
+`dmx_universe_map`/`dmx_patch_conflicts`/`dmx_patch_resolve` e
+`on_conflict` (`accept`/`reject`/`auto`) su `dmx_fixture_add`/
+`update`. Lato Plancia: all'apertura ricostruisce le fixture da
+`status.params.dmx_fixtures` (uid `p-...`) invece che dalla copia
+locale — fonte unica il palco di TD; editor con universo/indirizzo
+libero reali da `dmx_universe_map`; invio con `on_conflict` invece di
+scrivere doppioni alla cieca; bottone di resolve per pulire i doppioni
+già presenti. Verificato dal vivo (import automatico silenzioso,
+import manuale, editor con indirizzo reale). Dettaglio completo in
+`plancia/GAIA_PLANCIA_INTEGRATION.md`, nota TD 20.
+
+**Non ancora fatto**: leggere `dmx_matrix.fixtures.groups[].profiles`
+per offrire una scelta reale di profilo nell'editor invece del default
+automatico di DMX Master; catalogo modelli/tipi condiviso (nota
+interface 19) — `FIX_TYPES.ch` è ancora fisso lato Plancia, non legge
+`dmx_models`/`dmx_types`/`dmx_matrix.catalog`; `dmx_patch_check`
+(anteprima batch) non usato, si manda `on_conflict` diretto su ogni
+add/update.
 
 Il canale 4 non è OSC (per questo non ha una porta nella tabella nel senso
 degli altri) ed è l'unico dei quattro in cui TD *scrive* verso Gaia invece

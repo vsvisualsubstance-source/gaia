@@ -268,3 +268,38 @@ stato della nota 18 (non sul semplice invio).
 5. Stessa conferma-per-presenza della nota 18, applicata a modelli/tipi.
 
 Dettaglio completo nel commit TD4Gaia `65805d5` (nota interface 19).
+
+## Nota TD 20 (2026-10-16): universi, indirizzi e doppioni — FATTO lato Plancia
+
+TD ha trovato 19 gruppi di doppioni sul palco reale (ogni dispositivo
+con Plancia aperta generava il proprio `uid` locale, quindi lo stesso
+palco mandato da tablet/PC/kiosk diversi arrivava a TD come luci
+diverse) e ha costruito gestione completa di universi/indirizzi/
+conflitti. Implementato lato Plancia (`plancia/index.html`):
+
+1. **Fonte unica per il palco**: all'apertura/connessione, appena
+   arriva il primo `status` di `td-dmx-win` con `params.dmx_fixtures`,
+   `importFromTD(true)` sostituisce in silenzio le fixture locali con
+   quelle `uid` `p-...` di TD — niente più ricostruzione da
+   `defaultFixtures()` se TD ha già un palco. Verificato dal vivo via
+   Playwright: nessun dialogo, Pianta popolata con indirizzi reali
+   (es. `1.001`, `2.025`) alla prima apertura.
+2. Bottoni "⇪ TD" (manda tutto, `on_conflict:'reject'`), "⇩ TD"
+   (`importFromTD` manuale, con conferma) e "🧹 TD" (`resolveDuplicates`
+   → `dmx_patch_resolve` con `apply:true`, poi re-import silenzioso)
+   nel widget Palco.
+3. Editor fixture: menu universo da `dmx_universe_map.universes` (solo
+   le porte Art-Net vere), bottone "Primo indirizzo libero" da
+   `freeAddressTD()`, invio con `on_conflict:'reject'` per avere
+   `last_error` leggibile invece di scrivere un doppione.
+4. Creazione rapida (`openFixAdd`): prova prima l'indirizzo libero da
+   TD, altrimenti `nextAddress()` locale; invio con
+   `on_conflict:'auto'`, poi risincronizza l'indirizzo reale assegnato
+   da TD.
+
+`dmx_patch_check` (anteprima batch, senza scrivere) non è ancora
+usato: si è scelto `on_conflict` diretto su add/update, più semplice
+per un editor singola-fixture-alla-volta. Da rivalutare se la Plancia
+arriva a mandare lotti di fixture in un colpo solo.
+
+Dettaglio completo nel commit TD4Gaia `adfd9b4` (nota interface 20).
