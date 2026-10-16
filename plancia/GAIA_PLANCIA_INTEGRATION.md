@@ -191,7 +191,27 @@ Stesso meccanismo "Device TD" generico già in uso altrove
 **Non ancora verificato dal vivo un giro completo** (serve confermare
 che DMX Master riceva davvero e ripubblichi in `dmx_fixtures`).
 
-**Non ancora fatto**: leggere `dmx_matrix.fixtures.groups[].profiles`/
+**Giro completo verificato dal vivo da TD (nota interface 18,
+2026-10-15)** — add/update/remove funzionano tutti. Tre problemi
+trovati, tutti fissati lato Plancia lo stesso giorno:
+1. **Conferma reale**: TD accetta il comando MQTT anche quando lo
+   scarta (gruppo/profilo/indirizzo invalido) — serviva controllare
+   che `id` comparisse come `uid` in `dmx_fixtures`, non limitarsi a
+   "il publish è andato". Fix: polling leggero (6 tentativi) dopo
+   l'invio, errore da `status.last_error` se non arriva conferma,
+   avviso se `dmx_patch_report` segna la fixture in conflitto.
+2. **`uid()` tutto cifre** (~1/10000): prefisso `"p-"` su ogni id
+   creato in Plancia, così non è mai confuso con un `id` numerico di
+   TD.
+3. **Doppioni**: Plancia non leggeva mai la patch reale di TD —
+   `tdFixtures()` ora mostra (solo lettura, tratteggio grigio) le
+   fixture già in TD non create da Plancia, tap per un'info
+   gruppo/profilo/porta/indirizzo, niente drag/edit.
+
+**Non ancora fatto**: `nextAddress()` considera solo le fixture di
+Plancia, non ancora `dmx_fixtures`/`dmx_patch_report` di TD (accettato
+da TD come alternativa al fix proattivo — oggi il conflitto si vede
+solo DOPO l'invio). Leggere `dmx_matrix.fixtures.groups[].profiles`/
 `dmx_matrix.patch.ports` (A, già pubblicati) per offrire una scelta
 REALE di profilo/porta nell'editor invece di lasciare che DMX Master
 assegni un default — prossimo passo naturale, dati già disponibili.

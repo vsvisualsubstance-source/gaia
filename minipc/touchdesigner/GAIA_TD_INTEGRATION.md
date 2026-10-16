@@ -120,12 +120,24 @@ nell'editor fixture (assente per `wall`/`speaker`) manda
 `{action:"set",param:"dmx_fixture_add"|"dmx_fixture_update"|
 "dmx_fixture_remove",value:{id,type,name,group,universe,address,x,y,
 enabled}}` su `gaia/device/td-dmx-win/command` (stesso meccanismo
-generico "Device TD" già citato sopra). **Non ancora verificato dal
-vivo un giro completo** (Plancia manda → DMX Master riceve e traduce →
-ripubblica in `dmx_fixtures`). **Non ancora fatto**: leggere
-`dmx_matrix.fixtures.groups[].profiles`/`dmx_matrix.patch.ports` (A,
-già pubblicati) per offrire una scelta reale di profilo/porta
-nell'editor invece del default automatico di DMX Master.
+generico "Device TD" già citato sopra).
+
+**Giro completo verificato dal vivo da TD** (nota interface 18,
+TD4Gaia): add/update/remove funzionano. Tre fix lato Plancia lo stesso
+giorno — TD accetta il comando anche quando lo scarta (gruppo/profilo/
+indirizzo invalido), quindi ora `_synced` si marca solo dopo aver
+visto l'`id` comparire come `uid` in `dmx_fixtures` (non sul semplice
+invio); `uid()` lato Plancia ora ha prefisso `p-` (poteva uscire tutto
+cifre, confuso con un `id` numerico di TD); l'editor mostra ora (solo
+lettura) anche le fixture già patchate in TD, per non duplicarle.
+Dettaglio completo in `plancia/GAIA_PLANCIA_INTEGRATION.md`.
+
+**Non ancora fatto**: leggere `dmx_matrix.fixtures.groups[].profiles`/
+`dmx_matrix.patch.ports` (A, già pubblicati) per offrire una scelta
+reale di profilo/porta nell'editor invece del default automatico di
+DMX Master; `nextAddress()` lato Plancia considera solo le proprie
+fixture, non ancora `dmx_patch_report` di TD (oggi il conflitto si
+vede solo dopo l'invio, accettato da TD come alternativa).
 
 Il canale 4 non è OSC (per questo non ha una porta nella tabella nel senso
 degli altri) ed è l'unico dei quattro in cui TD *scrive* verso Gaia invece
