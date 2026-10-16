@@ -184,10 +184,32 @@ un bottone "Manda a DMX Master" (assente per `wall`/`speaker`) che
 pubblica su `gaia/device/td-dmx-win/command`:
 ```
 {action:"set", param:"dmx_fixture_add"|"dmx_fixture_update"|"dmx_fixture_remove",
- value:{id,type,name,group,universe,address,x,y,enabled}}
+ value:{id,type,name,group,model,universe,address,x,y,enabled,on_conflict}}
 ```
 Stesso meccanismo "Device TD" generico già in uso altrove
 (`devCmd()`/`gPub()` in `plancia/index.html`), nessun nuovo trasporto.
+`group` **è sempre presente**, non opzionale: ogni `FIX_TYPES` ha il
+suo gruppo fisso (vedi tabella) e `mkFix()` lo imposta su ogni fixture
+creata, mai lasciato vuoto.
+
+**Mappa tipo Plancia → gruppo mandato a TD** (`FIX_TYPES`, tabella
+completa — i 5 patchabili, `wall`/`speaker`/`laser` non mandano mai
+nulla a DMX):
+
+| Tipo Plancia | `group` mandato | `kind` (nota 19) | Modello di default |
+|---|---|---|---|
+| `mh` | `mh` (alias di `heads`) | `heads` | `Generic Spot 11ch 16bit` |
+| `par` | `front` (alias di `rig_a`) | `chase` | `D+RGB 4CH` |
+| `bar` | `ledbar` | `chase` | `D+RGB 4CH` |
+| `blinder` | `blinder` | `level` | `Dimmer 1CH` |
+| `haze` | `haze` | `level` | `Haze 2CH` |
+
+**Verificato dal vivo per tutti e 5 i tipi** (2026-10-16, via
+Playwright): ognuno confermato `_synced` con `group`/`model`/indirizzo
+reali tornati da TD in `dmx_fixtures` — non solo mh/par/bar (già
+verificati nelle note 18/20), anche blinder e haze creati e confermati
+nello stesso giro (`dmx_fixture_add` con `on_conflict:"auto"`,
+`group:"blinder"`/`"haze"`, modello assegnato `Dimmer 1CH`/`Haze 2CH`).
 **Non ancora verificato dal vivo un giro completo** (serve confermare
 che DMX Master riceva davvero e ripubblichi in `dmx_fixtures`).
 
