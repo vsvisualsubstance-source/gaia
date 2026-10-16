@@ -1173,7 +1173,10 @@ function drawPlot(g,W,H,t,w){
   const cnt=fixCounts();
   const lg=Object.entries(FIX_TYPES).filter(([k,ft])=>cnt[k]&&ft.ch).map(([k,ft])=>[`${ft.label} ×${cnt[k]}`,ft.ch+' ch']);
   const lx=s*.5,ly=H-s*.4-Math.max(1,lg.length)*14;
-  txt('PATCH DMX — tocca per modificare, un punto vuoto per aggiungere · tratteggiate = già in TD',lx,ly-8,'#e9ebef','left',9);
+  // Testo corto apposta: visto dal vivo (screenshot Playwright) che la
+  // versione lunga di prima si sovrapponeva al marcatore FOH, disegnato
+  // su questa stessa fascia verticale del palco.
+  txt('Tocca=modifica · vuoto=aggiungi · tratteggio=già in TD',lx,ly-8,'#e9ebef','left',9);
   lg.forEach((r,i)=>{txt(r[0],lx,ly+10+i*14,'#c9ced8','left');txt(r[1],lx+s*3.4,ly+10+i*14,'#868e9b','left')});
 }
 
