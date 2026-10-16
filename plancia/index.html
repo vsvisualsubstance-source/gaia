@@ -449,7 +449,7 @@ function projUpdate(id){
 }
 function projLoad(id){
   const data=store.get('plancia.project.'+id);if(!data)return false;
-  L=data;if(!L.fixtures)L.fixtures=defaultFixtures();
+  L=data;if(!L.fixtures)L.fixtures=defaultFixtures(L.rig);
   L._projectId=id;const e=projList().find(x=>x.id===id);L._projectName=e?e.name:'';
   pi=0;selId=null;save();render();initShow();
   return true;
@@ -560,7 +560,14 @@ TPL.full={name:'Show completo',desc:'Tutte le pagine insieme: Gaia, PatchDeck, D
 const sample=()=>({pages:TPL.full.pages(),fixtures:defaultFixtures()});
 
 let L=store.get(KEY)||sample();
-if(!L.fixtures)L.fixtures=defaultFixtures();
+// Se L.rig esiste (show salvato PRIMA di oggi, quando il rig erano solo
+// conteggi) va passato alla migrazione -- altrimenti un utente che
+// aveva personalizzato il rig (es. 10 teste invece di 8) si trova con
+// le fixture del default globale, non le "sue" (bug trovato dal vivo
+// 2026-10-16, l'utente segnalava "il render non si aggiorna in base a
+// quello disegnato" -- era anche questo: la migrazione ripartiva dal
+// default invece di quello che aveva davvero configurato).
+if(!L.fixtures)L.fixtures=defaultFixtures(L.rig);
 // host/port: destinazione OSC generica (/dmx/..., /mh/..., /led/..., /show/...)
 // -- DMX Master (TD, famiglia dmx) riceve questi indirizzi DIRETTAMENTE, non
 // passa da osc_bridge.py (quello e' solo per /gaia/..., vedi GAIA_PLANCIA_INTEGRATION.md).
@@ -1745,13 +1752,13 @@ function openSheet(){
   const tmsg=t=>$('#tMsg').textContent=t;
   s.querySelectorAll('[data-tadd]').forEach(b=>b.onclick=()=>{const t=TPL[b.dataset.tadd],ps=t.pages();L.pages.push(...ps);pi=L.pages.length-ps.length;selId=null;save();render();initShow();tmsg(`Aggiunto "${t.name}" (${ps.length} ${ps.length>1?'pagine':'pagina'}).`);$('#sJson').value=JSON.stringify(L,null,1)});
   s.querySelectorAll('[data-trep]').forEach(b=>{let armed=false;b.onclick=()=>{if(!armed){armed=true;b.textContent='Conferma';b.classList.add('danger');return}
-    const t=TPL[b.dataset.trep];L={pages:t.pages(),fixtures:L.fixtures||defaultFixtures()};pi=0;selId=null;save();render();initShow();tmsg(`Layout sostituito con "${t.name}".`);$('#sJson').value=JSON.stringify(L,null,1);
+    const t=TPL[b.dataset.trep];L={pages:t.pages(),fixtures:L.fixtures||defaultFixtures(L.rig)};pi=0;selId=null;save();render();initShow();tmsg(`Layout sostituito con "${t.name}".`);$('#sJson').value=JSON.stringify(L,null,1);
     armed=false;b.textContent='Sostituisci';b.classList.remove('danger')}});
   $('#sApply').onclick=()=>{C={...C,url:$('#sUrl').value.trim(),host:$('#sHost').value.trim()||'127.0.0.1',port:+$('#sPort').value||7000};store.set(CKEY,C);connect();closeSheet()};
   const msg=t=>$('#sMsg').textContent=t;
   $('#sCopy').onclick=()=>{const ta=$('#sJson');const fb=()=>{ta.select();msg('Testo selezionato: copialo con Ctrl/Cmd+C.')};
     if(navigator.clipboard)navigator.clipboard.writeText(ta.value).then(()=>msg('Layout copiato negli appunti.'),fb);else fb()};
-  $('#sLoad').onclick=()=>{try{const j=JSON.parse($('#sJson').value);if(!Array.isArray(j.pages)||!j.pages.length)throw 0;L=j;if(!L.fixtures)L.fixtures=defaultFixtures();pi=0;selId=null;save();render();initShow();msg('Layout applicato.')}catch{msg('JSON non valido: serve un oggetto con un elenco "pages".')}};
+  $('#sLoad').onclick=()=>{try{const j=JSON.parse($('#sJson').value);if(!Array.isArray(j.pages)||!j.pages.length)throw 0;L=j;if(!L.fixtures)L.fixtures=defaultFixtures(L.rig);pi=0;selId=null;save();render();initShow();msg('Layout applicato.')}catch{msg('JSON non valido: serve un oggetto con un elenco "pages".')}};
   function renderProjList(){
     $('#pCur').textContent=L._projectId?`Progetto corrente: ${L._projectName||'(senza nome)'}`:'Progetto corrente: non salvato (solo autosave locale su questo dispositivo).';
     const list=projList();
