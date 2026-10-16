@@ -392,7 +392,11 @@ const FIX_TYPES={
   speaker:{label:'Cassa',        group:'',        ch:0}
 };
 const FIX_COLOR={mh:'#58a6ff',par:'#ffb23e',bar:'#3fb950',wall:'#ff6fae',blinder:'#f85149',haze:'#8a92a0',speaker:'#c9ced8'};
-const mkFix=(type,name,x,y,universe,address)=>({id:uid(),type,name,group:FIX_TYPES[type].group,universe,address,x,y,enabled:true});
+// "p-" davanti: uid() e' 7 caratteri base36, ~1 volta su 10000 esce
+// tutto cifre -- DMX Master lo leggerebbe come id numerico (i SUOI,
+// non quelli creati da Plancia), confuso con una fixture sua. Trovato
+// da TD (nota interface 18), non da un test qui.
+const mkFix=(type,name,x,y,universe,address)=>({id:'p-'+uid(),type,name,group:FIX_TYPES[type].group,universe,address,x,y,enabled:true});
 function defaultFixtures(){
   // Migrazione dal vecchio modello a sole quantita' (RIG, 2026-10):
   // stessa disposizione automatica di prima, cosi' un layout salvato
@@ -416,6 +420,17 @@ function nextAddress(type,universe){ // primo indirizzo libero per quel tipo+uni
   const ch=FIX_TYPES[type].ch||1, used=(L.fixtures||[]).filter(f=>f.universe===universe).map(f=>[f.address,f.address+(FIX_TYPES[f.type].ch||1)-1]);
   let a=1;
   for(;;){const end=a+ch-1;if(end>512)return 1;if(!used.some(([s,e])=>a<=e&&end>=s))return a;a=Math.max(...used.filter(([s,e])=>a<=e&&end>=s).map(([,e])=>e))+1}
+}
+// Fixture già patchate in TD (DMX Master), NON create da Plancia --
+// trovato da TD (nota interface 18, "Doppioni"): Plancia non leggeva
+// mai la patch reale, quindi i default dell'editor si aggiungevano
+// alle fixture già a mano in TD invece di mostrarle. Solo lettura qui
+// (niente drag/edit): id numerico di TD, non il nostro uid stringa.
+function tdFixtures(){
+  const list=(G.devices['td-dmx-win']?.params||{}).dmx_fixtures;
+  if(!Array.isArray(list))return[];
+  const mine=new Set((L.fixtures||[]).map(f=>f.id));
+  return list.filter(x=>!x.uid||!mine.has(x.uid));
 }
 
 /* ---------- template ---------- */
@@ -1048,6 +1063,19 @@ function drawPlot(g,W,H,t,w){
   const fy=Math.min(H-s*.9,Y(11.2));g.strokeStyle='#ffb23e';g.lineWidth=1.3;g.strokeRect(cx-s*.9,fy-s*.4,s*1.8,s*.8);txt('FOH',cx,fy+4,'#ffb23e');
   g.setLineDash([2,4]);g.strokeStyle='#4a515e';g.beginPath();g.moveTo(cx,Y(8.8));g.lineTo(cx,fy-s*.45);g.stroke();g.setLineDash([]);
   txt('18 m',cx+6,(Y(8.8)+fy)/2,'#868e9b','left');
+  // Fixture già in TD, non create da Plancia -- SOLO LETTURA (tratteggio
+  // grigio, nessun drag/edit): evita di ricrearle per sbaglio (vedi
+  // tdFixtures()). Posizione reale (x/y pubblicati da TD).
+  const tdHits=[];
+  for(const tf of tdFixtures()){
+    if(typeof tf.x!=='number'||typeof tf.y!=='number')continue;
+    const x=X(tf.x),y=Y(tf.y),r=s*.24;
+    g.globalAlpha=.55;g.setLineDash([3,3]);g.strokeStyle='#5d6573';g.lineWidth=1.3;
+    g.beginPath();g.arc(x,y,r,0,Math.PI*2);g.stroke();g.setLineDash([]);g.globalAlpha=1;
+    txt((tf.name||'TD '+tf.id)+' (TD)',x,y-r-6,'#5d6573',undefined,9);
+    tdHits.push({tf,x,y,r:Math.max(r,s*.35)});
+  }
+  if(ui)ui.tdHits=tdHits;
   // fixture vere (patch editabile) -- ogni fixture ha una posizione propria
   // in L.fixtures, non piu' un conteggio con disposizione automatica.
   const hits=[],sel=ui&&ui.selFix;
@@ -1070,7 +1098,7 @@ function drawPlot(g,W,H,t,w){
   const cnt=fixCounts();
   const lg=Object.entries(FIX_TYPES).filter(([k,ft])=>cnt[k]&&ft.ch).map(([k,ft])=>[`${ft.label} ×${cnt[k]}`,ft.ch+' ch']);
   const lx=s*.5,ly=H-s*.4-Math.max(1,lg.length)*14;
-  txt('PATCH DMX — tocca una fixture per modificarla, un punto vuoto per aggiungerne una',lx,ly-8,'#e9ebef','left',9);
+  txt('PATCH DMX — tocca per modificare, un punto vuoto per aggiungere · tratteggiate = già in TD',lx,ly-8,'#e9ebef','left',9);
   lg.forEach((r,i)=>{txt(r[0],lx,ly+10+i*14,'#c9ced8','left');txt(r[1],lx+s*3.4,ly+10+i*14,'#868e9b','left')});
 }
 
@@ -1085,6 +1113,7 @@ function stageDown(e,el,w){
   const toM=p=>({x:(p.x-ui.proj.cx)/ui.proj.s,y:(p.y-ui.proj.oy)/ui.proj.s});
   const p0=toLocal(e);
   const hit=(ui.hits||[]).find(h=>Math.hypot(p0.x-h.x,p0.y-h.y)<=h.r);
+  const tdHit=!hit&&(ui.tdHits||[]).find(h=>Math.hypot(p0.x-h.x,p0.y-h.y)<=h.r);
   const start={x:e.clientX,y:e.clientY}; let moved=false; const dragF=hit&&hit.f;
   e.preventDefault(); el.setPointerCapture(e.pointerId);
   const mv=ev=>{
@@ -1095,9 +1124,26 @@ function stageDown(e,el,w){
     el.onpointermove=null;el.onpointerup=el.onpointercancel=null;
     if(dragF&&moved)save();
     else if(dragF&&!moved)openFixEditor(w,dragF);
+    else if(!moved&&tdHit)openTdInfo(tdHit.tf);
     else if(!moved)openFixAdd(w,toM(p0));
   };
   el.onpointermove=mv; el.onpointerup=el.onpointercancel=up;
+}
+function openTdInfo(tf){
+  // Solo lettura -- questa fixture esiste già in TD, non è stata creata
+  // da Plancia (vedi tdFixtures()). Niente editor, solo info, per non
+  // far credere che si possa modificarla da qui senza saperne il
+  // protocollo esatto (id numerico di TD, non il nostro uid stringa).
+  const s=$('#scrim'); s.hidden=false;
+  s.innerHTML=`<div class="sheet" role="dialog" aria-label="Fixture TD">
+    <div class="top"><h3>${esc(tf.name||'Fixture TD '+tf.id)}</h3><button class="btn ghost" id="tiClose">Chiudi</button></div>
+    <p class="hint">Già patchata in DMX Master, non creata da Plancia — solo lettura da qui.</p>
+    <label>Gruppo<input value="${esc(tf.group||'')}" disabled></label>
+    <label>Profilo<input value="${esc(tf.profile||'')}" disabled></label>
+    <div class="two"><label>Porta Art-Net<input value="${esc(tf.port_id||'')}" disabled></label><label>Indirizzo<input value="${tf.address??''}" disabled></label></div>
+  </div>`;
+  s.onpointerdown=e=>{if(e.target===s)closeSheet()};
+  $('#tiClose').onclick=closeSheet;
 }
 function openFixAdd(w,pos){
   const s=$('#scrim'); s.hidden=false;
@@ -1134,16 +1180,41 @@ function openFixEditor(w,f){
     f.enabled=$('#feOn').checked; save()};
   ['feName','feGroup','feUni','feAddr'].forEach(id=>{const n=$('#'+id);if(n)n.addEventListener('input',upd)});
   $('#feOn').addEventListener('change',upd);
-  // Canale 1b, confermato da TD (GAIA_TD_INTEGRATION.md, risposta
-  // 2026-10-15): dmx_fixture_add/dmx_fixtures accettano la fixture
-  // Plancia COSI' COM'E' -- id stringa (il loro uid), universe tradotto
-  // in port_id, group mancante dedotto dal type. wall/speaker saltati
-  // (bottone nemmeno mostrato, vedi sopra).
+  // Canale 1b, confermato dal vivo da TD (GAIA_TD_INTEGRATION.md, note
+  // interface 17/18): dmx_fixture_add/dmx_fixtures accettano la
+  // fixture Plancia COSI' COM'E' -- id stringa (il loro uid), universe
+  // tradotto in port_id, group mancante dedotto dal type. wall/speaker
+  // saltati (bottone nemmeno mostrato, vedi sopra).
+  // _synced si marca SOLO dopo aver visto f.id comparire come uid in
+  // dmx_fixtures -- TD manda sempre 200/ok anche se il comando viene
+  // rifiutato (gruppo/profilo/indirizzo invalido), quindi segnare
+  // _synced sull'invio e basta faceva credere riuscito un comando
+  // scartato, e il successivo "Aggiorna" falliva con "fixture non
+  // trovata" (bug trovato da TD, non qui).
   if($('#feSync'))$('#feSync').onclick=()=>{
     const ok=devCmd('td-dmx-win',{action:'set',param:f._synced?'dmx_fixture_update':'dmx_fixture_add',
       value:{id:f.id,type:f.type,name:f.name,group:f.group,universe:f.universe,address:f.address,x:f.x,y:f.y,enabled:f.enabled!==false}});
-    $('#feSyncMsg').textContent=ok?'Mandato (nessuna conferma di ricezione da DMX Master).':'Non collegata a Gaia — apri ⋯ → Gaia e collegati prima.';
-    if(ok){f._synced=true; save(); $('#feSync').textContent='Aggiorna su DMX Master'}
+    if(!ok){$('#feSyncMsg').textContent='Non collegata a Gaia — apri ⋯ → Gaia e collegati prima.';return}
+    const btn=$('#feSync'); btn.disabled=true; $('#feSyncMsg').textContent='Mandato, verifico la conferma da DMX Master…';
+    let tries=0;
+    const check=()=>{
+      tries++;
+      const list=(G.devices['td-dmx-win']?.params||{}).dmx_fixtures||[];
+      const found=list.find(x=>x.uid===f.id);
+      if(found){
+        f._synced=true; save();
+        const rep=((G.devices['td-dmx-win']?.params||{}).dmx_patch_report||[]).find(x=>x.id===found.id);
+        $('#feSyncMsg').textContent='Confermato da DMX Master'+(rep&&rep.status==='conflict'?' — ATTENZIONE: indirizzo in conflitto con un\'altra fixture già patchata.':'.');
+        btn.textContent='Aggiorna su DMX Master'; btn.disabled=false; return;
+      }
+      if(tries>=6){
+        const err=G.devices['td-dmx-win']?.last_error;
+        $('#feSyncMsg').textContent='Nessuna conferma da DMX Master'+(err?' — '+err:' — controlla gruppo/profilo/indirizzo (puoi riprovare).');
+        btn.disabled=false; return;
+      }
+      setTimeout(check,500);
+    };
+    setTimeout(check,500);
   };
   $('#feDel').onclick=()=>{if(f._synced)devCmd('td-dmx-win',{action:'set',param:'dmx_fixture_remove',value:{id:f.id}});
     L.fixtures=L.fixtures.filter(x=>x.id!==f.id); const ui=_stageUI[w.id];if(ui&&ui.selFix===f.id)ui.selFix=null; save(); closeSheet()};
