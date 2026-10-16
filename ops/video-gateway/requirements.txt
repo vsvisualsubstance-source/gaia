@@ -1,0 +1,16 @@
+# Plancia Video Service -- dipendenze (Python 3.11, Windows x64).
+# OPS non ha accesso diretto a internet: le wheel si scaricano su Core
+# (che ce l'ha) con:
+#   pip download --platform win_amd64 --python-version 311 --only-binary=:all: \
+#     -d . aiortc aiohttp numpy ndi-python
+# poi si copiano via scp in C:\gaia\video-gateway-wheels e si installano
+# offline su OPS con:
+#   python -m pip install --no-index --find-links=C:\gaia\video-gateway-wheels ^
+#     aiortc aiohttp numpy ndi-python
+#
+# ndi-python richiede il runtime NDI 6 (NDI_RUNTIME_DIR_V6), gia'
+# installato su OPS da NDI 6 Tools -- nessuna azione aggiuntiva li'.
+aiortc
+aiohttp
+numpy
+ndi-python

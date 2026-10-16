@@ -1175,10 +1175,11 @@ function beam(g,x,y,ang,len,wd,col,a){
 function glow(g,x,y,r,col,a){const gr=g.createRadialGradient(x,y,0,x,y,r);gr.addColorStop(0,rgba(col,a));gr.addColorStop(1,rgba(col,0));g.fillStyle=gr;g.fillRect(x-r,y-r,r*2,r*2)}
 const wallVideoPlayers=new Map();
 function wallPreviewMessage(f,state=wallVideoPlayers.get(f.id)){
-  if(f.sourceType!=='url')return f.sourceType==='procedural'?'Contenuto LED procedurale.':
-    `${(f.sourceType||'Sorgente').toUpperCase()}: preview in attesa del Video Service.`;
-  if(!f.sourceRef?.trim())return 'Inserisci un URL diretto HTTP(S) a un video MP4/WebM.';
-  if(!state)return 'Preview disponibile nella vista Render.';
+  if(f.sourceType==='procedural'||!f.sourceType)return'Contenuto LED procedurale.';
+  if(f.sourceType!=='url'&&f.sourceType!=='ndi')return`${f.sourceType.toUpperCase()}: preview in attesa del Video Service.`;
+  if(f.sourceType==='url'&&!f.sourceRef?.trim())return'Inserisci un URL diretto HTTP(S) a un video MP4/WebM.';
+  if(f.sourceType==='ndi'&&!f.sourceRef?.trim())return'Inserisci il nome esatto della sorgente NDI (vedi "Cerca sorgenti NDI").';
+  if(!state)return'Preview disponibile nella vista Render.';
   return state.message;
 }
 function setWallPreviewState(f,state,status,message){
@@ -1191,10 +1192,15 @@ function setWallPreviewState(f,state,status,message){
   }
 }
 function disposeWallVideo(state){
+  if(state.pc){try{state.pc.close()}catch{}}
+  if(state.previewId&&state.gatewayUrl)fetch(`${state.gatewayUrl}/api/previews/${state.previewId}`,{method:'DELETE'}).catch(()=>{});
   if(!state.video)return;
-  state.video.pause();state.video.removeAttribute('src');state.video.load();
+  state.video.pause();state.video.srcObject=null;state.video.removeAttribute('src');state.video.load();
 }
 function createWallVideoState(f){
+  return f.sourceType==='ndi'?createWallNdiState(f):createWallUrlState(f);
+}
+function createWallUrlState(f){
   const raw=f.sourceRef.trim(),state={raw,status:'loading',message:'Avvio preview…',video:null};
   let url;
   try{url=new URL(raw,location.href)}catch{
@@ -1225,11 +1231,63 @@ function createWallVideoState(f){
   });
   return state;
 }
+// Plancia Video Service (PoC 2026-10-16, ops/video-gateway): NDI->WebRTC
+// via aiortc, API di segnalazione {GET /api/sources, POST /api/previews,
+// DELETE /api/previews/:id} -- stessa forma della proposta in TD4PatchDeck
+// (docs/architecture/plancia-video-service.md), implementazione diversa
+// (Python/aiortc invece di GStreamer+webrtcbin). Il video arriva come
+// MediaStream su un <video> nascosto, drawVideoCover() lo disegna esattamente
+// come un video URL -- stesso percorso di rendering, nessuna duplicazione.
+function createWallNdiState(f){
+  const raw=f.sourceRef.trim(),gatewayUrl=videoGatewayUrl();
+  const state={raw,status:'loading',message:'Connessione al Video Service…',video:null,pc:null,previewId:null,gatewayUrl};
+  if(!gatewayUrl){state.status='error';state.message='Nessun Video Service configurato per questo profilo di rete.';return state}
+  (async()=>{
+    try{
+      const pc=new RTCPeerConnection();state.pc=pc;
+      const video=document.createElement('video');
+      video.muted=true;video.autoplay=true;video.playsInline=true;video.disablePictureInPicture=true;
+      state.video=video;
+      pc.ontrack=e=>{video.srcObject=e.streams[0];video.play().catch(()=>{});};
+      pc.onconnectionstatechange=()=>{
+        if(wallVideoPlayers.get(f.id)!==state)return;
+        if(pc.connectionState==='connected')setWallPreviewState(f,state,'live','Preview NDI attiva · audio disattivato.');
+        else if(pc.connectionState==='connecting')setWallPreviewState(f,state,'buffering','Negoziazione WebRTC in corso…');
+        else if(pc.connectionState==='failed'||pc.connectionState==='disconnected')setWallPreviewState(f,state,'error','Connessione al Video Service persa.');
+      };
+      pc.addTransceiver('video',{direction:'recvonly'});
+      const offer=await pc.createOffer();await pc.setLocalDescription(offer);
+      const r=await fetch(`${gatewayUrl}/api/previews`,{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({source:raw,offer:{sdp:offer.sdp,type:offer.type}})});
+      const j=await r.json();
+      if(wallVideoPlayers.get(f.id)!==state)return; // la fixture e' cambiata/sparita mentre aspettavamo
+      if(j.error){state.status='error';state.message=`Video Service: ${j.error}`;setWallPreviewState(f,state,'error',state.message);return}
+      state.previewId=j.id;
+      await pc.setRemoteDescription(new RTCSessionDescription(j.answer));
+    }catch(err){
+      if(wallVideoPlayers.get(f.id)!==state)return;
+      state.status='error';state.message=`Video Service non raggiungibile: ${err.message}`;
+      setWallPreviewState(f,state,'error',state.message);
+    }
+  })();
+  return state;
+}
+async function pickNdiSource(f){
+  const gatewayUrl=videoGatewayUrl();
+  if(!gatewayUrl){alert('Nessun Video Service configurato per questo profilo di rete.');return}
+  try{
+    const r=await fetch(`${gatewayUrl}/api/sources`);const j=await r.json();
+    if(!j.sources?.length){alert('Nessuna sorgente NDI trovata sulla rete al momento.');return}
+    const pick=j.sources.length===1?j.sources[0]:prompt(`Sorgenti NDI trovate:\n${j.sources.map((s,i)=>`${i+1}. ${s}`).join('\n')}\n\nScrivi il nome esatto (copia/incolla da sopra):`,j.sources[0]);
+    if(pick&&j.sources.includes(pick)){val2('#feSourceRef',pick);$('#feSourceRef').dispatchEvent(new Event('input'))}
+    else if(pick)alert('Nome non riconosciuto fra le sorgenti trovate — copialo esattamente.');
+  }catch(err){alert('Video Service non raggiungibile: '+err.message)}
+}
 function syncWallVideoPlayers(fixtures){
-  const wanted=new Map(fixtures.filter(f=>f.type==='wall'&&f.enabled!==false&&f.sourceType==='url'&&f.sourceRef?.trim()).map(f=>[f.id,f]));
+  const wanted=new Map(fixtures.filter(f=>f.type==='wall'&&f.enabled!==false&&(f.sourceType==='url'||f.sourceType==='ndi')&&f.sourceRef?.trim()).map(f=>[f.id,f]));
   for(const [id,state] of wallVideoPlayers){
     const f=wanted.get(id);
-    if(f&&state.raw===f.sourceRef.trim())continue;
+    if(f&&state.raw===f.sourceRef.trim()&&(f.sourceType==='ndi')===!!state.pc)continue;
     disposeWallVideo(state);wallVideoPlayers.delete(id);
   }
   for(const f of wanted.values()){
@@ -1239,7 +1297,7 @@ function syncWallVideoPlayers(fixtures){
 }
 function retryWallVideo(f){
   const old=wallVideoPlayers.get(f.id);if(old){disposeWallVideo(old);wallVideoPlayers.delete(f.id)}
-  if(f.enabled!==false&&f.sourceType==='url'&&f.sourceRef?.trim()){
+  if(f.enabled!==false&&(f.sourceType==='url'||f.sourceType==='ndi')&&f.sourceRef?.trim()){
     const state=createWallVideoState(f);wallVideoPlayers.set(f.id,state);
   }
 }
@@ -1279,7 +1337,7 @@ function drawRender(g,W,H,t,level){
     const cols=36,rows=Math.max(8,Math.round(cols*(wy1-wy0)/(wx1-wx0))),pw=(wx1-wx0)/cols,ph=(wy1-wy0)/rows;
     const b=SH.led.bright*SH.g.ledwall*(SH.blackout?0:SH.master),c=SH.wall.c;
     let avg=0;
-    if(wallF.sourceType==='url'){
+    if(wallF.sourceType==='url'||wallF.sourceType==='ndi'){
       const preview=wallVideoPlayers.get(wallF.id);
       g.fillStyle='#101319';g.fillRect(wx0,wy0,wx1-wx0,wy1-wy0);
       if(!drawVideoCover(g,preview?.video,wx0,wy0,wx1-wx0,wy1-wy0,clamp(b))){
@@ -1664,9 +1722,10 @@ function openFixEditor(w,f){
     ${f.type==='mh'||f.type==='laser'?`<label class="chk"><input id="feTruss" type="checkbox"> Segue altezza del truss</label>`:''}
     ${f.type==='wall'?`<div class="two"><label>Lunghezza (m)<input id="feW" type="number" min="1" max="20" step="0.1"></label><label>Altezza (m)<input id="feH" type="number" min="0.5" max="10" step="0.1"></label></div>
     <label>Rotazione (gradi)<input id="feRot" type="number" min="-180" max="180" step="5"></label>
-    <label>Sorgente LED<select id="feSource"><option value="procedural">Procedurale</option><option value="file">File (Video Service futuro)</option><option value="ndi">NDI (Video Service futuro)</option><option value="rtsp">RTSP (Video Service futuro)</option><option value="url">URL video diretto</option></select></label>
-    <label>Riferimento sorgente (URL, percorso o nome NDI)<input id="feSourceRef" spellcheck="false" autocapitalize="off"></label>
-    <p class="hint">La preview diretta richiede un URL HTTP(S) a un video MP4/H.264 o WebM compatibile col browser. Se l'avvio automatico è bloccato, fai clic sul pannello Render. Per pagine web, NDI, RTSP e file locali servirà il Video Service: la sua API WebRTC è ancora in progettazione. Audio disattivato.</p>
+    <label>Sorgente LED<select id="feSource"><option value="procedural">Procedurale</option><option value="url">URL video diretto</option><option value="ndi">NDI (via Video Service)</option><option value="file">File (Video Service futuro)</option><option value="rtsp">RTSP (Video Service futuro)</option></select></label>
+    <label>Riferimento sorgente (URL o nome NDI)<input id="feSourceRef" spellcheck="false" autocapitalize="off"></label>
+    <div class="row" id="feNdiPick" hidden><button class="btn sm ghost" id="feNdiSearch">Cerca sorgenti NDI</button></div>
+    <p class="hint">URL diretto: HTTP(S) a un video MP4/H.264 o WebM compatibile col browser (clic sul Render se l'avvio automatico è bloccato). NDI: nome esatto della sorgente, via il Video Service (<code>ops/video-gateway</code>, NDI&rarr;WebRTC). Pagine web, RTSP e file locali non ancora supportati dal Video Service. Audio sempre disattivato.</p>
     <p id="fePreviewStatus" class="hint preview-status" role="status" aria-live="polite"></p>
     <p class="hint">L'altezza dal piano è separata dall'altezza fisica del pannello.</p>`:''}
     ${f.type==='laser'?`<div class="two"><label>Orientamento (gradi)<input id="feAngle" type="number" min="-180" max="180" step="1"></label><label>Apertura pattern (gradi)<input id="feSpread" type="number" min="1" max="120" step="1"></label></div>
@@ -1685,6 +1744,7 @@ function openFixEditor(w,f){
   if($('#feSource')){
     val2('#feSource',f.sourceType||'procedural');val2('#feSourceRef',f.sourceRef||'');
     const hint=$('#fePreviewStatus');hint.dataset.wallId=f.id;hint.textContent=wallPreviewMessage(f);
+    $('#feNdiPick').hidden=$('#feSource').value!=='ndi';
   }
   if($('#feAngle')){val2('#feAngle',f.angle);val2('#feSpread',f.spread)}
   if($('#feGroup')){
@@ -1736,11 +1796,13 @@ function openFixEditor(w,f){
     if($('#feSource')){
       f.sourceType=$('#feSource').value;f.sourceRef=$('#feSourceRef').value.trim();
       const hint=$('#fePreviewStatus');hint.textContent=wallPreviewMessage(f);hint.className='hint preview-status';
+      $('#feNdiPick').hidden=f.sourceType!=='ndi';
     }
     if($('#feAngle')){f.angle=clamp(+$('#feAngle').value||0,-180,180);f.spread=clamp(+$('#feSpread').value||28,1,120)}
     f.enabled=$('#feOn').checked; save(); checkDirty()};
   ['feName','feZ','feGroup','feAddr','feW','feH','feRot','feSource','feSourceRef','feAngle','feSpread'].forEach(id=>{const n=$('#'+id);if(n){n.addEventListener('input',upd);n.addEventListener('change',upd)}});
   $('#feOn').addEventListener('change',upd);if($('#feTruss'))$('#feTruss').addEventListener('change',upd);
+  if($('#feNdiSearch'))$('#feNdiSearch').onclick=()=>pickNdiSource(f);
   // Universo: cambiarlo da solo non basta, l'indirizzo scelto per
   // l'universo vecchio quasi sempre collide nel nuovo -- ricalcola
   // SUBITO il primo indirizzo libero reale (da TD) per l'universo
@@ -1835,9 +1897,13 @@ function val2(sel,v){const n=$(sel);if(n)n.value=v??''}
 
 /* ---------- Gaia: MQTT su WebSocket, stesso schema di patchdeck.html / dmx.html / mixeraudio.html ---------- */
 const GKEY='plancia.gaia.v1';
+// video/videoPort: Plancia Video Service (NDI->WebRTC, PoC 2026-10-16),
+// gira sempre sulla stessa macchina fisica (OPS/SILVERMINI2, li' dove
+// vive TouchDesigner/PatchDeck) indipendentemente dal profilo di rete
+// scelto in Plancia -- per questo e' lo stesso valore in entrambi.
 const NET_DEFAULT={
-  casa:{name:'Casa',broker:'192.168.1.142',wsPort:9001,fallback:'100.94.220.65',nodered:'192.168.1.240',noderedPort:1881,admin:'192.168.1.142',adminPort:8765,osc:'192.168.1.142',oscPort:9008},
-  ops:{name:'Portatile (OPS)',broker:'192.168.1.240',wsPort:19001,fallback:'',nodered:'192.168.1.240',noderedPort:1881,admin:'192.168.1.240',adminPort:1881,osc:'192.168.1.240',oscPort:9008}};
+  casa:{name:'Casa',broker:'192.168.1.142',wsPort:9001,fallback:'100.94.220.65',nodered:'192.168.1.240',noderedPort:1881,admin:'192.168.1.142',adminPort:8765,osc:'192.168.1.142',oscPort:9008,video:'192.168.1.240',videoPort:8788},
+  ops:{name:'Portatile (OPS)',broker:'192.168.1.240',wsPort:19001,fallback:'',nodered:'192.168.1.240',noderedPort:1881,admin:'192.168.1.240',adminPort:1881,osc:'192.168.1.240',oscPort:9008,video:'192.168.1.240',videoPort:8788}};
 let GC=Object.assign({on:true,stanza:'studio',profile:'casa',profiles:JSON.parse(JSON.stringify(NET_DEFAULT))},store.get(GKEY)||{});
 if(GC.broker){GC.profiles.casa={...GC.profiles.casa,broker:GC.broker,wsPort:GC.port||9001,fallback:GC.fallback??''};delete GC.broker;delete GC.port;delete GC.fallback}   // migrazione dal formato precedente
 for(const k in NET_DEFAULT)if(!GC.profiles[k])GC.profiles[k]=JSON.parse(JSON.stringify(NET_DEFAULT[k]));
@@ -1848,6 +1914,7 @@ if(!GC.profiles[GC.profile])GC.profile='casa';
   const n=GC.profiles[GC.profile];[['broker','broker'],['nodered','nodered'],['admin','admin'],['osc','osc'],['ws','wsPort']].forEach(([a,b])=>{if(q.get(a))n[b]=b==='wsPort'?+q.get(a):q.get(a)});
   if(q.get('stanza'))GC.stanza=q.get('stanza');store.set(GKEY,GC)}catch{}})();
 const net=()=>GC.profiles[GC.profile]||NET_DEFAULT.casa;
+const videoGatewayUrl=()=>{const n=net();return n.video?`http://${n.video}:${n.videoPort||8788}`:null};
 const bridgeCfg=()=>({type:'config',host:C.host,port:+C.port,gaiaHost:net().osc,gaiaPort:+net().oscPort});
 const G={client:null,ok:false,host:null,sim:false,nr:null,nrWs:null,nrOk:false,dirty:true,lastPaint:0,devices:{},pdm:{},dxm:{},dmx:{},levels:{},canvas:null,brain:null,dream:null,chat:[],chatV:0,lastSent:null,offSince:null,tdAutoSynced:false};
 const MOOD_INKS={neutra:[0,255,204],calm:[80,230,190],stress:[255,115,85],social:[255,195,100],curiosity:[190,135,255]};

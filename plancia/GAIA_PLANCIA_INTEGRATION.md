@@ -342,3 +342,55 @@ per un editor singola-fixture-alla-volta. Da rivalutare se la Plancia
 arriva a mandare lotti di fixture in un colpo solo.
 
 Dettaglio completo nel commit TD4Gaia `adfd9b4` (nota interface 20).
+
+## Plancia Video Service — gateway NDI→WebRTC (PoC, 2026-10-16)
+
+Mauro ha proposto l'architettura in TD4PatchDeck
+(`docs/architecture/plancia-video-service.md`): servizio Windows
+dedicato che riceve sorgenti NDI e le offre al browser via WebRTC a
+bassa latenza, isolato dal controllo show (un suo crash non deve mai
+toccare TD/Resolume/DMX/laser). La proposta indicava GStreamer+
+webrtcbin; **implementato invece in Python** (`ops/video-gateway/`,
+stessa macchina OPS/SILVERMINI2 dove girano TD/PatchDeck/Resolume):
+
+- `ndi-python` (bindings sul runtime NDI 6 già installato su OPS da
+  NDI 6 Tools, nessuna installazione aggiuntiva) per ricevere i frame.
+- `aiortc` (WebRTC nativo Python, niente GStreamer da compilare/
+  wire-are su Windows) per l'encoding e la consegna al browser.
+- `aiohttp` per la segnalazione HTTP — **stessa forma di API** proposta
+  da Mauro: `GET /api/sources`, `POST /api/previews` (offer→answer
+  SDP), `DELETE /api/previews/{id}`, `GET /api/previews/{id}/status`.
+- Profilo preview: 640×360, downscale diretto (niente letterbox nel
+  PoC). `NdiReceiver` condiviso per sorgente: più preview della stessa
+  sorgente NDI non aprono connessioni NDI duplicate.
+- Persistente su OPS via Scheduled Task `GAIA-OPS-VideoGateway`
+  (`run_video_gateway_hidden.vbs` → `.bat`, stesso schema di
+  agent/dhcp/osc-bridge/plancia), porta **8788**.
+- OPS non ha accesso diretto a internet: le wheel Python (aiortc,
+  aiohttp, numpy, ndi-python — tutte con binari precompilati per
+  win_amd64/cp311, nessuna compilazione) si scaricano su Core e si
+  copiano via scp, installazione offline con
+  `pip install --no-index --find-links=...` (vedi
+  `ops/video-gateway/requirements.txt`).
+
+**Integrato in Plancia**: editor LED wall, sorgente "NDI (via Video
+Service)" — bottone "Cerca sorgenti NDI" interroga `/api/sources` e
+propone le sorgenti reali trovate sulla rete; il Render disegna il
+video ricevuto esattamente come una sorgente URL (stesso
+`drawVideoCover`, un `<video>` nascosto con `srcObject` invece di
+`src`). `NET_DEFAULT` ha nuovi campi `video`/`videoPort` (stessa
+macchina fisica in entrambi i profili casa/ops, a differenza di
+`broker` che cambia).
+
+**Verificato dal vivo** (Playwright, non solo sintassi): sorgente NDI
+reale di PatchDeck ("MSI (PATCHDECK)") visibile nel Render di Plancia,
+video fluido, `connectionState: connected`. Criteri di accettazione
+della proposta di Mauro soddisfatti per il PoC a sorgente singola.
+
+**Non fatto/non misurato**: latenza esatta in ms (serve un overlay con
+timestamp lato TD per confrontarlo col browser); più client
+contemporanei sulla stessa sorgente (l'architettura lo supporta via
+`NdiReceiver.acquire`/`release`, ma non testato dal vivo); letterbox
+invece di stretch sul resize; cosa succede se la sorgente NDI sparisce
+a metà preview (nessun retry/riconnessione automatica implementato);
+file/RTSP (fuori scope del PoC, solo NDI).
