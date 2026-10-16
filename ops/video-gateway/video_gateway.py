@@ -25,11 +25,28 @@ from aiohttp import web
 from av import VideoFrame
 from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
 from aiortc.mediastreams import MediaStreamError
+import aioice.ice as _aioice_ice
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("video_gateway")
+
+# OPS ha Docker+Hyper-V+WSL+Tailscale attivi insieme con la LAN vera:
+# aioice raccoglie candidati ICE da TUTTE le interfacce (anche 172.23.0.1
+# del bridge Docker e indirizzi 169.254.x link-local), e quando client e
+# server sono la STESSA macchina (test da un browser aperto su OPS) la
+# negoziazione puo' scegliere una coppia che sembra valida ma non porta
+# davvero i pacchetti -- "connecting" che non arriva mai a "connected" o
+# cade subito dopo. Filtra ai soli indirizzi della LAN reale (192.168.x)
+# e Tailscale (100.x); fallback al set originale se il filtro svuota
+# tutto (es. su una rete diversa da 192.168.x).
+_original_get_host_addresses = _aioice_ice.get_host_addresses
+def _filtered_get_host_addresses(use_ipv4, use_ipv6):
+    addrs = _original_get_host_addresses(use_ipv4, use_ipv6)
+    good = [a for a in addrs if a.startswith("192.168.") or a.startswith("100.")]
+    return good or addrs
+_aioice_ice.get_host_addresses = _filtered_get_host_addresses
 
 TARGET_FPS = 18  # nel range 15-20fps della proposta
 TARGET_W, TARGET_H = 640, 360
