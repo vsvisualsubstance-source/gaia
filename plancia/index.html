@@ -892,7 +892,7 @@ function renderInsp(){
     ${T==='clock'?`<label>Modalità<select id="fCMode"><option value="tod">Ora del giorno</option><option value="show">Timecode show (25 fps)</option><option value="countdown">Countdown a orario</option></select></label>
       <label>Orario di fine<input id="fTarget" type="time"></label>`:''}
     ${T==='stage'?`<label>Vista<select id="fView"><option value="render">Render</option><option value="plot">Pianta e patch</option></select></label>
-      <p class="hint">Il Render mostra sempre lo stesso rig disegnato in Pianta e patch (stesso numero di teste/uplight/barre, stessa LED wall) — nessun conteggio separato da impostare qui: aggiungi/sposta/modifica le fixture dalla vista Pianta e patch, il Render si aggiorna da solo.</p>`:''}
+      <p class="hint">Il Render mostra sempre lo stesso NUMERO di fixture e la stessa LED wall disegnati in Pianta e patch — nessun conteggio separato da impostare qui. La POSIZIONE invece no: il Render dispone teste/uplight/barre sempre su una riga automatica, non segue dove le hai messe in Pianta (in pausa per ora).</p>`:''}
     ${GAIA_TYPES.has(T)&&T!=='gaia'?`<label>${T==='gaiadmx'?'Stanza':'Device'}<select id="gDev"><option value="">Automatico</option>${(T==='gaiadmx'?Object.keys(G.dmx).sort():devIds('')).map(x=>`<option>${esc(x)}</option>`).join('')}</select></label>`:''}
     ${T==='patchdeck'?`<label>Deck<select id="gDeck"><option value="a">Deck A</option><option value="b">Deck B</option></select></label>`:''}
     ${T==='tddevice'?`<label>Tipo di device (per la scelta automatica)<select id="gFam"><option value="">Qualsiasi</option><option value="patchdeck">PatchDeck</option><option value="mixeraudio">Controller (mixeraudio)</option><option value="dmx">DMX V8</option></select></label>`:''}
@@ -997,6 +997,13 @@ function drawRender(g,W,H,t,level){
   // Conteggi/dimensioni dalla patch REALE (L.fixtures), non piu' da
   // L.rig -- cosi' Render e Pianta mostrano sempre lo stesso rig
   // disegnato dall'utente (richiesto esplicitamente, "deve coincidere").
+  // LIMITE NOTO (2026-10-16, in pausa apposta): questa funzione NON
+  // legge le posizioni x/y delle fixture -- dispone teste/uplight/
+  // barre sempre su una riga automatica, come prima. Spostare una luce
+  // nella Pianta non ha nessun effetto qui (solo il CONTEGGIO e le
+  // dimensioni della LED wall coincidono, non la posizione). Farlo per
+  // bene richiede una vista/un browser per verificare il risultato
+  // visivamente -- rimandato, non e' un bug.
   // Teste mobili limitate a 12: SH.heads e' un pool pre-allocato a quella
   // dimensione (vedi sopra), oltre non c'e' stato animato pronto.
   const cnt=fixCounts(), wallF=wallFixture(), uplights=cnt.par, bars=cnt.bar, speakers=cnt.speaker>0;
