@@ -1,0 +1,16 @@
+{
+  "name": "plancia",
+  "version": "0.1.0",
+  "description": "Superficie di controllo OSC/MIDI web per tablet, con bridge Node",
+  "main": "bridge.js",
+  "scripts": {
+    "start": "node bridge.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "optionalDependencies": {
+    "easymidi": "^3.1.0"
+  },
+  "license": "MIT"
+}
