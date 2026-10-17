@@ -63,7 +63,7 @@ browser e non sono un engine timeline sincronizzato in TD.
 
 1. **Verifica comando DMX V8** — baseline `dmx_matrix`/`status` già osservata su OPS per il rig A (palette, profili, servizi e valori); concordare una prova live controllata per cambiare e ripristinare una palette, verificando il feedback. Acquisire anche il rig B se presente.
 2. **Scene e look DMX V8** — individuare nel device un elenco e un comando di richiamo realmente pubblicati. Se non esistono, concordare prima il contratto TD (nomi/ID, recall, feedback, eventuale fade); non riutilizzare automaticamente `/dmx/scene`, che è un altro flusso OSC.
-3. **Timeline show** — il formato cue ora supporta scene OSC e set di parametri DMX V8; resta da creare un editor cue dedicato per aggiungere, modificare, riordinare ed eliminare cue e definire come sincronizzare play/stop/GO/back e posizione con il consumer TD. Il runtime non è autorevole lato TD.
+3. **Timeline show** — l'editor cue Plancia è disponibile e salva configurazione e cue nel layout OPS; play/stop, posizione corrente e clock restano locali al browser. Se serve una timeline condivisa, definire con TD il contratto autorevole per stato, GO/Back, seek e acknowledgement e la sincronizzazione fra client.
 4. **Feedback e affidabilità** — distinguere comando inviato da comando applicato, mostrare stato online/stale, errori e feedback per rig; provare disconnessione e riconnessione senza assumere che l'invio OSC equivalga a conferma.
 5. **Verifica palco e deploy** — provare fixture, teste mobili, blackout, palette e scene su hardware/live TD, poi aggiornare documentazione e pubblicare su OPS con backup e verifica della UI.
 
