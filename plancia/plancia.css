@@ -49,7 +49,7 @@ button{cursor:pointer}
 .main{flex:1;display:flex;gap:12px;min-height:0}
 .stage{flex:1;position:relative;min-width:0;border-radius:8px}
 .stage.portrait{display:flex;flex-direction:column;gap:8px;overflow-y:auto;overflow-x:hidden;touch-action:pan-y;padding-bottom:8px}
-.stage.portrait .w{position:relative;flex:none;touch-action:pan-y}
+.stage.portrait .w{position:relative;flex:none;box-sizing:border-box;touch-action:pan-y}
 .stage.portrait .t-fader,.stage.portrait .t-knob,.stage.portrait .t-button,
 .stage.portrait .t-xy,.stage.portrait .t-color,.stage.portrait .t-stage,.stage.portrait .t-timeline{touch-action:none}
 .editing .stage{background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);
