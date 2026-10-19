@@ -17,10 +17,76 @@ const { WebSocketServer } = require('ws');
 
 const PORT = +process.env.PORT || 8080;
 const OSC_IN = +process.env.OSC_IN || 9000;
+const STATE_FILE = process.env.PLANCIA_STATE_FILE || path.join(__dirname, 'data', 'state.json');
 let target = { host: process.env.OSC_HOST || '192.168.1.73', port: +process.env.OSC_PORT || 7020 };
 // Gaia: osc_bridge.py sul Core ascolta /gaia/td/... sulla 9008 e lo ripubblica su MQTT gaia/touchdesigner/...
 let gaiaOsc = { host: process.env.GAIA_OSC_HOST || '192.168.1.142', port: +process.env.GAIA_OSC_PORT || 9008 };
-const routeOf = address => address.startsWith('/gaia/') ? gaiaOsc : target;
+let oscChannels = new Map();
+function validSharedState(value) {
+  return value && typeof value === 'object' &&
+    (value.layout === null || (value.layout && Array.isArray(value.layout.pages) && value.layout.pages.length > 0)) &&
+    Array.isArray(value.projects) &&
+    value.projectData && typeof value.projectData === 'object' && !Array.isArray(value.projectData);
+}
+function loadSharedState() {
+  try {
+    const saved = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+    if (!validSharedState(saved.state) || !Number.isSafeInteger(saved.revision) || saved.revision < 0) {
+      throw new Error(`Invalid Plancia state file: ${STATE_FILE}`);
+    }
+    return { state: saved.state, revision: saved.revision };
+  } catch (error) {
+    if (error.code === 'ENOENT') return { state: { layout: null, projects: [], projectData: {} }, revision: 0 };
+    throw error;
+  }
+}
+const loadedState = loadSharedState();
+let sharedState = loadedState.state;
+let sharedRevision = loadedState.revision;
+let persistedState = loadedState.state;
+let persistedRevision = loadedState.revision;
+let stateWriteQueue = Promise.resolve();
+const encodeForScript = value => JSON.stringify(value)
+  .replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026')
+  .replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
+function saveSharedState(state, ws, clientRevision) {
+  sharedState = JSON.parse(JSON.stringify(state));
+  const revision = ++sharedRevision;
+  const stateSnapshot = sharedState;
+  const snapshot = JSON.stringify({ revision, state: stateSnapshot }, null, 2);
+  stateWriteQueue = stateWriteQueue.catch(() => {}).then(async () => {
+    await fs.promises.mkdir(path.dirname(STATE_FILE), { recursive: true });
+    const tempFile = `${STATE_FILE}.${process.pid}.tmp`;
+    await fs.promises.writeFile(tempFile, snapshot, 'utf8');
+    await fs.promises.rename(tempFile, STATE_FILE);
+  }).then(() => {
+    persistedState = stateSnapshot;
+    persistedRevision = revision;
+    if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'shared_saved', revision, clientRevision }));
+    broadcast({ type: 'shared_update', state: stateSnapshot, revision }, ws);
+  }).catch(error => {
+    console.error(`Plancia state save failed (${STATE_FILE}):`, error.message);
+    if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'shared_error', message: `Salvataggio condiviso fallito: ${error.message}` }));
+  });
+}
+const routeOf = (address, channel) => {
+  if (address.startsWith('/gaia/')) return gaiaOsc;
+  if (!channel || channel === 'default') return target;
+  return oscChannels.get(channel) || null;
+};
+const validPort = port => Number.isInteger(port) && port > 0 && port <= 65535;
+function channelsFromConfig(channels) {
+  if (!Array.isArray(channels)) return new Map();
+  return new Map(channels
+    .filter(c => c && typeof c.id === 'string' && c.id && typeof c.host === 'string' && c.host.trim() && validPort(+c.port))
+    .map(c => [c.id, { host: c.host.trim(), port: +c.port }]));
+}
+function channelFromSource(address) {
+  const matches = [];
+  if (target.host === address) matches.push('default');
+  for (const [id, channel] of oscChannels) if (channel.host === address) matches.push(id);
+  return matches.length > 1 ? null : matches[0];
+}
 
 /* ---------- codec OSC minimale ---------- */
 const pad4 = n => Math.ceil(n / 4) * 4;
@@ -91,8 +157,19 @@ try {
 /* ---------- server ---------- */
 const server = http.createServer((req, res) => {
   if (req.url === '/' || req.url.startsWith('/index.html') || req.url.startsWith('/?')) {
-    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache' });
-    fs.createReadStream(path.join(__dirname, 'index.html')).pipe(res);
+    fs.promises.readFile(path.join(__dirname, 'index.html'), 'utf8').then(html => {
+      const bootstrap = `window.__PLANCIA_SHARED__=${encodeForScript({ state: persistedState, revision: persistedRevision })};`;
+      const scriptTag = '<script>';
+      const scriptIndex = html.indexOf(scriptTag);
+      if (scriptIndex < 0) throw new Error('Plancia bootstrap script tag not found.');
+      const page = `${html.slice(0, scriptIndex + scriptTag.length)}${bootstrap}${html.slice(scriptIndex + scriptTag.length)}`;
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+      res.end(page);
+    }).catch(error => {
+      console.error('Plancia page load failed:', error.message);
+      res.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end('Plancia page could not be loaded.');
+    });
   } else if (req.url.split('?')[0] === '/vendor/mqtt.min.js') {
     // stesso mqtt.js che usano le pagine web di Gaia: niente CDN, funziona anche senza internet
     res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'max-age=86400' });
@@ -102,7 +179,7 @@ const server = http.createServer((req, res) => {
 const wss = new WebSocketServer({ server });
 const udp = dgram.createSocket({ type: 'udp4', reuseAddr: true });
 
-const hello = () => JSON.stringify({ type: 'hello', target, gaia: gaiaOsc, listen: OSC_IN, midi: midiOut ? midiOut.name || true : false });
+const hello = () => JSON.stringify({ type: 'hello', target, gaia: gaiaOsc, channels: [...oscChannels].map(([id, endpoint]) => ({ id, ...endpoint })), listen: OSC_IN, midi: midiOut ? midiOut.name || true : false, sharedState: persistedState, sharedRevision: persistedRevision });
 const broadcast = (msg, except) => {
   const s = JSON.stringify(msg);
   for (const c of wss.clients) if (c !== except && c.readyState === 1) c.send(s);
@@ -112,14 +189,32 @@ wss.on('connection', ws => {
   ws.send(hello());
   ws.on('message', data => {
     let m; try { m = JSON.parse(data); } catch { return; }
-    if (m.type === 'osc' && typeof m.address === 'string' && m.address.startsWith('/')) {
+    if (m.type === 'shared_state') {
+      if (!validSharedState(m.state) || !Number.isSafeInteger(m.clientRevision) || m.clientRevision < 0) {
+        if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'shared_error', message: 'Stato Plancia condiviso non valido.' }));
+        return;
+      }
+      saveSharedState(m.state, ws, m.clientRevision);
+    } else if (m.type === 'osc' && typeof m.address === 'string' && m.address.startsWith('/')) {
       const args = Array.isArray(m.args) ? m.args : [];
-      const to = routeOf(m.address);
-      udp.send(encode(m.address, args), to.port, to.host);
-      broadcast({ type: 'osc', address: m.address, args, echo: true }, ws); // altri tablet restano allineati
+      const channel = typeof m.channel === 'string' ? m.channel : 'default';
+      const to = routeOf(m.address, channel);
+      if (!to) {
+        if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'error', message: `Canale OSC "${channel}" non configurato.` }));
+        return;
+      }
+      udp.send(encode(m.address, args), to.port, to.host, error => {
+        if (error && ws.readyState === 1) ws.send(JSON.stringify({ type: 'error', message: `Invio OSC fallito su ${to.host}:${to.port}: ${error.message}` }));
+      });
+      broadcast({ type: 'osc', address: m.address, args, channel, echo: true }, ws); // altri tablet restano allineati
     } else if (m.type === 'config' && m.host && m.port) {
+      if (!validPort(+m.port)) {
+        if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'error', message: 'Porta OSC predefinita non valida.' }));
+        return;
+      }
       target = { host: String(m.host), port: +m.port };
-      if (m.gaiaHost && m.gaiaPort) gaiaOsc = { host: String(m.gaiaHost), port: +m.gaiaPort };
+      if (m.gaiaHost && validPort(+m.gaiaPort)) gaiaOsc = { host: String(m.gaiaHost), port: +m.gaiaPort };
+      if (Array.isArray(m.channels)) oscChannels = channelsFromConfig(m.channels);
       console.log(`OSC in uscita → ${target.host}:${target.port} · /gaia/... → ${gaiaOsc.host}:${gaiaOsc.port}`);
       for (const c of wss.clients) if (c.readyState === 1) c.send(hello());
     } else if (m.type === 'midi' && midiOut) {
@@ -128,8 +223,13 @@ wss.on('connection', ws => {
   });
 });
 
-udp.on('message', buf => {
-  try { for (const msg of decode(buf)) broadcast({ type: 'osc', ...msg }); } catch { /* pacchetto non valido */ }
+udp.on('message', (buf, rinfo) => {
+  try {
+    for (const msg of decode(buf)) {
+      const channel = channelFromSource(rinfo.address);
+      broadcast({ type: 'osc', ...msg, ...(channel !== undefined ? { channel } : {}) });
+    }
+  } catch { /* pacchetto non valido */ }
 });
 udp.on('error', e => console.error('UDP:', e.message));
 udp.bind(OSC_IN, () => udp.setBroadcast(true));
@@ -140,6 +240,7 @@ server.listen(PORT, () => {
   console.log(`  Apri sul tablet:  ${ips.map(ip => `http://${ip}:${PORT}`).join('  ') || `http://localhost:${PORT}`}`);
   console.log(`  OSC in uscita →  ${target.host}:${target.port}`);
   console.log(`  OSC /gaia/... →  ${gaiaOsc.host}:${gaiaOsc.port} (Gaia, osc_bridge)`);
+  console.log(`  Stato Plancia:   ${STATE_FILE}`);
   console.log(`  OSC in ingresso: porta UDP ${OSC_IN}`);
   console.log(`  MIDI:            ${midiOut ? 'attivo' : 'disattivato (npm i easymidi per abilitarlo)'}\n`);
 });

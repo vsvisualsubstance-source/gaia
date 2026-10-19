@@ -1,3 +1,4 @@
+<meta charset="utf-8">
 <title>Plancia OSC</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -46,6 +47,7 @@ button{cursor:pointer}
 .btn.sm{padding:4px 10px;font-size:13px}
 .addbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding-bottom:10px}
 .addbar .cap{font-family:var(--display);text-transform:uppercase;letter-spacing:.1em;font-size:13px;color:var(--dim);margin-right:4px}
+.addbar .help{font-size:12px;color:var(--dim);margin-right:8px}
 .addbar button{background:var(--panel);border:1px dashed var(--line2);border-radius:6px;padding:5px 11px;font-size:13px}
 .addbar button:hover{border-color:var(--accent);color:var(--accent)}
 
@@ -126,8 +128,10 @@ button{cursor:pointer}
 .tl-name{font-family:var(--display);font-weight:600;font-size:14px;letter-spacing:.08em;text-transform:uppercase}
 .tl-tr{display:flex;gap:4px}
 .tl-tr button{width:30px;height:28px;display:grid;place-items:center;background:var(--panel2);border:1px solid var(--line2);border-radius:5px;padding:0}
+.tl-tr button[data-act="edit-cues"]{width:auto;padding:0 8px;font-size:11px;font-family:var(--mono)}
 .tl-tr button svg{width:13px;height:13px;fill:var(--fg)}
 .tl-tr button.on{background:color-mix(in srgb,var(--c) 30%,var(--panel2));border-color:var(--c)}
+.tl-tr button:disabled{opacity:.35;cursor:default}
 .tl-tc{font-family:var(--mono);font-weight:600;font-size:17px;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
 .tl-cue{display:flex;gap:6px;align-items:baseline;min-width:0;overflow:hidden}
 .tl-cue .k{font-family:var(--mono);font-size:10px;color:var(--dim)}
@@ -138,11 +142,28 @@ button{cursor:pointer}
 .tl-ruler span{position:absolute;top:2px;font-family:var(--mono);font-size:9.5px;color:var(--dim);padding-left:3px;border-left:1px solid var(--line2);height:12px;line-height:11px}
 .tl-cues{position:absolute;left:0;right:0;top:17px;bottom:0}
 .tl-blk{position:absolute;top:4px;bottom:4px;border-radius:3px;background:color-mix(in srgb,var(--ic) 18%,transparent);border-left:2px solid var(--ic);overflow:hidden;padding:3px 5px;box-sizing:border-box}
+.tl-blk{cursor:grab;touch-action:none}
+.tl-blk.dragging{z-index:2;cursor:grabbing;opacity:.8}
 .tl-blk span{display:block;font-family:var(--display);font-weight:600;font-size:12px;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;color:var(--fg)}
 .tl-blk em{display:block;font-style:normal;font-family:var(--mono);font-size:9.5px;color:var(--dim)}
 .tl-blk.cur{background:color-mix(in srgb,var(--ic) 38%,transparent)}
 .tl-ph{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;background:var(--fg);box-shadow:0 0 8px #fff8;pointer-events:none}
 .tl-ph::before{content:"";position:absolute;top:0;left:-5px;border:6px solid transparent;border-top:7px solid var(--fg)}
+.hp{position:absolute;inset:28px 6px 6px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:1fr;gap:5px}
+.hp button{min-width:0;border:1px solid var(--line2);border-radius:5px;background:var(--panel2);padding:3px 5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hp button[data-act="manage-presets"]{color:var(--accent);border-style:dashed}
+.cue-edit-list,.preset-edit-list{display:flex;flex-direction:column;gap:8px}
+.cue-edit-row,.preset-edit-row{display:grid;grid-template-columns:minmax(82px,.7fr) minmax(110px,1fr) minmax(150px,1.5fr) auto;gap:6px;align-items:center;padding:8px;border:1px solid var(--line);border-radius:7px}
+.cue-edit-row input,.preset-edit-row input{min-width:0}
+.cue-edit-row .row,.preset-edit-row .row{gap:4px;flex-wrap:nowrap}
+.cue-edit-row .btn,.preset-edit-row .btn{padding:5px 8px}
+.cue-editor-target{font-family:var(--mono);font-size:12px}
+.cue-editor-actions{display:flex;gap:8px;justify-content:flex-end}
+@media(max-width:700px){
+  .cue-edit-row{grid-template-columns:1fr 1fr}
+  .cue-edit-row .cue-editor-target{grid-column:1/-1}
+  .cue-edit-row .row{grid-column:1/-1;justify-content:flex-end}
+}
 
 /* orologio */
 .t-clock .box{container-type:size}
@@ -278,11 +299,18 @@ button{cursor:pointer}
 .netg b{font-size:11px;color:var(--dim);font-weight:500;letter-spacing:.04em}
 .netg>span{font-size:13px}.netg em{display:block;font-style:normal;font-size:11px;color:var(--dim)}
 .nmut{font-size:12px!important;color:var(--dim);padding-left:4px}
+.osc-routes{display:flex;flex-direction:column;gap:8px}
+.osc-route{display:grid;grid-template-columns:1.1fr .9fr 1fr 1.3fr 72px 34px;gap:6px;align-items:end;padding:8px;border:1px solid var(--line);border-radius:7px;background:var(--bg)}
+.osc-route label{min-width:0}
+.osc-route input,.osc-route select{width:100%;min-width:0}
+.osc-route .btn{height:34px;padding-inline:8px}
+.toast{position:fixed;z-index:30;left:50%;bottom:28px;transform:translateX(-50%);max-width:min(92vw,620px);padding:10px 14px;border:1px solid var(--bad);border-radius:7px;background:var(--panel);color:var(--fg);box-shadow:0 8px 30px #0009;font-size:13px}
 .nett{display:flex;flex-direction:column;gap:5px;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
 .nt{display:grid;grid-template-columns:10px 130px minmax(0,1fr);gap:8px;align-items:center;font-size:12.5px}
 .nt i{width:8px;height:8px;border-radius:50%;background:var(--dim)}.nt.ok i{background:var(--ok)}.nt.ko i{background:var(--bad)}.nt.warn i{background:var(--accent)}
 .nt span{font-family:var(--mono);font-size:11.5px;color:var(--dim);overflow-wrap:anywhere}
 @media (max-width:520px){.netg{grid-template-columns:1fr 84px}.netg>span:not(.nmut){grid-column:1/-1;margin-top:4px}.netg>b{display:none}.nt{grid-template-columns:10px 1fr}.nt span{grid-column:2}}
+@media (max-width:760px){.osc-route{grid-template-columns:1fr 1fr}.osc-route label:nth-child(1),.osc-route label:nth-child(4){grid-column:span 2}}
 .sheet label.chk{flex-direction:row;align-items:center;gap:8px;color:var(--fg);font-size:13px}
 .sheet input[type=checkbox]{width:auto;accent-color:var(--accent)}
 
@@ -306,11 +334,12 @@ button{cursor:pointer}
   <div class="spacer"></div>
   <button id="gconn" class="pill" title="Gaia"><i></i><span id="gconnTxt">Gaia</span></button>
   <button id="conn" class="pill" title="Connessione OSC"><i></i><span id="connTxt">Non connesso</span></button>
-  <button id="editBtn" class="btn">Modifica</button>
+  <button id="saveStatus" class="pill" title="Salvataggio automatico del layout corrente sul server OPS"><i></i><span id="saveStatusTxt">Layout in attesa</span></button>
+  <button id="editBtn" class="btn" title="Modifica la griglia dei widget. Le fixture del palco si aggiungono e si spostano direttamente nella Pianta.">Modifica griglia</button>
   <button id="menuBtn" class="btn ghost" aria-label="Impostazioni e template">⋯</button>
 </header>
 <div id="addbar" class="addbar" hidden>
-  <span class="cap">Aggiungi</span>
+  <span class="cap">Griglia widget</span><span class="help">Trascina per spostare · angolo per ridimensionare · modifiche salvate in automatico</span><span class="cap">Aggiungi</span>
   <button data-add="gaia">Gaia</button><button data-add="patchdeck">PatchDeck</button><button data-add="tddevice">Device TD</button><button data-add="gaiadmx">DMX stanza</button>
   <button data-add="fader">Fader</button><button data-add="knob">Manopola</button><button data-add="button">Pulsante</button>
   <button data-add="xy">Pad XY</button><button data-add="scenes">Scene</button><button data-add="color">Colore</button>
@@ -327,6 +356,7 @@ button{cursor:pointer}
   <div class="rate" id="rate">0 msg/s</div>
 </footer>
 <div id="scrim" class="scrim" hidden></div>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
 <script>
 (()=>{
@@ -339,7 +369,87 @@ const $=s=>document.querySelector(s);
 const uid=()=>Math.random().toString(36).slice(2,9);
 const clamp=(v,a=0,b=1)=>Math.min(b,Math.max(a,v));
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const store={get(k){try{return JSON.parse(localStorage.getItem(k))}catch{return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}}};
+const bootstrap=window.__PLANCIA_SHARED__||{state:{layout:null,projects:[],projectData:{}},revision:0};
+let sharedState=bootstrap.state||{layout:null,projects:[],projectData:{}},sharedRevision=bootstrap.revision||0;
+let serverHasLayout=!!sharedState.layout,applyingSharedState=false,sharedSaveTimer=0,clientRevision=0,sharedDirty=false;
+let sharedBaseline=JSON.stringify(sharedState);
+function saveStatus(text,ok=false){
+  const button=$('#saveStatus');
+  if(!button)return;
+  button.classList.toggle('on',ok);$('#saveStatusTxt').textContent=text;button.title=text;
+}
+function localGet(key){try{return JSON.parse(localStorage.getItem(key))}catch{return null}}
+function importLocalProjects(){
+  const projects=localGet('plancia.projects.v1');
+  if(Array.isArray(projects))sharedState.projects=projects;
+  sharedState.projectData={};
+  for(const project of sharedState.projects){
+    if(!project||typeof project.id!=='string')continue;
+    const snapshot=localGet(`plancia.project.${project.id}`);
+    if(snapshot)sharedState.projectData[project.id]=snapshot;
+  }
+}
+function sharedStateChanged(){
+  const current=JSON.stringify(sharedState);
+  if(current===sharedBaseline)return;
+  sharedDirty=true;clientRevision++;
+  saveStatus(ws&&ws.readyState===1?'Salvataggio layout…':'Layout in attesa del server');
+  clearTimeout(sharedSaveTimer);
+  sharedSaveTimer=setTimeout(sendSharedState,200);
+}
+function sendSharedState(){
+  if(!sharedDirty)return;
+  if(!ws||ws.readyState!==1){saveStatus('Offline · layout in copia locale');return}
+  clearTimeout(sharedSaveTimer);
+  ws.send(JSON.stringify({type:'shared_state',state:sharedState,clientRevision}));
+  saveStatus('Salvataggio layout…');
+}
+function acceptSharedState(state,revision){
+  if(!state||!state.layout)return false;
+  sharedState=JSON.parse(JSON.stringify(state));
+  sharedRevision=revision;serverHasLayout=true;sharedDirty=false;
+  clearTimeout(sharedSaveTimer);
+  sharedBaseline=JSON.stringify(sharedState);
+  applyingSharedState=true;
+  try{
+    localStorage.setItem(KEY,JSON.stringify(sharedState.layout));
+    localStorage.setItem('plancia.projects.v1',JSON.stringify(sharedState.projects||[]));
+    for(const [id,snapshot] of Object.entries(sharedState.projectData||{}))localStorage.setItem(`plancia.project.${id}`,JSON.stringify(snapshot));
+  }catch(error){showError(`Cache locale non aggiornata: ${error.message}`)}
+  finally{applyingSharedState=false}
+  L=sharedState.layout;pi=Math.min(pi,L.pages.length-1);selId=null;
+  render();initShow();
+  if($('#pList'))renderProjList();
+  saveStatus('Layout salvato · OPS',true);
+  return true;
+}
+const store={
+  get(key){
+    if(serverHasLayout){
+      if(key===KEY)return sharedState.layout;
+      if(key==='plancia.projects.v1')return sharedState.projects;
+      if(key.startsWith('plancia.project.'))return sharedState.projectData[key.slice('plancia.project.'.length)]??null;
+    }
+    return localGet(key);
+  },
+  set(key,value){
+    try{localStorage.setItem(key,JSON.stringify(value))}catch{}
+    const projectKey='plancia.project.';
+    if(key===KEY){
+      if(!serverHasLayout)importLocalProjects();
+      sharedState.layout=value;
+    }else if(key==='plancia.projects.v1'){
+      if(!serverHasLayout)importLocalProjects();
+      sharedState.projects=value;
+      const projectIds=new Set(value.map(project=>project?.id).filter(id=>typeof id==='string'));
+      for(const id of Object.keys(sharedState.projectData))if(!projectIds.has(id))delete sharedState.projectData[id];
+    }else if(key.startsWith(projectKey)){
+      if(!serverHasLayout)importLocalProjects();
+      sharedState.projectData[key.slice(projectKey.length)]=value;
+    }else return;
+    if(!applyingSharedState)sharedStateChanged();
+  }
+};
 const hsv2rgb=(h,s,v=1)=>{const f=n=>{const k=(n+h*6)%6;return v-v*s*Math.max(0,Math.min(k,4-k,1))};return[f(5),f(3),f(1)]};
 const rgb2hsv=(r,g,b)=>{const mx=Math.max(r,g,b),mn=Math.min(r,g,b),d=mx-mn;let h=0;if(d){if(mx===r)h=((g-b)/d)%6;else if(mx===g)h=(b-r)/d+2;else h=(r-g)/d+4;h/=6;if(h<0)h+=1}return[h,mx?d/mx:0,mx]};
 const hex=c=>'#'+c.map(v=>Math.round(clamp(v)*255).toString(16).padStart(2,'0')).join('');
@@ -611,12 +721,13 @@ function importFromTD(silent){
   const mine=list.filter(x=>x.uid&&x.uid.startsWith('p-'));
   if(!mine.length){if(!silent)alert('DMX Master non ha ancora fixture create da Plancia — nulla da importare.');return false}
   if(!silent&&!confirm(`Sostituisce le ${(L.fixtures||[]).length} fixture locali con le ${mine.length} trovate su DMX Master. Continuare?`))return false;
-  L.fixtures=mine.map(x=>({
+  const localOnly=(L.fixtures||[]).filter(f=>!FIX_TYPES[f.type]?.ch);
+  L.fixtures=[...mine.map(x=>({
     id:x.uid,type:GROUP_TO_TYPE[x.group]||'par',name:x.name||x.uid,
     group:x.group,model:x.profile||undefined,universe:portIdToUniverse(x.port_id),address:x.address,
     x:typeof x.x==='number'?x.x:0,y:typeof x.y==='number'?x.y:0,
     enabled:x.enabled!==0&&x.enabled!==false,_synced:true
-  }));
+  })),...localOnly];
   ensureStageData(L); // altezza/truss/sorgente LED di default -- import non li aveva mai riempiti
   save();
   if(!silent)alert(`Importate ${mine.length} fixture da DMX Master.`);
@@ -640,26 +751,33 @@ const TPL={
     W('button',13,9,3,1,{label:'Flash strobo',addr:'/dmx/strobe',color:SWATCH[5]})
   ])]},
   dmx:{name:'Luci DMX',desc:'12 scene con crossfade, chase, blackout, strobo e fader di gruppo.',pages:()=>[P('DMX',[
-    W('scenes',0,0,8,5,{label:'Scene',addr:'/dmx/scene',items:sceneList,cols:4,value:0}),
-    W('scenes',8,0,4,3,{label:'Chase',addr:'/dmx/chase',items:CHASE.join('\n'),cols:2,value:0,color:SWATCH[4]}),
-    W('button',12,0,2,3,{label:'Blackout',addr:'/dmx/blackout',mode:'toggle',color:SWATCH[2]}),
-    W('button',14,0,2,3,{label:'Strobo',addr:'/dmx/strobe',mode:'toggle',color:SWATCH[5]}),
-    W('fader',8,3,4,2,{label:'Fade (s)',addr:'/dmx/fade',min:0,max:10,value:.15,color:SWATCH[1]}),
-    W('fader',12,3,4,2,{label:'Strobo (Hz)',addr:'/dmx/strobe/rate',min:1,max:20,value:.37,color:SWATCH[5]}),
+    W('scenes',0,0,8,5,{label:'Scene OSC',addr:'/dmx/scene',items:sceneList,cols:4,value:0}),
+    W('scenes',8,0,4,5,{label:'Palette · Rig A',mode:'dmx-enum',device:'',param:'dmx_a_palette',cols:4,color:SWATCH[1]}),
+    W('scenes',12,0,4,5,{label:'Palette · Rig B',mode:'dmx-enum',device:'',param:'dmx_b_palette',cols:4,color:SWATCH[4]}),
+    W('scenes',0,5,4,2,{label:'Chase',addr:'/dmx/chase',items:CHASE.join('\n'),cols:2,value:0,color:SWATCH[4]}),
+    W('button',4,5,2,2,{label:'Blackout',addr:'/dmx/blackout',mode:'toggle',color:SWATCH[2]}),
+    W('button',6,5,2,2,{label:'Strobo',addr:'/dmx/strobe',mode:'toggle',color:SWATCH[5]}),
+    W('fader',8,5,4,2,{label:'Fade (s)',addr:'/dmx/fade',min:0,max:10,value:.15,color:SWATCH[1]}),
+    W('fader',12,5,4,2,{label:'Strobo (Hz)',addr:'/dmx/strobe/rate',min:1,max:20,value:.37,color:SWATCH[5]}),
     ...[['Master','master',1,0],['Front','group/front',.85,0],['Back','group/back',.9,4],['Teste','group/mh',1,1],['LED bar','group/ledbar',.8,2],['LED wall','group/ledwall',.9,2],['Haze','group/haze',.55,5],['Blinder','group/blinder',0,5]]
-      .map(([n,a,v,c],i)=>W('fader',i*2,5,2,5,{label:n,addr:'/dmx/'+a,value:v,color:SWATCH[c]}))
+      .map(([n,a,v,c],i)=>W('fader',i*2,7,2,5,{label:n,addr:'/dmx/'+a,value:v,color:SWATCH[c]}))
+  ]),P('DMX V8',[
+    W('tddevice',0,0,16,12,{label:'DMX V8 · controlli live',fam:'dmx',device:''})
   ])]},
   mh:{name:'Teste mobili',desc:'Selezione fixture, pan/tilt, colore, gobo, posizioni preset, dimmer e zoom.',pages:()=>[P('Teste mobili',[
-    W('scenes',0,0,8,2,{label:'Selezione',addr:'/mh/select',mode:'multi',items:[1,2,3,4,5,6,7,8].map(n=>'MH '+n).join('\n'),cols:8,value:[1,1,1,1,1,1,1,1],color:SWATCH[1]}),
-    W('scenes',8,0,8,2,{label:'Posizioni',addr:'/mh/position',items:POS.join('\n'),cols:6,value:-1}),
+    W('scenes',0,0,8,2,{label:'Selezione teste TD',addr:'/mh/select/heads',mode:'head-select',items:'',headValues:[],selectedHeads:[],value:[],cols:8,color:SWATCH[1]}),
+    W('scenes',8,0,4,2,{label:'Posizioni',addr:'/mh/position',items:POS.join('\n'),cols:4,value:-1}),
+    W('scenes',12,0,4,2,{label:'Preset PTZ',mode:'head-presets',headPresets:[],color:SWATCH[4]}),
     W('xy',0,2,6,8,{label:'Pan / Tilt',addr:'/mh/pantilt',min:-1,max:1,value:.5,valueY:.25,color:SWATCH[1]}),
     W('color',6,2,4,5,{label:'Colore',addr:'/mh/color',value:{h:.58,s:.55},color:SWATCH[1]}),
     W('scenes',6,7,4,3,{label:'Gobo',addr:'/mh/gobo',items:GOBOS.join('\n'),cols:3,value:0,color:SWATCH[3]}),
     W('fader',10,2,2,5,{label:'Dimmer',addr:'/mh/dimmer',value:1}),
     W('fader',12,2,2,5,{label:'Zoom',addr:'/mh/zoom',value:.3,color:SWATCH[4]}),
     W('fader',14,2,2,5,{label:'Focus',addr:'/mh/focus',value:.7,color:SWATCH[4]}),
-    W('button',10,7,3,3,{label:'Strobo MH',addr:'/mh/strobe',mode:'toggle',color:SWATCH[5]}),
-    W('button',13,7,3,3,{label:'Home',addr:'/mh/home',color:SWATCH[2]})
+    W('button',10,7,2,3,{label:'Strobo',addr:'/mh/strobe',mode:'toggle',color:SWATCH[5]}),
+    W('button',12,7,2,3,{label:'Home',addr:'/mh/home',color:SWATCH[2]}),
+    W('button',14,7,2,1,{label:'Segui',addr:'/mh/follow',mode:'toggle',color:SWATCH[3]}),
+    W('button',14,8,2,2,{label:'Rilascia',addr:'/mh/release',color:SWATCH[1]})
   ])]},
   timeline:{name:'Timeline e clock',desc:'Cue list a tempo, timecode 25 fps, countdown a fine show, GO e Back.',pages:()=>[P('Timeline',[
     W('timeline',0,0,16,5,{label:'Timeline',...tlOpts()}),
@@ -716,6 +834,12 @@ ensureStageData(L);
 // 192.168.1.73:7020 = valore noto al 2026-10-15 -- se DMX Master cambia
 // macchina/IP, aggiorna qui (o dall'interfaccia, persiste in locale).
 let C=Object.assign({url:(location.protocol==='http:'?'ws://'+location.host:'ws://localhost:8080'),host:'192.168.1.73',port:7020},store.get(CKEY)||{});
+C.oscChannels=Array.isArray(C.oscChannels)?C.oscChannels.filter(c=>c&&typeof c.id==='string'&&c.id).map(c=>({
+  id:c.id,name:String(c.name||''),family:['dmx','patchdeck','mixeraudio','gaia','custom'].includes(c.family)?c.family:'custom',instance:String(c.instance||''),host:String(c.host||''),port:+c.port||''
+})):[];
+const OSC_FAMILIES={dmx:'DMX',patchdeck:'PatchDeck',mixeraudio:'Controller Audio',gaia:'Gaia',custom:'Altro'};
+const oscChannelName=c=>`${c.name||OSC_FAMILIES[c.family]||'Canale'}${c.instance?' · '+c.instance:''} (${c.host}:${c.port})`;
+const oscChannelId=c=>`osc:${encodeURIComponent(c.family)}:${encodeURIComponent(String(c.instance).trim().toLowerCase()||String(c.name).trim().toLowerCase())}`;
 let pi=0, editing=false, selId=null, ws=null, retry=null, hello=null;
 const stage=$('#stage'), insp=$('#insp');
 const page=()=>L.pages[pi];
@@ -785,27 +909,286 @@ const RT={}; const cueCache=new Map();
 const rt=w=>RT[w.addr]||(RT[w.addr]={t:0,playing:false,loop:false,cue:-1,last:0,sent:0});
 function parseCues(w){
   const k=w.cues||''; if(cueCache.has(k))return cueCache.get(k);
-  const r=k.split('\n').map(s=>s.match(/^\s*(\d+):(\d{1,2}(?:\.\d+)?)\s+(.*?)(?:\s*>\s*(\d+))?\s*$/)).filter(Boolean)
-    .map(m=>({t:+m[1]*60+ +m[2],name:m[3]||'Cue',scene:m[4]!=null?+m[4]-1:null})).sort((a,b)=>a.t-b.t);
+  const r=k.split('\n').map(s=>s.match(/^\s*(\d+):(\d{1,2}(?:\.\d+)?)\s+(.*?)(?:\s*>\s*(.+))?\s*$/)).filter(Boolean)
+    .map(m=>{
+      const targets=(m[4]||'').split(';').map(s=>s.trim()).filter(Boolean),sceneTarget=targets.find(s=>/^[1-9]\d*$/.test(s));
+      return{t:+m[1]*60+ +m[2],name:m[3]||'Cue',scene:sceneTarget!=null?+sceneTarget-1:null,
+        params:targets.filter(s=>s.includes('=')).map(s=>{const i=s.indexOf('=');return{param:s.slice(0,i).trim(),value:s.slice(i+1).trim()}}),
+        invalid:targets.filter(s=>!s.includes('=')&&!/^\d+$/.test(s))};
+    }).sort((a,b)=>a.t-b.t);
   cueCache.set(k,r); return r;
 }
+const cueTargets=c=>[c.scene!=null?String(c.scene+1):'',...c.params.map(p=>`${p.param}=${p.value}`),...c.invalid].filter(Boolean).join('; ');
+function formatCueTime(value){
+  const total=Math.round(value*100),minutes=Math.floor(total/6000),seconds=(total%6000)/100;
+  const whole=Math.floor(seconds),fraction=String(seconds.toFixed(2)).split('.')[1]?.replace(/0+$/,'')||'';
+  return`${minutes}:${String(whole).padStart(2,'0')}${fraction?'.'+fraction:''}`;
+}
+function parseCueTime(value){
+  const text=String(value||'').trim(),clock=text.match(/^(\d+):(\d{1,2}(?:\.\d+)?)$/);
+  if(clock){const seconds=+clock[2];return seconds<60?+clock[1]*60+seconds:NaN}
+  return/^\d+(?:\.\d+)?$/.test(text)?+text:NaN;
+}
+function serializeCues(cues){
+  return[...cues].sort((a,b)=>a.t-b.t).map(c=>`${formatCueTime(c.t)} ${c.name.trim()||'Cue'}${c.targets.trim()?` > ${c.targets.trim()}`:''}`).join('\n');
+}
+function renderCueEditor(w,cues){
+  const s=$('#scrim');s.hidden=false;
+  const rows=cues.map((c,i)=>`<div class="cue-edit-row" data-cue-row="${i}">
+    <label>Posizione (M:SS)<input class="cue-time" value="${esc(formatCueTime(c.t))}" inputmode="decimal" aria-label="Posizione cue ${i+1}"></label>
+    <label>Nome<input class="cue-name" value="${esc(c.name)}" aria-label="Nome cue ${i+1}"></label>
+    <label>Richiami<input class="cue-editor-target cue-targets" value="${esc(c.targets)}" placeholder="2; dmx_a_palette=Warm" aria-label="Richiami cue ${i+1}"></label>
+    <div class="row"><button class="btn sm" data-cue-move="-1" aria-label="Sposta cue ${i+1} su"${i===0?' disabled':''}>↑</button><button class="btn sm" data-cue-move="1" aria-label="Sposta cue ${i+1} giù"${i===cues.length-1?' disabled':''}>↓</button><button class="btn sm danger" data-cue-delete="${i}" aria-label="Elimina cue ${i+1}">×</button></div>
+  </div>`).join('');
+  s.innerHTML=`<div class="sheet" role="dialog" aria-label="Editor timeline">
+    <div class="top"><h3>Timeline · ${esc(w.label)}</h3><button class="btn ghost" id="cueClose">Chiudi</button></div>
+    <p class="hint">Le cue si riordinano per posizione. Trascina un blocco nella timeline oppure modifica qui orario e richiamo; le modifiche vengono salvate nel layout condiviso OPS.</p>
+    <div class="cue-edit-list">${rows||'<p class="hint">Nessuna cue. Aggiungine una per iniziare.</p>'}</div>
+    <div class="row"><button class="btn" id="cueAdd">＋ Aggiungi cue</button></div>
+    <p class="hint">Richiamo opzionale: indice scena OSC 1-based, parametro DMX V8 nel formato <code>dmx_a_palette=Warm</code>, o più valori separati da <code>;</code>. Esempio: <code>2; dmx_b_palette=Cool</code>.</p>
+    <div class="cue-editor-actions"><button class="btn ghost" id="cueCancel">Annulla</button><button class="btn primary" id="cueSave">Salva timeline</button></div>
+  </div>`;
+  const readRows=()=>[...s.querySelectorAll('.cue-edit-row')].map(row=>({
+    t:parseCueTime(row.querySelector('.cue-time').value),
+    name:row.querySelector('.cue-name').value.trim()||'Cue',
+    targets:row.querySelector('.cue-targets').value.trim()
+  }));
+  const redraw=()=>renderCueEditor(w,readRows());
+  s.querySelector('#cueClose').onclick=s.querySelector('#cueCancel').onclick=closeSheet;
+  s.querySelector('#cueAdd').onclick=()=>{
+    const current=readRows(),last=current.reduce((max,c)=>Number.isFinite(c.t)?Math.max(max,c.t):max,0);
+    current.push({t:Math.min(w.duration,Math.max(0,last+10)),name:`Cue ${current.length+1}`,targets:''});
+    redraw();
+    s.querySelector('.cue-edit-row:last-child .cue-name')?.focus();
+  };
+  s.querySelectorAll('[data-cue-move]').forEach(button=>button.onclick=()=>{
+    const current=readRows(),i=+button.closest('[data-cue-row]').dataset.cueRow,j=i+ +button.dataset.cueMove;
+    if(j<0||j>=current.length)return;
+    [current[i].t,current[j].t]=[current[j].t,current[i].t];
+    renderCueEditor(w,current.sort((a,b)=>a.t-b.t));
+  });
+  s.querySelectorAll('[data-cue-delete]').forEach(button=>button.onclick=()=>{
+    const current=readRows();current.splice(+button.dataset.cueDelete,1);redraw();
+  });
+  s.querySelector('#cueSave').onclick=()=>{
+    const current=readRows();
+    const invalid=current.find(c=>!Number.isFinite(c.t)||c.t<0||c.t>w.duration);
+    if(invalid){showError(`Timeline: inserisci un orario tra 0 e ${formatCueTime(w.duration)}.`);return}
+    if(current.some(c=>c.name.includes('>'))){showError('Il nome della cue non può contenere il separatore ">".');return}
+    w.cues=serializeCues(current);
+    save();refresh(w);closeSheet();
+  };
+}
+function openCueEditor(w){
+  const cues=parseCues(w).map(c=>({t:c.t,name:c.name,targets:cueTargets(c)}));
+  renderCueEditor(w,cues);
+}
+function headControlWidgets(){
+  return page().widgets.filter(w=>w.addr?.startsWith('/mh/')&&
+    !['/mh/select','/mh/select/heads','/mh/home','/mh/follow','/mh/release','/mh/position','/mh/preset/recall'].includes(w.addr));
+}
+function captureHeadControlValues(){
+  return headControlWidgets().map(w=>({id:w.id,value:JSON.parse(JSON.stringify(w.value)),valueY:w.valueY}));
+}
+function saveHeadPresets(w,presets){
+  w.headPresets=presets;save();refresh(w);
+}
+function recallHeadPreset(w,index){
+  const preset=w.headPresets?.[index];if(!preset)return;
+  let recalled=0;
+  for(const saved of preset.values||[]){
+    const control=page().widgets.find(item=>item.id===saved.id&&item.addr?.startsWith('/mh/'));
+    if(!control)continue;
+    control.value=JSON.parse(JSON.stringify(saved.value));
+    if(Number.isFinite(saved.valueY))control.valueY=saved.valueY;
+    paint(elOf(control.id),control);fire(control.addr,argsOf(control),control.oscChannel);recalled++;
+  }
+  if(!recalled){showError(`Preset "${preset.name}" non contiene controlli PTZ presenti in questa pagina.`);return}
+  save();closeSheet();
+}
+function renderHeadPresetEditor(w,presets){
+  const s=$('#scrim');s.hidden=false;
+  const rows=presets.map((p,i)=>`<div class="preset-edit-row" data-preset-row="${i}">
+    <input data-preset-name="${i}" value="${esc(p.name)}" aria-label="Nome preset ${i+1}">
+    <div class="row">
+      <button class="btn sm" data-preset-action="recall" data-preset-index="${i}">Richiama</button>
+      <button class="btn sm" data-preset-action="update" data-preset-index="${i}">Aggiorna</button>
+      <button class="btn sm" data-preset-action="up" data-preset-index="${i}" aria-label="Sposta preset su"${i===0?' disabled':''}>↑</button>
+      <button class="btn sm" data-preset-action="down" data-preset-index="${i}" aria-label="Sposta preset giù"${i===presets.length-1?' disabled':''}>↓</button>
+      <button class="btn sm danger" data-preset-action="delete" data-preset-index="${i}" aria-label="Elimina preset">×</button>
+    </div>
+  </div>`).join('');
+  s.innerHTML=`<div class="sheet" role="dialog" aria-label="Preset teste mobili">
+    <div class="top"><h3>Preset PTZ · ${esc(w.label)}</h3><button class="btn ghost" id="presetClose">Chiudi</button></div>
+    <p class="hint">I preset salvati qui sono snapshot dei controlli PTZ di questa pagina, condivisi nel layout OPS. Il richiamo invia gli stessi controlli OSC alle teste attualmente selezionate; non salva un preset interno a TD.</p>
+    <div class="preset-edit-list">${rows||'<p class="hint">Nessun preset salvato.</p>'}</div>
+    <div class="row"><label style="flex:1">Nuovo preset<input id="presetNewName" placeholder="Es. Controluce alto"></label><button class="btn primary" id="presetAdd" style="align-self:flex-end">Salva preset corrente</button></div>
+    <div class="cue-editor-actions"><button class="btn ghost" id="presetDone">Fine</button></div>
+  </div>`;
+  const capture=()=>captureHeadControlValues();
+  s.querySelector('#presetClose').onclick=s.querySelector('#presetDone').onclick=closeSheet;
+  s.querySelector('#presetAdd').onclick=()=>{
+    const name=s.querySelector('#presetNewName').value.trim(),values=capture();
+    if(!name){showError('Inserisci un nome per il preset PTZ.');return}
+    if(presets.some(p=>p.name.toLocaleLowerCase()===name.toLocaleLowerCase())){showError(`Esiste già un preset chiamato "${name}".`);return}
+    if(!values.length){showError('Questa pagina non contiene controlli PTZ da salvare.');return}
+    presets.push({name,values});saveHeadPresets(w,presets);renderHeadPresetEditor(w,presets);
+  };
+  s.querySelectorAll('[data-preset-name]').forEach(input=>input.onchange=()=>{
+    const i=+input.dataset.presetName,name=input.value.trim();
+    if(!name||presets.some((p,k)=>k!==i&&p.name.toLocaleLowerCase()===name.toLocaleLowerCase())){
+      showError('Il nome del preset deve essere presente e univoco.');input.value=presets[i].name;return;
+    }
+    presets[i].name=name;saveHeadPresets(w,presets);
+  });
+  s.querySelectorAll('[data-preset-action]').forEach(button=>button.onclick=()=>{
+    const i=+button.dataset.presetIndex,action=button.dataset.presetAction;
+    if(action==='recall'){w.headPresets=presets;recallHeadPreset(w,i);return}
+    if(action==='update'){
+      const values=capture();if(!values.length){showError('Questa pagina non contiene controlli PTZ da salvare.');return}
+      presets[i].values=values;
+    }else if(action==='delete')presets.splice(i,1);
+    else if(action==='up'&&i>0)[presets[i-1],presets[i]]=[presets[i],presets[i-1]];
+    else if(action==='down'&&i<presets.length-1)[presets[i+1],presets[i]]=[presets[i],presets[i+1]];
+    saveHeadPresets(w,presets);renderHeadPresetEditor(w,presets);
+  });
+}
+function openHeadPresetEditor(w){
+  renderHeadPresetEditor(w,JSON.parse(JSON.stringify(w.headPresets||[])));
+}
 const cueAt=(cues,t)=>{let i=-1;cues.forEach((c,k)=>{if(c.t<=t+1e-6)i=k});return i};
-function fireCue(w,i){const c=parseCues(w)[i];if(!c)return;fire(w.addr+'/cue',[i+1]);if(c.scene!=null)fire('/dmx/scene',[c.scene])}
-function seek(w,t,quietCue){const r=rt(w),cues=parseCues(w);r.t=clamp(t,0,w.duration);const i=cueAt(cues,r.t);
-  if(i!==r.cue){r.cue=i;if(!quietCue&&i>=0)fireCue(w,i)} fire(w.addr+'/time',[+r.t.toFixed(2)])}
+function setDmxParam(device,param,raw){
+  const meta=devParams(device).find(p=>p.n===param);
+  if(!meta){showError(`DMX V8: parametro "${param}" non pubblicato dal device ${device||'selezionato'}.`);return false}
+  const status=G.devices[device],seen=status?._seen??status?.ts;
+  if(!status||!Number.isFinite(seen)||Date.now()-seen>1800000){showError(`DMX V8: device ${device} offline o senza status recente; comando non inviato.`);return false}
+  let value;
+  if(meta.options){
+    const option=meta.options.find(o=>String(o)===raw);
+    if(option===undefined){showError(`DMX V8: valore "${raw}" non disponibile per ${param}.`);return false}
+    value=option;
+  }else{
+    if(!Number.isFinite(meta.min)||!Number.isFinite(meta.max)||meta.min>meta.max){showError(`DMX V8: range non valido per ${param}.`);return false}
+    if(raw===''){showError(`DMX V8: valore mancante per ${param}.`);return false}
+    value=Number(raw);
+    if(!Number.isFinite(value)||value<meta.min||value>meta.max){showError(`DMX V8: valore non valido per ${param} (${meta.min}–${meta.max}).`);return false}
+  }
+  if(!devCmd(device,{action:'set',param,value})){showError('DMX V8 non collegato: comando non inviato.');return false}
+  return true;
+}
+function fireCue(w,i){
+  const c=parseCues(w)[i];if(!c)return;
+  if(c.invalid.length)showError(`Cue "${c.name}": destinazione non riconosciuta (${c.invalid.join(', ')}).`);
+  fire(w.addr+'/cue',[i+1],w.oscChannel);
+  if(c.scene!=null)fire('/dmx/scene',[c.scene],w.oscChannel);
+  if(c.params.length){
+    c.params.forEach(p=>{
+      const device=w.dmxDevice||devIds('dmx').find(id=>devParams(id).some(meta=>meta.n===p.param));
+      if(!device){showError(`Timeline: nessun device DMX V8 pubblica il parametro "${p.param}".`);return}
+      setDmxParam(device,p.param,p.value);
+    });
+  }
+}
+const SHOW_CLOCK_STATE='gaia/show/clock/state',SHOW_CLOCK_COMMAND='gaia/show/clock/command';
+const showClock={id:`plancia-${Math.random().toString(36).slice(2)}`,state:null,receivedAt:0,
+  osc:null,authority:false,hasMqtt:false,minRtt:null,rtts:[],pings:new Map(),pingSeq:0};
+const showClockAge=sample=>sample?Math.max(0,now()-sample.receivedAt):Infinity;
+const showClockFresh=sample=>!!sample&&((sample.source==='osc'&&!sample.state.playing&&!showClock.hasMqtt)||showClockAge(sample)<=3500);
+function showClockSample(){
+  const candidates=[];
+  if(showClock.state)candidates.push({source:'mqtt',state:showClock.state,receivedAt:showClock.receivedAt});
+  if(showClock.osc)candidates.push({source:'osc',state:showClock.osc,receivedAt:showClock.osc.receivedAt});
+  const fresh=candidates.find(showClockFresh);
+  if(fresh)return fresh;
+  return candidates.sort((a,b)=>b.receivedAt-a.receivedAt)[0]||null;
+}
+function showClockPosition(sample=showClockSample()){
+  if(!sample)return null;
+  const s=sample.state,elapsed=Math.min(showClockAge(sample),3500);
+  const compensation=sample.source==='mqtt'?(showClock.minRtt||0)/2:0;
+  const rate=Number.isFinite(+s.rate)?+s.rate:1;
+  return clamp((+s.pos||0)+(s.playing?(elapsed+compensation)/1000*rate:0),0,
+    Number.isFinite(+s.length)&&+s.length>0?+s.length:Infinity);
+}
+function showClockCues(){
+  const raw=G.devices['td-dmx-win']?.params?.show_cues;
+  const list=Array.isArray(raw)?raw:Array.isArray(raw?.cues)?raw.cues:null;
+  if(!list)return null;
+  return list.map((item,i)=>{
+    const c=typeof item==='string'?{}:item||{};
+    const match=typeof item==='string'?item.match(/^\s*(\d+:\d{1,2}(?:\.\d+)?)\s+(.+)$/):null;
+    const position=c.t??c.pos??c.position??c.seconds??c.time_s??c.time??match?.[1];
+    const t=typeof position==='string'?parseCueTime(position):+position;
+    const name=c.label||c.name||match?.[2]||`Cue ${i+1}`;
+    return Number.isFinite(t)?{t,name:String(name),index:Number.isFinite(+c.index)&&+c.index>0?+c.index:i+1,scene:null,params:[],invalid:[]}:null;
+  }).filter(Boolean);
+}
+function showClockCommand(w,action,value){
+  const sample=showClockSample();
+  if(!sample||!showClockFresh(sample)){showError('Orologio TD non raggiungibile: comando non inviato.');return false}
+  if(sample.source==='mqtt'){
+    if(!G.ok){showError('Broker Gaia non collegato: comando clock non inviato.');return false}
+    const command={action};if(value!==undefined)command.value=value;
+    return gPub(SHOW_CLOCK_COMMAND,command);
+  }
+  const osc=(address,args)=>emit({type:'osc',address,args,channel:w.oscChannel||'default'});
+  if(action==='play'||action==='pause')osc('/show/play',[action==='play'?1:0]);
+  else if(action==='toggle')osc('/show/play',[sample.state.playing?0:1]);
+  else if(action==='stop'){osc('/show/play',[0]);osc('/show/time',[0])}
+  else if(action==='seek')osc('/show/time',[+value]);
+  else if(action==='go')osc('/show/go',[1]);
+  else if(action==='back')osc('/show/back',[1]);
+  else if(action==='cue')osc('/show/cue',[+value]);
+  else{showError(`Comando clock "${action}" non supportato.`);return false}
+  return true;
+}
+function showClockRemoteOSC(address,args){
+  const sample=showClock.osc||(showClock.osc={pos:0,playing:false,receivedAt:now()});
+  if(address==='/show/time'&&Number.isFinite(+args[0]))sample.pos=Math.max(0,+args[0]);
+  else if(address==='/show/play')sample.playing=+args[0]>.5;
+  else if(address==='/show/cue')sample.cue=+args[0];
+  else return;
+  sample.receivedAt=now();showClock.authority=true;
+}
+function isShowTimeline(w){return w.addr==='/show'}
+function timelineDuration(w){
+  const sample=isShowTimeline(w)&&showClock.authority?showClockSample():null;
+  return sample&&Number.isFinite(+sample.state.length)&&+sample.state.length>0?+sample.state.length:(w.duration||1);
+}
+function timelineCues(w){
+  if(isShowTimeline(w)&&showClock.authority)return showClockCues()||[];
+  return parseCues(w);
+}
+function refreshShowTimelines(){
+  for(const w of page().widgets)if(w.type==='timeline'&&isShowTimeline(w))refresh(w);
+}
+function seek(w,t,quietCue){if(isShowTimeline(w)&&showClock.authority){showClockCommand(w,'seek',clamp(t,0,timelineDuration(w)));return}
+  const r=rt(w),cues=parseCues(w);r.t=clamp(t,0,w.duration);const i=cueAt(cues,r.t);
+  if(i!==r.cue){r.cue=i;if(!quietCue&&i>=0)fireCue(w,i)} fire(w.addr+'/time',[+r.t.toFixed(2)],w.oscChannel)}
 function tlAct(w,act){const r=rt(w),cues=parseCues(w);
-  if(act==='play'){r.playing=!r.playing;r.last=now();fire(w.addr+'/play',[r.playing?1:0]);if(r.playing&&r.cue<0&&cues[0]&&cues[0].t<=r.t){r.cue=0;fireCue(w,0)}}
-  else if(act==='stop'){r.playing=false;r.t=0;r.cue=-1;fire(w.addr+'/play',[0]);fire(w.addr+'/time',[0])}
+  if(isShowTimeline(w)&&showClock.authority){
+    const sample=showClockSample();
+    if(act==='edit-cues'){showError('Le cue dello show si modificano in DMX Master.');return}
+    if(act==='loop'){showError('Il clock TD non espone ancora un comando loop.');return}
+    if(act==='play')showClockCommand(w,sample?.state.playing?'pause':'play');
+    else if(act==='stop')showClockCommand(w,'stop');
+    else if(act==='start')showClockCommand(w,'seek',0);
+    else if(act==='go'||act==='back')showClockCommand(w,act);
+    return;
+  }
+  if(act==='play'){r.playing=!r.playing;r.last=now();fire(w.addr+'/play',[r.playing?1:0],w.oscChannel);if(r.playing&&r.cue<0&&cues[0]&&cues[0].t<=r.t){r.cue=0;fireCue(w,0)}}
+  else if(act==='stop'){r.playing=false;r.t=0;r.cue=-1;fire(w.addr+'/play',[0],w.oscChannel);fire(w.addr+'/time',[0],w.oscChannel)}
   else if(act==='start'){seek(w,0)}
   else if(act==='loop'){r.loop=!r.loop}
   else if(act==='go'){const i=Math.min(cues.length-1,r.cue+1);if(i>=0){r.t=cues[i].t;r.cue=i;fireCue(w,i)}}
   else if(act==='back'){const i=Math.max(0,r.cue-1);if(cues[i]){r.t=cues[i].t;r.cue=i;fireCue(w,i)}}
 }
 function timelineBus(a,args,src){
+  if(src==='remote'&&a.startsWith('/show/'))showClockRemoteOSC(a,args);
   const seen=new Set();
   for(const w of allW()){if(w.type!=='timeline'||seen.has(w.addr)||!a.startsWith(w.addr+'/'))continue;seen.add(w.addr);
     const s=a.slice(w.addr.length+1),v=+args[0];
-    if((s==='go'||s==='back')&&v>.5)tlAct(w,s);
+    if((s==='go'||s==='back')&&v>.5&&!(src==='remote'&&isShowTimeline(w)))tlAct(w,s);
     else if(src==='remote'&&s==='play'){const r=rt(w);r.playing=v>.5;r.last=now()}
     else if(src==='remote'&&s==='time'){rt(w).t=clamp(v,0,w.duration)}
   }
@@ -830,21 +1213,27 @@ function inner(w){
       <circle class="cap" cx="50" cy="50" r="24"/><line class="ptr" x1="58" y1="50" x2="70" y2="50"/></svg></div>`;
     case 'xy': return '<div class="pad"><i class="hx"></i><i class="vy"></i><i class="dot"></i></div>';
     case 'button': return `<span class="tag">${w.mode==='toggle'?'TOG':''}</span>`;
-    case 'scenes':{const it=items(w),c=colsOf(w,it.length),lk=w.addr==='/dmx/scene';
+    case 'scenes':{
+      if(w.mode==='dmx-enum')return '<div class="sc"></div>';
+      if(w.mode==='head-presets')return `<div class="hp">${(w.headPresets||[]).map((p,i)=>`<button data-head-preset="${i}" title="${esc(p.name)}">${esc(p.name)}</button>`).join('')}<button data-act="manage-presets">＋ Gestisci</button></div>`;
+      const it=items(w),c=colsOf(w,it.length),lk=w.addr==='/dmx/scene';
+      if(w.mode==='head-select'&&!it.length)return '<div class="dv-empty">In attesa delle teste mobili pubblicate da DMX Master.</div>';
       return `<div class="sc" style="grid-template-columns:repeat(${c},minmax(0,1fr))">${it.map((n,i)=>{const ic=lk&&LOOKS[i]?lookHex(i):'';
         return `<div class="si" data-i="${i}"${ic?` style="--ic:${ic}"`:''}><span class="no">${String(i+1).padStart(2,'0')}</span><span class="nm">${esc(n)}</span><i class="chip"></i><i class="prog"></i></div>`}).join('')}</div>`}
     case 'color': return `<div class="cw"><div class="disc"><i class="mk"></i></div><div class="sws">${SWC.map((c,i)=>`<i data-s="${i}" style="--s:${hex(c)}"></i>`).join('')}</div></div>`;
-    case 'timeline':{const cues=parseCues(w),D=w.duration||1;
+    case 'timeline':{const cues=timelineCues(w),D=timelineDuration(w),controlled=isShowTimeline(w)&&showClock.authority;
+      const sample=controlled?showClockSample():null,available=!!sample&&showClockFresh(sample),locked=controlled&&!available;
       const step=[5,10,15,30,60,120,300].find(s=>D/s<=12)||600; let ticks='';
       for(let t=0;t<D;t+=step)ticks+=`<span style="left:${t/D*100}%">${Math.floor(t/60)}:${String(t%60).padStart(2,'0')}</span>`;
       const blocks=cues.map((c,i)=>{const e=(cues[i+1]?.t??D);const col=c.scene!=null&&LOOKS[c.scene]?lookHex(c.scene):w.color;
-        return `<div class="tl-blk" data-k="${i}" style="left:${c.t/D*100}%;width:${(e-c.t)/D*100}%;--ic:${col}"><span>${i+1} ${esc(c.name)}</span><em>${c.scene!=null?'SC '+(c.scene+1):''}</em></div>`}).join('');
-      return `<div class="tl"><div class="tl-head"><span class="tl-name">${esc(w.label)}</span>
-        <div class="tl-tr"><button data-act="start" aria-label="Inizio">${ICON.start}</button><button data-act="play" aria-label="Play/pausa">${ICON.play}</button><button data-act="stop" aria-label="Stop">${ICON.stop}</button><button data-act="loop" aria-label="Loop">${ICON.loop}</button></div>
-        <span class="tl-tc">00:00:00:00</span><span class="tl-cue"><span class="k">CUE</span><b>—</b></span><span class="tl-bpm">${w.bpm||120} BPM · ${Math.floor(D/60)}:${String(Math.round(D%60)).padStart(2,'0')}</span></div>
+        const target=[c.scene!=null?'SC '+(c.scene+1):'',c.params.length?'DMX '+c.params.length:''].filter(Boolean).join(' · ');
+        return `<div class="tl-blk" data-k="${i}" style="left:${c.t/D*100}%;width:${(e-c.t)/D*100}%;--ic:${col}"><span>${i+1} ${esc(c.name)}</span><em>${target}</em></div>`}).join('');
+      return `<div class="tl" data-duration="${D}"><div class="tl-head"><span class="tl-name">${esc(w.label)}</span>
+        <div class="tl-tr"><button data-act="start" aria-label="Inizio"${locked?' disabled':''}>${ICON.start}</button><button data-act="play" aria-label="Play/pausa"${locked?' disabled':''}>${ICON.play}</button><button data-act="stop" aria-label="Stop"${locked?' disabled':''}>${ICON.stop}</button><button data-act="loop" aria-label="Loop"${controlled?' disabled':''}>${ICON.loop}</button><button data-act="edit-cues" aria-label="Modifica cue"${controlled?' disabled':''}>CUE</button></div>
+        <span class="tl-tc">00:00:00:00</span><span class="tl-cue"><span class="k">CUE</span><b>—</b></span><span class="tl-bpm">${controlled?`TD · ${available?sample.source.toUpperCase():'OFFLINE · FERMO'}`:`${w.bpm||120} BPM`} · ${Math.floor(D/60)}:${String(Math.round(D%60)).padStart(2,'0')}</span></div>
         <div class="tl-lane"><div class="tl-ruler">${ticks}</div><div class="tl-cues">${blocks}</div><div class="tl-ph"></div></div></div>`}
     case 'clock': return '<div class="clk"><div class="clk-main">--:--:--</div><div class="clk-sub"></div></div>';
-    case 'stage': return `<canvas></canvas><div class="seg"><button data-v="render" aria-pressed="${w.view!=='plot'}">Render</button><button data-v="plot" aria-pressed="${w.view==='plot'}">Pianta</button><button data-act="syncall" title="Manda tutte le fixture patchabili a DMX Master">⇪ TD</button><button data-act="importtd" title="Ricarica il palco dalla patch reale di DMX Master (fonte unica, evita doppioni)">⇩ TD</button><button data-act="resolve" title="Pulisci i doppioni su DMX Master e ricarica">🧹 TD</button><button data-act="types" title="Manda la tassonomia (tipi/modelli) di Plancia a DMX Master -- sostituisce quella attuale">📋 TD</button></div><div class="hud"></div>`;
+    case 'stage': return `<canvas></canvas><div class="seg"><button data-v="render" aria-pressed="${w.view!=='plot'}">Render</button><button data-v="plot" aria-pressed="${w.view==='plot'}">Pianta</button><button data-act="syncall" title="Invia a DMX Master solo le fixture patchabili DMX. È un invio separato dall'autosalvataggio del layout; LED wall escluse.">⇪ TD</button><button data-act="importtd" title="Importa da DMX Master la patch delle sole fixture DMX; le fixture non-DMX restano in Plancia.">⇩ TD</button><button data-act="resolve" title="Pulisce i doppioni DMX in TD e reimporta la patch; le fixture non-DMX restano in Plancia.">🧹 TD</button><button data-act="types" title="Invia la tassonomia dei tipi di Plancia a DMX Master (sostituisce quella attuale).">📋 TD</button></div><div class="hud"></div>`;
     default: return gInner(w);
   }
 }
@@ -854,7 +1243,7 @@ function build(w){
   const el=document.createElement('div');
   el.className='w t-'+w.type+(selId===w.id?' sel':''); el.dataset.id=w.id;
   el.style.setProperty('--c',w.color);
-  const addr=['label','stage','clock'].includes(w.type)||GAIA_TYPES.has(w.type)?'':(w.addr||'nessun indirizzo');
+  const addr=['label','stage','clock'].includes(w.type)||GAIA_TYPES.has(w.type)||(w.type==='scenes'&&w.mode==='dmx-enum')?'':(w.addr||'nessun indirizzo');
   el.innerHTML=`<div class="box">${inner(w)}<span class="lab">${esc(w.label)}</span><span class="addr">${esc(addr)}</span>${showVal(w)?'<span class="val"></span>':''}</div><span class="rs"></span>`;
   place(el,w); paint(el,w); bind(el,w);
   if(w.type==='stage'||w.type==='gaia')sizeCanvas(el);
@@ -877,7 +1266,8 @@ function paint(el,w){
   }else if(w.type==='button'){
     el.classList.toggle('on',v>.5);
   }else if(w.type==='scenes'){
-    el.querySelectorAll('.si').forEach((n,i)=>n.classList.toggle('on',w.mode==='multi'?!!(Array.isArray(v)&&+v[i]):v===i));
+    if(w.mode==='dmx-enum')paintTdEnum(el,w);
+    else el.querySelectorAll('.si').forEach((n,i)=>n.classList.toggle('on',w.mode==='multi'||w.mode==='head-select'?!!(Array.isArray(v)&&+v[i]):v===i));
   }else if(w.type==='color'){
     const h=v?.h??0,s=v?.s??0,mk=el.querySelector('.mk');
     mk.style.left=50+Math.cos(h*2*Math.PI)*s*50+'%'; mk.style.top=50+Math.sin(h*2*Math.PI)*s*50+'%';
@@ -896,15 +1286,19 @@ function renderTabs(){
   if(editing){const b=document.createElement('button');b.className='tab add';b.textContent='+';b.title='Nuova pagina';b.onclick=addPage;t.appendChild(b)}
 }
 function render(){document.body.classList.toggle('editing',editing);$('#addbar').hidden=!editing;
-  $('#editBtn').textContent=editing?'Fatto':'Modifica';$('#editBtn').classList.toggle('primary',editing);
-  renderTabs();renderStage();renderInsp()}
+  $('#editBtn').textContent=editing?'Fine griglia':'Modifica griglia';
+  $('#editBtn').title=editing?'Termina la modifica della griglia dei widget. Le fixture del palco si modificano direttamente nella Pianta.':'Modifica solo la griglia dei widget; per spostare o aggiungere luci usa direttamente la Pianta.';
+  $('#editBtn').classList.toggle('primary',editing);
+  renderTabs();renderStage();renderInsp();syncHeadSelectors()}
 
 /* ---------- invio OSC ---------- */
 function argsOf(w){
   switch(w.type){
     case 'xy': return [out(w,w.value),out(w,w.valueY)];
     case 'button': return [w.value>.5?w.max:w.min];
-    case 'scenes': return w.mode==='multi'?(w.value||[]).map(x=>+x?1:0):[w.value];
+    case 'scenes':
+      if(w.mode==='head-select'&&w.addr==='/mh/select/heads')return (w.headValues||[]).filter((_,i)=>!!w.value?.[i]);
+      return w.mode==='multi'?(w.value||[]).map(x=>+x?1:0):[w.value];
     case 'color': return colorRGB(w).map(x=>+x.toFixed(4));
     default: return [out(w,w.value)];
   }
@@ -912,13 +1306,13 @@ function argsOf(w){
 const queue=new Map(); let raf=0;
 function send(w){if(!w.addr)return; queue.set(w.id,w); if(!raf) raf=requestAnimationFrame(flush)}
 function flush(){raf=0; for(const w of queue.values()){
-  const m={type:'osc',address:w.addr,args:argsOf(w)};
+  const m={type:'osc',address:w.addr,args:argsOf(w),channel:w.oscChannel||'default'};
   emit(m); applyWidgets(m,w.id);
   if(w.midi&&w.midi.cc!==''&&w.midi.cc!=null) emit({type:'midi',ch:+w.midi.ch||1,cc:+w.midi.cc,value:Math.round((typeof w.value==='number'?w.value:0)*127)},true);
 } queue.clear()}
 function set(w,v){if(w.value===v)return; w.value=v; paint(elOf(w.id),w); send(w)}
 function setXY(w,x,y){w.value=x;w.valueY=y;paint(elOf(w.id),w);send(w)}
-function fire(address,args){const m={type:'osc',address,args};emit(m);applyWidgets(m,null)}
+function fire(address,args,channel){const m={type:'osc',address,args,channel:channel||'default'};emit(m);applyWidgets(m,null)}
 function bus(a,args,src){model(a,args);timelineBus(a,args,src)}
 
 /* ---------- interazione ---------- */
@@ -940,14 +1334,49 @@ function bind(el,w){
       });
       return}
     if(w.type==='timeline'){
-      const b=e.target.closest('[data-act]'); if(b){e.preventDefault();tlAct(w,b.dataset.act);return}
+      const b=e.target.closest('[data-act]'); if(b){e.preventDefault();if(b.dataset.act==='edit-cues')openCueEditor(w);else tlAct(w,b.dataset.act);return}
       const lane=e.target.closest('.tl-lane'); if(!lane)return;
+      const block=e.target.closest('.tl-blk');
+      if(block){
+        if(isShowTimeline(w)&&showClock.authority){
+          e.preventDefault();
+          const cue=timelineCues(w)[+block.dataset.k];
+          if(cue)showClockCommand(w,'cue',cue.index||(+block.dataset.k+1));
+          return;
+        }
+        e.preventDefault();el.setPointerCapture(e.pointerId);
+        const cues=parseCues(w).map(c=>({t:c.t,name:c.name,targets:cueTargets(c)})),i=+block.dataset.k,r=lane.getBoundingClientRect(),startX=e.clientX,startT=cues[i]?.t??0;
+        block.classList.add('dragging');
+        const move=ev=>{const t=clamp(startT+(ev.clientX-startX)/r.width*w.duration,0,Math.max(0,w.duration-.01));block.style.left=t/w.duration*100+'%'};
+        el.onpointermove=move;
+        el.onpointerup=el.onpointercancel=ev=>{
+          const delta=Math.abs(ev.clientX-startX);el.onpointermove=el.onpointerup=el.onpointercancel=null;
+          if(delta<5){openCueEditor(w);return}
+          cues[i].t=clamp(startT+(ev.clientX-startX)/r.width*w.duration,0,Math.max(0,w.duration-.01));
+          w.cues=serializeCues(cues);save();refresh(w);
+        };
+        return;
+      }
       e.preventDefault(); el.setPointerCapture(e.pointerId); const r=lane.getBoundingClientRect();
-      const mv=ev=>seek(w,clamp((ev.clientX-r.left)/r.width)*w.duration); mv(e); el.onpointermove=mv; el.onpointerup=el.onpointercancel=end; return;
+      const mv=ev=>seek(w,clamp((ev.clientX-r.left)/r.width)*timelineDuration(w)); mv(e); el.onpointermove=mv; el.onpointerup=el.onpointercancel=end; return;
     }
     if(w.type==='scenes'){
+      if(w.mode==='head-presets'){
+        const manage=e.target.closest('[data-act="manage-presets"]'),preset=e.target.closest('[data-head-preset]');
+        if(manage){e.preventDefault();openHeadPresetEditor(w);return}
+        if(preset){e.preventDefault();recallHeadPreset(w,+preset.dataset.headPreset);return}
+        return;
+      }
       const it=e.target.closest('[data-i]'); if(!it)return; e.preventDefault(); const i=+it.dataset.i;
-      if(w.mode==='multi'){const a=items(w).map((_,k)=>Array.isArray(w.value)?(+w.value[k]||0):0);a[i]=a[i]?0:1;w.value=a;paint(el,w);send(w)}
+      if(w.mode==='dmx-enum'){
+        const info=tdEnumInfo(w),option=info.meta?.options?.[i];
+        if(!info.id){showError('Nessun device DMX V8 pubblicato.');return}
+        if(!info.meta||option===undefined){showError('Il parametro enum DMX V8 non è disponibile.');return}
+        setDmxParam(info.id,info.meta.n,String(option));return;
+      }
+      if(w.mode==='multi'||w.mode==='head-select'){const a=items(w).map((_,k)=>Array.isArray(w.value)?(+w.value[k]||0):0);a[i]=a[i]?0:1;w.value=a;
+        if(w.mode==='head-select')w.selectedHeads=(w.headValues||[]).filter((_,k)=>!!a[k]);
+        paint(el,w);send(w)}
       else{w.value=-2;set(w,i)}
       save(); return;
     }
@@ -1019,7 +1448,7 @@ function renderInsp(){
   if(!w){
     insp.innerHTML=`<h3>Pagina</h3><label>Nome<input id="pgName"></label>
       <div class="row"><button class="btn" id="pgAdd">Nuova pagina</button><button class="btn danger" id="pgDel">Elimina pagina</button></div>
-      <p class="hint">Tocca un controllo per modificarlo. Trascinalo per spostarlo sulla griglia, usa l'angolo in basso a destra per ridimensionarlo.</p>
+      <p class="hint">Questa modalità modifica la griglia dei widget, non le fixture del palco. Trascina un widget per spostarlo, usa l'angolo per ridimensionarlo; ogni modifica si salva automaticamente.</p>
       <p class="hint">Da <code>⋯</code> trovi i template pronti: DMX, teste mobili, timeline, design del palco.</p>`;
     $('#pgName').value=page().name;
     $('#pgName').oninput=e=>{page().name=e.target.value||'Pagina';save();renderTabs()};
@@ -1029,17 +1458,32 @@ function renderInsp(){
       L.pages.splice(pi,1);pi=Math.max(0,pi-1);save();render()};
     return;
   }
-  const T=w.type, hasAddr=!['label','stage','clock'].includes(T)&&!GAIA_TYPES.has(T), hasRange=['fader','knob','xy','meter','button'].includes(T), hasMidi=['fader','knob','button'].includes(T);
+  const T=w.type, hasAddr=!['label','stage','clock'].includes(T)&&!GAIA_TYPES.has(T)&&!(T==='scenes'&&['dmx-enum','head-presets'].includes(w.mode)), hasRange=['fader','knob','xy','meter','button'].includes(T), hasMidi=['fader','knob','button'].includes(T);
+  const gaiaOscAddress=String(w.addr||'').startsWith('/gaia/');
+  const missingOscChannel=w.oscChannel&&!C.oscChannels.some(c=>c.id===w.oscChannel);
+  const enumDevice=T==='scenes'?(w.device||pickDev(w,'dmx')||''):'';
+  const availableEnums=enumParams(enumDevice);
+  const deviceOptions=T==='tddevice'?devIds(w.fam||''):devIds('');
   insp.innerHTML=`<h3>${NAMES[T]}</h3>
     <label>Etichetta<input id="fLabel"></label>
     ${hasAddr?`<label>${T==='timeline'?'Indirizzo base OSC':'Indirizzo OSC'}<input id="fAddr" class="mono" spellcheck="false" autocapitalize="off"></label>`:''}
+    ${hasAddr&&!gaiaOscAddress?`<label>Canale OSC<select id="fOscChannel"><option value="">Predefinito · ${esc(C.host)}:${C.port}</option>${C.oscChannels.map(c=>`<option value="${esc(c.id)}">${esc(oscChannelName(c))}</option>`).join('')}${missingOscChannel?`<option value="${esc(w.oscChannel)}">Non configurato · ${esc(w.oscChannel)}</option>`:''}</select></label>
+      ${missingOscChannel?'<p class="hint">Questo layout riferisce un canale assente su questo browser. Configuralo in Impostazioni o scegli un altro canale.</p>':''}
+      <p class="hint">La famiglia e l’istanza identificano la destinazione; indirizzo e argomenti restano quelli definiti dal contratto del progetto TD.</p>`:''}
+    ${hasAddr&&gaiaOscAddress?'<p class="hint">Questo indirizzo usa il canale Gaia dedicato (/gaia/), non un canale OSC personalizzato.</p>':''}
     ${hasRange?`<div class="two"><label>${T==='button'?'Valore OFF':'Min'}<input id="fMin" type="number" step="any"></label><label>${T==='button'?'Valore ON':'Max'}<input id="fMax" type="number" step="any"></label></div>`:''}
     ${T==='button'?`<label>Comportamento<select id="fMode"><option value="push">Momentaneo</option><option value="toggle">Interruttore</option></select></label>`:''}
-    ${T==='scenes'?`<label>Voci (una per riga)<textarea id="fItems"></textarea></label><div class="two"><label>Modalità<select id="fSMode"><option value="push">Una attiva</option><option value="multi">Selezione multipla</option></select></label><label>Colonne<input id="fCols" type="number" min="0" max="12" placeholder="auto"></label></div>
-      <p class="hint">Invia l'indice della voce (0, 1, 2…) oppure, in selezione multipla, un elenco di 0 e 1.</p>`:''}
+    ${T==='scenes'?`${!['dmx-enum','head-presets'].includes(w.mode)?'<label>Voci (una per riga)<textarea id="fItems"'+(w.mode==='head-select'?' disabled':'')+'></textarea></label>':''}<div class="two"><label>Modalità<select id="fSMode"><option value="push">Una attiva</option><option value="multi">Selezione multipla</option><option value="head-select">Selezione teste TD</option><option value="dmx-enum">Parametro enum DMX V8</option><option value="head-presets">Preset PTZ salvati</option></select></label><label>Colonne<input id="fCols" type="number" min="0" max="12" placeholder="auto"></label></div>
+      ${w.mode==='dmx-enum'?`<label>Device DMX V8<select id="fTdDevice"><option value="">Automatico</option>${devIds('dmx').map(id=>`<option value="${esc(id)}"${id===w.device?' selected':''}>${esc(id)}</option>`).join('')}</select></label>
+        <label>Parametro enum<select id="fTdParam"><option value="">Automatico · palette preferita</option>${availableEnums.map(p=>`<option value="${esc(p.n)}"${p.n===w.param?' selected':''}>${esc(p.label)} · ${esc(p.n)}</option>`).join('')}</select></label>
+        <p class="hint">Le voci arrivano dalla matrice <code>dmx_matrix</code>; il click invia al device il valore originale dell'enum via MQTT. Nessuna opzione o stato viene inventato.</p>`
+        :w.mode==='head-presets'?'<p class="hint">I preset PTZ si gestiscono dal widget in modalità normale. Sono snapshot locali condivisi nel layout; non sono preset interni al motore TD.</p>'
+        :'<p class="hint">Invia l’indice della voce (0, 1, 2…) oppure, in selezione multipla, un elenco di 0 e 1.</p>'}`:''}
     ${T==='timeline'?`<div class="two"><label>Durata (s)<input id="fDur" type="number" min="10"></label><label>BPM<input id="fBpm" type="number" min="40" max="240"></label></div>
       <label>Cue<textarea id="fCues" spellcheck="false" style="min-height:180px"></textarea></label>
-      <p class="hint">Una cue per riga: <code>1:24 Ritornello &gt; 5</code> richiama la scena 5. Invia <code>${esc(w.addr)}/time</code>, <code>/play</code>, <code>/cue</code>; ascolta <code>/go</code> e <code>/back</code>.</p>`:''}
+      <button class="btn" id="fCueEditor">Apri editor cue</button>
+      <label>Device DMX V8 per le cue<select id="fTLDmxDevice"><option value="">Automatico</option>${devIds('dmx').map(id=>`<option value="${esc(id)}"${id===w.dmxDevice?' selected':''}>${esc(id)}</option>`).join('')}</select></label>
+      <p class="hint">Usa l’editor cue per aggiungere, spostare e riordinare le cue locali. Le modifiche si salvano nel layout condiviso OPS; “Aggiorna” in ⋯ → Progetti aggiorna anche lo snapshot nominato. Se DMX Master pubblica un clock attivo, la timeline /show lo segue e invia i comandi al master.</p>`:''}
     ${T==='clock'?`<label>Modalità<select id="fCMode"><option value="tod">Ora del giorno</option><option value="show">Timecode show (25 fps)</option><option value="countdown">Countdown a orario</option></select></label>
       <label>Orario di fine<input id="fTarget" type="time"></label>`:''}
     ${T==='stage'?`<label>Vista<select id="fView"><option value="render">Render</option><option value="plot">Pianta e patch</option></select></label>
@@ -1057,8 +1501,8 @@ function renderInsp(){
         <label>FOH Y<input id="fohY" type="number" step="0.1"></label>
         <label>FOH larghezza<input id="fohW" type="number" min="0.5" step="0.1"></label>
         <label>FOH profondità<input id="fohD" type="number" min="0.5" step="0.1"></label></div></details>
-      <p class="hint">Posizioni e altezze delle fixture sono locali a Plancia. La sorgente LED è configurabile; anteprima NDI/RTSP richiede ancora un bridge video compatibile col browser. I laser sono solo visuali, senza invio OSC/DMX.</p>`:''}
-    ${GAIA_TYPES.has(T)&&T!=='gaia'?`<label>${T==='gaiadmx'?'Stanza':'Device'}<select id="gDev"><option value="">Automatico</option>${(T==='gaiadmx'?Object.keys(G.dmx).sort():devIds('')).map(x=>`<option>${esc(x)}</option>`).join('')}</select></label>`:''}
+      <p class="hint">La Pianta si modifica fuori da “Modifica griglia”: trascina una fixture per spostarla, toccala per le proprietà, tocca uno spazio vuoto per aggiungerne una. Geometria e sorgente LED si salvano automaticamente su OPS. “⇪ TD” è un invio separato e riguarda solo le fixture DMX; LED wall, casse e laser restano gestiti da Plancia.</p>`:''}
+    ${GAIA_TYPES.has(T)&&T!=='gaia'?`<label>${T==='gaiadmx'?'Stanza':'Device'}<select id="gDev"><option value="">Automatico</option>${(T==='gaiadmx'?Object.keys(G.dmx).sort():deviceOptions).map(x=>`<option value="${esc(x)}"${x===(T==='gaiadmx'?w.stanza:w.device)?' selected':''}>${esc(x)}</option>`).join('')}</select></label>`:''}
     ${T==='patchdeck'?`<label>Deck<select id="gDeck"><option value="a">Deck A</option><option value="b">Deck B</option></select></label>`:''}
     ${T==='tddevice'?`<label>Tipo di device (per la scelta automatica)<select id="gFam"><option value="">Qualsiasi</option><option value="patchdeck">PatchDeck</option><option value="mixeraudio">Controller (mixeraudio)</option><option value="dmx">DMX V8</option></select></label>`:''}
     ${T==='gaia'?`<label>Stanza della chat<input id="gSt2" class="mono"></label><p class="hint">I messaggi vanno su <code>gaia/voice/command/&lt;stanza&gt;</code> come un comando vocale. I tasti − e + spostano il mood via <code>gaia/touchdesigner/mood</code>: in Admin → Automazioni va acceso "touchdesignerMood".</p>`:''}
@@ -1071,12 +1515,28 @@ function renderInsp(){
   const val=(id,v)=>{const n=$(id);if(n){if(n.type==='checkbox')n.checked=!!v;else n.value=v??''}};
   val('#fLabel',w.label); on('#fLabel',v=>w.label=v);
   if(hasAddr){val('#fAddr',w.addr); on('#fAddr',v=>w.addr=v.trim())}
+  if($('#fOscChannel')){val('#fOscChannel',w.oscChannel||'');on('#fOscChannel',v=>w.oscChannel=v,'change')}
   if(hasRange){val('#fMin',w.min);val('#fMax',w.max);on('#fMin',v=>{if(v!==''&&!isNaN(v))w.min=+v});on('#fMax',v=>{if(v!==''&&!isNaN(v))w.max=+v})}
   if(T==='button'){val('#fMode',w.mode);on('#fMode',v=>{w.mode=v;w.value=0},'change')}
-  if(T==='scenes'){val('#fItems',w.items);val('#fSMode',w.mode==='multi'?'multi':'push');val('#fCols',w.cols||'');
-    on('#fItems',v=>w.items=v);on('#fSMode',v=>{w.mode=v;w.value=v==='multi'?[]:0},'change');on('#fCols',v=>w.cols=+v||0)}
+  if(T==='scenes'){val('#fItems',w.items);val('#fSMode',w.mode||'push');val('#fCols',w.cols||'');
+    on('#fItems',v=>w.items=v);$('#fSMode').addEventListener('change',e=>{
+      const old=w.mode;w.mode=e.target.value;w.value=w.mode==='multi'||w.mode==='head-select'?[]:0;
+      if(w.mode==='head-select'){w.addr='/mh/select/heads';w.headValues=[];w.selectedHeads=[];delete w._headsInitialized;syncHeadSelectors()}
+      else if(old==='head-select'&&w.addr==='/mh/select/heads')w.addr='/mh/select';
+      if(w.mode==='dmx-enum'){w.addr='';w.device=w.device||'';w.param=w.param||''}
+      if(w.mode==='head-presets'){w.addr='';w.headPresets=w.headPresets||[]}
+      else if(old==='head-presets'&&!w.addr)w.addr='/mh/preset/recall';
+      save();refresh(w);renderInsp();
+    });on('#fCols',v=>w.cols=+v||0);
+    if($('#fTdDevice'))$('#fTdDevice').addEventListener('change',e=>{w.device=e.target.value;
+      if(w.param&&!enumParams(w.device||pickDev(w,'dmx')).some(p=>p.n===w.param))w.param='';
+      save();refresh(w);renderInsp()});
+    if($('#fTdParam'))$('#fTdParam').addEventListener('change',e=>{w.param=e.target.value;save();refresh(w);renderInsp()});
+  }
   if(T==='timeline'){val('#fDur',w.duration);val('#fBpm',w.bpm);val('#fCues',w.cues);
-    on('#fDur',v=>{if(+v>=10)w.duration=+v});on('#fBpm',v=>{if(+v>0)w.bpm=+v});on('#fCues',v=>w.cues=v)}
+    on('#fDur',v=>{if(+v>=10)w.duration=+v});on('#fBpm',v=>{if(+v>0)w.bpm=+v});on('#fCues',v=>w.cues=v);
+    if($('#fCueEditor'))$('#fCueEditor').onclick=()=>openCueEditor(w);
+    if($('#fTLDmxDevice'))$('#fTLDmxDevice').addEventListener('change',e=>{w.dmxDevice=e.target.value;save();renderInsp()})}
   if(T==='clock'){val('#fCMode',w.mode);val('#fTarget',w.target||'23:30');on('#fCMode',v=>w.mode=v,'change');on('#fTarget',v=>w.target=v)}
   if(T==='stage'){
     val('#fView',w.view);on('#fView',v=>w.view=v,'change');
@@ -1094,9 +1554,14 @@ function renderInsp(){
       });
     }
   }
-  if($('#gDev')){val('#gDev',T==='gaiadmx'?(w.stanza||''):(w.device||''));on('#gDev',v=>{if(T==='gaiadmx')w.stanza=v;else w.device=v},'change')}
+  if($('#gDev')){val('#gDev',T==='gaiadmx'?(w.stanza||''):(w.device||''));
+    if(T==='tddevice')$('#gDev').addEventListener('change',e=>{w.device=e.target.value;save();refresh(w)});
+    else on('#gDev',v=>{if(T==='gaiadmx')w.stanza=v;else w.device=v},'change')}
   if(T==='patchdeck'){val('#gDeck',w.deck||'a');on('#gDeck',v=>w.deck=v,'change')}
-  if(T==='tddevice'){val('#gFam',w.fam||'');on('#gFam',v=>w.fam=v,'change')}
+  if(T==='tddevice'){val('#gFam',w.fam||'');$('#gFam').addEventListener('change',e=>{
+    w.fam=e.target.value;if(w.device&&!devIds(w.fam).includes(w.device))w.device='';
+    save();refresh(w);renderInsp();
+  })}
   if(T==='gaia'){val('#gSt2',GC.stanza);on('#gSt2',v=>{GC.stanza=v.trim()||'studio';store.set(GKEY,GC)},'change',false)}
   if(hasMidi){val('#fCh',w.midi.ch);val('#fCc',w.midi.cc);on('#fCh',v=>w.midi.ch=clamp(+v||1,1,16));on('#fCc',v=>w.midi.cc=v===''?'':clamp(Math.round(+v),0,127))}
   insp.querySelectorAll('.swb').forEach(b=>b.onclick=()=>{w.color=b.dataset.c;save();refresh(w);insp.querySelectorAll('.swb').forEach(x=>x.setAttribute('aria-pressed',x===b))});
@@ -1120,15 +1585,42 @@ function status(){
 }
 function connect(){
   clearTimeout(retry); if(ws){ws.onclose=null;try{ws.close()}catch{}} ws=null; hello=null; status();
-  if(!C.url)return;
+  if(!C.url){saveStatus('Bridge non configurato');return}
   try{ws=new WebSocket(C.url)}catch{retry=setTimeout(connect,4000);return}
   ws.onopen=()=>{status();ws.send(JSON.stringify(bridgeCfg()))};
-  ws.onclose=()=>{ws=null;status();retry=setTimeout(connect,3000)};
+  ws.onclose=()=>{ws=null;status();saveStatus(sharedDirty?'Offline · layout in copia locale':'Server OPS non connesso');retry=setTimeout(connect,3000)};
   ws.onerror=()=>{};
   ws.onmessage=ev=>{let m;try{m=JSON.parse(ev.data)}catch{return}
-    if(m.type==='hello'){hello=m;status();return}
+    if(m.type==='hello'){
+      hello=m;status();
+      if(m.sharedState?.layout){
+        if(!sharedDirty)acceptSharedState(m.sharedState,m.sharedRevision);
+        else sendSharedState();
+      }else if(sharedDirty)sendSharedState();
+      else saveStatus('Server pronto',true);
+      return
+    }
+    if(m.type==='shared_saved'){
+      sharedRevision=Math.max(sharedRevision,m.revision||0);
+      if(m.revision>=sharedRevision&&m.clientRevision===clientRevision){
+        sharedBaseline=JSON.stringify(sharedState);sharedDirty=false;serverHasLayout=true;
+        saveStatus('Layout salvato · OPS',true);
+      }else if(sharedDirty)sendSharedState();
+      return
+    }
+    if(m.type==='shared_update'){
+      if(m.revision>sharedRevision)acceptSharedState(m.state,m.revision);
+      return
+    }
+    if(m.type==='shared_error'){saveStatus('Errore salvataggio layout');showError(m.message||'Salvataggio condiviso fallito.');return}
+    if(m.type==='error'){showError(m.message||'Errore nel bridge OSC.');return}
     if(m.type==='osc')receive(m);
   };
+}
+let toastTimer=0;
+function showError(message){
+  const toast=$('#toast');toast.textContent=message;toast.hidden=false;
+  clearTimeout(toastTimer);toastTimer=setTimeout(()=>{toast.hidden=true},5000);
 }
 function emit(msg,quiet){
   if(ws&&ws.readyState===1)ws.send(JSON.stringify(msg));
@@ -1138,9 +1630,13 @@ function emit(msg,quiet){
 function applyWidgets(m,except){
   for(const p of L.pages)for(const w of p.widgets){
     if(w.id===except||!w.addr||w.addr!==m.address)continue;
+    if(Object.hasOwn(m,'channel')&&(w.oscChannel||'default')!==m.channel)continue;
     const n=a=>clamp((+a-w.min)/((w.max-w.min)||1)), a0=m.args[0];
     if(w.type==='xy'){if(m.args.length>1){w.value=n(a0);w.valueY=n(m.args[1])}}
     else if(w.type==='button'){w.value=(+a0===w.max||+a0>(w.min+w.max)/2)?1:0}
+    else if(w.type==='scenes'&&w.mode==='head-select'&&w.addr==='/mh/select/heads'){
+      w.selectedHeads=m.args.map(String);w.value=(w.headValues||[]).map(id=>w.selectedHeads.includes(id)?1:0);
+    }
     else if(w.type==='scenes'){w.value=w.mode==='multi'?m.args.map(x=>+x>.5?1:0):Math.round(+a0)}
     else if(w.type==='color'){if(m.args.length>2){const [h,s]=rgb2hsv(+m.args[0],+m.args[1],+m.args[2]);w.value={h,s}}}
     else if(['fader','knob','meter'].includes(w.type)&&m.args.length)w.value=n(a0);
@@ -1552,7 +2048,7 @@ function drawPlot(g,W,H,t,w){
   // Testo corto apposta: visto dal vivo (screenshot Playwright) che la
   // versione lunga di prima si sovrapponeva al marcatore FOH, disegnato
   // su questa stessa fascia verticale del palco.
-  txt('Tocca=modifica · vuoto=aggiungi · tratteggio=già in TD',lx,ly-8,'#e9ebef','left',9);
+  txt('Trascina=sposta · tocca fixture=proprietà · vuoto=aggiungi · autosalvataggio layout',lx,ly-8,'#e9ebef','left',9);
   lg.forEach((r,i)=>{txt(r[0],lx,ly+10+i*14,'#c9ced8','left');txt(r[1],lx+s*3.4,ly+10+i*14,'#868e9b','left')});
 }
 
@@ -1915,8 +2411,80 @@ if(!GC.profiles[GC.profile])GC.profile='casa';
   if(q.get('stanza'))GC.stanza=q.get('stanza');store.set(GKEY,GC)}catch{}})();
 const net=()=>GC.profiles[GC.profile]||NET_DEFAULT.casa;
 const videoGatewayUrl=()=>{const n=net();return n.video?`http://${n.video}:${n.videoPort||8788}`:null};
-const bridgeCfg=()=>({type:'config',host:C.host,port:+C.port,gaiaHost:net().osc,gaiaPort:+net().oscPort});
+const bridgeCfg=()=>({type:'config',host:C.host,port:+C.port,gaiaHost:net().osc,gaiaPort:+net().oscPort,channels:C.oscChannels});
 const G={client:null,ok:false,host:null,sim:false,nr:null,nrWs:null,nrOk:false,dirty:true,lastPaint:0,devices:{},pdm:{},dxm:{},dmx:{},levels:{},canvas:null,brain:null,dream:null,chat:[],chatV:0,lastSent:null,offSince:null,tdAutoSynced:false};
+function tdHeadEntries(){
+  const params=G.devices['td-dmx-win']?.params||{};
+  const listed=Array.isArray(params.heads_list)?params.heads_list:Object.values(params.heads_list||{});
+  const fixtures=Array.isArray(params.dmx_fixtures)?params.dmx_fixtures.filter(f=>
+    ['heads','mh'].includes(String(f.group||'').toLowerCase())||String(f.group||'').toLowerCase().startsWith('heads_')||f.type==='mh'):[];
+  const source=listed.length?listed:fixtures;
+  const entries=source.map(h=>{
+    const id=h.uid||(h.unit!=null?`u${h.unit}`:h.id!=null?`id:${h.id}`:h.name||h.key);
+    if(id==null)return null;
+    const aliases=[h.uid,h.key,h.name,h.unit,`u${h.unit}`,h.id,`id:${h.id}`].filter(x=>x!=null).map(String);
+    return{id:String(id),label:String(h.name||`Testa ${h.unit??h.id??''}`),aliases};
+  }).filter(Boolean);
+  const matrix=G.dxm['td-dmx-win']||{},programmer=matrix.heads?.programmer||matrix.dmx_matrix?.heads?.programmer;
+  const order=programmer?.order;
+  if(!Array.isArray(order))return entries;
+  return order.map(item=>{
+    const token=String(item?.uid||item?.key||item?.name||item?.unit||item);
+    return entries.find(h=>h.aliases.includes(token)||h.id===token);
+  }).filter(Boolean);
+}
+function syncHeadSelectors(){
+  const entries=tdHeadEntries();if(!entries.length)return;
+  for(const w of allW()){
+    if(w.type!=='scenes'||w.mode!=='head-select'||w.addr!=='/mh/select/heads')continue;
+    const before=JSON.stringify([w.headValues,w.items,w.value,w.selectedHeads]);
+    const selected=new Set(Array.isArray(w.selectedHeads)?w.selectedHeads:[]);
+    if(!w._headsInitialized){
+      if(Array.isArray(w._headSelectedIndices))entries.forEach((h,i)=>{if(w._headSelectedIndices[i])selected.add(h.id)});
+      else if(!selected.size)entries.forEach(h=>selected.add(h.id));
+      delete w._headSelectedIndices;w._headsInitialized=true;
+    }
+    w.headValues=entries.map(h=>h.id);
+    w.items=entries.map(h=>h.label).join('\n');
+    w.selectedHeads=w.headValues.filter(id=>selected.has(id));
+    w.value=w.headValues.map(id=>selected.has(id)?1:0);
+    if(before!==JSON.stringify([w.headValues,w.items,w.value,w.selectedHeads])){
+      save();
+      if(page().widgets.includes(w))refresh(w);
+    }
+  }
+}
+function migrateLegacyHeadSelectors(){
+  let changed=false;
+  for(const w of allW()){
+    if(w.type!=='scenes'||w.addr!=='/mh/select'||w.mode!=='multi')continue;
+    const names=items(w);
+    if(names.length!==8||!names.every((name,i)=>name===`MH ${i+1}`))continue;
+    w._headSelectedIndices=Array.isArray(w.value)?w.value.slice():[];
+    w.mode='head-select';w.addr='/mh/select/heads';w.items='';w.headValues=[];w.selectedHeads=[];w._headsInitialized=false;
+    changed=true;
+  }
+  if(changed)save();
+}
+function migrateHeadPresetWidgets(){
+  let changed=false;
+  for(const p of L.pages||[]){
+    const widgets=p.widgets||[];
+    if(widgets.some(w=>w.type==='scenes'&&w.mode==='head-presets'))continue;
+    const hasHeadSelector=widgets.some(w=>w.type==='scenes'&&(w.mode==='head-select'||w.addr==='/mh/select/heads'));
+    const positions=widgets.find(w=>w.type==='scenes'&&w.addr==='/mh/position');
+    if(!hasHeadSelector||!positions||positions.w<4)continue;
+    const presetW=Math.max(2,Math.floor(positions.w/2));
+    const originalW=positions.w;
+    positions.w=originalW-presetW;
+    positions.cols=Math.min(4,positions.cols||4);
+    widgets.push(W('scenes',positions.x+positions.w,positions.y,presetW,positions.h,{
+      label:'Preset PTZ',mode:'head-presets',headPresets:[],color:SWATCH[4]
+    }));
+    changed=true;
+  }
+  if(changed)save();
+}
 const MOOD_INKS={neutra:[0,255,204],calm:[80,230,190],stress:[255,115,85],social:[255,195,100],curiosity:[190,135,255]};
 const MOOD_ALIAS={serena:'calm',sofferente:'stress',instabile:'stress',viva:'social',stabile:'neutra',neutrale:'neutra'};
 const MOOD_IT={neutra:'Neutra',calm:'Calma',stress:'Stress',social:'Sociale',curiosity:'Curiosità'};
@@ -1938,7 +2506,8 @@ function gConnect(host){
   G.client=c;
   c.on('connect',()=>{G.ok=true;G.offSince=null;if(G.sim)gSimOff();gStatus();
     ['gaia/device/+/status','gaia/devices/+/patchdeck_matrix','gaia/devices/+/dmx_matrix','gaia/device/+/audio_levels','gaia/dmx/+/status',
-     'gaia/td/canvas','gaia/brain/state','gaia/brain/dream','gaia/voice/tts/+','gaia/voice/command/+'].forEach(t=>c.subscribe(t))});
+     'gaia/td/canvas','gaia/brain/state','gaia/brain/dream','gaia/voice/tts/+','gaia/voice/command/+',
+     SHOW_CLOCK_STATE,'gaia/show/clock/pong/+'].forEach(t=>c.subscribe(t))});
   const off=()=>{if(G.client!==c)return;G.ok=false;G.offSince=G.offSince??Date.now();gStatus()};
   c.on('offline',off);c.on('error',off);c.on('close',off);
   c.on('message',(t,raw)=>{if(!raw||!raw.length)return;let p;const s=raw.toString();try{p=JSON.parse(s)}catch{p=s}gIn(t,p)});
@@ -1946,6 +2515,13 @@ function gConnect(host){
 // fallback LAN <-> Tailscale solo dopo 10s consecutivi scollegati (non a ogni blip), come le pagine di Gaia
 setInterval(()=>{const n=net();if(!GC.on||G.ok||G.offSince==null||!n.fallback||!window.mqtt)return;
   if(Date.now()-G.offSince>10000){G.offSince=Date.now();gConnect(G.host===n.broker?n.fallback:n.broker)}},2000);
+setInterval(()=>{
+  if(!G.ok||!G.client)return;
+  const seq=++showClock.pingSeq,t0=now(),payload={from:showClock.id,n:seq,t0};
+  showClock.pings.set(seq,{at:t0,t0});
+  for(const[k,v]of showClock.pings)if(t0-v.at>30000)showClock.pings.delete(k);
+  G.client.publish('gaia/show/clock/ping',JSON.stringify(payload));
+},2000);
 // Node-RED: WebSocket /gaia (stesso flusso della dashboard) — fonte di riserva per mood e pensieri se gaia/td/canvas tace
 function nrConnect(){
   try{G.nrWs&&(G.nrWs.onclose=null,G.nrWs.close())}catch{}G.nrWs=null;G.nrOk=false;
@@ -1961,10 +2537,27 @@ function gStatus(){
 }
 function gIn(t,p){
   const seg=t.split('/'),obj=p&&typeof p==='object';
-  if(seg[1]==='device'&&seg[3]==='status'){if(obj){p._seen=Date.now();G.devices[seg[2]]=p;
-    if(seg[2]==='td-dmx-win'&&!G.tdAutoSynced&&Array.isArray(p.params?.dmx_fixtures)){G.tdAutoSynced=true;importFromTD(true)}}}
+  if(t===SHOW_CLOCK_STATE){
+    if(obj&&p.v===1&&p.master==='td-dmx-win'&&Number.isFinite(+p.pos)&&typeof p.playing==='boolean'){
+      const oldLength=showClock.state?.length;
+      showClock.state={...p,pos:+p.pos,playing:p.playing};showClock.receivedAt=now();showClock.authority=true;showClock.hasMqtt=true;
+      if(oldLength!==p.length)refreshShowTimelines();
+    }
+  }else if(seg[1]==='show'&&seg[2]==='clock'&&seg[3]==='pong'){
+    if(obj&&p.from===showClock.id){
+      const sent=showClock.pings.get(+p.n);
+      if(sent&&p.t0===sent.t0){const rtt=Math.max(0,now()-sent.at);showClock.pings.delete(+p.n);
+        showClock.rtts.push(rtt);if(showClock.rtts.length>10)showClock.rtts.shift();
+        showClock.minRtt=Math.min(...showClock.rtts)}
+    }
+  }else if(seg[1]==='device'&&seg[3]==='status'){if(obj){const oldShowCues=JSON.stringify(G.devices[seg[2]]?.params?.show_cues);p._seen=Date.now();G.devices[seg[2]]=p;
+    if(seg[2]==='td-dmx-win'&&!G.tdAutoSynced&&Array.isArray(p.params?.dmx_fixtures)){G.tdAutoSynced=true;importFromTD(true)}
+    if(seg[2]==='td-dmx-win'){
+      syncHeadSelectors();
+      if(oldShowCues!==JSON.stringify(p.params?.show_cues))refreshShowTimelines();
+    }}}
   else if(t.endsWith('/patchdeck_matrix')){if(obj)G.pdm[p.device_id||seg[2]]=p}
-  else if(t.endsWith('/dmx_matrix')){if(obj)G.dxm[p.device_id||seg[2]]=p}
+  else if(t.endsWith('/dmx_matrix')){if(obj){G.dxm[p.device_id||seg[2]]=p;syncHeadSelectors()}}
   else if(t.endsWith('/audio_levels'))G.levels[seg[2]]=p;
   else if(seg[1]==='dmx'&&seg[3]==='status'){if(obj)G.dmx[p.stanza||seg[2]]=p}
   else if(t==='gaia/td/canvas'){if(obj)G.canvas=p}
@@ -2033,6 +2626,29 @@ function devServices(id){
   else if(dm?.services)keys.push(...Object.keys(dm.services));
   return[...new Set(keys)].filter(k=>!['load_patch','deck_toggle'].includes(pm[k]?.kind)).sort();
 }
+const enumParams=id=>devParams(id).filter(p=>Array.isArray(p.options));
+function tdEnumInfo(w){
+  const devices=w.device?[w.device]:devIds('dmx');
+  const id=devices.find(device=>!w.param||enumParams(device).some(p=>p.n===w.param))||devices[0]||null;
+  const params=enumParams(id);
+  const meta=w.param?params.find(p=>p.n===w.param):params.find(p=>/palette/i.test(p.n));
+  return{id,meta,missing:!!w.param&&!meta,noPalette:!w.param&&!meta,value:meta?(G.devices[id]?.params||{})[meta.n]:undefined};
+}
+function paintTdEnum(el,w){
+  const sc=el.querySelector('.sc'),info=tdEnumInfo(w);
+  const opts=info.meta?.options||[],labels=info.meta?.labels||[];
+  const sig=JSON.stringify([info.id,info.meta?.n,opts,labels]);
+  if(sc._sig!==sig){
+    sc._sig=sig;
+    if(!info.meta||!opts.length)sc.innerHTML=`<p class="dv-empty">${info.missing?'Il parametro DMX V8 configurato non è più pubblicato.':info.meta?'Il parametro DMX V8 non pubblica opzioni.':info.noPalette?'DMX V8 non pubblica un parametro enum palette. Seleziona un parametro dall’ispettore.':'In attesa di un parametro enum DMX V8.'}</p>`;
+    else{
+      sc.style.gridTemplateColumns=`repeat(${colsOf(w,opts.length)},minmax(0,1fr))`;
+      sc.innerHTML=opts.map((o,i)=>`<div class="si" data-i="${i}" data-opt="${esc(o)}" data-opt-type="${typeof o}"><span class="no">${String(i+1).padStart(2,'0')}</span><span class="nm">${esc(labels[i]??o)}</span><i class="chip"></i></div>`).join('');
+    }
+  }
+  sc.querySelectorAll('.si').forEach((n,i)=>n.classList.toggle('on',String(info.value)===String(opts[i])));
+  const addr=el.querySelector('.addr');if(addr)addr.textContent=info.meta?`${info.id} · ${info.meta.n}`:'DMX V8 · parametro non disponibile';
+}
 
 /* ---------- disegno dei widget Gaia ---------- */
 function gInner(w){
@@ -2087,10 +2703,10 @@ function gPaint(el,w){
     el.querySelector('.gw-s').textContent=id?`${d?.name||id} · ${FAM_IT[gFam(id,d)]||gFam(id,d)||'device'}${d?.stanza?' · '+d.stanza:''}`:'';
     const body=el.querySelector('.dv-body');
     if(!id){body._sig='';body.innerHTML=`<p class="dv-empty">${(G.ok||G.sim)?`Nessun device ${esc(FAM_IT[w.fam]||'')} ha ancora pubblicato il proprio stato.`:'Gaia non è collegata. Imposta il broker in ⋯ → Gaia.'}</p>`;return}
-    const ps=devParams(id),sv=devServices(id),sig=id+'|'+sv.join()+'|'+ps.map(p=>p.n).join();
+    const ps=devParams(id),sv=devServices(id),sig=JSON.stringify([id,sv,ps.map(p=>[p.n,p.options||null,p.labels||null])]);
     if(body._sig!==sig){body._sig=sig;
       body.innerHTML=(sv.length?`<div class="dv-svc">${sv.map(k=>`<button class="chip" data-svc="${esc(k)}">${esc(k.replace(/_/g,' '))}</button>`).join('')}</div>`:'')+
-        ps.map(p=>p.options?`<div class="dv-p"><span>${esc(p.label)}</span><div class="dv-opts">${p.options.map((o,i)=>`<button class="chip" data-par="${esc(p.n)}" data-opt="${esc(o)}">${esc(p.labels?.[i]??o)}</button>`).join('')}</div><span></span></div>`
+        ps.map(p=>p.options?`<div class="dv-p"><span>${esc(p.label)}</span><div class="dv-opts">${p.options.map((o,i)=>`<button class="chip" data-par="${esc(p.n)}" data-opt="${esc(o)}" data-opt-type="${typeof o}">${esc(p.labels?.[i]??o)}</button>`).join('')}</div><span></span></div>`
           :`<div class="dv-p"><span title="${esc(p.n)}">${esc(p.label)}</span><div class="dv-sl" data-par="${esc(p.n)}" data-min="${p.min}" data-max="${p.max}"><i></i></div><span class="dv-v"></span></div>`).join('')||'<p class="dv-empty">Il device non espone servizi o parametri.</p>'}
     const st=d?.services||{},pv=d?.params||{};
     body.querySelectorAll('.chip[data-svc]').forEach(c=>c.classList.toggle('on',st[c.dataset.svc]==='active'));
@@ -2156,7 +2772,9 @@ function gBind(e,el,w){
     const b=t.closest('[data-deck]');if(b){e.preventDefault();devCmd(id,{action:b.dataset.state==='1'?'disable':'enable',service:b.dataset.deck})}return}
   if(w.type==='tddevice'){const id=pickDev(w,w.fam||'');
     const sv=t.closest('.chip[data-svc]');if(sv){e.preventDefault();devCmd(id,{action:sv.classList.contains('on')?'disable':'enable',service:sv.dataset.svc});return}
-    const op=t.closest('.chip[data-opt]');if(op){e.preventDefault();const raw=op.dataset.opt;devCmd(id,{action:'set',param:op.dataset.par,value:isNaN(raw)||raw===''?raw:+raw});return}
+    const op=t.closest('.chip[data-opt]');if(op){e.preventDefault();const raw=op.dataset.opt,type=op.dataset.optType;
+      const value=type==='number'?Number(raw):type==='boolean'?raw==='true':raw;
+      devCmd(id,{action:'set',param:op.dataset.par,value});return}
     const sl=t.closest('.dv-sl');if(sl){dragSlider(e,el,sl,f=>{const mn=+sl.dataset.min,mx=+sl.dataset.max,v=+(mn+(mx-mn)*f).toFixed(4);
       if(G.devices[id]){(G.devices[id].params=G.devices[id].params||{})[sl.dataset.par]=v}sliderSet(sl,f,fmt(v));return()=>devCmd(id,{action:'set',param:sl.dataset.par,value:v})})}
     return}
@@ -2187,10 +2805,11 @@ function gSim(){
   G.pdm['PatchDeck-Win-MSI']={device_id:'PatchDeck-Win-MSI',services:pm,fx_params:{edge:{label:'Edge',min:0,max:1},blur:{label:'Blur',min:0,max:1},feedback:{label:'Feedback',min:0,max:1},rgb_split:{label:'RGB split',min:0,max:1},kaleido:{label:'Kaleido',min:0,max:1}}};
   G.devices['PatchDeck-Win-MSI']={device_id:'PatchDeck-Win-MSI',name:'PatchDeck V8',family:'patchdeck',role:'touchdesigner',stanza:'studio',services:svc,params:{edge:.2,blur:.1,feedback:.45,rgb_split:0,kaleido:.3},ts:t};
   G.devices['td-controller-macmauro']={device_id:'td-controller-macmauro',name:'Controller V8',family:'mixeraudio',role:'touchdesigner',stanza:'studio',services:{audio_in:'active',limiter:'active',record:'inactive'},params:{ch1_gain:.8,ch2_gain:.65,ch3_gain:.5,ch4_gain:.7,master:.85},ts:t};
-  G.dxm['td-dmx-win']={device_id:'td-dmx-win',params:{dmx_min_dimmer:{type:'float',range:[0,1]},dmx_max_dimmer:{type:'float',range:[0,1]},dmx_kick_threshold:{type:'float',range:[0,1]},dmx_kick_boost:{type:'float',range:[0,2]},dmx_color_speed:{type:'float',range:[0,4]},dmx_palette:{type:'menu',options:['Fire','Ocean','Neon','Mono']},audio_a_type:{type:'menu',options:['device','touch_audio','touch_bands']}},
+  const dmxPalettes=['Rainbow (Daslight)','Warm','Cool','Fire','Fire Inverted','Ocean','Magenta-Cyan','Plasma','Basic','Basic 2','Neon Party','Sunset','Forest','Deep Purple','Red','Blue','Yellow','Amber','Custom'];
+  G.dxm['td-dmx-win']={device_id:'td-dmx-win',params:{dmx_min_dimmer:{type:'float',range:[0,1]},dmx_max_dimmer:{type:'float',range:[0,1]},dmx_kick_threshold:{type:'float',range:[0,1]},dmx_kick_boost:{type:'float',range:[0,2]},dmx_color_speed:{type:'float',range:[0,4]},dmx_a_palette:{type:'menu',options:dmxPalettes},dmx_b_palette:{type:'menu',options:dmxPalettes},dmx_a_fixture_profile:{type:'menu',options:['ZQ006018 4CH RGBW','ZQ006018 8CH','RGB 3CH','D+RGB 4CH','D+RGBW 5CH','RGBWA+UV 6CH','D+RGBW+S+M 7CH']},audio_a_type:{type:'menu',options:['device','touch_audio','touch_bands']}},
     services:{dmx_output:{kind:'toggle'},dmx_kick_enable:{kind:'toggle'},dmx_audio_enable:{kind:'toggle'}}};
   G.devices['td-dmx-win']={device_id:'td-dmx-win',name:'DMX V8',family:'dmx',role:'touchdesigner',stanza:'studio',services:{dmx_output:'active',dmx_kick_enable:'active',dmx_audio_enable:'active'},
-    params:{dmx_min_dimmer:.05,dmx_max_dimmer:.95,dmx_kick_threshold:.55,dmx_kick_boost:1.2,dmx_color_speed:1.4,dmx_palette:'Neon',audio_a_type:'touch_bands'},ts:t};
+    params:{dmx_min_dimmer:.05,dmx_max_dimmer:.95,dmx_kick_threshold:.55,dmx_kick_boost:1.2,dmx_color_speed:1.4,dmx_a_palette:'Basic 2',dmx_b_palette:'Warm',dmx_a_fixture_profile:'RGB 3CH',audio_a_type:'touch_bands'},ts:t};
   const pr={Warm:[255,160,60],Cool:[60,140,255],Fire:[255,60,0],Ocean:[0,120,180],Forest:[20,160,60],Sunset:[255,90,40],Magenta:[220,0,180],White:[255,255,255],Off:[0,0,0]};
   G.dmx.ingresso={device_id:'pi-dmx-ingresso',stanza:'ingresso',artnet_configured:true,palettes:Object.keys(pr),palettes_rgb:pr,timeline_presets:{Arcobaleno:{},Lampeggio:{},Respiro:{}},default_fixture:'par1',
     fixtures:{par1:{current_palette:'Warm',output_rgb:[255,160,60],brightness:.8,audio_reactive:false,timeline_running:false,current_timeline_preset:null}},audio_level:.2,ts:t};
@@ -2238,12 +2857,28 @@ function loop(){
   [SH.wash,SH.back,SH.bar,SH.wall].forEach(T=>stepT(T,n));SH.heads.forEach(h=>stepT(h.T,n));
   // timeline
   const seen=new Set();showPlaying=false;
-  for(const w of allW()){if(w.type!=='timeline'||seen.has(w.addr))continue;seen.add(w.addr);const r=rt(w),cues=parseCues(w);
-    if(r.playing){r.t+=dt;if(r.t>=w.duration){if(r.loop){r.t=0;r.cue=-1}else{r.t=w.duration;r.playing=false;fire(w.addr+'/play',[0])}}
+  for(const w of allW()){if(w.type!=='timeline'||seen.has(w.addr))continue;seen.add(w.addr);const r=rt(w);
+    if(isShowTimeline(w)&&showClock.authority){
+      const sample=showClockSample(),position=showClockPosition(sample);
+      if(position!=null)r.t=position;
+      r.playing=!!sample&&showClockFresh(sample)&&!!sample.state.playing;
+      r.loop=!!sample?.state.loop;
+      const cue=sample?.source==='mqtt'?sample.state.cue?.index:sample?.state.cue;
+      r.cue=Number.isFinite(+cue)&&+cue>0?Math.floor(+cue)-1:-1;
+      showT=r.t;showPlaying=r.playing;showBpm=120;
+      continue;
+    }
+    const cues=parseCues(w);
+    if(r.playing){r.t+=dt;if(r.t>=w.duration){if(r.loop){r.t=0;r.cue=-1}else{r.t=w.duration;r.playing=false;fire(w.addr+'/play',[0],w.oscChannel)}}
       const i=cueAt(cues,r.t);if(i!==r.cue){r.cue=i;if(i>=0)fireCue(w,i)}
-      if(n-r.sent>100){r.sent=n;fire(w.addr+'/time',[+r.t.toFixed(2)])}
+      if(n-r.sent>100){r.sent=n;fire(w.addr+'/time',[+r.t.toFixed(2)],w.oscChannel)}
       showPlaying=true;showBpm=w.bpm||120}
     if(r.playing||seen.size===1)showT=r.t}
+  if(showClock.authority){
+    const sample=showClockSample(),position=showClockPosition(sample);
+    if(position!=null)showT=position;
+    showPlaying=!!sample&&showClockFresh(sample)&&!!sample.state.playing;
+  }
   const beat=(n/60000*showBpm)%1, level=showPlaying?.45+.55*Math.exp(-beat*5):.12+.05*Math.sin(n*.002);
   simTick(n);const gp=G.dirty||n-G.lastPaint>1000;if(gp){G.dirty=false;G.lastPaint=n}
   const byId=new Map(page().widgets.map(w=>[w.id,w]));
@@ -2253,20 +2888,34 @@ function loop(){
       const W=c.width/c._d,H=c.height/c._d;if(w.view==='plot')drawPlot(g,W,H,n,w);else drawRender(g,W,H,n,level);
       const hud=w.view==='plot'?'':`${SH.blackout?'<b>BLACKOUT</b> · ':''}SC ${SH.scene+1} ${esc(LOOKS[SH.scene]?.n||'')} · fade ${SH.fade.toFixed(1)}s · chase ${CHASE[SH.chase]||'Off'}${SH.strobe?' · <b>STROBO</b>':''}`;
       const h=el.querySelector('.hud');if(h._v!==hud){h.innerHTML=hud;h._v=hud}}
-    else if(w.type==='timeline'){const r=rt(w),D=w.duration||1,cues=parseCues(w);
+    else if(w.type==='timeline'){const r=rt(w),D=timelineDuration(w),cues=timelineCues(w);
       el.querySelector('.tl-ph').style.left=r.t/D*100+'%';el.querySelector('.tl-tc').textContent=tc(r.t);
-      const b=el.querySelector('.tl-cue b'),nm=cues[r.cue]?`${r.cue+1} · ${cues[r.cue].name}`:'—';if(b.textContent!==nm)b.textContent=nm;
+      const sample=isShowTimeline(w)&&showClock.authority?showClockSample():null;
+      const controlled=isShowTimeline(w)&&showClock.authority,locked=controlled&&(!sample||!showClockFresh(sample));
+      el.querySelector('[data-act="start"]').disabled=locked;
+      el.querySelector('[data-act="play"]').disabled=locked;
+      el.querySelector('[data-act="stop"]').disabled=locked;
+      el.querySelector('[data-act="loop"]').disabled=controlled;
+      el.querySelector('[data-act="edit-cues"]').disabled=controlled;
+      const remoteLabel=sample?.source==='mqtt'&&sample.state.cue?.label?
+        `${sample.state.cue.index?`${sample.state.cue.index} · `:''}${sample.state.cue.label}`:null;
+      const b=el.querySelector('.tl-cue b'),nm=remoteLabel|| (cues[r.cue]?`${r.cue+1} · ${cues[r.cue].name}`:'—');if(b.textContent!==nm)b.textContent=nm;
       const pb=el.querySelector('[data-act="play"]');if(pb._p!==r.playing){pb._p=r.playing;pb.innerHTML=r.playing?ICON.pause:ICON.play;pb.classList.toggle('on',r.playing)}
       el.querySelector('[data-act="loop"]').classList.toggle('on',r.loop);
       el.querySelectorAll('.tl-blk').forEach(x=>x.classList.toggle('cur',+x.dataset.k===r.cue))}
     else if(w.type==='clock'){const m=el.querySelector('.clk-main'),sb=el.querySelector('.clk-sub'),d=new Date();let a,b,cl='';
-      if(w.mode==='show'){a=tc(showT);b=`TC 25 fps · ${showPlaying?'PLAY':'STOP'}`;cl=showPlaying?'live':''}
+      if(w.mode==='show'){
+        a=tc(showT);const sample=showClock.authority?showClockSample():null,available=!!sample&&showClockFresh(sample);
+        b=showClock.authority?`TD · ${available?sample.source.toUpperCase():'OFFLINE · FERMO'} · TC 25 fps`:`TC 25 fps · ${showPlaying?'PLAY':'STOP'}`;
+        if(available&&sample.state.playing)cl='live';
+      }
       else if(w.mode==='countdown'){const [hh,mm]=(w.target||'23:30').split(':').map(Number),e=new Date(d);e.setHours(hh||0,mm||0,0,0);
         let s=Math.round((e-d)/1000);const neg=s<0;s=Math.abs(s);a=(neg?'+':'')+[Math.floor(s/3600),Math.floor(s/60)%60,s%60].map(v=>String(v).padStart(2,'0')).join(':');
         b=neg?`Oltre l'orario di fine (${w.target})`:`Fine alle ${w.target||'23:30'}`;cl=neg?'over':s<300?'warn':''}
       else{a=d.toLocaleTimeString('it-IT',{hour12:false});b=d.toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'})}
       if(m.textContent!==a)m.textContent=a;if(sb.textContent!==b)sb.textContent=b;
       el.classList.toggle('warn',cl==='warn');el.classList.toggle('over',cl==='over');el.classList.toggle('live',cl==='live')}
+    else if(w.type==='scenes'&&w.mode==='dmx-enum'){if(gp)paintTdEnum(el,w)}
     else if(w.type==='scenes'&&w.addr==='/dmx/scene'){const k=SH.fade>0?clamp((n-SH.t0)/(SH.fade*1000)):1;
       el.querySelectorAll('.si').forEach((x,i)=>{const p=x.querySelector('.prog');p.style.width=(i===SH.scene&&k<1)?k*100+'%':'0'})}
   }
@@ -2308,16 +2957,23 @@ function openSheet(){
       <div class="row"><button class="btn primary" id="sApply">Connetti</button></div>
       <p class="note">Avvia il bridge sul computer con <code>npm start</code> e apri dal tablet l'indirizzo che stampa (es. <code>http://192.168.1.20:8080</code>). L'OSC in arrivo va sulla porta <code>9000</code> del bridge. Senza bridge, il render simula il rig in locale.</p>
     </section>
+    <section><h3 style="font-size:14px">Canali OSC per progetto o istanza</h3>
+      <p class="note">La destinazione predefinita resta ${esc(C.host)}:${C.port}. Aggiungi un canale per ogni progetto o istanza TD e assegnalo ai widget dal loro ispettore. Gaia <code>/gaia/…</code> continua a usare il canale Gaia; i widget Gaia via MQTT non cambiano.</p>
+      <div id="oscRoutes" class="osc-routes"></div>
+      <div class="row"><button class="btn sm" id="oscRouteAdd">Aggiungi canale</button></div>
+      <p class="note" id="oscRouteError" role="alert" hidden></p>
+      <p class="note">Per esempio, configura qui DMX, PatchDeck o Controller Audio con host e porta OSC realmente in ascolto nel relativo progetto. La famiglia e l’istanza sono etichette di routing: non trasformano né verificano il contratto degli indirizzi.</p>
+    </section>
     <section><h3 style="font-size:14px">Progetti</h3>
       <p class="note" id="pCur"></p>
       <div id="pList"></div>
       <div class="row"><input id="pName" placeholder="Nome nuovo progetto" style="flex:1"><button class="btn primary" id="pSaveAs">Salva come nuovo</button></div>
-      <p class="note">Un progetto salva pagine E fixture insieme (Pianta/Render coincidono sempre, vengono dallo stesso posto). I template sono punti di partenza pronti — "Carica" sostituisce il progetto attuale (chiede conferma se non è salvato).</p>
+      <p class="note">Le modifiche al layout corrente si salvano automaticamente su OPS, ma non aggiornano lo snapshot del progetto. “Aggiorna” salva nel progetto corrente; “Salva come nuovo” crea uno snapshot separato. “Modifica griglia” serve solo a disporre i widget: per spostare o aggiungere luci usa direttamente la Pianta. I comandi ⇪/⇩ TD scambiano la patch DMX, non salvano il layout.</p>
     </section>
     <section><h3 style="font-size:14px">Layout</h3>
       <textarea id="sJson" spellcheck="false"></textarea>
       <div class="row"><button class="btn" id="sCopy">Copia</button><button class="btn" id="sLoad">Applica JSON</button></div>
-      <p class="note" id="sMsg">Il layout si salva da solo su questo dispositivo. Copia il JSON per spostarlo su un altro tablet o nel repo.</p>
+      <p class="note" id="sMsg">Il layout corrente si salva automaticamente sul server OPS e si condivide tra i browser connessi. Lo snapshot di un progetto si aggiorna solo con “Aggiorna”. Copia il JSON per spostare il layout fuori da OPS o nel repo.</p>
     </section></div>`;
   let editP=GC.profile;
   const F=[['gBroker','broker'],['gWs','wsPort',1],['gFb','fallback'],['gNr','nodered'],['gNrP','noderedPort',1],['gAd','admin'],['gAdP','adminPort',1],['gOs','osc'],['gOsP','oscPort',1]];
@@ -2334,6 +2990,38 @@ function openSheet(){
     if(ws&&ws.readyState===1)ws.send(JSON.stringify(bridgeCfg()));
     G.offSince=null;nrConnect();if(GC.on){gSimOff();gLoadLib(()=>gConnect(net().broker));setTimeout(()=>{if(!G.ok)gSim()},4500)}else{try{G.client&&G.client.end(true)}catch{}G.client=null;G.ok=false;gSim()}gStatus();closeSheet()};
   $('#sUrl').value=C.url;$('#sHost').value=C.host;$('#sPort').value=C.port;
+  let oscChannelsDraft=C.oscChannels.map(c=>({...c}));
+  const deletedOscChannels=new Set();
+  const renderOscChannels=()=>{
+    const list=$('#oscRoutes');
+    list.innerHTML=oscChannelsDraft.map((c,i)=>`<div class="osc-route" data-route="${i}">
+      <label>Nome<input data-prop="name" value="${esc(c.name)}" placeholder="Es. DMX Master"></label>
+      <label>Famiglia<select data-prop="family">${Object.entries(OSC_FAMILIES).map(([k,v])=>`<option value="${k}"${k===c.family?' selected':''}>${esc(v)}</option>`).join('')}</select></label>
+      <label>Istanza<input data-prop="instance" value="${esc(c.instance)}" placeholder="Es. td-dmx-win"></label>
+      <label>Host<input data-prop="host" class="mono" value="${esc(c.host)}" spellcheck="false" autocapitalize="off"></label>
+      <label>Porta<input data-prop="port" type="number" min="1" max="65535" value="${esc(c.port)}"></label>
+      <button class="btn danger" data-route-del="${i}" aria-label="Elimina canale OSC">×</button>
+    </div>`).join('')||'<p class="hint">Nessun canale aggiuntivo. I widget usano la destinazione predefinita.</p>';
+    list.querySelectorAll('[data-route]').forEach(row=>{
+      const i=+row.dataset.route;
+      row.querySelectorAll('[data-prop]').forEach(input=>input.addEventListener('input',e=>{
+        oscChannelsDraft[i][e.target.dataset.prop]=e.target.dataset.prop==='port'?e.target.value:e.target.value;
+      }));
+      row.querySelector('[data-prop="family"]').addEventListener('change',e=>{oscChannelsDraft[i].family=e.target.value});
+    });
+    list.querySelectorAll('[data-route-del]').forEach(button=>button.onclick=()=>{
+      const route=oscChannelsDraft[+button.dataset.route];
+      const assigned=allW().filter(w=>w.oscChannel===route.id);
+      if(assigned.length&&!confirm(`Il canale è assegnato a ${assigned.length} controlli. Eliminarlo e riportarli alla destinazione predefinita?`))return;
+      deletedOscChannels.add(route.id);
+      oscChannelsDraft.splice(+button.dataset.route,1);save();renderOscChannels();
+    });
+  };
+  renderOscChannels();
+  $('#oscRouteAdd').onclick=()=>{
+    oscChannelsDraft.push({id:'osc-'+uid(),name:'',family:'custom',instance:'',host:'',port:''});
+    renderOscChannels();
+  };
   $('#sJson').value=JSON.stringify(L,null,1);
   $('#sClose').onclick=closeSheet; s.onpointerdown=e=>{if(e.target===s)closeSheet()};
   const tmsg=t=>$('#tMsg').textContent=t;
@@ -2341,13 +3029,27 @@ function openSheet(){
   s.querySelectorAll('[data-trep]').forEach(b=>{let armed=false;b.onclick=()=>{if(!armed){armed=true;b.textContent='Conferma';b.classList.add('danger');return}
     const t=TPL[b.dataset.trep];L={pages:t.pages(),fixtures:L.fixtures||defaultFixtures(L.rig),stage:L.stage||stageDefaults()};ensureStageData(L);pi=0;selId=null;save();render();initShow();tmsg(`Layout sostituito con "${t.name}".`);$('#sJson').value=JSON.stringify(L,null,1);
     armed=false;b.textContent='Sostituisci';b.classList.remove('danger')}});
-  $('#sApply').onclick=()=>{C={...C,url:$('#sUrl').value.trim(),host:$('#sHost').value.trim()||'127.0.0.1',port:+$('#sPort').value||7000};store.set(CKEY,C);connect();closeSheet()};
+  $('#sApply').onclick=()=>{
+    const port=Number($('#sPort').value),host=$('#sHost').value.trim();
+    const invalid=oscChannelsDraft.find(c=>!c.host.trim()||!Number.isInteger(Number(c.port))||Number(c.port)<1||Number(c.port)>65535||(!c.instance.trim()&&!c.name.trim()));
+    const error=$('#oscRouteError');
+    if(!host||!Number.isInteger(port)||port<1||port>65535){error.textContent='Inserisci un host e una porta OSC predefinita valida (1–65535).';error.hidden=false;return}
+    if(invalid){error.textContent=`Completa nome o istanza, host e porta validi per il canale "${invalid.name||OSC_FAMILIES[invalid.family]||'senza nome'}".`;error.hidden=false;return}
+    const normalizedChannels=oscChannelsDraft.map(c=>({...c,id:oscChannelId(c),port:Number(c.port)}));
+    if(new Set(normalizedChannels.map(c=>c.id)).size!==normalizedChannels.length){error.textContent='Due canali hanno la stessa famiglia e identità (istanza o nome). Rendili univoci.';error.hidden=false;return}
+    error.hidden=true;
+    for(const w of allW())if(deletedOscChannels.has(w.oscChannel))delete w.oscChannel;
+    const channelIds=new Map(oscChannelsDraft.map(c=>[c.id,oscChannelId(c)]));
+    for(const w of allW())if(channelIds.has(w.oscChannel))w.oscChannel=channelIds.get(w.oscChannel);
+    C={...C,url:$('#sUrl').value.trim(),host,port,oscChannels:normalizedChannels};
+    save();store.set(CKEY,C);connect();closeSheet();
+  };
   const msg=t=>$('#sMsg').textContent=t;
   $('#sCopy').onclick=()=>{const ta=$('#sJson');const fb=()=>{ta.select();msg('Testo selezionato: copialo con Ctrl/Cmd+C.')};
     if(navigator.clipboard)navigator.clipboard.writeText(ta.value).then(()=>msg('Layout copiato negli appunti.'),fb);else fb()};
   $('#sLoad').onclick=()=>{try{const j=JSON.parse($('#sJson').value);if(!Array.isArray(j.pages)||!j.pages.length)throw 0;L=j;if(!L.fixtures)L.fixtures=defaultFixtures(L.rig);ensureStageData(L);pi=0;selId=null;save();render();initShow();msg('Layout applicato.')}catch{msg('JSON non valido: serve un oggetto con un elenco "pages".')}};
   function renderProjList(){
-    $('#pCur').textContent=L._projectId?`Progetto corrente: ${L._projectName||'(senza nome)'}`:'Progetto corrente: non salvato (solo autosave locale su questo dispositivo).';
+    $('#pCur').textContent=L._projectId?`Progetto corrente: ${L._projectName||'(senza nome)'} · snapshot separato dal layout autosalvato`:'Progetto corrente: nessuno · il layout corrente è comunque autosalvato su OPS.';
     const list=projList();
     $('#pList').innerHTML=
       PROJECT_TEMPLATES.map(t=>`<div class="row" style="align-items:center"><span style="flex:1">🧩 ${esc(t.name)}</span><button class="btn sm" data-tpl="${t.tid}">Carica</button></div>`).join('')+
@@ -2387,6 +3089,6 @@ function initShow(){
   goScene(sc,0);
 }
 
-render(); initShow(); connect(); gStart(); requestAnimationFrame(loop);
+migrateLegacyHeadSelectors();migrateHeadPresetWidgets();render(); initShow(); connect(); gStart(); requestAnimationFrame(loop);
 })();
 </script>

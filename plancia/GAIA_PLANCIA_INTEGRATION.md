@@ -24,7 +24,32 @@ reale** — quello che un tablet apre davvero durante un show — deve
 sempre essere quello su OPS (`http://192.168.1.240:8080`). Se mai serve
 testare qualcosa su Core, è un deploy temporaneo, non quello buono.
 
-## Quattro canali, non uno
+## Persistenza di layout e progetti
+
+Il layout corrente si salva automaticamente quando si modificano widget
+o fixture nella Pianta; non serve premere un comando Salva. L'indicatore
+in alto conferma la ricezione dal server. La modalità "Modifica griglia"
+serve soltanto a disporre e ridimensionare i widget, mentre le fixture si
+aggiungono/spostano/modificano direttamente nella Pianta, senza attivarla.
+Questo autosalvataggio aggiorna il layout corrente, non lo snapshot del
+progetto nominato: per aggiornare quest'ultimo usare esplicitamente
+"Aggiorna" in `⋯` → Progetti. L'invio/ricezione DMX (`⇪ TD`/`⇩ TD`) è
+un'operazione distinta dalla persistenza del layout.
+
+Layout corrente e snapshot dei progetti sono condivisi fra i browser che
+si collegano allo stesso bridge OPS. `bridge.js` li salva in
+`plancia/data/state.json` (variabile `PLANCIA_STATE_FILE` per scegliere
+un percorso diverso); gli aggiornamenti vengono inviati agli altri
+client connessi. Se più device salvano modifiche, prevale l’ultimo
+salvataggio ricevuto dal server. Usare `localhost` invece dell’IP OPS
+non punta allo stesso origin nel browser; per i device remoti aprire
+`http://192.168.1.240:8080`.
+
+Le preferenze di connessione e gli endpoint/canali OSC restano locali
+al browser, non nel file condiviso. Di conseguenza ogni device che deve
+inviare OSC deve configurare i propri endpoint.
+
+## Quattro flussi, non uno
 
 Plancia parla con Gaia su **quattro canali indipendenti**, con
 destinazioni diverse — non confonderli (stesso principio di
@@ -40,8 +65,9 @@ destinazioni diverse — non confonderli (stesso principio di
 
 Il canale 1 funziona già out-of-the-box (stesso schema di
 `patchdeck.html`/`dmx.html`/`mixeraudio.html`), nessun lavoro lato Gaia.
-Il canale 2 esiste già (`osc_bridge.py` gira su Core e su OPS). **Il
-canale 3 è quello nuovo, definito qui.**
+Il canale 2 esiste già (`osc_bridge.py` gira su Core e su OPS). Il
+canale 3, già descritto qui, ora supporta più destinazioni selezionabili
+widget per widget.
 
 ## Canale 3 — perché diretto a DMX Master, non via Gaia/MQTT
 
@@ -55,10 +81,36 @@ pilotare *direttamente* un software luci: su Gaia, quel ruolo lo ha
 pilota davvero teste mobili/LED via Art-Net — non `osc_bridge.py`, che
 non sa nulla di DMX).
 
-`bridge.js` instrada per prefisso (`routeOf()` in `bridge.js`):
-- `/gaia/...` → canale 2 (`GAIA_OSC_HOST`/`GAIA_OSC_PORT`, env var)
-- tutto il resto → canale 3 (`OSC_HOST`/`OSC_PORT`, env var — e anche
-  dall'interfaccia, persiste per-browser in `localStorage`)
+`bridge.js` instrada prima `/gaia/...` verso il canale 2
+(`GAIA_OSC_HOST`/`GAIA_OSC_PORT`). Gli altri widget usano il canale
+selezionato nell’ispettore in modalità Modifica; senza selezione
+mantengono la destinazione predefinita `OSC_HOST`/`OSC_PORT`. I canali
+aggiuntivi si configurano da `⋯` → **Canali OSC per progetto o
+istanza**, con nome, famiglia, istanza, host e porta. L’identificativo
+del canale viaggia solo tra browser e `bridge.js`: il datagramma OSC e
+i contratti esistenti di indirizzo/argomenti non cambiano.
+L’identità del canale è stabile in base a famiglia e istanza (o, se
+l’istanza è vuota, al nome), perciò un layout importato su un altro
+browser mantiene le assegnazioni quando si ricrea lì lo stesso canale.
+Gli host e le porte restano configurazione locale e non vengono esportati
+con il layout.
+
+Famiglia e istanza sono metadati di routing, non discovery né garanzia
+che il progetto ricevente implementi un indirizzo. In particolare,
+PatchDeck e Controller Audio hanno già superfici Gaia via MQTT; non va
+dedotto da questo che ogni loro progetto TD abbia un OSC In abilitato.
+Configurare solo endpoint e contratti verificati nel relativo progetto.
+La destinazione predefinita resta DMX Master (`td-dmx-win`, famiglia
+`dmx`, 7020).
+
+Il feedback in ingresso continua ad arrivare sulla porta 9000. Se l’IP
+sorgente corrisponde a un solo canale configurato, il bridge allega quel
+canale ai messaggi per sincronizzare i widget assegnati. Se più canali
+condividono lo stesso IP, la sorgente non identifica il progetto e il
+feedback non aggiorna i widget assegnati a quei canali; con sorgenti non
+riconosciute resta il comportamento storico (matching per indirizzo OSC).
+Il riconoscimento usa l’IP sorgente, quindi un host configurato con un
+nome DNS non permette l’associazione del feedback a un canale specifico.
 
 ## Porte — contratto esplicito, mai indovinato
 
@@ -80,14 +132,14 @@ niente vieta di condividere una porta per prefisso OSC. Tenerli separati
 evita di dover mai chiedersi "quel pacchetto su 7010 è mocap o un fader
 di Plancia?".
 
-**Cosa serve lato TD (DMX Master)**: un OSC In DAT in ascolto sulla
-**7020**, che interpreta gli indirizzi della tabella in
-`plancia/README.md` ("Mappa indirizzi dello show") e li traduce in
-output Art-Net reale (stesso principio per cui oggi li simula in
-locale il widget Palco di Plancia stesso — DMX Master fa la stessa
-cosa ma sul rig vero). Non e' un `mocap_port` auto-annunciato: la 7020
-e' fissa per convenzione (un solo DMX Master alla volta, non serve
-profiling dinamico come per il mocap multi-istanza).
+**Lato TD (DMX Master)**: la nota TD/Win-PD 23 in
+[`TD4Gaia/GAIA_INTERFACE.md`](https://github.com/vsvisualsubstance-source/TD4Gaia/blob/main/GAIA_INTERFACE.md)
+documenta il controllo selettivo delle teste sulla porta 7020, verificato
+dal lato TD: selezioni, posizioni, preset e modalità follow/manual.
+La numerazione differisce tra i documenti: è il **flusso 3 di Plancia**
+e il **canale 5 lato TD**. Gli altri indirizzi del prospetto restano
+contratti specifici del progetto TD e non sono implicati dal solo fatto
+che Plancia possa inviarli.
 
 ## Canale 1b — design dello show, bidirezionale (proposta, 2026-10-15)
 
@@ -256,16 +308,77 @@ tablet che non ha ancora una preferenza salvata) — due posti, stesso
 dato, nessuna scoperta automatica per questo canale (a differenza del
 mocap).
 
-## Cosa NON è ancora stato fatto
+## Verifiche e limiti
 
-- L'OSC In su DMX Master (7020) che interpreta `/dmx/...`/`/mh/...` è
-  lato TD (TD4Gaia, non in questo repo) — **in costruzione ora**.
-- Canale 1b (design dello show, sopra): schema solo proposto, nessun
-  codice né lato Plancia né lato DMX Master.
-- Nessun fallback/simulazione se DMX Master è irraggiungibile: il
+- Il template Teste mobili ora invia selezioni per identificativo vivo
+  (`/mh/select/heads <uid>…`), leggendo `heads_list` e l’ordine della
+  programmer da MQTT; senza dati TD non crea una lista fittizia di otto
+  teste. I controlli pan/tilt e look seguono la mappa OSC nel README.
+- La prova fisica Plancia → bridge OPS → TD DMX non è eseguibile da
+  questo checkout senza accesso al TD live. Va verificata sul rig prima
+  del deploy touring, inclusi feedback, disconnessione e ID teste reali.
+- Il canale di ritorno OSC è un solo listener (9000); più istanze sullo
+  stesso IP non si distinguono via sorgente. Per feedback simultaneo
+  servono IP o indirizzi OSC distinti.
+- Nessun fallback di rete verso DMX Master: il
   widget Palco di Plancia *già* simula in locale (vedi README), quindi
-  l'operatore vede comunque qualcosa anche a canale 3 morto — ma non è
-  un segnale di errore esplicito lato Plancia oggi.
+  l'operatore vede comunque qualcosa anche se il canale 3 non è
+  raggiungibile; il bridge segnala gli errori UDP e i canali mancanti.
+
+## Nota TD/Win-PD 24 (2026-10-19): clock condiviso dello show
+
+Il master è la timeline `show` di DMX Master (`td-dmx-win`); Plancia è un
+follower, non un secondo orologio. Il contratto TD pubblica lo stato
+retained su `gaia/show/clock/state` e riceve i comandi su
+`gaia/show/clock/command`. La Plancia sottoscrive lo stato e i pong,
+stima il ritardo con ping MQTT e interpola la posizione usando
+`performance.now()`; se manca uno stato per 3,5 secondi congela il tempo.
+Play/pausa, stop, salto, GO, Back e richiamo cue sono inoltrati al master.
+
+Il widget `/show` usa la lista `show_cues` dello status DMX Master quando
+disponibile. Non esegue né richiama le cue locali mentre segue il clock
+TD. In assenza di uno stato MQTT mantiene il precedente funzionamento
+locale; se riceve feedback OSC `/show/*` dalla porta 9000 lo usa come
+sorgente del clock e invia i comandi OSC al canale del widget. Con MQTT,
+uno stato scaduto congela la posizione invece di avviare un secondo
+orologio locale. In fallback OSC, durante il play la posizione si
+aggiorna col feedback; in pausa TD non manda heartbeat, quindi Plancia
+mantiene il clock fermo ma non può rilevare la disconnessione del master.
+
+Il feedback OSC `/show/*` lato TD (`plancia_in` → `Feedback`) era
+documentato come pronto ma spento nella nota 24. L’attivazione del
+feedback resta un passaggio operativo lato TD; non è cambiata da Plancia.
+Il follower Plancia è stato provato dall'operatore il 2026-10-19 e il
+clock condiviso risulta funzionante.
+
+## Nota TD/Win-PD 25 (2026-10-19): feedback teste mobili verso Plancia
+
+TD ha verificato dal vivo e attivato il feedback OSC verso il listener
+Plancia su `OPS:9000` (bridge.js `OSC_IN`). Con `Feedback` e
+`Feedbackheads` abilitati, TD invia al massimo 10 aggiornamenti al
+secondo quando i valori cambiano e ripubblica lo stato ogni 5 secondi:
+
+- `/mh/select` con la maschera delle teste selezionate, nell'ordine delle
+  unità (attualmente MH1, MH6);
+- per la prima testa selezionata: `/mh/pantilt`, `/mh/color`,
+  `/mh/dimmer`, `/mh/zoom`, `/mh/focus`, `/mh/strobe` e `/mh/gobo`;
+- `/dmx/group/mh` per il livello del gruppo teste.
+
+Il feedback non fa eco dei comandi Plancia ricevuti negli ultimi 0,5
+secondi e l'aggiornamento dei widget in ingresso non rimanda comandi a
+TD. Il feedback della timeline (`Feedbackshow`) era stato lasciato
+spento in attesa del follower Plancia, ora implementato; resta da
+abilitarlo in TD e provarlo sul rig.
+Riferimento lato TD: commit
+[`f093c41` in TD4DMX](https://github.com/vsvisualsubstance-source/TD4DMX/commit/f093c412acb7ab5e4f1b200ec56840cbe7e2c6b7).
+
+**Discrepanza da risolvere lato Plancia:** il selettore invia
+`/mh/select/heads <uid>…`, ma TD restituisce la selezione come maschera
+su `/mh/select`. Attualmente `applyWidgets()` aggiorna il widget
+`head-select` solo per `/mh/select/heads`, perciò il feedback di
+selezione TD non aggiorna le spie del selettore in Plancia. Va gestita la
+maschera rispettando l'ordine delle teste pubblicato da TD (oggi MH1,
+MH6), senza cambiare il comando di selezione per UID in uscita.
 
 ## Nota TD 19 (2026-10-16): catalogo fixture condiviso — FATTO lato Plancia
 
@@ -318,9 +431,11 @@ conflitti. Implementato lato Plancia (`plancia/index.html`):
 
 1. **Fonte unica per il palco**: all'apertura/connessione, appena
    arriva il primo `status` di `td-dmx-win` con `params.dmx_fixtures`,
-   `importFromTD(true)` sostituisce in silenzio le fixture locali con
-   quelle `uid` `p-...` di TD — niente più ricostruzione da
-   `defaultFixtures()` se TD ha già un palco. Verificato dal vivo via
+   `importFromTD(true)` sostituisce in silenzio le fixture DMX locali
+   con quelle `uid` `p-...` di TD — niente più ricostruzione da
+   `defaultFixtures()` se TD ha già un palco. Mantiene però le fixture
+   locali non gestite da DMX Master (in particolare LED wall, casse e
+   laser), che non compaiono in `dmx_fixtures`. Verificato dal vivo via
    Playwright: nessun dialogo, Pianta popolata con indirizzi reali
    (es. `1.001`, `2.025`) alla prima apertura.
 2. Bottoni "⇪ TD" (manda tutto, `on_conflict:'reject'`), "⇩ TD"
