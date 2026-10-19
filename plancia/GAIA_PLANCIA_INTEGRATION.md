@@ -24,7 +24,32 @@ reale** — quello che un tablet apre davvero durante un show — deve
 sempre essere quello su OPS (`http://192.168.1.240:8080`). Se mai serve
 testare qualcosa su Core, è un deploy temporaneo, non quello buono.
 
-## Quattro canali, non uno
+## Persistenza di layout e progetti
+
+Il layout corrente si salva automaticamente quando si modificano widget
+o fixture nella Pianta; non serve premere un comando Salva. L'indicatore
+in alto conferma la ricezione dal server. La modalità "Modifica griglia"
+serve soltanto a disporre e ridimensionare i widget, mentre le fixture si
+aggiungono/spostano/modificano direttamente nella Pianta, senza attivarla.
+Questo autosalvataggio aggiorna il layout corrente, non lo snapshot del
+progetto nominato: per aggiornare quest'ultimo usare esplicitamente
+"Aggiorna" in `⋯` → Progetti. L'invio/ricezione DMX (`⇪ TD`/`⇩ TD`) è
+un'operazione distinta dalla persistenza del layout.
+
+Layout corrente e snapshot dei progetti sono condivisi fra i browser che
+si collegano allo stesso bridge OPS. `bridge.js` li salva in
+`plancia/data/state.json` (variabile `PLANCIA_STATE_FILE` per scegliere
+un percorso diverso); gli aggiornamenti vengono inviati agli altri
+client connessi. Se più device salvano modifiche, prevale l’ultimo
+salvataggio ricevuto dal server. Usare `localhost` invece dell’IP OPS
+non punta allo stesso origin nel browser; per i device remoti aprire
+`http://192.168.1.240:8080`.
+
+Le preferenze di connessione e gli endpoint/canali OSC restano locali
+al browser, non nel file condiviso. Di conseguenza ogni device che deve
+inviare OSC deve configurare i propri endpoint.
+
+## Quattro flussi, non uno
 
 Plancia parla con Gaia su **quattro canali indipendenti**, con
 destinazioni diverse — non confonderli (stesso principio di
@@ -40,8 +65,9 @@ destinazioni diverse — non confonderli (stesso principio di
 
 Il canale 1 funziona già out-of-the-box (stesso schema di
 `patchdeck.html`/`dmx.html`/`mixeraudio.html`), nessun lavoro lato Gaia.
-Il canale 2 esiste già (`osc_bridge.py` gira su Core e su OPS). **Il
-canale 3 è quello nuovo, definito qui.**
+Il canale 2 esiste già (`osc_bridge.py` gira su Core e su OPS). Il
+canale 3, già descritto qui, ora supporta più destinazioni selezionabili
+widget per widget.
 
 ## Canale 3 — perché diretto a DMX Master, non via Gaia/MQTT
 
@@ -55,10 +81,36 @@ pilotare *direttamente* un software luci: su Gaia, quel ruolo lo ha
 pilota davvero teste mobili/LED via Art-Net — non `osc_bridge.py`, che
 non sa nulla di DMX).
 
-`bridge.js` instrada per prefisso (`routeOf()` in `bridge.js`):
-- `/gaia/...` → canale 2 (`GAIA_OSC_HOST`/`GAIA_OSC_PORT`, env var)
-- tutto il resto → canale 3 (`OSC_HOST`/`OSC_PORT`, env var — e anche
-  dall'interfaccia, persiste per-browser in `localStorage`)
+`bridge.js` instrada prima `/gaia/...` verso il canale 2
+(`GAIA_OSC_HOST`/`GAIA_OSC_PORT`). Gli altri widget usano il canale
+selezionato nell’ispettore in modalità Modifica; senza selezione
+mantengono la destinazione predefinita `OSC_HOST`/`OSC_PORT`. I canali
+aggiuntivi si configurano da `⋯` → **Canali OSC per progetto o
+istanza**, con nome, famiglia, istanza, host e porta. L’identificativo
+del canale viaggia solo tra browser e `bridge.js`: il datagramma OSC e
+i contratti esistenti di indirizzo/argomenti non cambiano.
+L’identità del canale è stabile in base a famiglia e istanza (o, se
+l’istanza è vuota, al nome), perciò un layout importato su un altro
+browser mantiene le assegnazioni quando si ricrea lì lo stesso canale.
+Gli host e le porte restano configurazione locale e non vengono esportati
+con il layout.
+
+Famiglia e istanza sono metadati di routing, non discovery né garanzia
+che il progetto ricevente implementi un indirizzo. In particolare,
+PatchDeck e Controller Audio hanno già superfici Gaia via MQTT; non va
+dedotto da questo che ogni loro progetto TD abbia un OSC In abilitato.
+Configurare solo endpoint e contratti verificati nel relativo progetto.
+La destinazione predefinita resta DMX Master (`td-dmx-win`, famiglia
+`dmx`, 7020).
+
+Il feedback in ingresso continua ad arrivare sulla porta 9000. Se l’IP
+sorgente corrisponde a un solo canale configurato, il bridge allega quel
+canale ai messaggi per sincronizzare i widget assegnati. Se più canali
+condividono lo stesso IP, la sorgente non identifica il progetto e il
+feedback non aggiorna i widget assegnati a quei canali; con sorgenti non
+riconosciute resta il comportamento storico (matching per indirizzo OSC).
+Il riconoscimento usa l’IP sorgente, quindi un host configurato con un
+nome DNS non permette l’associazione del feedback a un canale specifico.
 
 ## Porte — contratto esplicito, mai indovinato
 
@@ -80,14 +132,14 @@ niente vieta di condividere una porta per prefisso OSC. Tenerli separati
 evita di dover mai chiedersi "quel pacchetto su 7010 è mocap o un fader
 di Plancia?".
 
-**Cosa serve lato TD (DMX Master)**: un OSC In DAT in ascolto sulla
-**7020**, che interpreta gli indirizzi della tabella in
-`plancia/README.md` ("Mappa indirizzi dello show") e li traduce in
-output Art-Net reale (stesso principio per cui oggi li simula in
-locale il widget Palco di Plancia stesso — DMX Master fa la stessa
-cosa ma sul rig vero). Non e' un `mocap_port` auto-annunciato: la 7020
-e' fissa per convenzione (un solo DMX Master alla volta, non serve
-profiling dinamico come per il mocap multi-istanza).
+**Lato TD (DMX Master)**: la nota TD/Win-PD 23 in
+[`TD4Gaia/GAIA_INTERFACE.md`](https://github.com/vsvisualsubstance-source/TD4Gaia/blob/main/GAIA_INTERFACE.md)
+documenta il controllo selettivo delle teste sulla porta 7020, verificato
+dal lato TD: selezioni, posizioni, preset e modalità follow/manual.
+La numerazione differisce tra i documenti: è il **flusso 3 di Plancia**
+e il **canale 5 lato TD**. Gli altri indirizzi del prospetto restano
+contratti specifici del progetto TD e non sono implicati dal solo fatto
+che Plancia possa inviarli.
 
 ## Canale 1b — design dello show, bidirezionale (proposta, 2026-10-15)
 
@@ -256,16 +308,22 @@ tablet che non ha ancora una preferenza salvata) — due posti, stesso
 dato, nessuna scoperta automatica per questo canale (a differenza del
 mocap).
 
-## Cosa NON è ancora stato fatto
+## Verifiche e limiti
 
-- L'OSC In su DMX Master (7020) che interpreta `/dmx/...`/`/mh/...` è
-  lato TD (TD4Gaia, non in questo repo) — **in costruzione ora**.
-- Canale 1b (design dello show, sopra): schema solo proposto, nessun
-  codice né lato Plancia né lato DMX Master.
-- Nessun fallback/simulazione se DMX Master è irraggiungibile: il
+- Il template Teste mobili ora invia selezioni per identificativo vivo
+  (`/mh/select/heads <uid>…`), leggendo `heads_list` e l’ordine della
+  programmer da MQTT; senza dati TD non crea una lista fittizia di otto
+  teste. I controlli pan/tilt e look seguono la mappa OSC nel README.
+- La prova fisica Plancia → bridge OPS → TD DMX non è eseguibile da
+  questo checkout senza accesso al TD live. Va verificata sul rig prima
+  del deploy touring, inclusi feedback, disconnessione e ID teste reali.
+- Il canale di ritorno OSC è un solo listener (9000); più istanze sullo
+  stesso IP non si distinguono via sorgente. Per feedback simultaneo
+  servono IP o indirizzi OSC distinti.
+- Nessun fallback di rete verso DMX Master: il
   widget Palco di Plancia *già* simula in locale (vedi README), quindi
-  l'operatore vede comunque qualcosa anche a canale 3 morto — ma non è
-  un segnale di errore esplicito lato Plancia oggi.
+  l'operatore vede comunque qualcosa anche se il canale 3 non è
+  raggiungibile; il bridge segnala gli errori UDP e i canali mancanti.
 
 ## Nota TD 19 (2026-10-16): catalogo fixture condiviso — FATTO lato Plancia
 
@@ -318,9 +376,11 @@ conflitti. Implementato lato Plancia (`plancia/index.html`):
 
 1. **Fonte unica per il palco**: all'apertura/connessione, appena
    arriva il primo `status` di `td-dmx-win` con `params.dmx_fixtures`,
-   `importFromTD(true)` sostituisce in silenzio le fixture locali con
-   quelle `uid` `p-...` di TD — niente più ricostruzione da
-   `defaultFixtures()` se TD ha già un palco. Verificato dal vivo via
+   `importFromTD(true)` sostituisce in silenzio le fixture DMX locali
+   con quelle `uid` `p-...` di TD — niente più ricostruzione da
+   `defaultFixtures()` se TD ha già un palco. Mantiene però le fixture
+   locali non gestite da DMX Master (in particolare LED wall, casse e
+   laser), che non compaiono in `dmx_fixtures`. Verificato dal vivo via
    Playwright: nessun dialogo, Pianta popolata con indirizzi reali
    (es. `1.001`, `2.025`) alla prima apertura.
 2. Bottoni "⇪ TD" (manda tutto, `on_conflict:'reject'`), "⇩ TD"
@@ -342,6 +402,51 @@ per un editor singola-fixture-alla-volta. Da rivalutare se la Plancia
 arriva a mandare lotti di fixture in un colpo solo.
 
 Dettaglio completo nel commit TD4Gaia `adfd9b4` (nota interface 20).
+
+## Scene, palette e timeline: stato dei contratti
+
+Non unificare questi flussi sotto un unico widget o topic:
+
+| Funzione | Contratto attuale | Limite da chiudere |
+|---|---|---|
+| Parametri/servizi DMX V8 | `dmx_matrix` pubblica `params`, opzioni enum, servizi e, quando presente, la struttura `rigs`; `status` pubblica valori e servizi correnti. La pagina **DMX V8** li espone come controlli dinamici. I parametri per rig mantengono il nome prefissato (es. `dmx_a_palette`). | UI e cue usano solo nomi/opzioni attualmente pubblicati; documentare separatamente eventuali metadati di matrice che TD non espone come parametri o servizi controllabili. Verificare l'aggiornamento su rig A/B e la conferma dopo l'invio. |
+| Menu palette nel DMX | Il template DMX aggiunge menu distinti **Palette · Rig A/B**, derivati da enum e stato live; click invia il valore tipizzato con `action:"set"` su `gaia/device/<id>/command`. | Una palette resta un parametro, non viene trattata come catalogo scene/look; l'applicazione live va verificata sul rig e non si deduce dal solo invio MQTT. |
+| Palette DMX stanza | `gaia/dmx/<stanza>/status` pubblica `palettes_rgb`; `set_palette` va su `gaia/dmx/<stanza>/command`. | È un controller Gaia di stanza, distinto dal DMX Master/DMX V8. |
+| Scene e chase show | I template Plancia inviano indici sui contratti OSC `/dmx/scene` e `/dmx/chase` al DMX Master. | Etichette e ordine mostrati da Plancia sono liste configurate nel layout, non un catalogo scene ricevuto da TD. Verificare ordine/nomi e feedback con il progetto DMX Master realmente in uso. |
+| Timeline | Il widget mantiene durata, BPM e cue nel layout condiviso; l’editor consente di aggiungere, modificare, rinominare, riordinare, spostare nel tempo ed eliminare cue. Le scalette si possono salvare, caricare, aggiornare ed eliminare con nome nello stato OPS condiviso, separatamente dai progetti nominati che salvano l’intero layout. Le cue supportano scene OSC con `> 5` e set DMX V8 con `> dmx_a_palette=Warm`, combinabili fra loro e con parametri di rig diversi tramite `;`. | Non è un engine di timeline TD né una sessione runtime sincronizzata fra browser: play/stop, posizione e clock sono locali. Non è stato concordato il contratto TD per stato autorevole, GO/Back, seek, timecode e acknowledgement. |
+
+**Verifica live in sola lettura su OPS (2026-10-17)**: sono stati rilevati `td-dmx-win`, `td-pddmx-win` e `td-dmx-ops`; la matrice espone enum distinti per rig A/B, inclusi `dmx_a_palette` e `dmx_b_palette`, profili fixture e servizi. Il menu rig A ha mostrato 19 voci. Non è stato inviato alcun comando live: resta da provare un recall di palette e leggerne la conferma nello status.
+
+**Passi rimanenti**: (1) provare in modo controllato cambio/ripristino palette e verificare il feedback; acquisire anche i dati del rig B se presente; (2) concordare e validare il catalogo e il recall delle scene/look con DMX Master, senza dedurli dal parametro palette; (3) definire il contratto runtime autorevole della timeline TD e la sincronizzazione client, se richiesta; (4) validare multi-rig, perdita rete, risposte ai comandi e hardware. Editor cue e libreria di scalette nominate Plancia sono salvati nello stato OPS; restano distinti da un engine timeline e da preset memorizzati nel motore TD.
+
+**Interfaccia Plancia**: il template DMX include i selettori rig A/B e la pagina DMX V8 con controlli di matrice; i device DMX sono selezionabili dall'ispettore. Timeline accetta set di parametri controllati dalla matrice, inclusi enum e parametri numerici nei range pubblicati. Errori di device offline, parametro assente, opzione obsoleta o valore fuori range vengono mostrati e non generano un comando DMX V8. L'editor CUE permette di aggiungere/modificare/eliminare e riordinare cue, e di spostarle sulla traccia; la configurazione è salvata nel layout condiviso OPS, mentre il playback rimane locale al browser. Compatibilità mantenuta per le cue legacy. Il template PTZ consente snapshot nominati dei controlli della pagina, salvati nel layout OPS e richiamati via OSC alle teste correntemente selezionate; non sono preset interni TD e non hanno acknowledgement. Resta necessaria la prova live prima di affermare che un comando sia stato applicato.
+
+### Richiesta dati di riscontro da portare a TD4DMX — 2026-10-18
+
+In vista del prossimo collegamento con il progetto TD4DMX, concordare
+quali dati live il device può pubblicare per alimentare il Render e
+mostrare in Plancia uno stato verificabile, senza inferire i colori dal
+nome delle palette:
+
+- **Output colore per fixture**: UID stabile della fixture, rig/famiglia,
+  RGB effettivo in uscita (dopo palette, effetti, master e blackout),
+  intensità/dimmer e timestamp dello stato. Se RGB non è disponibile,
+  indicare esplicitamente quali canali/attributi vengono pubblicati e
+  come mapparli al fixture profile.
+- **Scene/look**: catalogo effettivo con ID stabile e nome, scena attiva
+  per il rig e relativo feedback dopo recall; distinguere scena/look da
+  parametro palette.
+- **Preset PTZ nativi, se supportati**: elenco ID/nome, posizione salvata
+  (pan/tilt e altri attributi disponibili), comandi di store/recall ed
+  eventuale update/delete, più esito o stato confermato del comando.
+- **Trasporto e schema**: topic MQTT/OSC, payload/esempio, retained o
+  frequenza di aggiornamento, comportamento offline/stale e granularità
+  rig/fixture. Preferire stato aggregato retained per UI e aggiornamenti
+  live con timestamp; identificare chiaramente l'origine device.
+
+Questa è una richiesta da discutere, non un contratto già esistente:
+non pubblicare comandi o campi ipotetici dalla Plancia finché TD4DMX non
+conferma schema, semantica e feedback.
 
 ## Plancia Video Service — gateway NDI→WebRTC (PoC, 2026-10-16)
 
