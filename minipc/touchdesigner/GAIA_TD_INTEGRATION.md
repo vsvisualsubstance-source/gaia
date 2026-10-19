@@ -73,6 +73,40 @@ canale 2 (mocap).
 Core (Core non viaggia). Quindi l'host che DMX Master vede come sender
 del canale 5 è sempre OPS (`192.168.1.240`), non Core.
 
+### Feedback DMX Master → Plancia — lavoro da fare (2026-10-19)
+
+Il feedback OSC attuale verso `OPS:9000` copre la selezione teste,
+i parametri della prima testa selezionata e `/dmx/group/mh` (nota TD/Win-PD
+25). Non è un feedback dello stato di tutte le fixture: Plancia non può
+quindi ricostruire colori e intensità individuali del palco quando questi
+cambiano in TD o da un altro controllo.
+
+Da completare lato DMX Master:
+
+- Pubblicare lo stato di **ogni fixture DMX** con un identificativo stabile
+  (`uid`, coerente con `dmx_fixtures`), includendo almeno colore e
+  intensità/dimmer e, per le teste mobili, pan/tilt e gli altri parametri
+  supportati dal rig. Non limitarsi alla prima testa selezionata.
+- Definire e documentare il contratto OSC per fixture (indirizzi,
+  argomenti, normalizzazione/unità e associazione UID↔fixture) prima di
+  abilitarlo; verificare che Plancia possa aggiornare i controlli e il
+  Render del Palco senza ambiguità.
+- Restituire anche lo stato generale che serve a mantenere coerenti
+  **Palco** e **Show**: scena attiva, master, fade, blackout/strobo/chase,
+  livelli dei gruppi e colore/modalità/intensità LED. Il messaggio
+  `/dmx/group/blinder` è stato osservato arrivare, ma non costituisce da
+  solo il contratto completo di feedback dei gruppi.
+- Specificare se i valori restituiti rappresentano i parametri logici del
+  programmer o l'uscita effettiva dopo master, livelli di gruppo, blackout
+  e altri effetti; Plancia e TD devono usare la stessa semantica.
+- Conservare la soppressione dell'eco dei comandi appena ricevuti da
+  Plancia, garantendo però che modifiche originate in TD o da altri
+  controlli vengano pubblicate.
+- Provare il flusso completo sui cambi scena e sui controlli singoli:
+  valori in TD → feedback UDP verso `OPS:9000` → widget/Rendere del Palco
+  aggiornati; verificare inoltre ripubblicazione periodica e assenza di
+  loop OSC.
+
 **In parallelo, canale 1b (design dello show, non OSC)**: proposta
 (non ancora costruita) per creare/patchare le fixture DIRETTAMENTE da
 Plancia invece che a mano in TD — via lo stesso meccanismo "Device TD"
