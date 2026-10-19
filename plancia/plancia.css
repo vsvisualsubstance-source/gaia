@@ -11,7 +11,8 @@
 [hidden]{display:none!important}
 html,body{height:100%}
 body{background:var(--bg);color:var(--fg);font-family:var(--body);display:flex;flex-direction:column;overflow:hidden;
-  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  margin:0;box-sizing:border-box;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-bottom:env(safe-area-inset-bottom,0px);
   touch-action:none;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
 button,input,select,textarea{font:inherit;color:inherit}
 button{cursor:pointer}
@@ -47,6 +48,10 @@ button{cursor:pointer}
 /* ---------- palco della griglia ---------- */
 .main{flex:1;display:flex;gap:12px;min-height:0}
 .stage{flex:1;position:relative;min-width:0;border-radius:8px}
+.stage.portrait{display:flex;flex-direction:column;gap:8px;overflow-y:auto;overflow-x:hidden;touch-action:pan-y;padding-bottom:8px}
+.stage.portrait .w{position:relative;flex:none;touch-action:pan-y}
+.stage.portrait .t-fader,.stage.portrait .t-knob,.stage.portrait .t-button,
+.stage.portrait .t-xy,.stage.portrait .t-color,.stage.portrait .t-stage,.stage.portrait .t-timeline{touch-action:none}
 .editing .stage{background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);
   background-size:calc(100% / 16) calc(100% / 10);outline:1px solid var(--line)}
 .w{position:absolute;padding:4px;--c:var(--accent)}
@@ -314,8 +319,34 @@ button{cursor:pointer}
   .mon .rate{display:none}
   .brand .txt{display:none}
   .tl-bpm,.tl-cue{display:none}
-  .bar{flex-wrap:wrap}
-  .tabs{order:9;flex-basis:100%}
-  .pill{max-width:46%}
+  .bar{display:grid;grid-template-columns:minmax(0,1fr) auto auto;grid-template-areas:"brand edit menu" "gconn conn save" "tabs tabs tabs";gap:6px;padding-block:8px}
+  .brand{grid-area:brand}
+  #gconn{grid-area:gconn}
+  #conn{grid-area:conn}
+  #saveStatus{grid-area:save}
+  #editBtn{grid-area:edit}
+  #menuBtn{grid-area:menu}
+  .tabs{grid-area:tabs;min-width:0;flex:none;gap:3px}
+  .tab{min-height:40px;padding-inline:10px}
+  .pill{max-width:none;min-height:34px;box-sizing:border-box;justify-content:flex-start;padding-inline:8px;font-size:11px;gap:5px}
+  .bar>.btn{min-height:36px;box-sizing:border-box;padding-inline:10px}
+  .mon{gap:8px;padding-block:6px}
+  .mcell{flex:1 1 0}
+  .ga-dim{grid-template-columns:minmax(64px,76px) minmax(0,1fr) 36px 36px;gap:6px}
+  .ga-dim button{min-width:36px;min-height:36px}
+  .ga-in input,.ga-in button{min-height:42px;box-sizing:border-box}
+  .ga-in button{padding-inline:12px}
+}
+@media (max-width:600px){
+  .ga{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(325px,44%) minmax(0,1fr);gap:10px;padding:10px}
+  .ga-l{gap:8px}
+  .ga-r{gap:8px}
+  .ga-dim{grid-template-columns:minmax(64px,76px) minmax(0,1fr) 36px 36px}
+}
+@media (max-width:420px){
+  .bar{grid-template-columns:minmax(0,1fr) auto auto;gap:5px}
+  .pill{font-size:10px;padding-inline:6px;gap:4px}
+  .pill i{width:7px;height:7px}
+  .tab{padding-inline:8px}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}

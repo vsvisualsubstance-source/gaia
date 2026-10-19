@@ -2,9 +2,15 @@
 const ICON={play:'<svg viewBox="0 0 12 12"><path d="M2.5 1.5v9l8-4.5z"/></svg>',pause:'<svg viewBox="0 0 12 12"><path d="M2 1.5h3v9H2zM7 1.5h3v9H7z"/></svg>',
   stop:'<svg viewBox="0 0 12 12"><path d="M2 2h8v8H2z"/></svg>',start:'<svg viewBox="0 0 12 12"><path d="M1.5 1.5h2v9h-2zM11 1.5v9L4 6z"/></svg>',
   loop:'<svg viewBox="0 0 12 12"><path d="M3 4h5.5L7 2.5 8 1.5 11.2 4.7 8 8 7 7l1.5-1.5H3a.5.5 0 0 0-.5.5v1H1V6a2 2 0 0 1 2-2zM9.5 6.5H11V7a2 2 0 0 1-2 2H4.5L6 10.5 5 11.5 1.8 8.3 5 5l1 1-1.5 1.5H9a.5.5 0 0 0 .5-.5z"/></svg>'};
+let portraitUnit=48;
 function place(el,w){
-  el.style.left=w.x/COLS*100+'%'; el.style.top=w.y/ROWS*100+'%';
-  el.style.width=w.w/COLS*100+'%'; el.style.height=w.h/ROWS*100+'%';
+  if(stage.classList.contains('portrait')){
+    el.style.left='0';el.style.top='';el.style.width='100%';
+    el.style.height=`${Math.max(120,Math.round(w.h*portraitUnit))}px`;
+  }else{
+    el.style.left=w.x/COLS*100+'%'; el.style.top=w.y/ROWS*100+'%';
+    el.style.width=w.w/COLS*100+'%'; el.style.height=w.h/ROWS*100+'%';
+  }
   el.classList.toggle('hz',w.w>w.h);
 }
 function inner(w){
@@ -80,7 +86,18 @@ function paint(el,w){
     : w.type==='button' ? (v>.5?'ON':'OFF') : w.type==='color' ? hex(colorRGB(w)).toUpperCase() : fmt(out(w,v));
 }
 const elOf=id=>stage.querySelector(`[data-id="${id}"]`);
-function renderStage(){stage.replaceChildren(...page().widgets.map(build))}
+function renderStage(){
+  const portrait=!editing&&window.matchMedia('(max-width:760px) and (orientation:portrait)').matches;
+  stage.classList.toggle('portrait',portrait);
+  if(portrait)portraitUnit=clamp(stage.clientHeight/ROWS,44,56);
+  const widgets=page().widgets;
+  const ordered=portrait?[...widgets].sort((a,b)=>a.y-b.y||a.x-b.x):widgets;
+  stage.replaceChildren(...ordered.map(build));
+}
+window.addEventListener('resize',()=>{
+  const portrait=!editing&&window.matchMedia('(max-width:760px) and (orientation:portrait)').matches;
+  if(portrait!==stage.classList.contains('portrait'))renderStage();
+});
 function refresh(w){const o=elOf(w.id); if(o) o.replaceWith(build(w))}
 function renderTabs(){
   const t=$('#tabs'); t.innerHTML='';

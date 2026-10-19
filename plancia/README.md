@@ -64,6 +64,7 @@ Il MIDI usa il pacchetto opzionale `easymidi`. Su Windows serve una porta virtua
 ## Interfaccia
 
 - **Modifica griglia**: aggiungi fader, manopole, pulsanti, pad XY, indicatori e testi; trascina i widget per disporli sulla griglia 16×10 e usa l'angolo per ridimensionarli. Questa modalità riguarda solo l'impaginazione dei widget, non le luci nella Pianta.
+- **Vista portrait**: fuori dalla modalità Modifica, i widget vengono impilati in ordine di lettura e la pagina scorre verticalmente. È solo un riadattamento visivo: coordinate e dimensioni della griglia salvata restano invariate; ruotando in landscape torna il layout completo.
 - **Pianta del palco**: senza attivare "Modifica griglia", trascina una fixture per spostarla, toccala per aprirne le proprietà e tocca uno spazio vuoto per aggiungerne una. Modifiche ai widget, coordinate e proprietà delle fixture vengono salvate automaticamente nel layout corrente condiviso su OPS; non serve un pulsante Salva. La spia in alto conferma quando il server ha ricevuto il layout.
 - L'autosalvataggio Plancia non equivale all'invio della patch a TouchDesigner: `⇪ TD` invia le fixture DMX patchabili, mentre LED wall, casse e laser restano gestiti dal layout Plancia. Le modifiche a una fixture DMX già sincronizzata possono richiedere "Aggiorna su DMX Master" nel suo editor.
 - Ogni controllo ha indirizzo OSC, range min/max, colore, e per fader/manopole/pulsanti un CC MIDI facoltativo. In modalità **Modifica**, l’ispettore permette di assegnargli un canale OSC.
