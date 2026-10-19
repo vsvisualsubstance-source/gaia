@@ -37,6 +37,21 @@ npm start
 
 Il bridge stampa l'indirizzo da aprire sul tablet (es. `http://192.168.1.20:8080`). Tablet e computer devono essere sulla stessa rete.
 
+### Struttura UI
+
+- `index.html`: struttura della pagina.
+- `plancia.css`: stili dell'interfaccia.
+- `src/*.js`: logica client-side divisa per responsabilità (stato/layout,
+  show, widget, bridge, palco, Gaia e impostazioni).
+- `build-app.js`: assembla i moduli nell'unico bundle `app.js` servito al
+  browser; i moduli condividono lo scope per mantenere invariati stato e
+  comportamento.
+- `bridge.js`: server HTTP/WebSocket, relay OSC e persistenza condivisa.
+
+Il bridge serve `app.js` e `plancia.css` come asset locali, senza dipendenze da CDN per la UI.
+`npm start` e `run_plancia.bat` rigenerano il bundle prima di avviare il
+bridge; per la sola verifica della build usare `npm test`.
+
 | Variabile | Default | A cosa serve |
 |---|---|---|
 | `PORT` | `8080` | porta della pagina e del WebSocket |

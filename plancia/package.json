@@ -4,7 +4,9 @@
   "description": "Superficie di controllo OSC/MIDI web per tablet, con bridge Node",
   "main": "bridge.js",
   "scripts": {
-    "start": "node bridge.js"
+    "build": "node build-app.js",
+    "start": "node build-app.js && node bridge.js",
+    "test": "node --test test\\build-app.test.js"
   },
   "dependencies": {
     "ws": "^8.18.0"

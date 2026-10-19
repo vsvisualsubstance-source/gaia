@@ -12,4 +12,6 @@ set OSC_HOST=192.168.1.73
 set OSC_PORT=7020
 set GAIA_OSC_HOST=127.0.0.1
 set GAIA_OSC_PORT=9008
+node build-app.js
+if errorlevel 1 exit /b 1
 node bridge.js > plancia.log 2>&1

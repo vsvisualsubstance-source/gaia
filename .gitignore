@@ -3,6 +3,7 @@
 
 # Node (plancia/bridge.js)
 node_modules/
+plancia/app.js
 
 # Python
 venv/

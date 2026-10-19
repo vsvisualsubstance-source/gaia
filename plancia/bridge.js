@@ -18,6 +18,10 @@ const { WebSocketServer } = require('ws');
 const PORT = +process.env.PORT || 8080;
 const OSC_IN = +process.env.OSC_IN || 9000;
 const STATE_FILE = process.env.PLANCIA_STATE_FILE || path.join(__dirname, 'data', 'state.json');
+const STATIC_ASSETS = {
+  '/app.js': { file: 'app.js', contentType: 'text/javascript; charset=utf-8' },
+  '/plancia.css': { file: 'plancia.css', contentType: 'text/css; charset=utf-8' }
+};
 let target = { host: process.env.OSC_HOST || '192.168.1.73', port: +process.env.OSC_PORT || 7020 };
 // Gaia: osc_bridge.py sul Core ascolta /gaia/td/... sulla 9008 e lo ripubblica su MQTT gaia/touchdesigner/...
 let gaiaOsc = { host: process.env.GAIA_OSC_HOST || '192.168.1.142', port: +process.env.GAIA_OSC_PORT || 9008 };
@@ -169,6 +173,16 @@ const server = http.createServer((req, res) => {
       console.error('Plancia page load failed:', error.message);
       res.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' });
       res.end('Plancia page could not be loaded.');
+    });
+  } else if (STATIC_ASSETS[req.url.split('?')[0]]) {
+    const asset = STATIC_ASSETS[req.url.split('?')[0]];
+    fs.promises.readFile(path.join(__dirname, asset.file)).then(content => {
+      res.writeHead(200, { 'content-type': asset.contentType, 'cache-control': 'no-store' });
+      res.end(content);
+    }).catch(error => {
+      console.error(`Plancia asset load failed (${asset.file}):`, error.message);
+      res.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end('Plancia asset could not be loaded.');
     });
   } else if (req.url.split('?')[0] === '/vendor/mqtt.min.js') {
     // stesso mqtt.js che usano le pagine web di Gaia: niente CDN, funziona anche senza internet
