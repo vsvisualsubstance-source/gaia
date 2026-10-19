@@ -112,7 +112,7 @@ function gConnect(host){
   let c;try{c=mqtt.connect(`ws://${host}:${net().wsPort}`,{connectTimeout:4000,reconnectPeriod:3000})}catch{G.offSince=G.offSince??Date.now();return}
   G.client=c;
   c.on('connect',()=>{G.ok=true;G.offSince=null;if(G.sim)gSimOff();gStatus();
-    ['gaia/device/+/status','gaia/devices/+/patchdeck_matrix','gaia/devices/+/dmx_matrix','gaia/device/+/audio_levels','gaia/dmx/+/status',
+    ['gaia/device/+/status','gaia/devices/+/patchdeck_matrix','gaia/devices/+/dmx_matrix','gaia/devices/+/dmx_output','gaia/device/+/audio_levels','gaia/dmx/+/status',
      'gaia/td/canvas','gaia/brain/state','gaia/brain/dream','gaia/voice/tts/+','gaia/voice/command/+',
      SHOW_CLOCK_STATE,'gaia/show/clock/pong/+'].forEach(t=>c.subscribe(t))});
   const off=()=>{if(G.client!==c)return;G.ok=false;G.offSince=G.offSince??Date.now();gStatus()};
@@ -144,7 +144,23 @@ function gStatus(){
 }
 function gIn(t,p){
   const seg=t.split('/'),obj=p&&typeof p==='object';
-  if(t===SHOW_CLOCK_STATE){
+  if(seg[1]==='devices'&&seg[3]==='dmx_output'){
+    if(obj){
+      const previousScene=dmxNumber(DMX_OUTPUT.scene?.index??DMX_OUTPUT.scene);
+      if(dmxOutputApplySnapshot(p,seg[2])){
+        const updates=[['/dmx/master',DMX_OUTPUT.master],['/dmx/blackout',DMX_OUTPUT.blackout?1:0],['/dmx/strobe',DMX_OUTPUT.strobe?1:0]];
+        for(const [address,value]of updates)if(value!=null){
+          bus(address,[value],'remote');
+          applyWidgets({address,args:[value]},null);
+        }
+        const scene=dmxNumber(DMX_OUTPUT.scene?.index??DMX_OUTPUT.scene);
+        if(scene!=null&&scene>=0&&scene!==previousScene){
+          bus('/dmx/scene',[scene],'remote');
+          applyWidgets({address:'/dmx/scene',args:[scene]},null);
+        }
+      }
+    }
+  }else if(t===SHOW_CLOCK_STATE){
     if(obj&&p.v===1&&p.master==='td-dmx-win'&&Number.isFinite(+p.pos)&&typeof p.playing==='boolean'){
       const oldLength=showClock.state?.length;
       showClock.state={...p,pos:+p.pos,playing:p.playing};showClock.receivedAt=now();showClock.authority=true;showClock.hasMqtt=true;

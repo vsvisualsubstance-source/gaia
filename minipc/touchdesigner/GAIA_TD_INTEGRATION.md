@@ -73,39 +73,35 @@ canale 2 (mocap).
 Core (Core non viaggia). Quindi l'host che DMX Master vede come sender
 del canale 5 è sempre OPS (`192.168.1.240`), non Core.
 
-### Feedback DMX Master → Plancia — lavoro da fare (2026-10-19)
+### Feedback DMX Master → Plancia — output fixture (TD implementato)
 
-Il feedback OSC attuale verso `OPS:9000` copre la selezione teste,
-i parametri della prima testa selezionata e `/dmx/group/mh` (nota TD/Win-PD
-25). Non è un feedback dello stato di tutte le fixture: Plancia non può
-quindi ricostruire colori e intensità individuali del palco quando questi
-cambiano in TD o da un altro controllo.
+Il feedback di uscita per fixture è implementato in TD4DMX nel commit
+`b0ee279` (2026-10-19). Il payload rappresenta l'uscita DMX effettiva, dopo
+master, blackout, gruppi ed effetti, non una stima del programmer.
 
-Da completare lato DMX Master:
+- MQTT retained, QoS 0: `gaia/devices/<device_id>/dmx_output`.
+- Payload versione 1: stato globale (`device_id`, `seq`, `ts`, `rate_hz`,
+  `master`, `blackout`, `strobe`, `scene`) e array `fixtures`.
+- Ogni fixture è identificata da `uid` stabile e porta ID, metadati patch,
+  `sent`, `intensity` 0–1 e `rgb_out` 0–1 effettivo; le teste mobili
+  includono anche pan/tilt in gradi, gobo, color wheel e shutter. I canali
+  non disponibili usano `-1` nel fallback OSC.
+- Il publisher invia su variazione e con heartbeat almeno ogni 2 secondi.
+  `ts` è il tempo TD: il ricevente misura la freshness dal proprio tempo
+  locale di ricezione.
+- Fallback OSC verso `OPS:9000`: `/dmx/output/source mqtt|osc`,
+  `/dmx/fixture/<uid>` (`sent intensity r g b`) e
+  `/dmx/fixture/<uid>/head` (`pan tilt gobo color_wheel shutter`).
+  Il feedback fixture OSC è limitato a 10 Hz e ripubblicato ogni 5 secondi.
+- In modalità `auto`, TD usa OSC se l'output MQTT non è disponibile o dopo
+  aver ricevuto `/dmx/output/osc 1`; la richiesta di Plancia vale 15 secondi
+  e va rinnovata per mantenere attivo il fallback.
 
-- Pubblicare lo stato di **ogni fixture DMX** con un identificativo stabile
-  (`uid`, coerente con `dmx_fixtures`), includendo almeno colore e
-  intensità/dimmer e, per le teste mobili, pan/tilt e gli altri parametri
-  supportati dal rig. Non limitarsi alla prima testa selezionata.
-- Definire e documentare il contratto OSC per fixture (indirizzi,
-  argomenti, normalizzazione/unità e associazione UID↔fixture) prima di
-  abilitarlo; verificare che Plancia possa aggiornare i controlli e il
-  Render del Palco senza ambiguità.
-- Restituire anche lo stato generale che serve a mantenere coerenti
-  **Palco** e **Show**: scena attiva, master, fade, blackout/strobo/chase,
-  livelli dei gruppi e colore/modalità/intensità LED. Il messaggio
-  `/dmx/group/blinder` è stato osservato arrivare, ma non costituisce da
-  solo il contratto completo di feedback dei gruppi.
-- Specificare se i valori restituiti rappresentano i parametri logici del
-  programmer o l'uscita effettiva dopo master, livelli di gruppo, blackout
-  e altri effetti; Plancia e TD devono usare la stessa semantica.
-- Conservare la soppressione dell'eco dei comandi appena ricevuti da
-  Plancia, garantendo però che modifiche originate in TD o da altri
-  controlli vengano pubblicate.
-- Provare il flusso completo sui cambi scena e sui controlli singoli:
-  valori in TD → feedback UDP verso `OPS:9000` → widget/Rendere del Palco
-  aggiornati; verificare inoltre ripubblicazione periodica e assenza di
-  loop OSC.
+Plancia sottoscrive il topic MQTT e riceve il fallback sul bridge OSC.
+L'attivazione effettiva del publisher nel progetto TD live e la verifica
+end-to-end sul rig restano da confermare. Il payload globale non include
+fade e livelli/gruppi completi; il feedback OSC `/dmx/group/...` esistente
+resta un canale distinto.
 
 **In parallelo, canale 1b (design dello show, non OSC)**: proposta
 (non ancora costruita) per creare/patchare le fixture DIRETTAMENTE da

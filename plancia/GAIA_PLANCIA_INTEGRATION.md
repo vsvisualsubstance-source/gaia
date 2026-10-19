@@ -112,6 +112,24 @@ riconosciute resta il comportamento storico (matching per indirizzo OSC).
 Il riconoscimento usa l’IP sorgente, quindi un host configurato con un
 nome DNS non permette l’associazione del feedback a un canale specifico.
 
+### Feedback dell’uscita DMX per fixture
+
+Plancia riceve lo snapshot retained TD su
+`gaia/devices/+/dmx_output` (contratto TD4DMX `b0ee279`) e i messaggi OSC
+`/dmx/output/source`, `/dmx/fixture/<uid>` e
+`/dmx/fixture/<uid>/head` sulla porta 9000. I valori fixture sono quelli
+effettivamente inviati dopo master, blackout, livelli di gruppo ed effetti;
+`rgb_out` è normalizzato 0–1. Pan e tilt sono mostrati come gradi ricevuti,
+senza convertirli nei valori angolari interni del Render.
+
+Lo stato vive solo in memoria: non modifica né salva `L.fixtures` o la
+griglia. Il Render usa colore/intensità freschi per le fixture associate
+via UID/ID; le teste mostrano anche intensità, pan e tilt. Il riepilogo
+HUD indica sorgente e fixture inviate. I dati MQTT diventano stale dopo
+6 secondi senza heartbeat, quelli OSC dopo 12 secondi. Se MQTT è offline,
+Plancia invia `/dmx/output/osc 1` al massimo ogni 10 secondi per rinnovare
+la richiesta TD (validità 15 secondi).
+
 ## Porte — contratto esplicito, mai indovinato
 
 Stessa filosofia di `mocap_port` (vedi `GAIA_TD_INTEGRATION.md`, "Porta

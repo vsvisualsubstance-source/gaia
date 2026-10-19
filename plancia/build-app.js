@@ -11,6 +11,7 @@ const appModules = [
   '30-show-engine.js',
   '40-widget-rendering.js',
   '41-widget-interactions.js',
+  '49-dmx-output.js',
   '50-bridge-sync.js',
   '60-stage-rendering.js',
   '61-stage-fixtures.js',
