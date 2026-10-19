@@ -204,7 +204,7 @@ class _MocapTargetRegistry:
         now = time.time()
         return {'targets': {
             td_id: {'ip': t['ip'], 'name': t['name'], 'stanza': t['stanza'],
-                    'enabled': t['enabled'],
+                    'family': t.get('family'), 'enabled': t['enabled'],
                     'offline': (now - t['last_seen']) > self.OFFLINE_AFTER_S}
             for td_id, t in self._targets.items()
         }}

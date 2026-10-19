@@ -36,7 +36,7 @@ Sono presenti tre superfici diverse, con contratti distinti:
 |---|---|---|
 | **DMX V8 / Device TD** | `gaia/devices/<id>/dmx_matrix` per servizi, parametri, enum e rig; `gaia/device/<id>/status` per stato/valori; `gaia/device/<id>/command` con `enable`/`disable` o `{action:"set", param, value}` | La pagina **DMX V8** presenta i servizi e i parametri pubblicati per il device scelto; la pagina **DMX** aggiunge menu palette dinamici distinti per rig A/B, con opzioni e stato derivati dalla matrice/status. Tutti i parametri restano selezionabili nelle cue timeline. |
 | **DMX stanza Gaia** | `gaia/dmx/<stanza>/status` (`palettes_rgb`, `timeline_presets`, fixture e stato); `gaia/dmx/<stanza>/command` (`set_palette`, `timeline_load/start/stop`, blackout, luminosità, audio-reactive) | Controlli operativi per palette RGB e preset di timeline della stanza. Non rappresentano le palette o le scene del DMX V8. |
-| **Show / Timeline OSC** | `/dmx/scene`, `/dmx/chase`, `/show...` e altri indirizzi della [mappa OSC](#mappa-indirizzi-dello-show) | I nomi delle scene/chase mostrati dai template sono esempi statici. Il widget timeline salva le cue nel layout OPS ed è configurabile dall'ispettore, ma clock, avanzamento e cue corrente sono runtime locali del browser: non sono una timeline condivisa o un engine scene ricevuto da DMX V8. |
+| **Show / Timeline OSC** | `/dmx/scene`, `/dmx/chase`, `/show...` e altri indirizzi della [mappa OSC](#mappa-indirizzi-dello-show) | I nomi delle scene/chase mostrati dai template sono esempi statici. Le cue e le scalette nominate sono salvate nello stato condiviso OPS; clock, avanzamento e cue corrente restano runtime locali del browser: non sono una timeline condivisa o un engine scene ricevuto da DMX V8. |
 
 Quando la matrice DMX V8 aggiorna le opzioni di un enum, i widget dinamici aggiornano il menu e mantengono il tipo originale del valore (per esempio stringa invece di convertirla implicitamente in numero). La pagina **DMX** conserva le scene OSC del DMX Master separate dai menu **Palette · Rig A/B**; la pagina **DMX V8** raccoglie i servizi e i parametri dinamici del device selezionato. Una cue può richiamare una scena OSC, impostare uno o più parametri DMX V8 (anche enum di rig diversi) o fare entrambe le cose. Il nome/valore del parametro deve essere esattamente quello pubblicato dalla matrice e l'enum deve corrispondere a un'opzione corrente; non viene inventato un catalogo scene/look che DMX V8 non abbia pubblicato.
 
@@ -54,16 +54,23 @@ un indice di scena OSC, uno o più parametri DMX V8, o entrambi. Le cue
 restano compatibili con il formato precedente `M:SS Nome > richiamo`.
 
 L’editor salva le cue nel layout corrente condiviso su OPS, come le altre
-modifiche della Plancia. Per aggiornare anche lo snapshot di un progetto
-nominato, usare **⋯ → Progetti → Aggiorna**. La durata e le cue sono
-persistenti; play/stop, posizione corrente e clock restano locali al
-browser e non sono un engine timeline sincronizzato in TD.
+modifiche della Plancia. Dal medesimo editor si possono salvare, caricare,
+aggiornare ed eliminare scalette nominate, indipendenti dal layout e
+riutilizzabili su un widget Timeline. Una scaletta contiene cue, durata,
+BPM e device DMX selezionato. Il comando **Salva timeline** aggiorna il
+layout corrente; per aggiornare anche lo snapshot dell’intero progetto
+nominato, usare **⋯ → Progetti → Aggiorna**.
+
+Non è stato concordato un contratto runtime del clock con TD. Play/stop,
+posizione corrente, cue corrente e timecode sono locali al browser; i
+messaggi OSC emessi dalla Plancia non costituiscono acknowledgement né
+conferma di uno stato autorevole sincronizzato fra client.
 
 #### Scaletta per completare il flusso DMX
 
 1. **Verifica comando DMX V8** — baseline `dmx_matrix`/`status` già osservata su OPS per il rig A (palette, profili, servizi e valori); concordare una prova live controllata per cambiare e ripristinare una palette, verificando il feedback. Acquisire anche il rig B se presente.
 2. **Scene e look DMX V8** — individuare nel device un elenco e un comando di richiamo realmente pubblicati. Se non esistono, concordare prima il contratto TD (nomi/ID, recall, feedback, eventuale fade); non riutilizzare automaticamente `/dmx/scene`, che è un altro flusso OSC.
-3. **Timeline show** — l'editor cue Plancia è disponibile e salva configurazione e cue nel layout OPS; play/stop, posizione corrente e clock restano locali al browser. Se serve una timeline condivisa, definire con TD il contratto autorevole per stato, GO/Back, seek e acknowledgement e la sincronizzazione fra client.
+3. **Timeline show** — l'editor salva cue nel layout OPS e scalette nominate separate; i progetti nominati continuano a salvare l'intero layout. Play/stop, posizione corrente e clock restano locali al browser. Definire con TD il contratto runtime autorevole per stato, GO/Back, seek, timecode e acknowledgement, oltre alla sincronizzazione fra client.
 4. **Feedback e affidabilità** — distinguere comando inviato da comando applicato, mostrare stato online/stale, errori e feedback per rig; provare disconnessione e riconnessione senza assumere che l'invio OSC equivalga a conferma.
 5. **Verifica palco e deploy** — provare fixture, teste mobili, blackout, palette e scene su hardware/live TD, poi aggiornare documentazione e pubblicare su OPS con backup e verifica della UI.
 

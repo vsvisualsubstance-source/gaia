@@ -83,6 +83,37 @@ _cfg        = {}
 _cfg_lock   = threading.RLock()
 _procs: dict = {}
 _procs_lock = threading.Lock()
+# Lock PER-CHIAVE (non uno globale) attorno a "controlla se gira -> ferma i
+# conflitti -> avvia" di _start_service, cosi' due comandi 'enable' concorrenti
+# per la STESSA chiave (es. TD Gaia che manda 'enable' piu' volte ravvicinate)
+# non passano ENTRAMBI il controllo _is_running(key) prima che il primo abbia
+# fatto in tempo a registrare il proprio Popen -- bug reale trovato dal vivo
+# 2026-09-19 (evento 25/9): istanze duplicate di Herbarium/Yolo TD.
+#
+# Un lock GLOBALE unico (primo tentativo, poi trovato reale il problema
+# descritto sotto) serializzava anche chiavi DIVERSE senza motivo (avviare
+# touchdesigner_yolo bloccava touchdesigner_herbarium finche' non finiva, con
+# _stop_conflicts che aspetta fino a 5s per processo fermato +
+# CAMERA_RELEASE_DELAY) e soprattutto ha prodotto un DEADLOCK REALE dal vivo
+# con un burst di comandi concorrenti (disable camera/yolo/mediapipe + enable
+# di entrambi i progetti TD quasi simultanei) -- l'agent si e' bloccato per
+# oltre 25 minuti, nessun heartbeat, causa esatta non isolata con certezza.
+# Per-chiave riduce la contesa (chiavi diverse non si bloccano a vicenda) e
+# l'acquire ha comunque un timeout (vedi sotto) come rete di sicurezza finale:
+# l'agent non deve MAI piu' restare bloccato per sempre, qualunque sia la
+# causa esatta di un blocco imprevisto.
+_start_service_locks: dict = {}
+_start_service_locks_guard = threading.Lock()
+_START_LOCK_TIMEOUT = 15.0
+
+
+def _get_start_lock(key: str) -> threading.RLock:
+    with _start_service_locks_guard:
+        lock = _start_service_locks.get(key)
+        if lock is None:
+            lock = threading.RLock()
+            _start_service_locks[key] = lock
+        return lock
 # Processi orfani (istanze reali OS, non lanciate dal Popen di QUESTA
 # istanza dell'agent) rilevati e adottati -- vedi _find_os_pid/_is_running.
 _adopted_pids: dict = {}
@@ -268,20 +299,55 @@ def _svc_status(key: str) -> str:
     return "active" if _is_running(key) else "inactive"
 
 
+# Webcam esclusiva (stesso principio di CAMERA_CONSUMERS/_sync_camera sopra):
+# fermare un consumer non libera subito l'hardware, il driver/OS impiega un
+# istante in piu' a rilasciarlo DOPO che il processo e' gia' morto per
+# davvero (p.wait() gia' confermato). Trovato dal vivo 2026-09-19 (evento
+# 25/9): avviare touchdesigner_yolo/herbarium subito dopo aver fermato
+# yolo/mediapipe nativi dava un conflitto webcam in TD "come se il servizio
+# gaia non si spegnesse in tempo" -- perche' letteralmente non faceva in
+# tempo, il process kill e il rilascio hardware non sono lo stesso istante.
+# Vale in ENTRAMBE le direzioni: anche tornare da un .toe che ha la webcam
+# aperta a yolo/mediapipe nativi ha lo stesso identico problema, quindi
+# l'insieme copre sia i consumer nativi sia i due progetti TD.
+CAMERA_RELEASE_DELAY = 2.0
+# touchdesigner_herbarium ESCLUSO apposta (2026-09-19, richiesto
+# esplicitamente): confermato dal vivo che non tocca la webcam, resta
+# sempre acceso durante l'evento 25/9 -- solo touchdesigner_yolo la apre
+# davvero.
+CAMERA_HOLDING_SERVICES = set(CAMERA_CONSUMERS) | {"camera", "touchdesigner_yolo"}
+
+
 def _stop_conflicts(key: str):
     """Progetti TD che vanno uno alla volta sulla stessa istanza
     TouchDesigner (es. touchdesigner/touchdesigner_herbarium su OPS):
     dichiarati in "conflicts" nel manifest, fermati prima di avviarne uno
     nuovo -- stesso meccanismo gia' in minipc/tdstudio/agent.py, portato
     qui perche' prima esisteva un solo slot TD per macchina (nessun
-    concetto di conflitto)."""
+    concetto di conflitto). Include anche i consumer camera nativi
+    (yolo/mediapipe/camera, 2026-09-19) -- un progetto TD che apre la
+    webcam direttamente e' in conflitto con loro tanto quanto con un altro
+    progetto TD, stesso hardware esclusivo."""
     defn = _SERVICE_DEFS.get(key, {})
+    stopped_camera_consumer = False
     for other in defn.get("conflicts", []):
         if other in _SERVICE_DEFS and _is_running(other):
             print(f"[Agent] {key} e' in conflitto con {other}, lo fermo prima")
             _stop_service(other)
             with _cfg_lock:
                 _cfg.setdefault("services", {}).setdefault(other, {})["enabled"] = False
+            if other in CAMERA_HOLDING_SERVICES:
+                stopped_camera_consumer = True
+    # Solo se abbiamo davvero fermato un consumer nativo (yolo/mediapipe/
+    # kiosk) e non per "camera" stessa -- altrimenti si rientra in
+    # _start_service("camera") mentre potremmo essere gia' dentro una sua
+    # chiamata in corso (vedi guardia di rientranza in _sync_camera).
+    if stopped_camera_consumer and key != "camera":
+        with _cfg_lock:
+            services_cfg = dict(_cfg.get("services", {}))
+        _sync_camera(services_cfg)
+        print(f"[Agent] Attendo {CAMERA_RELEASE_DELAY}s per il rilascio hardware della webcam...")
+        time.sleep(CAMERA_RELEASE_DELAY)
 
 
 def _start_service(key: str) -> bool:
@@ -298,41 +364,52 @@ def _start_service(key: str) -> bool:
         ok = _is_running(key)
         print(f"[Agent] {key} e' gestito esternamente, non avviabile da qui (attivo={ok})")
         return ok
-    if _is_running(key):
-        return True
-    _stop_conflicts(key)
-    env = _build_env(defn.get("env_extra", {}))
-    cwd = defn.get("cwd")
-    # {STANZA} negli argomenti → stanza corrente (es. URL del kiosk che segue
-    # il device quando viene riassegnato, come CAMERA_NAME sul Pi)
-    cmd = [c.replace("{STANZA}", _cfg.get("stanza", "")) for c in defn["cmd"]]
-    # check_script: false per i servizi il cui ultimo argomento non è un file
-    # (es. kiosk: l'ultimo arg è un URL)
-    if defn.get("check_script", True):
-        script = os.path.join(cwd, cmd[-1]) if cwd else cmd[-1]
-        if not os.path.exists(script):
-            print(f"[Agent] File non trovato: {script}")
-            return False
-    print(f"[Agent] Avvio {key}: {' '.join(cmd)}")
-    # CREATE_NO_WINDOW: senza, ogni sottoprocesso apre/condivide una console
-    # visibile — chiuderla per errore (es. pensando fosse un singolo
-    # servizio) manda un evento di chiusura a TUTTO l'albero di processi
-    # (visto in produzione: chiusa una finestra "camera", morti anche
-    # yolo/mediapipe/voice insieme). Con questo flag non c'e' nessuna
-    # finestra da chiudere per sbaglio.
-    creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
-    with _procs_lock:
-        _procs[key] = subprocess.Popen(
-            cmd, cwd=cwd, env=env, creationflags=creationflags,
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT
-        )
-    proc = _procs[key]
+    lock = _get_start_lock(key)
+    if not lock.acquire(timeout=_START_LOCK_TIMEOUT):
+        # Rete di sicurezza (vedi commento sopra _start_service_locks): non
+        # bloccare mai per sempre, anche se la causa di fondo di una
+        # contesa lunga non e' chiara -- meglio un 'enable' che fallisce e
+        # si puo' ritentare che un agent intero bloccato.
+        print(f"[Agent] Timeout ({_START_LOCK_TIMEOUT}s) acquisendo il lock di avvio per {key}, salto")
+        return False
+    try:
+        if _is_running(key):
+            return True
+        _stop_conflicts(key)
+        env = _build_env(defn.get("env_extra", {}))
+        cwd = defn.get("cwd")
+        # {STANZA} negli argomenti → stanza corrente (es. URL del kiosk che
+        # segue il device quando viene riassegnato, come CAMERA_NAME sul Pi)
+        cmd = [c.replace("{STANZA}", _cfg.get("stanza", "")) for c in defn["cmd"]]
+        # check_script: false per i servizi il cui ultimo argomento non è un
+        # file (es. kiosk: l'ultimo arg è un URL)
+        if defn.get("check_script", True):
+            script = os.path.join(cwd, cmd[-1]) if cwd else cmd[-1]
+            if not os.path.exists(script):
+                print(f"[Agent] File non trovato: {script}")
+                return False
+        print(f"[Agent] Avvio {key}: {' '.join(cmd)}")
+        # CREATE_NO_WINDOW: senza, ogni sottoprocesso apre/condivide una
+        # console visibile — chiuderla per errore (es. pensando fosse un
+        # singolo servizio) manda un evento di chiusura a TUTTO l'albero di
+        # processi (visto in produzione: chiusa una finestra "camera", morti
+        # anche yolo/mediapipe/voice insieme). Con questo flag non c'e'
+        # nessuna finestra da chiudere per sbaglio.
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        with _procs_lock:
+            _procs[key] = subprocess.Popen(
+                cmd, cwd=cwd, env=env, creationflags=creationflags,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+            )
+        proc = _procs[key]
 
-    def drain(p, svc):
-        for line in p.stdout:
-            print(f"[{svc}] {line.decode(errors='replace').rstrip()}")
-    threading.Thread(target=drain, args=(proc, key), daemon=True).start()
-    return True
+        def drain(p, svc):
+            for line in p.stdout:
+                print(f"[{svc}] {line.decode(errors='replace').rstrip()}")
+        threading.Thread(target=drain, args=(proc, key), daemon=True).start()
+        return True
+    finally:
+        lock.release()
 
 
 def _stop_service(key: str) -> bool:
@@ -391,15 +468,35 @@ def _camera_consumers_active(services_cfg: dict) -> int:
     return sum(1 for k in CAMERA_CONSUMERS if services_cfg.get(k, {}).get("enabled", False))
 
 
+_syncing_camera = False  # guardia di rientranza, vedi commento sotto
+
+
 def _sync_camera(services_cfg: dict):
-    if "camera" not in _SERVICE_DEFS:
+    """Guardia di rientranza (2026-09-19, bug reale trovato dal vivo):
+    _stop_conflicts() ora chiama questa funzione, e questa puo' chiamare
+    _start_service("camera"), che a sua volta chiama SEMPRE _stop_conflicts()
+    all'inizio -- se "camera" e' ancora need=True/running=False mentre siamo
+    DENTRO la stessa catena di chiamate (es. il primo _start_service("camera")
+    non ha ancora fatto in tempo a registrare il processo appena lanciato),
+    si rientra qui all'infinito fino a RecursionError, mai risolto dallo
+    stato reale perche' la catena non torna mai al chiamante originale per
+    aggiornarlo. Con questa guardia, un rientro durante una sincronizzazione
+    gia' in corso è semplicemente ignorato: la sincronizzazione esterna
+    (quella gia' in volo) vede comunque lo stato giusto una volta che i suoi
+    stessi _start_service/_stop_service ritornano."""
+    global _syncing_camera
+    if "camera" not in _SERVICE_DEFS or _syncing_camera:
         return
-    need = _camera_consumers_active(services_cfg) > 0
-    running = _is_running("camera")
-    if need and not running:
-        _start_service("camera")
-    elif not need and running:
-        _stop_service("camera")
+    _syncing_camera = True
+    try:
+        need = _camera_consumers_active(services_cfg) > 0
+        running = _is_running("camera")
+        if need and not running:
+            _start_service("camera")
+        elif not need and running:
+            _stop_service("camera")
+    finally:
+        _syncing_camera = False
 
 
 # ── MQTT ──────────────────────────────────────────────────────────────

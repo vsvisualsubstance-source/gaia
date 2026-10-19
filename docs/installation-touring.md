@@ -39,6 +39,17 @@ presidiata) non aveva bisogno di avere:
    sopra allo scheduling BIOS/Task Scheduler (power on/off pensato
    **solo** BIOS RTC wake + Task Scheduler, niente hardware extra tipo
    prese smart).
+   **Spegnimento programmato controllabile da Gaia** (2026-09-19,
+   `shutdown_at` in `device.json`/`set_config`, "HH:MM" o `null`):
+   alternativa a un Task Scheduler nativo fisso — il watchdog loop
+   esistente (stesso `WATCHDOG_INTERVAL`, nessun thread nuovo) confronta
+   l'ora corrente e chiama lo stesso `_do_shutdown()` del comando MQTT
+   diretto. Cambiare/disattivare l'orario non richiede più SSH sulla
+   macchina: si fa da Admin → Pi Manager (card del device, visibile per
+   `role: "installation"`) o da Telegram via `set_config`. Costruito e
+   verificato dal vivo su `installation-silver-filoq` — da portare anche
+   sulla macchina di Palazzo Ducale (basta il redeploy di `agent.py`,
+   nessuna modifica a `services.json`).
 3. **`discovery.py`** (portato da `pi/agent/discovery.py`, cascata a 4
    livelli: cache su file → beacon UDP → mDNS → Tailscale) chiamata
    PRIMA della connessione MQTT (`discovery.discover(cached_host=...)`).

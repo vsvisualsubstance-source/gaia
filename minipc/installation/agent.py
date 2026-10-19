@@ -15,6 +15,11 @@ video-mapping via MadMapper). Due differenze reali rispetto a ops/agent.py
   3. `reboot`/`shutdown` REALI (ops/agent.py li rifiuta esplicitamente,
      "silvermini2 non e' un Pi headless") — qui servono come rete di
      sicurezza software sopra lo scheduling BIOS/Task Scheduler.
+  4. `shutdown_at` (2026-09-19, "HH:MM" o null in set_config/device.json,
+     controllabile da Admin/Telegram) — spegnimento programmato SOFTWARE,
+     controllato dal watchdog loop stesso (nessun secondo thread/schtasks
+     separato). Alternativa remotamente modificabile a un Task Scheduler
+     nativo fisso: cambiare orario non richiede più SSH sulla macchina.
 
 Stessa interfaccia MQTT di pi/agent/agent.py e ops/agent/agent.py:
   - pubblica: gaia/device/{id}/status  (heartbeat ogni 30s, retain=True)
@@ -26,6 +31,7 @@ Le definizioni dei servizi vengono da services.json (manifest locale).
 import json
 import msvcrt
 import os
+import re
 import signal
 import socket
 import subprocess
@@ -76,6 +82,23 @@ CONFIG_FILE = os.path.join(_DIR, "agent_config.json")
 
 MQTT_HOST = os.getenv("MQTT_HOST", "192.168.1.142")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
+_mqtt = None
+
+# Ri-scoperta automatica dopo disconnessione prolungata (2026-09-19, bug
+# reale trovato due volte dal vivo -- Corridoio su pi/agent.py e proprio
+# questa macchina dopo un riavvio reale: discovery.discover() gira UNA SOLA
+# VOLTA all'avvio del processo; se la prima scelta si rivela irraggiungibile
+# solo al connect vero (es. la LAN risultava "probabile" ma poi il socket
+# fallisce con rete non raggiungibile), paho continua a ritentare lo STESSO
+# host morto in eterno col solo backoff di reconnect_delay_set, mai una
+# nuova discovery -- unico modo per uscirne era riavviare l'agent a mano.
+# Qui: se resta disconnesso più di RECOVERY_THRESHOLD secondi, il loop
+# principale (main(), già gira ogni 1s) ri-esegue la discovery e ripunta il
+# client su un host nuovo se diverso da quello attuale.
+_mqtt_connected = False
+_last_disconnect_ts = time.time()
+_next_rediscovery_ts = 0
+RECOVERY_THRESHOLD = 90
 HEARTBEAT_INTERVAL = 30
 
 # Watchdog — riavvia da solo un servizio "enabled" che risulta caduto,
@@ -91,7 +114,19 @@ _DEFAULT_CFG = {
     "stanza":    _manifest.get("stanza", "unknown"),
     "name":      _manifest.get("stanza", "unknown"),
     "services":  {k: {"enabled": False} for k in _SERVICE_DEFS if k != "camera"},
+    # Spegnimento programmato (2026-09-19, richiesto esplicitamente: controllo
+    # da Gaia invece di uno schtasks fisso non modificabile da remoto) --
+    # "HH:MM" (ora locale della macchina) o None = disabilitato. Rete di
+    # sicurezza SOFTWARE sopra a un eventuale spegnimento schedulato via Task
+    # Scheduler nativo -- qui e' controllabile da Admin/Telegram senza SSH.
+    "shutdown_at": None,
 }
+
+# Guardia anti-doppio-trigger: l'orario viene controllato ogni WATCHDOG_INTERVAL
+# (30s), quindi un solo minuto HH:MM combacia per ~2 giri -- senza questa data
+# scatterebbe lo shutdown due volte (irrilevante in pratica, la prima gia' spegne
+# la macchina, ma resta un bug se mai il comando fallisse silenziosamente).
+_last_scheduled_shutdown_date = None
 
 # ── Stato globale ─────────────────────────────────────────────────────
 _running    = True
@@ -119,7 +154,7 @@ def load_config() -> dict:
     if os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, encoding="utf-8") as f:
             saved = json.load(f)
-        base.update({k: saved[k] for k in ("device_id", "stanza", "name", "updated") if k in saved})
+        base.update({k: saved[k] for k in ("device_id", "stanza", "name", "updated", "shutdown_at") if k in saved})
         for svc in _SERVICE_DEFS:
             if svc == "camera":
                 continue
@@ -333,12 +368,23 @@ def _notify_telegram(text: str):
         print(f"[Agent] Errore notifica Telegram: {e}")
 
 
+def _do_shutdown(reason: str):
+    """Unico punto che spegne davvero la macchina — usato sia dal comando
+    MQTT diretto sia dal trigger programmato (_watchdog_loop) cosi' i due
+    percorsi non duplicano la stessa subprocess.run e restano coerenti."""
+    print(f"[Agent] Shutdown ({reason}) — eseguo tra 5s.")
+    _notify_telegram(f"🔌 Shutdown ({reason}) sulla macchina installazione — in corso.")
+    subprocess.run(["shutdown", "/s", "/t", "5"],
+                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+
+
 def _publish_status():
     with _cfg_lock:
-        device_id = _cfg.get("device_id")
-        stanza    = _cfg.get("stanza")
-        name      = _cfg.get("name", stanza)
-        svc_cfg   = _cfg.get("services", {})
+        device_id   = _cfg.get("device_id")
+        stanza      = _cfg.get("stanza")
+        name        = _cfg.get("name", stanza)
+        svc_cfg     = _cfg.get("services", {})
+        shutdown_at = _cfg.get("shutdown_at")
 
     services = {k: _svc_status(k) for k in _SERVICE_DEFS}
 
@@ -353,6 +399,7 @@ def _publish_status():
         "capabilities": detect_capabilities(),
         "services":     services,
         "config":       svc_cfg,
+        "shutdown_at":  shutdown_at,
         "uptime":       _get_uptime(),
         "ts":           int(time.time() * 1000),
     }
@@ -387,7 +434,9 @@ def _publish_profile(status_payload: dict):
 
 
 def _on_connect(client, userdata, flags, reason_code, properties=None):
+    global _mqtt_connected
     if reason_code == 0:
+        _mqtt_connected = True
         with _cfg_lock:
             device_id = _cfg.get("device_id")
         client.subscribe(f"gaia/device/{device_id}/command")
@@ -396,6 +445,44 @@ def _on_connect(client, userdata, flags, reason_code, properties=None):
         _publish_status()
     else:
         print(f"[MQTT] Connessione fallita rc={reason_code}")
+
+
+def _on_disconnect(client, userdata, reason_code, properties=None):
+    global _mqtt_connected, _last_disconnect_ts
+    was_connected = _mqtt_connected
+    _mqtt_connected = False
+    if was_connected:
+        _last_disconnect_ts = time.time()
+    if reason_code != 0:
+        print(f"[MQTT] Disconnesso (rc={reason_code})")
+
+
+def _maybe_rediscover():
+    """Chiamata ad ogni giro del loop principale in main() -- vedi commento
+    sopra RECOVERY_THRESHOLD. No-op quasi sempre (early return)."""
+    global _next_rediscovery_ts, MQTT_HOST, MQTT_PORT
+    if _mqtt_connected or _mqtt is None:
+        return
+    now = time.time()
+    if now - _last_disconnect_ts < RECOVERY_THRESHOLD or now < _next_rediscovery_ts:
+        return
+    _next_rediscovery_ts = now + RECOVERY_THRESHOLD
+    print(f"[Agent] Disconnesso da oltre {RECOVERY_THRESHOLD}s, ri-eseguo discovery...")
+    try:
+        info = discovery.discover(cached_host=MQTT_HOST)
+    except Exception as e:
+        print(f"[Agent] Ri-discovery fallita: {e}")
+        return
+    if info and info.get("mqtt_host") and info["mqtt_host"] != MQTT_HOST:
+        print(f"[Agent] Nuovo host trovato: {info['mqtt_host']} (era {MQTT_HOST})")
+        MQTT_HOST = info["mqtt_host"]
+        MQTT_PORT = int(info.get("mqtt_port", MQTT_PORT))
+        try:
+            _mqtt.connect_async(MQTT_HOST, MQTT_PORT, 60)
+        except Exception as e:
+            print(f"[Agent] connect_async fallita: {e}")
+    else:
+        print("[Agent] Ri-discovery: nessun host migliore trovato, continuo a ritentare quello attuale")
 
 
 def _on_message(client, userdata, msg):
@@ -442,6 +529,14 @@ def _handle_command(cmd: dict):
                 stanza_changed = True
             if "name" in cmd:
                 _cfg["name"] = cmd["name"]
+            if "shutdown_at" in cmd:
+                val = cmd["shutdown_at"]
+                if val in (None, ""):
+                    _cfg["shutdown_at"] = None
+                elif isinstance(val, str) and re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", val):
+                    _cfg["shutdown_at"] = val
+                else:
+                    print(f"[Agent] shutdown_at non valido (atteso HH:MM o null): {val!r}, ignorato")
             if "services" in cmd:
                 for svc, val in cmd["services"].items():
                     enabled = val if isinstance(val, bool) else val.get("enabled", False)
@@ -480,10 +575,7 @@ def _handle_command(cmd: dict):
         return
 
     elif action == "shutdown":
-        print("[Agent] Shutdown richiesto via MQTT — eseguo tra 5s.")
-        _notify_telegram("🔌 Shutdown richiesto da remoto sulla macchina installazione — in corso.")
-        subprocess.run(["shutdown", "/s", "/t", "5"],
-                        creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+        _do_shutdown("richiesto da remoto")
         return
 
     else:
@@ -535,10 +627,18 @@ def _watchdog_loop():
     problema strutturale diventerebbe un loop di riavvii). Dopo
     WATCHDOG_ALERT_AFTER fallimenti CONSECUTIVI per lo stesso servizio,
     un solo alert Telegram (non uno ad ogni giro) finche' non recupera."""
+    global _last_scheduled_shutdown_date
     while _running:
         time.sleep(WATCHDOG_INTERVAL)
         with _cfg_lock:
-            services = dict(_cfg.get("services", {}))
+            services    = dict(_cfg.get("services", {}))
+            shutdown_at = _cfg.get("shutdown_at")
+        if shutdown_at:
+            now = datetime.now()
+            today = now.strftime("%Y-%m-%d")
+            if now.strftime("%H:%M") == shutdown_at and _last_scheduled_shutdown_date != today:
+                _last_scheduled_shutdown_date = today
+                _do_shutdown(f"programmato {shutdown_at}")
         for key, scfg in services.items():
             if not scfg.get("enabled"):
                 _watchdog_fail_counts.pop(key, None)
@@ -628,6 +728,7 @@ def main():
 
     _mqtt = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"gaia-installation-agent-{_cfg['device_id']}")
     _mqtt.on_connect = _on_connect
+    _mqtt.on_disconnect = _on_disconnect
     _mqtt.on_message = _on_message
     # Senza questo, il reconnect automatico di loop_start() dopo la
     # connessione iniziale si e' visto bloccarsi indefinitamente al primo
@@ -659,6 +760,7 @@ def main():
         if time.time() - last_hb >= HEARTBEAT_INTERVAL:
             _publish_status()
             last_hb = time.time()
+        _maybe_rediscover()
         time.sleep(1)
 
     _mqtt.loop_stop()

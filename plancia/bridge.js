@@ -26,7 +26,8 @@ function validSharedState(value) {
   return value && typeof value === 'object' &&
     (value.layout === null || (value.layout && Array.isArray(value.layout.pages) && value.layout.pages.length > 0)) &&
     Array.isArray(value.projects) &&
-    value.projectData && typeof value.projectData === 'object' && !Array.isArray(value.projectData);
+    value.projectData && typeof value.projectData === 'object' && !Array.isArray(value.projectData) &&
+    (value.timelineSets === undefined || Array.isArray(value.timelineSets));
 }
 function loadSharedState() {
   try {
@@ -36,7 +37,7 @@ function loadSharedState() {
     }
     return { state: saved.state, revision: saved.revision };
   } catch (error) {
-    if (error.code === 'ENOENT') return { state: { layout: null, projects: [], projectData: {} }, revision: 0 };
+    if (error.code === 'ENOENT') return { state: { layout: null, projects: [], projectData: {}, timelineSets: [] }, revision: 0 };
     throw error;
   }
 }

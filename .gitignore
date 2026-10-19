@@ -61,6 +61,7 @@ ops/agent/agent.log
 
 # Log e dati runtime
 *.log
+plancia/data/
 mosquitto/log/
 mosquitto/data/
 

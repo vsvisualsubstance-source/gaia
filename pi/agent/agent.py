@@ -614,6 +614,23 @@ def _do_shutdown(reason: str):
 
 
 def _get_ip() -> str:
+    """IP della rotta di DEFAULT, non il primo di `hostname -I` -- quello
+    può restituire un'interfaccia isolata come eth0 in modalità Art-Net
+    del DMX (bug reale trovato dal vivo 2026-10-13: Admin mostrava
+    l'IP 2.1.1.x del DMX invece del vero IP WiFi/LAN del Pi, irraggiungibile
+    da dove serve davvero per trovarlo/configurarlo). `ip route get` legge
+    solo la tabella di routing (nessun pacchetto mandato davvero) e
+    restituisce la src IP che si userebbe per uscire -- coerente con
+    `ipv4.never-default` già usato per tenere eth0 fuori dalla rotta
+    predefinita quando il DMX è attivo (vedi _set_eth_profile)."""
+    try:
+        r = subprocess.run(["ip", "-4", "route", "get", "1.1.1.1"],
+                            capture_output=True, text=True, timeout=3)
+        m = re.search(r"\bsrc (\d+\.\d+\.\d+\.\d+)", r.stdout)
+        if m:
+            return m.group(1)
+    except Exception:
+        pass
     try:
         r = subprocess.run(["hostname", "-I"], capture_output=True, text=True, timeout=3)
         return r.stdout.strip().split()[0]
