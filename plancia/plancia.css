@@ -356,3 +356,9 @@ button{cursor:pointer}
   .tab{padding-inline:8px}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+.grp-list{display:flex;flex-direction:column;gap:8px}
+.grp-row{display:grid;grid-template-columns:minmax(110px,1fr) minmax(110px,1fr) minmax(150px,1.2fr) auto;gap:6px;align-items:end;padding:8px;border:1px solid var(--line);border-radius:7px}
+.grp-row input,.grp-row select{min-width:0}
+.grp-row .row{gap:6px;flex-wrap:nowrap;align-items:center}
+@media (max-width:760px){.grp-row{grid-template-columns:1fr 1fr}.grp-row .row{grid-column:1/-1;justify-content:space-between}}
+.hint.warn{color:var(--accent);border:1px solid var(--accent);border-radius:6px;padding:6px 9px}

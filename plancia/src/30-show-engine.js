@@ -87,6 +87,7 @@ function serializeCues(cues){
 function renderCueEditor(w,cues,meta={}){
   const s=$('#scrim');s.hidden=false;
   const duration=meta.duration||w.duration,tdMode=!!meta.td;
+  CUE_ED={w,td:tdMode,rev:meta.rev||null,dirty:!!meta._dirty};
   const rows=cues.map((c,i)=>`<div class="cue-edit-row" data-cue-row="${i}">
     <label>Posizione (M:SS)<input class="cue-time" value="${esc(formatCueTime(c.t))}" inputmode="decimal" aria-label="Posizione cue ${i+1}"></label>
     <label>Nome<input class="cue-name" value="${esc(c.name)}" aria-label="Nome cue ${i+1}"></label>
@@ -100,6 +101,7 @@ function renderCueEditor(w,cues,meta={}){
     <div class="cue-edit-list">${rows||'<p class="hint">Nessuna cue. Aggiungine una per iniziare.</p>'}</div>
     <div class="row"><button class="btn" id="cueAdd">＋ Aggiungi cue</button></div>
     <p class="hint">Richiamo opzionale: indice scena OSC 1-based, parametro DMX V8 nel formato <code>dmx_a_palette=Warm</code>, crossfade in DMX Master con <code>fade=1.5</code> (secondi), o più valori separati da <code>;</code>. Esempio: <code>2; fade=3; dmx_b_palette=Cool</code>.</p>
+    <p id="cueTdChanged" class="hint warn" hidden>TD ha cambiato la timeline mentre la modificavi (rev <b></b>). "⇩ Importa da TD" riparte dalla sua; Salva prova a sovrascriverla e TD chiede conferma del conflitto.</p>
     ${tdMode?'<p class="hint">Timeline dello show di DMX Master: Salva la invia a TD, che la valida prima di caricarla.</p>':''}
     <div class="cue-editor-actions"><div class="row cue-td"><button class="btn ghost" id="cueImportTD" title="Carica nell'editor la timeline attuale di DMX Master (show_timeline)">⇩ Importa da TD</button>${tdMode?'':'<button class="btn" id="cueSendTD" title="Salva e invia questa timeline a DMX Master: TD la valida, poi chiede conferma">⇪ Invia a TD</button>'}</div><button class="btn ghost" id="cueCancel">Annulla</button><button class="btn primary" id="cueSave">${tdMode?'Salva e invia a TD':'Salva timeline'}</button></div>
   </div>`;
@@ -113,7 +115,8 @@ function renderCueEditor(w,cues,meta={}){
   const dur=()=>{const d=parseCueTime(s.querySelector('#cueDur').value);return d>0?d:duration};
   // ridisegna con la lista data: prima rileggeva sempre le righe dal DOM,
   // quindi la cue appena aggiunta (o tolta) da Aggiungi/× si perdeva
-  const redraw=(list=readRows())=>renderCueEditor(w,list,{...meta,duration:dur()});
+  const redraw=(list=readRows())=>renderCueEditor(w,list,{...meta,duration:dur(),_dirty:true});
+  s.querySelector('.sheet').addEventListener('input',()=>{if(CUE_ED)CUE_ED.dirty=true});
   s.querySelector('#cueDur').onchange=()=>{
     if(!(parseCueTime(s.querySelector('#cueDur').value)>0)){showError('Durata: scrivi M:SS o secondi, maggiore di zero.');return}
     redraw();
@@ -135,7 +138,7 @@ function renderCueEditor(w,cues,meta={}){
     const current=readRows(),i=+button.closest('[data-cue-row]').dataset.cueRow,j=i+ +button.dataset.cueMove;
     if(j<0||j>=current.length)return;
     [current[i].t,current[j].t]=[current[j].t,current[i].t];
-    renderCueEditor(w,current.sort((a,b)=>a.t-b.t),{...meta,duration:dur()});
+    renderCueEditor(w,current.sort((a,b)=>a.t-b.t),{...meta,duration:dur(),_dirty:true});
   });
   s.querySelectorAll('[data-cue-delete]').forEach(button=>button.onclick=()=>{
     const current=readRows();current.splice(+button.dataset.cueDelete,1);redraw(current);
@@ -161,7 +164,7 @@ function renderCueEditor(w,cues,meta={}){
     if(!doc){showError('DMX Master non pubblica show_timeline: collega Gaia (⋯ → Gaia) o aggiorna il contratto TD.');return}
     const n=readRows().length;
     if(n&&!confirm(`Sostituire le ${n} cue nell'editor con la timeline di DMX Master${doc.name?` "${doc.name}"`:''} (${doc.cues.length} cue, ${formatCueTime(+doc.length||0)})?\nDiventa definitiva solo con Salva.`))return;
-    renderCueEditor(w,timelineFromTD(doc),{...meta,duration:Math.max(1,+doc.length||duration),bpm:+doc.bpm>0?+doc.bpm:null,rev:doc.rev});
+    renderCueEditor(w,timelineFromTD(doc),{...meta,duration:Math.max(1,+doc.length||duration),bpm:+doc.bpm>0?+doc.bpm:null,rev:doc.rev,_dirty:false});
   };
 }
 
@@ -176,7 +179,20 @@ function renderCueEditor(w,cues,meta={}){
 // risponde conflict invece di sovrascrivere in silenzio. Le automazioni
 // (keys) non vengono inviate: assenti = quelle di TD restano intatte.
 const tdSceneCatalog=()=>{const c=tdParams().show_scene_catalog;return Array.isArray(c)?c:[]};
-const tdTimelineDoc=()=>{const d=tdParams().show_timeline;return d&&Array.isArray(d.cues)?d:null};
+// prima il topic retained gaia/devices/td-dmx-win/show_timeline, poi lo status
+const tdTimelineDoc=()=>{const d=G.tdTimeline||tdParams().show_timeline;return d&&Array.isArray(d.cues)?d:null};
+// Editor aperto sulla timeline di TD (CUE_ED: widget + rev da cui parte +
+// modifiche locali). Rev nuova sul topic: senza modifiche l'editor si
+// ricarica da solo, con modifiche avvisa (nota TD 31, flusso punto 1).
+let CUE_ED=null;
+function onTdTimelineRev(doc){
+  refreshShowTimelines();
+  const open=CUE_ED&&!$('#scrim').hidden&&document.querySelector('.cue-edit-list');
+  if(!open||!CUE_ED.td||CUE_ED.rev===doc.rev)return;
+  if(!CUE_ED.dirty){renderCueEditor(CUE_ED.w,timelineFromTD(doc),{td:true,duration:Math.max(1,+doc.length||CUE_ED.w.duration),bpm:+doc.bpm>0?+doc.bpm:null,rev:doc.rev});return}
+  const box=document.querySelector('#cueTdChanged');
+  if(box){box.hidden=false;box.querySelector('b').textContent=`${doc.rev}${doc.source?` · da ${doc.source}`:''}`}
+}
 function timelineToTD(w){
   const cat=tdSceneCatalog(),notes=[];
   const cues=parseCues(w).map(c=>{
@@ -241,7 +257,10 @@ async function sendTimelineToTD(w){
     const r=await tdTimelineRequest(doc);
     if(!r.ok){alert('Caricamento rifiutato da DMX Master:'+list(r.errors));return}
     w.tdBaseRev=r.rev;save();
-    alert(`Timeline caricata in DMX Master: ${r.cues} cue (rev ${r.rev}).`);
+    // conferma vera = il topic retained porta la rev dell'esito (nota TD 31)
+    let seen=G.tdTimeline?.rev===r.rev;
+    for(let i=0;i<10&&!seen;i++){await new Promise(ok=>setTimeout(ok,500));seen=G.tdTimeline?.rev===r.rev}
+    alert(`Timeline caricata in DMX Master: ${r.cues} cue (rev ${r.rev}).`+(seen?' Confermata sul topic show_timeline.':' Il topic show_timeline non ha ancora la nuova rev: controlla che la timeline dello show si aggiorni.'));
   }catch(e){alert(e.message)}
 }
 function openCueEditor(w){

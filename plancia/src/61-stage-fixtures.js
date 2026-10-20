@@ -172,7 +172,7 @@ function openFixEditor(w,f){
     <p class="hint">L'altezza dal piano è separata dall'altezza fisica del pannello.</p>`:''}
     ${f.type==='laser'?`<div class="two"><label>Orientamento (gradi)<input id="feAngle" type="number" min="-180" max="180" step="1"></label><label>Apertura pattern (gradi)<input id="feSpread" type="number" min="1" max="120" step="1"></label></div>
     <p class="hint">Visualizzazione locale, senza comandi OSC/DMX. Il trasporto verso TouchDesigner sarà definito separatamente.</p>`:''}
-    ${FIX_TYPES[f.type].ch?`<label>Gruppo <em>/dmx/group/...</em><input id="feGroup" class="mono"></label>
+    ${FIX_TYPES[f.type].ch?`<label>Gruppo <em>rig di DMX Master · ▦ Gruppi nel Palco</em><select id="feGroup">${groupOptionsHtml(f.group)}</select></label>
     <label>Modello <em>profilo DMX, nota 19</em><select id="feModel"></select></label>
     <div class="two"><label>Universo<select id="feUni"></select></label><label>Indirizzo<input id="feAddr" type="number" min="1" max="512"></label></div>
     <div class="row"><button class="btn sm ghost" id="feAuto">Primo indirizzo libero (da DMX Master)</button></div>`:''}
@@ -190,7 +190,7 @@ function openFixEditor(w,f){
   }
   if($('#feAngle')){val2('#feAngle',f.angle);val2('#feSpread',f.spread)}
   if($('#feGroup')){
-    val2('#feGroup',f.group);val2('#feAddr',f.address);
+    val2('#feGroup',normGroupName(f.group,groupsOf()));val2('#feAddr',f.address);
     // Universi reali da DMX Master (dmx_universe_map, nota 20) -- solo
     // le porte Art-Net vere. Se non ancora disponibile (offline/mai
     // sincronizzata), ripiega su un'unica opzione col valore attuale,
