@@ -26,7 +26,10 @@ function model(a,args){
   if(a.startsWith('/dmx/group/')){const g=a.slice(11);if(g in SH.g)SH.g[g]=v;return}
   switch(a){
     case '/dmx/master':SH.master=v;break;
-    case '/dmx/scene':goScene(Math.round(v));break;
+    // Con le scene di DMX Master l'indice e' una scena di TD, non un LOOK
+    // locale: niente goScene (il Render mostra l'uscita vera, nota 33).
+    // I LOOKS restano solo per la simulazione senza TD.
+    case '/dmx/scene':if(tdScenes().length)SH.scene=Math.round(v);else goScene(Math.round(v));break;
     case '/dmx/fade':SH.fade=v;break;
     case '/dmx/blackout':SH.blackout=v>.5;break;
     case '/dmx/strobe':SH.strobe=v>.5;break;
@@ -363,7 +366,7 @@ function showClockCues(){
     const match=typeof item==='string'?item.match(/^\s*(\d+:\d{1,2}(?:\.\d+)?)\s+(.+)$/):null;
     const position=c.t??c.pos??c.position??c.seconds??c.time_s??c.time??match?.[1];
     const t=typeof position==='string'?parseCueTime(position):+position;
-    const name=c.label||c.name||match?.[2]||`Cue ${i+1}`;
+    const name=c.label||c.name||match?.[2]||c.scene||`Cue ${i+1}`;
     return Number.isFinite(t)?{t,name:String(name),index:Number.isFinite(+c.index)&&+c.index>0?+c.index:i+1,scene:null,params:[],invalid:[]}:null;
   }).filter(Boolean);
 }
@@ -402,6 +405,10 @@ function timelineDuration(w){
 function timelineCues(w){
   if(isShowTimeline(w)&&showClock.authority)return showClockCues()||[];
   return parseCues(w);
+}
+// Pulsanti /dmx/scene: nomi dal catalogo di DMX Master quando c'e'
+function refreshTdSceneWidgets(){
+  for(const w of page().widgets)if(w.type==='scenes'&&w.addr==='/dmx/scene'&&(!w.mode||w.mode==='push'))refresh(w);
 }
 function refreshShowTimelines(){
   for(const w of page().widgets)if(w.type==='timeline'&&isShowTimeline(w))refresh(w);

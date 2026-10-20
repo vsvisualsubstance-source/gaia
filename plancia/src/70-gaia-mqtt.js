@@ -154,8 +154,11 @@ function gIn(t,p){
           applyWidgets({address,args:[value]},null);
         }
         const scene=dmxNumber(DMX_OUTPUT.scene?.index??DMX_OUTPUT.scene);
+        // Solo evidenziare il pulsante: la scena e' gia' applicata in TD e
+        // il Render la vede da rgb_out. bus() -> goScene() lancerebbe il
+        // look LOCALE con lo stesso indice (TestScene1 -> "Walk-in", nota 33).
         if(scene!=null&&scene>=0&&scene!==previousScene){
-          bus('/dmx/scene',[scene],'remote');
+          SH.scene=scene;
           applyWidgets({address:'/dmx/scene',args:[scene]},null);
         }
       }
@@ -173,11 +176,12 @@ function gIn(t,p){
         showClock.rtts.push(rtt);if(showClock.rtts.length>10)showClock.rtts.shift();
         showClock.minRtt=Math.min(...showClock.rtts)}
     }
-  }else if(seg[1]==='device'&&seg[3]==='status'){if(obj){const oldShowCues=JSON.stringify(G.devices[seg[2]]?.params?.show_cues);p._seen=Date.now();G.devices[seg[2]]=p;
+  }else if(seg[1]==='device'&&seg[3]==='status'){if(obj){const oldShowCues=JSON.stringify(G.devices[seg[2]]?.params?.show_cues),oldScenes=JSON.stringify(G.devices[seg[2]]?.params?.show_scene_catalog);p._seen=Date.now();G.devices[seg[2]]=p;
     if(seg[2]==='td-dmx-win'&&!G.tdAutoSynced&&Array.isArray(p.params?.dmx_fixtures)){G.tdAutoSynced=true;importFromTD(true)}
     if(seg[2]==='td-dmx-win'){
       syncHeadSelectors();
       if(oldShowCues!==JSON.stringify(p.params?.show_cues))refreshShowTimelines();
+      if(oldScenes!==JSON.stringify(p.params?.show_scene_catalog))refreshTdSceneWidgets();
     }}}
   else if(t.endsWith('/patchdeck_matrix')){if(obj)G.pdm[p.device_id||seg[2]]=p}
   else if(t.endsWith('/dmx_matrix')){if(obj){G.dxm[p.device_id||seg[2]]=p;syncHeadSelectors()}}
@@ -269,6 +273,16 @@ function paintTdEnum(el,w){
       sc.innerHTML=opts.map((o,i)=>`<div class="si" data-i="${i}" data-opt="${esc(o)}" data-opt-type="${typeof o}" title="${esc(labels[i]??o)}"><span class="no">${String(i+1).padStart(2,'0')}</span><span class="nm">${esc(labels[i]??o)}</span><i class="chip"></i></div>`).join('');
     }
   }
-  sc.querySelectorAll('.si').forEach((n,i)=>n.classList.toggle('on',String(info.value)===String(opts[i])));
+  // Colori veri: TD pubblica le palette solo per nome. La palette attiva
+  // prende la tinta che il suo rig sta emettendo (dmx_output, media degli
+  // rgb_out del gruppo); "Custom" il primo colore custom del rig. Le altre
+  // restano neutre finche' TD non pubblica i colori di ogni palette.
+  const group=dmxPaletteGroup(info.meta?.n),live=group&&dmxOutputFresh()?dmxGroupColor(group,tdGroupOf):null;
+  const custom=(G.devices[info.id]?.params||{})[String(info.meta?.n||'').replace(/_palette$/,'_custom_color1')];
+  sc.querySelectorAll('.si').forEach((n,i)=>{
+    const on=String(info.value)===String(opts[i]);n.classList.toggle('on',on);
+    const col=on&&live?live:opts[i]==='Custom'&&Array.isArray(custom)?custom:null;
+    const hx=col?hex(col):'';if(n._ic!==hx){n._ic=hx;hx?n.style.setProperty('--ic',hx):n.style.removeProperty('--ic')}
+  });
   const addr=el.querySelector('.addr');if(addr)addr.textContent=info.meta?`${info.id} · ${info.meta.n}`:'DMX V8 · parametro non disponibile';
 }

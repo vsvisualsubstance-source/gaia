@@ -13,6 +13,7 @@ function dmxFixtureRecord(f,receivedAt){
   const rgb=Array.isArray(f.rgb_out)&&f.rgb_out.length>=3?f.rgb_out.slice(0,3).map(dmxUnit):null;
   return{
     key,uid,id,sent:f.sent===true,intensity:dmxUnit(f.intensity),rgbOut:rgb&&rgb.every(v=>v!=null)?rgb:null,
+    group:f.group==null?null:String(f.group),colorSource:f.color_source??null,
     pan:dmxNumber(f.pan),tilt:dmxNumber(f.tilt),gobo:dmxNumber(f.gobo),
     colorWheel:dmxNumber(f.color_wheel),shutter:dmxNumber(f.shutter),receivedAt
   };
@@ -89,6 +90,46 @@ function dmxOutputSummary(at=Date.now()){
   return`DMX feedback · ${DMX_OUTPUT.source.toUpperCase()} · ${sent}/${DMX_OUTPUT.fixtures.size} fixture inviate`;
 }
 
+// ── Colori e scene reali di DMX Master (note TD/Win-PD 28, 33, 34) ─────
+// Pan/tilt di dmx_output sono gradi: in unita' del Render (-1..1, stesso
+// verso della nota 30) dividendo per meta' escursione del modello del
+// catalogo (pan_range/tilt_range, default 540/270 come i generici TD).
+function dmxHeadAngles(record,model){
+  if(!record||record.pan==null||record.tilt==null)return null;
+  const half=(v,d)=>Math.max(1,(Number.isFinite(+v)&&+v>0?+v:d)/2),c=v=>Math.max(-1,Math.min(1,v));
+  return[c(record.pan/half(model?.pan_range,540)),c(record.tilt/half(model?.tilt_range,270))];
+}
+// Tinta reale di un gruppo TD (rig_a, rig_b, ledbar...): media degli
+// rgb_out delle sue fixture inviate, normalizzata a luminosita' piena (e'
+// un campione di colore, non un livello). null = gruppo buio o sconosciuto.
+// groupOf: uid -> gruppo, per la riserva OSC che il gruppo non lo porta.
+function dmxGroupColor(group,groupOf=null,fixtures=DMX_OUTPUT.fixtures){
+  const sum=[0,0,0];let n=0;
+  for(const f of fixtures.values()){
+    const g=f.group||(groupOf&&groupOf(f.uid))||null;
+    if(g!==group||!f.sent||!f.rgbOut)continue;
+    f.rgbOut.forEach((v,i)=>sum[i]+=v);n++;
+  }
+  const max=Math.max(...sum);
+  return n&&max>.004?sum.map(v=>v/max):null;
+}
+// dmx_a_palette -> rig_a, dmx_b_palette -> rig_b, dmx_<gruppo>_palette -> gruppo
+function dmxPaletteGroup(param){
+  const m=/^dmx_(.+)_palette$/.exec(String(param||''));
+  return m?({a:'rig_a',b:'rig_b'}[m[1]]||m[1]):null;
+}
+// Scene di TD: show_scene_catalog [{id,index,label}], index = /dmx/scene.
+function tdSceneList(params){
+  const c=params?.show_scene_catalog;
+  return Array.isArray(c)?c.filter(s=>s&&s.id!=null&&Number.isFinite(+s.index)).sort((a,b)=>a.index-b.index):[];
+}
+function tdActiveScene(params,output=DMX_OUTPUT){
+  const a=output?.scene??params?.show_active_scene;
+  const index=dmxNumber(a&&typeof a==='object'?a.index:a);
+  return index==null?null:{index,id:a&&typeof a==='object'?a.scene??null:null};
+}
+
 if(typeof module==='object'&&module.exports){
-  module.exports={DMX_OUTPUT,dmxOutputApplySnapshot,dmxOutputApplySource,dmxOutputApplyOsc,dmxOutputFresh,dmxOutputForFixture,dmxOutputSummary};
+  module.exports={DMX_OUTPUT,dmxOutputApplySnapshot,dmxOutputApplySource,dmxOutputApplyOsc,dmxOutputFresh,dmxOutputForFixture,dmxOutputSummary,
+    dmxHeadAngles,dmxGroupColor,dmxPaletteGroup,tdSceneList,tdActiveScene};
 }

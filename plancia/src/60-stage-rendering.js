@@ -163,7 +163,9 @@ function drawRender(g,W,H,t,level){
   const wallFixtures=fixturesOf('wall'), uplights=fixturesOf('par'), bars=fixturesOf('bar');
   const headsF=fixturesOf('mh'), blinderF=fixturesOf('blinder'), speakers=fixturesOf('speaker'), lasers=fixturesOf('laser');
   const geom=L.stage, depth=Math.max(1,geom.depth), halfStage=Math.max(1,geom.width/2);
-  const gate=SH.strobe?(((t/1000*SH.rate)%1)<.22?1:0):1, M=(SH.blackout?0:SH.master)*gate, hz=.3+.9*SH.g.haze;
+  // nebbia: con il feedback, l'uscita reale della macchina haze (nota 33)
+  const hazeOut=fixturesOf('haze').map(feedbackFor).find(fb=>fb?.sent&&fb.intensity!=null);
+  const gate=SH.strobe?(((t/1000*SH.rate)%1)<.22?1:0):1, M=(SH.blackout?0:SH.master)*gate, hz=.3+.9*(hazeOut?hazeOut.intensity:SH.g.haze);
   g.globalCompositeOperation='source-over';
   const bg=g.createLinearGradient(0,0,0,H);bg.addColorStop(0,'#04050a');bg.addColorStop(1,'#090b10');g.fillStyle=bg;g.fillRect(0,0,W,H);
   const fb=H*.66,ff=H*.86,zScale=H*.48/Math.max(1,geom.trussHeight);
@@ -247,19 +249,23 @@ function drawRender(g,W,H,t,level){
   for(let x=trussL.x;x<trussR.x;x+=12){g.moveTo(x,trussL.y);g.lineTo(x+6,trussL.y+8);g.lineTo(x+12,trussL.y)}g.stroke();
   // teste mobili
   const n=headsF.length;ensureHeadPool(n);const heads=[];
-  for(let i=0;i<n;i++){const f=headsF[i],h=SH.heads[i],p=h.T.c,pos=project(f.x,f.y,fixtureZ(f)),x=pos.x,y=pos.y,size=clamp(pos.scale*.7,8,18);heads.push([x,y,h,p,size,feedbackFor(f)]);
+  for(let i=0;i<n;i++){const f=headsF[i],h=SH.heads[i],p=h.T.c,pos=project(f.x,f.y,fixtureZ(f)),x=pos.x,y=pos.y,size=clamp(pos.scale*.7,8,18);heads.push([x,y,h,p,size,feedbackFor(f),f]);
     g.fillStyle='#1c2027';g.strokeStyle='#3a404c';g.lineWidth=1;
     g.beginPath();g.roundRect(x-size,y-size*.35,size*2,size*.7,2);g.fill();g.stroke();
     g.save();g.translate(x,y);g.rotate(-p[0]*.9);g.beginPath();g.roundRect(-size*.45,-size*.4,size*.9,size*.9,3);g.fill();g.stroke();g.restore()}
   g.globalCompositeOperation='lighter';
-  for(const [x,y,h,p,size,feedback] of heads){
+  for(const [x,y,h,p,size,feedback,f] of heads){
     const k=feedback?outputLevel(feedback):p[5]*SH.g.mh*M*(h.strobe?(((t/1000*13)%1)<.3?1:0):1);
-    const col=feedback?outputColor(feedback):[p[2],p[3],p[4]],pan=p[0],tl=p[1],z=p[6],soft=1-p[7]*.5;
+    // con il feedback: colore e livello da rgb_out, posizione da pan/tilt
+    // reali in gradi (nota 33); gobo/zoom non sono nel feedback: fascio
+    // aperto e zoom locale
+    const real=feedback?dmxHeadAngles(feedback,tdModelFor(f)):null;
+    const col=feedback?outputColor(feedback):[p[2],p[3],p[4]],pan=real?real[0]:p[0],tl=real?real[1]:p[1],z=p[6],soft=1-p[7]*.5;
     if(k>.01){
-      if(feedback)glow(g,x,y,size,col,.95*k);
+      if(feedback&&!real)glow(g,x,y,size,col,.95*k);
       else{
         let ang,len; if(tl>=0){ang=pan*1.15;len=H*(.42+.45*tl)}else{ang=Math.PI-pan*1.15;len=H*(.3+.4*-tl)}
-        const wd=len*(.035+z*.22), subs=h.gobo===3?[0,1,2].map(j=>[Math.sin(t*.0012+j*2.1)*.06,.35+.2*j,.7]):GOBO[h.gobo]||GOBO[0];
+        const gobo=feedback?0:h.gobo,wd=len*(.035+z*.22), subs=gobo===3?[0,1,2].map(j=>[Math.sin(t*.0012+j*2.1)*.06,.35+.2*j,.7]):GOBO[gobo]||GOBO[0];
         for(const [o,wf,a] of subs)beam(g,x,y,ang+o*(.6+z*2.2),len,wd*wf*(.8+soft*.4),col,.42*k*hz*a);
         glow(g,x,y,size,col,.95*k);
         const ex=x+Math.sin(ang)*len,ey=y+Math.cos(ang)*len;
@@ -268,7 +274,9 @@ function drawRender(g,W,H,t,level){
     }
     if(feedback){
       const values=[feedback.sent?'OUT':'OFF',feedback.intensity==null?null:`${Math.round(feedback.intensity*100)}%`,
-        feedback.pan==null?null:`P ${Math.round(feedback.pan)}°`,feedback.tilt==null?null:`T ${Math.round(feedback.tilt)}°`].filter(Boolean);
+        feedback.pan==null?null:`P ${Math.round(feedback.pan)}°`,feedback.tilt==null?null:`T ${Math.round(feedback.tilt)}°`,
+        // ruota colori con slot senza colore nel catalogo: TD manda bianco (nota 34)
+        feedback.colorSource==='unknown'?'colore ?':null].filter(Boolean);
       g.save();g.globalCompositeOperation='source-over';g.font='8px JetBrains Mono, monospace';
       g.fillStyle='#dce4f2';g.shadowColor='#000';g.shadowBlur=2;g.fillText(values.join(' · '),x-size,y+size+11);g.restore();
     }

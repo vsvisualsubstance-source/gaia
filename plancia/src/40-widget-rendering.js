@@ -25,7 +25,10 @@ function inner(w){
     case 'scenes':{
       if(w.mode==='dmx-enum')return '<div class="sc"></div>';
       if(w.mode==='head-presets')return `<div class="hp">${(w.headPresets||[]).map((p,i)=>`<button data-head-preset="${i}" title="${esc(p.name)}">${esc(p.name)}</button>`).join('')}<button data-act="manage-presets">＋ Gestisci</button></div>`;
-      const it=items(w),c=colsOf(w,it.length),lk=w.addr==='/dmx/scene';
+      // /dmx/scene con DMX Master: le scene vere di TD (catalogo), senza i
+      // colori dei LOOKS locali, che con TD non corrispondono a niente
+      const td=w.addr==='/dmx/scene'&&(!w.mode||w.mode==='push')?tdScenes():[];
+      const it=td.length?td.map(s=>s.label||s.id):items(w),c=colsOf(w,it.length),lk=w.addr==='/dmx/scene'&&!td.length;
       if(w.mode==='head-select'&&!it.length)return '<div class="dv-empty">In attesa delle teste mobili pubblicate da DMX Master.</div>';
       return `<div class="sc" style="grid-template-columns:repeat(${c},minmax(0,1fr))">${it.map((n,i)=>{const ic=lk&&LOOKS[i]?lookHex(i):'';
         return `<div class="si" data-i="${i}" title="${esc(n)}"${ic?` style="--ic:${ic}"`:''}><span class="no">${String(i+1).padStart(2,'0')}</span><span class="nm">${esc(n)}</span><i class="chip"></i><i class="prog"></i></div>`}).join('')}</div>`}

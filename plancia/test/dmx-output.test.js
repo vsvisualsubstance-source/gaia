@@ -9,7 +9,12 @@ const {
   dmxOutputApplyOsc,
   dmxOutputFresh,
   dmxOutputForFixture,
-  dmxOutputSummary
+  dmxOutputSummary,
+  dmxHeadAngles,
+  dmxGroupColor,
+  dmxPaletteGroup,
+  tdSceneList,
+  tdActiveScene
 } = require('../src/49-dmx-output');
 
 beforeEach(() => {
@@ -71,4 +76,75 @@ test('OSC sentinel values represent absent channels instead of zero', () => {
   assert.equal(record.sent, false);
   assert.equal(record.intensity, null);
   assert.equal(record.rgbOut, null);
+});
+
+// Valori reali letti da DMX Master (td-dmx-win) il 2026-10-20
+const LIVE = {
+  v: 1, device_id: 'td-dmx-win', master: 1, blackout: false, strobe: false,
+  scene: { scene: 'TestScene1', index: 0, source: 'cue', fade: 3.5, cue: 1 },
+  fixtures: [
+    { uid: 'p-fslozhy', group: 'heads', sent: true, intensity: 0.423, rgb_out: [0.423, 0.423, 0.423], color_source: 'wheel', pan: 76, tilt: -55.8 },
+    { uid: 'p-p75dqtd', group: 'rig_a', sent: true, intensity: 0.603, rgb_out: [0.603, 0, 0], color_source: 'rgb' },
+    { uid: 'p-6sbj0ql', group: 'rig_a', sent: true, intensity: 0.603, rgb_out: [0, 0, 0.426], color_source: 'rgb' },
+    { uid: 'p-wblmjiz', group: 'rig_a', sent: true, intensity: 0.603, rgb_out: [0.603, 0, 0], color_source: 'rgb' },
+    { uid: 'p-nvef9lh', group: 'ledbar', sent: true, intensity: 0.451, rgb_out: [0.451, 0, 0], color_source: 'rgb' },
+    { uid: 'p-3pkies2', group: 'haze', sent: true, intensity: 0.833, rgb_out: null, color_source: null }
+  ]
+};
+
+test('real DMX Master snapshot keeps group and color source per fixture', () => {
+  assert.equal(dmxOutputApplySnapshot(LIVE, 'td-dmx-win', 1000), true);
+  const head = dmxOutputForFixture({ id: 'p-fslozhy' });
+  assert.equal(head.group, 'heads');
+  assert.equal(head.colorSource, 'wheel');
+  const haze = dmxOutputForFixture({ id: 'p-3pkies2' });
+  assert.equal(haze.rgbOut, null);
+  assert.equal(haze.intensity, 0.833);
+});
+
+test('head pan/tilt degrees become render units using the catalog range', () => {
+  dmxOutputApplySnapshot(LIVE, 'td-dmx-win', 1000);
+  const head = dmxOutputForFixture({ id: 'p-fslozhy' });
+  const [pan, tilt] = dmxHeadAngles(head, { pan_range: 540, tilt_range: 270 });
+  assert.ok(Math.abs(pan - 76 / 270) < 1e-9);
+  assert.ok(Math.abs(tilt - -55.8 / 135) < 1e-9);
+  assert.deepEqual(dmxHeadAngles(head, null), [pan, tilt]); // default 540/270
+  assert.equal(dmxHeadAngles({ pan: null, tilt: 3 }, null), null);
+  assert.deepEqual(dmxHeadAngles({ pan: 9999, tilt: -9999 }, null), [1, -1]);
+});
+
+test('group colour is the hue the rig actually emits, at full brightness', () => {
+  dmxOutputApplySnapshot(LIVE, 'td-dmx-win', 1000);
+  const rigA = dmxGroupColor('rig_a');
+  // 2 rossi pieni + 1 blu: tinta rosso-viola, normalizzata a 1
+  assert.equal(rigA[0], 1);
+  assert.equal(rigA[1], 0);
+  assert.ok(Math.abs(rigA[2] - 0.426 / 1.206) < 1e-9);
+  assert.deepEqual(dmxGroupColor('ledbar'), [1, 0, 0]);
+  assert.equal(dmxGroupColor('haze'), null); // nessun colore
+  assert.equal(dmxGroupColor('rig_b'), null); // nessuna fixture
+});
+
+test('group colour falls back to a uid->group map for OSC records', () => {
+  dmxOutputApplyOsc('/dmx/fixture/p-x', [1, 0.5, 0, 0.5, 0], 1000);
+  assert.equal(dmxGroupColor('rig_b'), null);
+  assert.deepEqual(dmxGroupColor('rig_b', uid => uid === 'p-x' ? 'rig_b' : null), [0, 1, 0]);
+});
+
+test('palette params map to TD groups', () => {
+  assert.equal(dmxPaletteGroup('dmx_a_palette'), 'rig_a');
+  assert.equal(dmxPaletteGroup('dmx_b_palette'), 'rig_b');
+  assert.equal(dmxPaletteGroup('dmx_ledbar_palette'), 'ledbar');
+  assert.equal(dmxPaletteGroup('dmx_a_color_speed'), null);
+});
+
+test('TD scenes come from the catalog in /dmx/scene order, active from dmx_output', () => {
+  const params = { show_scene_catalog: [
+    { id: 'Finale', index: 1, label: 'Finale' }, { id: 'TestScene1', index: 0, label: 'TestScene1' }, { bad: true }
+  ], show_active_scene: { scene: 'Finale', index: 1 } };
+  assert.deepEqual(tdSceneList(params).map(s => s.id), ['TestScene1', 'Finale']);
+  assert.deepEqual(tdSceneList({}), []);
+  dmxOutputApplySnapshot(LIVE, 'td-dmx-win', 1000);
+  assert.deepEqual(tdActiveScene(params), { index: 0, id: 'TestScene1' }); // dmx_output vince
+  assert.deepEqual(tdActiveScene(params, { scene: null }), { index: 1, id: 'Finale' });
 });

@@ -130,6 +130,27 @@ HUD indica sorgente e fixture inviate. I dati MQTT diventano stale dopo
 Plancia invia `/dmx/output/osc 1` al massimo ogni 10 secondi per rinnovare
 la richiesta TD (validità 15 secondi).
 
+**2026-10-20 (OPS), note TD/Win-PD 32-34 verificate dal vivo:**
+
+- **Scene di TD, non i LOOKS locali** (nota 33): `/dmx/scene` in arrivo da
+  TD (OSC o `dmx_output.scene`) evidenzia solo il pulsante e imposta
+  `SH.scene`, senza `goScene`; il widget Scene su `/dmx/scene` mostra i
+  nomi di `show_scene_catalog` (indice = `/dmx/scene`), e così l'HUD del
+  Render. I 12 `LOOKS` restano solo per la simulazione senza TD.
+- **Teste**: con il feedback il fascio usa `pan`/`tilt` reali in gradi,
+  divisi per metà escursione del modello (`pan_range`/`tilt_range` di
+  `dmx_models`, default 540/270), stesso verso del pad (nota 30); colore
+  e livello da `rgb_out`; gobo aperto (non è nel feedback). Con
+  `color_source: "unknown"` l'etichetta mostra "colore ?" (nota 34).
+- **Haze**: la nebbia del Render usa l'`intensity` reale della macchina
+  haze.
+- **Palette** (`dmx-enum` `dmx_<rig>_palette`): la palette attiva prende
+  la tinta che il rig sta emettendo (media degli `rgb_out` del gruppo,
+  `dmxGroupColor`), "Custom" il `custom_color1` del rig. TD pubblica le
+  altre palette solo per nome: restano neutre finché TD non ne pubblica
+  i colori (richiesta in TD4Gaia "OPS, 2").
+- **Timeline**: cue di TD senza `label` mostrano il nome della scena.
+
 ## Porte — contratto esplicito, mai indovinato
 
 Stessa filosofia di `mocap_port` (vedi `GAIA_TD_INTEGRATION.md`, "Porta

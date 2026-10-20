@@ -209,6 +209,11 @@ const universeMap=()=>tdParams().dmx_universe_map||null;
 // davvero, letti da status.params -- sostituisce i canali fissi di
 // FIX_TYPES.ch ovunque conta il numero vero di indirizzi occupati.
 const tdModels=()=>tdParams().dmx_models||[];
+// Dati reali di DMX Master per il Render e i menu (helper in 49-dmx-output.js)
+const tdFixtureByUid=uid=>uid==null?null:(tdParams().dmx_fixtures||[]).find(f=>f.uid===String(uid))||null;
+const tdGroupOf=uid=>tdFixtureByUid(uid)?.group||null;
+const tdModelFor=f=>{const name=tdFixtureByUid(f.uid??f.id)?.profile||f.model;return tdModels().find(m=>m.model===name)||null};
+const tdScenes=()=>tdSceneList(tdParams());
 const tdTypes=()=>tdParams().dmx_types||[];
 function modelFootprint(name){
   const m=tdModels().find(x=>x.model===name);
