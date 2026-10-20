@@ -123,9 +123,19 @@
       "_nota": "Path verificato dal vivo 2026-09-14 via `Get-ChildItem -Recurse` su C:\\Users\\vsvis\\Documents\\td: il .toe giusto e' dentro la sottocartella td\\yolo\\ (Yolo.toe) -- NON il file sciolto 'Yolo_PC_Mauro.toe' nella cartella td\\ principale (progetto diverso/vecchio, altra macchina). Chiave 'touchdesigner_yolo' e non 'yolo' da sola per lo stesso motivo di touchdesigner_herbarium: 'yolo' e' gia' un servizio Python vero e proprio (pi/yolo, person/object detection) nel set TOGGLEABLE di Telegram e in questo stesso manifest -- riusarlo per il .toe avrebbe fatto rispondere entrambi i servizi allo stesso comando/nome."
     },
     "ollama": {
-      "type": "http_check",
-      "check_url": "http://localhost:11434/api/tags",
-      "_nota": "Ollama nativo Windows (non Docker), installato 2026-08-07 — gia' nel pool 'backend sano' di Node-RED (health-check ogni 20s). NON gestito come subprocess dall'agent: Ollama per Windows ha un proprio 'ollama app.exe' che si auto-riavvia in autonomia (scoperto 2026-08-08, killandolo per errore e vedendolo ripartire da solo) -- spawnare 'ollama serve' anche da qui competerebbe sulla porta 11434. Questa entry serve solo a farlo comparire correttamente in Pi Manager (era invisibile: Core lo vede perche' local_agent.py lo gestisce come container Docker, OPS non aveva alcuna voce per lui). Start/stop da Pi Manager non hanno effetto qui (per design, vedi agent.py _start_service/_stop_service), solo lo stato e' letto dal vivo via /api/tags."
+      "cmd": [
+        "C:\\Users\\vsvis\\AppData\\Local\\Programs\\Ollama\\ollama.exe",
+        "serve"
+      ],
+      "check_script": false,
+      "signature": "ollama.exe serve",
+      "kill_tree": true,
+      "env_extra": {
+        "OLLAMA_IGPU_ENABLE": "1",
+        "OLLAMA_FLASH_ATTENTION": "1"
+      },
+      "_nota_gpu": "2026-10-20: Radeon 780M (iGPU, backend Vulkan) scartata di default da Ollama ('dropping integrated GPU') -- OLLAMA_IGPU_ENABLE=1 la abilita, vede ~17 GiB di memoria condivisa. Benchmark (prompt ~200 tok, gen 128 tok) CPU -> GPU+FA: qwen2.5:3b gen 11.4 -> 16.6 tok/s, prompt 186 -> 520; llama3.1:8b gen 4.9 -> 7.0, prompt 76 -> 202; qwen3:14b ora 100% su GPU a 3.6 tok/s. OLLAMA_KV_CACHE_TYPE=q8_0 provato e scartato: gen ~5% piu' lenta, utile solo per contesti molto lunghi. Attenzione: la stessa iGPU fa girare TouchDesigner su questa macchina.",
+      "_nota": "Ollama nativo Windows (non Docker), installato 2026-08-07 — gia' nel pool 'backend sano' di Node-RED (health-check ogni 20s). Dal 2026-10-20 gestito come subprocess dall'agent (start/stop via MQTT/Pi Manager): disattivata la 'ollama app.exe' di Windows (collegamento Esecuzione automatica spostato in Programs\\Ollama\\_disabled_autostart), che rilanciava da sola 'ollama serve' e rendeva impossibile spegnerlo da remoto. 'signature' esplicita perche' cmd[-1]='serve' da solo combacerebbe anche con camera_server.py; e' sul cmdline completo cosi' non adotta per errore i processi 'ollama.exe runner' (modelli caricati). kill_tree: lo stop chiude anche i runner figli, altrimenti resterebbero vivi a tenere la VRAM."
     }
   },
   "camera_consumers": [

@@ -411,7 +411,11 @@ def _service_signature(key: str) -> str | None:
         return None
     cmd = defn["cmd"]
     cwd = defn.get("cwd")
-    if defn.get("check_script", True):
+    if defn.get("signature"):
+        # Esplicita nel manifest quando cmd[-1] da solo non e' univoco (es.
+        # ollama: "serve" combacerebbe anche con camera_server.py)
+        signature = defn["signature"]
+    elif defn.get("check_script", True):
         signature = os.path.join(cwd, cmd[-1]) if cwd else cmd[-1]
     else:
         signature = cmd[-1]
@@ -453,7 +457,9 @@ def _find_os_pid(key: str) -> int | None:
                 continue  # mai auto-matchare -- questo stesso processo ha 'signature' nel suo import/env
             try:
                 cmdline = p.info.get("cmdline") or []
-                if any(signature in part for part in cmdline):
+                # Sul cmdline unito, come il fast-path in _is_running: una
+                # signature puo' attraversare piu' argomenti ("ollama.exe serve")
+                if signature in " ".join(cmdline):
                     return p.info["pid"]
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
@@ -566,11 +572,11 @@ def _start_service(key: str) -> bool:
         print(f"[Agent] Servizio sconosciuto: {key}")
         return False
     if defn.get("type") == "http_check":
-        # Servizio gestito fuori dall'agent (es. Ollama ha un proprio
-        # ollama app.exe che si auto-riavvia in autonomia su Windows --
-        # spawnare un secondo processo qui competerebbe sulla stessa
-        # porta). L'agent lo espone in sola lettura al contratto Pi
-        # Manager, non ne possiede il ciclo di vita.
+        # Servizio gestito fuori dall'agent (es. un'app che si auto-riavvia
+        # da sola: spawnare un secondo processo qui competerebbe sulla
+        # stessa porta -- era il caso di Ollama fino al 2026-10-20). L'agent
+        # lo espone in sola lettura al contratto Pi Manager, non ne
+        # possiede il ciclo di vita.
         ok = _is_running(key)
         print(f"[Agent] {key} e' gestito esternamente, non avviabile da qui (attivo={ok})")
         return ok
@@ -627,8 +633,25 @@ def _stop_service(key: str) -> bool:
     if defn and defn.get("type") == "http_check":
         print(f"[Agent] {key} e' gestito esternamente, non fermabile da qui")
         return False
+    kill_tree = bool(defn and defn.get("kill_tree"))
     with _procs_lock:
         p = _procs.get(key)
+        if p is not None and p.poll() is None and kill_tree:
+            # Servizi che lanciano figli propri (ollama serve -> ollama
+            # runner per ogni modello caricato): terminate() chiuderebbe solo
+            # il padre, lasciando i runner orfani a tenere la VRAM.
+            subprocess.run(
+                ["taskkill", "/PID", str(p.pid), "/T", "/F"], capture_output=True, timeout=8,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+            )
+            try:
+                p.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                p.kill()
+            _procs[key] = None
+            print(f"[Agent] Fermato (con figli): {key}")
+            _orphan_check_cache.pop(key, None)
+            return True
         if p is not None and p.poll() is None:
             # Windows non ha SIGTERM reale: terminate() manda comunque un
             # segnale gestibile ai processi Python (CTRL_BREAK non serve
@@ -653,7 +676,8 @@ def _stop_service(key: str) -> bool:
     if pid is not None:
         try:
             subprocess.run(
-                ["taskkill", "/PID", str(pid), "/F"], capture_output=True, timeout=8,
+                ["taskkill", "/PID", str(pid)] + (["/T"] if kill_tree else []) + ["/F"],
+                capture_output=True, timeout=8,
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
             )
             print(f"[Agent] Fermato processo orfano {key} (PID={pid})")
