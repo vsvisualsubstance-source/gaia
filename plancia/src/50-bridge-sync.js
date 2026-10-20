@@ -65,7 +65,19 @@ function applyWidgets(m,except){
     if(p===page())paint(elOf(w.id),w);
   }
 }
-function receive(m){log('in',m);applyWidgets(m,null);bus(m.address,m.args,'remote')}
+function receive(m){
+  log('in',m);
+  if(dmxOutputApplyOsc(m.address,m.args)){G.dirty=true;return}
+  applyWidgets(m,null);bus(m.address,m.args,'remote')
+}
+let dmxOscRequestAt=0;
+setInterval(()=>{
+  if(G.ok||!ws||ws.readyState!==1||!hello)return;
+  const receivedAt=Date.now();
+  if(receivedAt-dmxOscRequestAt<10000)return;
+  dmxOscRequestAt=receivedAt;
+  emit({type:'osc',address:'/dmx/output/osc',args:[1]},true);
+},1000);
 let count=0; setInterval(()=>{$('#rate').textContent=count+' msg/s';count=0},1000);
 function log(dir,m){
   count++;

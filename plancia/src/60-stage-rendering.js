@@ -155,6 +155,11 @@ function drawVideoCover(g,video,x,y,w,h,alpha){
 function drawRender(g,W,H,t,level){
   const fixtures=(L.fixtures||[]).filter(f=>f.enabled!==false);
   const fixturesOf=type=>fixtures.filter(f=>f.type===type);
+  const hasDmxFeedback=dmxOutputFresh(),feedbackFor=f=>hasDmxFeedback?dmxOutputForFixture(f):null;
+  const outputColor=feedback=>feedback?.rgbOut&&Math.max(...feedback.rgbOut)>0?
+    feedback.rgbOut.map(value=>value/Math.max(...feedback.rgbOut)):[1,1,1];
+  const outputLevel=feedback=>feedback?.sent?
+    feedback.rgbOut?Math.max(...feedback.rgbOut):feedback.intensity||0:0;
   const wallFixtures=fixturesOf('wall'), uplights=fixturesOf('par'), bars=fixturesOf('bar');
   const headsF=fixturesOf('mh'), blinderF=fixturesOf('blinder'), speakers=fixturesOf('speaker'), lasers=fixturesOf('laser');
   const geom=L.stage, depth=Math.max(1,geom.depth), halfStage=Math.max(1,geom.width/2);
@@ -176,7 +181,8 @@ function drawRender(g,W,H,t,level){
     const wx0=wp.x-wallWidth/2,wx1=wp.x+wallWidth/2,wy1=wp.y,wy0=wy1-wallHeight;
     g.globalCompositeOperation='source-over';g.fillStyle='#07080b';g.fillRect(wx0-4,wy0-4,wx1-wx0+8,wy1-wy0+8);
     const cols=36,rows=Math.max(8,Math.round(cols*(wy1-wy0)/(wx1-wx0))),pw=(wx1-wx0)/cols,ph=(wy1-wy0)/rows;
-    const b=SH.led.bright*SH.g.ledwall*(SH.blackout?0:SH.master),c=SH.wall.c;
+    const feedback=feedbackFor(wallF),b=feedback?outputLevel(feedback):SH.led.bright*SH.g.ledwall*(SH.blackout?0:SH.master);
+    const c=feedback?outputColor(feedback):SH.wall.c;
     let avg=0;
     if(wallF.sourceType==='url'||wallF.sourceType==='ndi'){
       const preview=wallVideoPlayers.get(wallF.id);
@@ -195,7 +201,8 @@ function drawRender(g,W,H,t,level){
       const hsv=rgb2hsv(...c), hue=hsv[0],sat=hsv[1],val=Math.max(...c),timeHue=Math.sin(t*.0006)*.05;
       for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
         let col=c,k=1;
-        switch(SH.led.mode){
+        if(feedback)k=b;
+        else switch(SH.led.mode){
           case 1:col=hsv2rgb((hue+x/cols*.18+timeHue+1)%1,sat,val);k=.55+.45*Math.sin(x*.18+t*.0015);break;
           case 2:k=Math.pow(.5+.5*Math.sin(x*.32+y*.22-t*.003),1.6);break;
           case 3:k=hash(x*7+y,Math.floor(t/120))>.82?1:.06;break;
@@ -227,7 +234,8 @@ function drawRender(g,W,H,t,level){
   // uplight
   for(let i=0;i<uplights.length;i++){
     const f=uplights[i],group=f.group==='back'||f.group==='rig_b'?'back':'front',p=project(f.x,f.y,f.z);
-    const col=chaseCol(group==='back'?SH.back.c:SH.wash.c,i,uplights.length,t),k=SH.g[group]*M*chaseK(i,uplights.length,t,level);
+    const feedback=feedbackFor(f),col=feedback?outputColor(feedback):chaseCol(group==='back'?SH.back.c:SH.wash.c,i,uplights.length,t);
+    const k=feedback?outputLevel(feedback):SH.g[group]*M*chaseK(i,uplights.length,t,level);
     if(k<.01)continue;
     beam(g,p.x,p.y,Math.PI+(p.x<W/2?-.08:.08),H*.48,H*.07,col,.22*k*hz);glow(g,p.x,p.y,10,col,.9*k);
   }
@@ -239,20 +247,31 @@ function drawRender(g,W,H,t,level){
   for(let x=trussL.x;x<trussR.x;x+=12){g.moveTo(x,trussL.y);g.lineTo(x+6,trussL.y+8);g.lineTo(x+12,trussL.y)}g.stroke();
   // teste mobili
   const n=headsF.length;ensureHeadPool(n);const heads=[];
-  for(let i=0;i<n;i++){const f=headsF[i],h=SH.heads[i],p=h.T.c,pos=project(f.x,f.y,fixtureZ(f)),x=pos.x,y=pos.y,size=clamp(pos.scale*.7,8,18);heads.push([x,y,h,p,size]);
+  for(let i=0;i<n;i++){const f=headsF[i],h=SH.heads[i],p=h.T.c,pos=project(f.x,f.y,fixtureZ(f)),x=pos.x,y=pos.y,size=clamp(pos.scale*.7,8,18);heads.push([x,y,h,p,size,feedbackFor(f)]);
     g.fillStyle='#1c2027';g.strokeStyle='#3a404c';g.lineWidth=1;
     g.beginPath();g.roundRect(x-size,y-size*.35,size*2,size*.7,2);g.fill();g.stroke();
     g.save();g.translate(x,y);g.rotate(-p[0]*.9);g.beginPath();g.roundRect(-size*.45,-size*.4,size*.9,size*.9,3);g.fill();g.stroke();g.restore()}
   g.globalCompositeOperation='lighter';
-  for(const [x,y,h,p,size] of heads){
-    const k=p[5]*SH.g.mh*M*(h.strobe?(((t/1000*13)%1)<.3?1:0):1); if(k<.01)continue;
-    const col=[p[2],p[3],p[4]],pan=p[0],tl=p[1],z=p[6],soft=1-p[7]*.5;
-    let ang,len; if(tl>=0){ang=pan*1.15;len=H*(.42+.45*tl)}else{ang=Math.PI-pan*1.15;len=H*(.3+.4*-tl)}
-    const wd=len*(.035+z*.22), subs=h.gobo===3?[0,1,2].map(j=>[Math.sin(t*.0012+j*2.1)*.06,.35+.2*j,.7]):GOBO[h.gobo]||GOBO[0];
-    for(const [o,wf,a] of subs)beam(g,x,y,ang+o*(.6+z*2.2),len,wd*wf*(.8+soft*.4),col,.42*k*hz*a);
-    glow(g,x,y,size,col,.95*k);
-    const ex=x+Math.sin(ang)*len,ey=y+Math.cos(ang)*len;
-    if(tl>=0&&ey>fb&&ey<ff+H*.05){g.save();g.translate(ex,ey);g.scale(1,.32);glow(g,0,0,wd*1.1,col,.5*k);g.restore()}
+  for(const [x,y,h,p,size,feedback] of heads){
+    const k=feedback?outputLevel(feedback):p[5]*SH.g.mh*M*(h.strobe?(((t/1000*13)%1)<.3?1:0):1);
+    const col=feedback?outputColor(feedback):[p[2],p[3],p[4]],pan=p[0],tl=p[1],z=p[6],soft=1-p[7]*.5;
+    if(k>.01){
+      if(feedback)glow(g,x,y,size,col,.95*k);
+      else{
+        let ang,len; if(tl>=0){ang=pan*1.15;len=H*(.42+.45*tl)}else{ang=Math.PI-pan*1.15;len=H*(.3+.4*-tl)}
+        const wd=len*(.035+z*.22), subs=h.gobo===3?[0,1,2].map(j=>[Math.sin(t*.0012+j*2.1)*.06,.35+.2*j,.7]):GOBO[h.gobo]||GOBO[0];
+        for(const [o,wf,a] of subs)beam(g,x,y,ang+o*(.6+z*2.2),len,wd*wf*(.8+soft*.4),col,.42*k*hz*a);
+        glow(g,x,y,size,col,.95*k);
+        const ex=x+Math.sin(ang)*len,ey=y+Math.cos(ang)*len;
+        if(tl>=0&&ey>fb&&ey<ff+H*.05){g.save();g.translate(ex,ey);g.scale(1,.32);glow(g,0,0,wd*1.1,col,.5*k);g.restore()}
+      }
+    }
+    if(feedback){
+      const values=[feedback.sent?'OUT':'OFF',feedback.intensity==null?null:`${Math.round(feedback.intensity*100)}%`,
+        feedback.pan==null?null:`P ${Math.round(feedback.pan)}°`,feedback.tilt==null?null:`T ${Math.round(feedback.tilt)}°`].filter(Boolean);
+      g.save();g.globalCompositeOperation='source-over';g.font='8px JetBrains Mono, monospace';
+      g.fillStyle='#dce4f2';g.shadowColor='#000';g.shadowBlur=2;g.fillText(values.join(' · '),x-size,y+size+11);g.restore();
+    }
   }
   // casse
   g.globalCompositeOperation='source-over';
@@ -280,15 +299,18 @@ function drawRender(g,W,H,t,level){
   g.globalCompositeOperation='lighter';
   if(bars.length){const px=8;
     for(let i=0;i<bars.length;i++){const f=bars[i];
-      for(let j=0;j<px;j++){const idx=i*px+j,col=chaseCol(SH.bar.c,idx,bars.length*px,t),k=SH.g.ledbar*M*chaseK(SH.chase===2?idx:i,SH.chase===2?bars.length*px:bars.length,t,level);
+      const feedback=feedbackFor(f),col=feedback?outputColor(feedback):null,fixtureLevel=feedback?outputLevel(feedback):0;
+      for(let j=0;j<px;j++){const idx=i*px+j,color=col||chaseCol(SH.bar.c,idx,bars.length*px,t),k=feedback?fixtureLevel:SH.g.ledbar*M*chaseK(SH.chase===2?idx:i,SH.chase===2?bars.length*px:bars.length,t,level);
         const span=f.w||1.8,p=project(f.x+(j+.5-px/2)*span/px,f.y,f.z),x=p.x,y=p.y;
-        g.fillStyle=k>.02?rgba(col,1,k):'#15171c';g.fillRect(x-p.scale*span/px/2+.5,y-2,Math.max(1,p.scale*span/px-1),4);
-        if(k>.02)glow(g,x,y,10,col,.5*k)}}
+        g.fillStyle=k>.02?rgba(color,1,k):'#15171c';g.fillRect(x-p.scale*span/px/2+.5,y-2,Math.max(1,p.scale*span/px-1),4);
+        if(k>.02)glow(g,x,y,10,color,.5*k)}}
   }
   // pubblico e blinder
   const bl=SH.g.blinder*(SH.blackout?0:1);
-  if(bl>.01){
-    for(const f of blinderF){const p=project(f.x,f.y,f.z);glow(g,p.x,p.y,Math.max(12,p.scale*1.5),[1,.85,.6],.55*bl)}
+  if(bl>.01||blinderF.some(f=>feedbackFor(f)?.sent)){
+    for(const f of blinderF){const feedback=feedbackFor(f),actual=feedback?outputLevel(feedback):bl;
+      if(actual<=.01)continue;
+      const p=project(f.x,f.y,f.z);glow(g,p.x,p.y,Math.max(12,p.scale*1.5),feedback?outputColor(feedback):[1,.85,.6],.55*actual)}
     if(!blinderF.length)glow(g,W/2,H*1.05,W*.7,[1,.85,.6],.55*bl);
   }
   g.globalCompositeOperation='source-over';
