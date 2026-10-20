@@ -237,6 +237,12 @@ function devParams(id){
   const fx=G.pdm[id]?.fx_params||{};
   for(const[n,m]of Object.entries(fx)){seen.add(n);out.push({n,label:m.label||n.replace(/_/g,' '),min:typeof m.min==='number'?m.min:0,max:typeof m.max==='number'?m.max:1})}
   const dm=G.dxm[id];
+  // Quick patch del rig (nota TD 38): scriverli RISCRIVE l'intero gruppo
+  // come blocco consecutivo e puo' sovrapporlo ad altre fixture. Con la
+  // patch per fixture (Pianta) non vanno mai offerti come controlli.
+  for(const[rig]of Object.entries(dm?.rigs||{}))for(const q of DMX_QUICK_PATCH)seen.add(`dmx_${rig}_${q}`);
+  // anche le teste: heads_start_address / heads_output_port / heads_profile
+  for(const n of Object.keys(d.params||{}))if(/^(dmx_.+|heads)_(fixture_count|start_address|output_port|fixture_profile|profile)$/.test(n))seen.add(n);
   const addDx=(params,rig)=>{for(const[n0,m]of Object.entries(params||{})){const n=rig?n0.replace(/^dmx_/,`dmx_${rig}_`):n0;if(seen.has(n))continue;seen.add(n);
     const lab=(rig?rig.toUpperCase()+' · ':'')+n0.replace(/^dmx_/,'').replace(/_/g,' ');
     if(Array.isArray(m.options))out.push({n,label:lab,options:m.options});
@@ -251,7 +257,9 @@ function devServices(id){
   let keys=Object.keys(d.services||{});
   if(dm?.rigs)for(const[rig,r]of Object.entries(dm.rigs))for(const k of Object.keys(r.services||{}))keys.push(k.replace(/^dmx_/,`dmx_${rig}_`));
   else if(dm?.services)keys.push(...Object.keys(dm.services));
-  return[...new Set(keys)].filter(k=>!['load_patch','deck_toggle'].includes(pm[k]?.kind)).sort();
+  // apply_fixture_profile = quick patch del rig (riscrive il profilo di
+  // tutto il gruppo, nota TD 38): non offerto come pulsante
+  return[...new Set(keys)].filter(k=>!['load_patch','deck_toggle'].includes(pm[k]?.kind)&&!/^dmx_.+_apply_fixture_profile$/.test(k)).sort();
 }
 const enumParams=id=>devParams(id).filter(p=>Array.isArray(p.options));
 function tdEnumInfo(w){

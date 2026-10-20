@@ -186,3 +186,14 @@ test('scene preview gives front and back palettes, stepped from the matrix', () 
   assert.deepEqual(tdScenePreview({ id: 'x' }), []);
   assert.deepEqual(tdScenePreview({ preview: { heads: [] } }), []); // scena senza "rigs"
 });
+
+test('scene preview includes ledbar and created rigs after front/back, skips level rigs', () => {
+  const scene = { preview: { ledbar: { palette: 'Basic 2', colors: [[0, 1, 0]] }, rig_b: { palette: 'Red', colors: [[1, 0, 0]] },
+    haze: { level: 0.8 }, blinder: { level: 0.3 }, rig_a: { palette: 'Blue', colors: [[0, 0, 1]] }, side: { palette: 'Red', colors: [[1, 0, 0]] } } };
+  assert.deepEqual(tdScenePreview(scene).map(s => s[0][0]), [[0, 0, 1], [1, 0, 0], [0, 1, 0], [1, 0, 0]]);
+});
+
+test('quick patch params are the four destructive ones (nota TD 38)', () => {
+  const { DMX_QUICK_PATCH } = require('../src/49-dmx-output');
+  assert.deepEqual(DMX_QUICK_PATCH, ['fixture_count', 'start_address', 'output_port', 'fixture_profile']);
+});

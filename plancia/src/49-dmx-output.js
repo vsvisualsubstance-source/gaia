@@ -155,12 +155,17 @@ function dmxGradient(segments){
 }
 // Anteprima di una scena di TD (show_scene_catalog[].preview): front |
 // back, ognuno con i colori della palette salvata nella scena.
+// Dalla nota 38 la preview ha ogni rig della scena (ledbar, rig creati;
+// haze/blinder solo con "level", senza colori): front, back, poi gli altri.
 function tdScenePreview(scene,stepped=new Set()){
   const p=scene?.preview;if(!p||typeof p!=='object')return[];
-  return[p.rig_a,p.rig_b].filter(r=>Array.isArray(r?.colors)&&r.colors.length).map(r=>[r.colors,stepped.has(r.palette)]);
+  const keys=['rig_a','rig_b',...Object.keys(p).filter(k=>!['rig_a','rig_b','heads'].includes(k)).sort()];
+  return keys.map(k=>p[k]).filter(r=>Array.isArray(r?.colors)&&r.colors.length).map(r=>[r.colors,stepped.has(r.palette)]);
 }
+// Parametri quick patch dei rig: mai offerti come controlli (nota TD 38)
+const DMX_QUICK_PATCH=['fixture_count','start_address','output_port','fixture_profile'];
 
 if(typeof module==='object'&&module.exports){
   module.exports={DMX_OUTPUT,dmxOutputApplySnapshot,dmxOutputApplySource,dmxOutputApplyOsc,dmxOutputFresh,dmxOutputForFixture,dmxOutputSummary,
-    dmxHeadAngles,dmxGroupColor,dmxPaletteGroup,tdSceneList,tdActiveScene,dmxHex,dmxPaletteColors,dmxGradient,tdScenePreview};
+    dmxHeadAngles,dmxGroupColor,dmxPaletteGroup,tdSceneList,tdActiveScene,dmxHex,dmxPaletteColors,dmxGradient,tdScenePreview,DMX_QUICK_PATCH};
 }
