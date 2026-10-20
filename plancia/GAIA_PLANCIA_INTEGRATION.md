@@ -351,6 +351,35 @@ feedback resta un passaggio operativo lato TD; non è cambiata da Plancia.
 Il follower Plancia è stato provato dall'operatore il 2026-10-19 e il
 clock condiviso risulta funzionante.
 
+## 2026-10-20: timeline disegnata in Plancia → DMX Master (TD/Win-PD 29) — FATTO lato Plancia
+
+Plancia usa il param `show_timeline` di `td-dmx-win` (documento intero,
+validato tutto insieme, esito in `show_timeline_result`):
+
+- **Editor cue** (pulsante CUE o ispettore): `⇩ Importa da TD` carica la
+  timeline attuale di TD nell'editor (diventa definitiva solo con Salva);
+  `⇪ Invia a TD` salva e invia. L'invio fa sempre prima `dry_run: true`,
+  mostra cue/durata/marker/avvisi di TD e chiede conferma, poi carica.
+- **Timeline `/show` che segue TD**: CUE apre l'editor già caricato con la
+  timeline di TD e "Salva e invia a TD" la rimanda (prima era bloccato con
+  "Le cue dello show si modificano in DMX Master").
+- **Scene per nome**: l'indice scena di Plancia (1-based nel testo cue,
+  `/dmx/scene` 0-based) viene tradotto nell'`id` di `show_scene_catalog`;
+  una scena che TD non ha diventa un marker (`missing_scenes: "marker"`)
+  e compare tra gli avvisi prima della conferma.
+- **Fade per cue**: nuovo richiamo `fade=<s>` nella riga cue (es.
+  `0:10 Blu > 2; fade=3.5`); senza, vale `default_fade: 2` di TD. In
+  riproduzione locale Plancia lo ignora.
+- **Conflitti**: Plancia salva nel widget la `rev` dell'ultimo import/invio
+  (`tdBaseRev`) e la manda come `base_rev`; se intanto la timeline è stata
+  cambiata in TD, chiede se sovrascrivere (`force: true`).
+- **Non inviati**: i parametri DMX V8 delle cue (`dmx_a_palette=Warm`)
+  restano solo in Plancia (avviso prima dell'invio); le automazioni
+  (`keys`) e il `loop` di TD non vengono toccati.
+
+Verificato dal vivo: dry-run della timeline attuale di TD rimandata nel
+formato Plancia → `ok: true`, nessun conflitto, rev invariata.
+
 ## Nota TD/Win-PD 25 (2026-10-19): feedback teste mobili verso Plancia
 
 TD ha verificato dal vivo e attivato il feedback OSC verso il listener

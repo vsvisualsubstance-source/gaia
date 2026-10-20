@@ -56,13 +56,15 @@ function parseCues(w){
   const r=k.split('\n').map(s=>s.match(/^\s*(\d+):(\d{1,2}(?:\.\d+)?)\s+(.*?)(?:\s*>\s*(.+))?\s*$/)).filter(Boolean)
     .map(m=>{
       const targets=(m[4]||'').split(';').map(s=>s.trim()).filter(Boolean),sceneTarget=targets.find(s=>/^[1-9]\d*$/.test(s));
-      return{t:+m[1]*60+ +m[2],name:m[3]||'Cue',scene:sceneTarget!=null?+sceneTarget-1:null,
-        params:targets.filter(s=>s.includes('=')).map(s=>{const i=s.indexOf('=');return{param:s.slice(0,i).trim(),value:s.slice(i+1).trim()}}),
+      // fade=<s>: crossfade della cue in DMX Master (show_timeline), non un parametro DMX V8
+      const isFade=s=>/^fade\s*=/i.test(s),fadeTarget=targets.find(isFade),fade=fadeTarget?parseFloat(fadeTarget.split('=')[1]):NaN;
+      return{t:+m[1]*60+ +m[2],name:m[3]||'Cue',scene:sceneTarget!=null?+sceneTarget-1:null,fade:fade>=0?fade:null,
+        params:targets.filter(s=>s.includes('=')&&!isFade(s)).map(s=>{const i=s.indexOf('=');return{param:s.slice(0,i).trim(),value:s.slice(i+1).trim()}}),
         invalid:targets.filter(s=>!s.includes('=')&&!/^\d+$/.test(s))};
     }).sort((a,b)=>a.t-b.t);
   cueCache.set(k,r); return r;
 }
-const cueTargets=c=>[c.scene!=null?String(c.scene+1):'',...c.params.map(p=>`${p.param}=${p.value}`),...c.invalid].filter(Boolean).join('; ');
+const cueTargets=c=>[c.scene!=null?String(c.scene+1):'',c.fade!=null?`fade=${c.fade}`:'',...c.params.map(p=>`${p.param}=${p.value}`),...c.invalid].filter(Boolean).join('; ');
 function formatCueTime(value){
   const total=Math.round(value*100),minutes=Math.floor(total/6000),seconds=(total%6000)/100;
   const whole=Math.floor(seconds),fraction=String(seconds.toFixed(2)).split('.')[1]?.replace(/0+$/,'')||'';
@@ -76,8 +78,12 @@ function parseCueTime(value){
 function serializeCues(cues){
   return[...cues].sort((a,b)=>a.t-b.t).map(c=>`${formatCueTime(c.t)} ${c.name.trim()||'Cue'}${c.targets.trim()?` > ${c.targets.trim()}`:''}`).join('\n');
 }
-function renderCueEditor(w,cues){
+// meta: valori in sospeso da applicare solo con Salva (duration/bpm/rev di una
+// timeline appena importata da TD); meta.td = timeline /show che segue TD,
+// dove Salva significa inviare a DMX Master.
+function renderCueEditor(w,cues,meta={}){
   const s=$('#scrim');s.hidden=false;
+  const duration=meta.duration||w.duration,tdMode=!!meta.td;
   const rows=cues.map((c,i)=>`<div class="cue-edit-row" data-cue-row="${i}">
     <label>Posizione (M:SS)<input class="cue-time" value="${esc(formatCueTime(c.t))}" inputmode="decimal" aria-label="Posizione cue ${i+1}"></label>
     <label>Nome<input class="cue-name" value="${esc(c.name)}" aria-label="Nome cue ${i+1}"></label>
@@ -89,19 +95,20 @@ function renderCueEditor(w,cues){
     <p class="hint">Le cue si riordinano per posizione. Trascina un blocco nella timeline oppure modifica qui orario e richiamo; le modifiche vengono salvate nel layout condiviso OPS.</p>
     <div class="cue-edit-list">${rows||'<p class="hint">Nessuna cue. Aggiungine una per iniziare.</p>'}</div>
     <div class="row"><button class="btn" id="cueAdd">＋ Aggiungi cue</button></div>
-    <p class="hint">Richiamo opzionale: indice scena OSC 1-based, parametro DMX V8 nel formato <code>dmx_a_palette=Warm</code>, o più valori separati da <code>;</code>. Esempio: <code>2; dmx_b_palette=Cool</code>.</p>
-    <div class="cue-editor-actions"><button class="btn ghost" id="cueCancel">Annulla</button><button class="btn primary" id="cueSave">Salva timeline</button></div>
+    <p class="hint">Richiamo opzionale: indice scena OSC 1-based, parametro DMX V8 nel formato <code>dmx_a_palette=Warm</code>, crossfade in DMX Master con <code>fade=1.5</code> (secondi), o più valori separati da <code>;</code>. Esempio: <code>2; fade=3; dmx_b_palette=Cool</code>.</p>
+    ${tdMode?'<p class="hint">Timeline dello show di DMX Master: Salva la invia a TD, che la valida prima di caricarla.</p>':''}
+    <div class="cue-editor-actions"><div class="row cue-td"><button class="btn ghost" id="cueImportTD" title="Carica nell'editor la timeline attuale di DMX Master (show_timeline)">⇩ Importa da TD</button>${tdMode?'':'<button class="btn" id="cueSendTD" title="Salva e invia questa timeline a DMX Master: TD la valida, poi chiede conferma">⇪ Invia a TD</button>'}</div><button class="btn ghost" id="cueCancel">Annulla</button><button class="btn primary" id="cueSave">${tdMode?'Salva e invia a TD':'Salva timeline'}</button></div>
   </div>`;
   const readRows=()=>[...s.querySelectorAll('.cue-edit-row')].map(row=>({
     t:parseCueTime(row.querySelector('.cue-time').value),
     name:row.querySelector('.cue-name').value.trim()||'Cue',
     targets:row.querySelector('.cue-targets').value.trim()
   }));
-  const redraw=()=>renderCueEditor(w,readRows());
+  const redraw=()=>renderCueEditor(w,readRows(),meta);
   s.querySelector('#cueClose').onclick=s.querySelector('#cueCancel').onclick=closeSheet;
   s.querySelector('#cueAdd').onclick=()=>{
     const current=readRows(),last=current.reduce((max,c)=>Number.isFinite(c.t)?Math.max(max,c.t):max,0);
-    current.push({t:Math.min(w.duration,Math.max(0,last+10)),name:`Cue ${current.length+1}`,targets:''});
+    current.push({t:Math.min(duration,Math.max(0,last+10)),name:`Cue ${current.length+1}`,targets:''});
     redraw();
     s.querySelector('.cue-edit-row:last-child .cue-name')?.focus();
   };
@@ -109,23 +116,116 @@ function renderCueEditor(w,cues){
     const current=readRows(),i=+button.closest('[data-cue-row]').dataset.cueRow,j=i+ +button.dataset.cueMove;
     if(j<0||j>=current.length)return;
     [current[i].t,current[j].t]=[current[j].t,current[i].t];
-    renderCueEditor(w,current.sort((a,b)=>a.t-b.t));
+    renderCueEditor(w,current.sort((a,b)=>a.t-b.t),meta);
   });
   s.querySelectorAll('[data-cue-delete]').forEach(button=>button.onclick=()=>{
     const current=readRows();current.splice(+button.dataset.cueDelete,1);redraw();
   });
-  s.querySelector('#cueSave').onclick=()=>{
+  const commit=()=>{
     const current=readRows();
-    const invalid=current.find(c=>!Number.isFinite(c.t)||c.t<0||c.t>w.duration);
-    if(invalid){showError(`Timeline: inserisci un orario tra 0 e ${formatCueTime(w.duration)}.`);return}
-    if(current.some(c=>c.name.includes('>'))){showError('Il nome della cue non può contenere il separatore ">".');return}
+    const invalid=current.find(c=>!Number.isFinite(c.t)||c.t<0||c.t>duration);
+    if(invalid){showError(`Timeline: inserisci un orario tra 0 e ${formatCueTime(duration)}.`);return false}
+    if(current.some(c=>c.name.includes('>'))){showError('Il nome della cue non può contenere il separatore ">".');return false}
     w.cues=serializeCues(current);
-    save();refresh(w);closeSheet();
+    if(meta.duration)w.duration=meta.duration;
+    if(meta.bpm)w.bpm=meta.bpm;
+    if(meta.rev)w.tdBaseRev=meta.rev;
+    save();refresh(w);return true;
+  };
+  s.querySelector('#cueSave').onclick=()=>{if(commit()){closeSheet();if(tdMode)sendTimelineToTD(w)}};
+  const send=s.querySelector('#cueSendTD');
+  if(send)send.onclick=()=>{if(commit()){closeSheet();sendTimelineToTD(w)}};
+  s.querySelector('#cueImportTD').onclick=()=>{
+    const doc=tdTimelineDoc();
+    if(!doc){showError('DMX Master non pubblica show_timeline: collega Gaia (⋯ → Gaia) o aggiorna il contratto TD.');return}
+    const n=readRows().length;
+    if(n&&!confirm(`Sostituire le ${n} cue nell'editor con la timeline di DMX Master${doc.name?` "${doc.name}"`:''} (${doc.cues.length} cue, ${formatCueTime(+doc.length||0)})?\nDiventa definitiva solo con Salva.`))return;
+    renderCueEditor(w,timelineFromTD(doc),{...meta,duration:Math.max(1,+doc.length||duration),bpm:+doc.bpm>0?+doc.bpm:null,rev:doc.rev});
   };
 }
+
+// ── Timeline Plancia ⇄ DMX Master (GAIA_INTERFACE "TD/Win-PD, 29") ─────
+// TD riceve l'intera timeline come UN documento sul param show_timeline:
+// la valida tutta insieme (dry_run = solo verifica), su errore non scrive
+// nulla, e l'esito arriva in show_timeline_result {seq, ok, errors,
+// warnings, rev, conflict, cues, markers, length}. Le scene viaggiano per
+// NOME (id stabile di show_scene_catalog): l'indice /dmx/scene di Plancia
+// slitta se in TD si cancella una scena precedente. base_rev = rev letta
+// all'ultimo import/invio: se intanto la timeline e' cambiata in TD, TD
+// risponde conflict invece di sovrascrivere in silenzio. Le automazioni
+// (keys) non vengono inviate: assenti = quelle di TD restano intatte.
+const tdSceneCatalog=()=>{const c=tdParams().show_scene_catalog;return Array.isArray(c)?c:[]};
+const tdTimelineDoc=()=>{const d=tdParams().show_timeline;return d&&Array.isArray(d.cues)?d:null};
+function timelineToTD(w){
+  const cat=tdSceneCatalog(),notes=[];
+  const cues=parseCues(w).map(c=>{
+    const known=c.scene==null?null:cat.find(x=>x.index===c.scene);
+    if(c.params.length)notes.push(`"${c.name}": ${c.params.map(p=>p.param).join(', ')}`);
+    const d={time:+c.t.toFixed(3),scene:c.scene==null?null:known?known.id:c.scene,label:c.name};
+    if(c.fade!=null)d.fade=c.fade;
+    return d;
+  });
+  const doc={v:1,name:w.label||'Timeline',bpm:+w.bpm>0?+w.bpm:null,length:w.duration,default_fade:2,
+    missing_scenes:'marker',source:'plancia',cues};
+  if(w.tdBaseRev)doc.base_rev=w.tdBaseRev;
+  return{doc,notes};
+}
+function timelineFromTD(doc){
+  const cat=tdSceneCatalog();
+  return doc.cues.map((c,i)=>{
+    const known=c.scene?cat.find(x=>x.id===c.scene):null;
+    // fade 2 = default_fade di TD: omesso, al reinvio torna uguale
+    const fade=Number.isFinite(+c.fade)&&+c.fade!==2?`fade=${+c.fade}`:'';
+    const targets=[known?String(known.index+1):c.scene?String(c.scene):'',fade].filter(Boolean).join('; ');
+    return{t:+c.time||0,name:String(c.label||c.scene||`Cue ${i+1}`).replace(/>/g,'›'),targets};
+  });
+}
+// Invia un documento e aspetta il PROPRIO esito (seq diverso da quello di
+// prima dell'invio), stesso schema a polling di resolveDuplicates().
+function tdTimelineRequest(doc){
+  const before=tdParams().show_timeline_result?.seq;
+  if(!devCmd('td-dmx-win',{action:'set',param:'show_timeline',value:doc}))
+    return Promise.reject(new Error('Non collegata a Gaia: apri ⋯ → Gaia e collegati prima.'));
+  return new Promise((resolve,reject)=>{
+    let tries=0;
+    const check=()=>{
+      const r=tdParams().show_timeline_result;
+      if(r&&r.seq!==before&&!!r.dry_run===!!doc.dry_run)return resolve(r);
+      if(++tries>=16){const err=G.devices['td-dmx-win']?.last_error;
+        return reject(new Error('Nessuna risposta da DMX Master entro 8 s'+(err?`: ${err}`:'.')))}
+      setTimeout(check,500);
+    };
+    setTimeout(check,500);
+  });
+}
+async function sendTimelineToTD(w){
+  const{doc,notes}=timelineToTD(w);
+  const list=a=>'\n• '+a.join('\n• ');
+  try{
+    let check=await tdTimelineRequest({...doc,dry_run:true});
+    if(!check.ok&&check.conflict&&check.errors.every(e=>e.startsWith('conflitto'))){
+      if(!confirm('La timeline in DMX Master è stata modificata dopo l\'ultimo import/invio da Plancia.\nSovrascriverla comunque con questa?'))return;
+      doc.force=true;check=await tdTimelineRequest({...doc,dry_run:true});
+    }
+    if(!check.ok){alert('DMX Master rifiuta la timeline:'+list(check.errors));return}
+    const lines=[`Inviare "${doc.name}" a DMX Master?`,
+      `${check.cues} cue · durata ${formatCueTime(check.length)}${check.markers?` · ${check.markers} senza scena (marker)`:''}`,
+      'Sostituisce le cue dello show in TD; le automazioni restano invariate.'];
+    if(check.warnings?.length)lines.push('','Avvisi di TD:'+list(check.warnings));
+    if(notes.length)lines.push('','Parametri DMX che TD non riceve (restano solo in Plancia):'+list(notes));
+    if(!confirm(lines.join('\n')))return;
+    const r=await tdTimelineRequest(doc);
+    if(!r.ok){alert('Caricamento rifiutato da DMX Master:'+list(r.errors));return}
+    w.tdBaseRev=r.rev;save();
+    alert(`Timeline caricata in DMX Master: ${r.cues} cue (rev ${r.rev}).`);
+  }catch(e){alert(e.message)}
+}
 function openCueEditor(w){
+  // /show che segue TD: si modifica la timeline di DMX Master, non la bozza locale
+  const doc=isShowTimeline(w)&&showClock.authority?tdTimelineDoc():null;
+  if(doc){renderCueEditor(w,timelineFromTD(doc),{td:true,duration:Math.max(1,+doc.length||w.duration),bpm:+doc.bpm>0?+doc.bpm:null,rev:doc.rev});return}
   const cues=parseCues(w).map(c=>({t:c.t,name:c.name,targets:cueTargets(c)}));
-  renderCueEditor(w,cues);
+  renderCueEditor(w,cues,{td:isShowTimeline(w)&&showClock.authority});
 }
 function headControlWidgets(){
   return page().widgets.filter(w=>w.addr?.startsWith('/mh/')&&
@@ -312,7 +412,7 @@ function seek(w,t,quietCue){if(isShowTimeline(w)&&showClock.authority){showClock
 function tlAct(w,act){const r=rt(w),cues=parseCues(w);
   if(isShowTimeline(w)&&showClock.authority){
     const sample=showClockSample();
-    if(act==='edit-cues'){showError('Le cue dello show si modificano in DMX Master.');return}
+    if(act==='edit-cues'){openCueEditor(w);return}
     if(act==='loop'){showError('Il clock TD non espone ancora un comando loop.');return}
     if(act==='play')showClockCommand(w,sample?.state.playing?'pause':'play');
     else if(act==='stop')showClockCommand(w,'stop');

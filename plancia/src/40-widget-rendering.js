@@ -28,7 +28,7 @@ function inner(w){
       const it=items(w),c=colsOf(w,it.length),lk=w.addr==='/dmx/scene';
       if(w.mode==='head-select'&&!it.length)return '<div class="dv-empty">In attesa delle teste mobili pubblicate da DMX Master.</div>';
       return `<div class="sc" style="grid-template-columns:repeat(${c},minmax(0,1fr))">${it.map((n,i)=>{const ic=lk&&LOOKS[i]?lookHex(i):'';
-        return `<div class="si" data-i="${i}"${ic?` style="--ic:${ic}"`:''}><span class="no">${String(i+1).padStart(2,'0')}</span><span class="nm">${esc(n)}</span><i class="chip"></i><i class="prog"></i></div>`}).join('')}</div>`}
+        return `<div class="si" data-i="${i}" title="${esc(n)}"${ic?` style="--ic:${ic}"`:''}><span class="no">${String(i+1).padStart(2,'0')}</span><span class="nm">${esc(n)}</span><i class="chip"></i><i class="prog"></i></div>`}).join('')}</div>`}
     case 'color': return `<div class="cw"><div class="disc"><i class="mk"></i></div><div class="sws">${SWC.map((c,i)=>`<i data-s="${i}" style="--s:${hex(c)}"></i>`).join('')}</div></div>`;
     case 'timeline':{const cues=timelineCues(w),D=timelineDuration(w),controlled=isShowTimeline(w)&&showClock.authority;
       const sample=controlled?showClockSample():null,available=!!sample&&showClockFresh(sample),locked=controlled&&!available;
@@ -38,7 +38,7 @@ function inner(w){
         const target=[c.scene!=null?'SC '+(c.scene+1):'',c.params.length?'DMX '+c.params.length:''].filter(Boolean).join(' · ');
         return `<div class="tl-blk" data-k="${i}" style="left:${c.t/D*100}%;width:${(e-c.t)/D*100}%;--ic:${col}"><span>${i+1} ${esc(c.name)}</span><em>${target}</em></div>`}).join('');
       return `<div class="tl" data-duration="${D}"><div class="tl-head"><span class="tl-name">${esc(w.label)}</span>
-        <div class="tl-tr"><button data-act="start" aria-label="Inizio"${locked?' disabled':''}>${ICON.start}</button><button data-act="play" aria-label="Play/pausa"${locked?' disabled':''}>${ICON.play}</button><button data-act="stop" aria-label="Stop"${locked?' disabled':''}>${ICON.stop}</button><button data-act="loop" aria-label="Loop"${controlled?' disabled':''}>${ICON.loop}</button><button data-act="edit-cues" aria-label="Modifica cue"${controlled?' disabled':''}>CUE</button></div>
+        <div class="tl-tr"><button data-act="start" aria-label="Inizio"${locked?' disabled':''}>${ICON.start}</button><button data-act="play" aria-label="Play/pausa"${locked?' disabled':''}>${ICON.play}</button><button data-act="stop" aria-label="Stop"${locked?' disabled':''}>${ICON.stop}</button><button data-act="loop" aria-label="Loop"${controlled?' disabled':''}>${ICON.loop}</button><button data-act="edit-cues" aria-label="Modifica cue">CUE</button></div>
         <span class="tl-tc">00:00:00:00</span><span class="tl-cue"><span class="k">CUE</span><b>—</b></span><span class="tl-bpm">${controlled?`TD · ${available?sample.source.toUpperCase():'OFFLINE · FERMO'}`:`${w.bpm||120} BPM`} · ${Math.floor(D/60)}:${String(Math.round(D%60)).padStart(2,'0')}</span></div>
         <div class="tl-lane"><div class="tl-ruler">${ticks}</div><div class="tl-cues">${blocks}</div><div class="tl-ph"></div></div></div>`}
     case 'clock': return '<div class="clk"><div class="clk-main">--:--:--</div><div class="clk-sub"></div></div>';

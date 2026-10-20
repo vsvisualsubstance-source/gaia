@@ -250,7 +250,7 @@ function paintTdEnum(el,w){
     if(!info.meta||!opts.length)sc.innerHTML=`<p class="dv-empty">${info.missing?'Il parametro DMX V8 configurato non è più pubblicato.':info.meta?'Il parametro DMX V8 non pubblica opzioni.':info.noPalette?'DMX V8 non pubblica un parametro enum palette. Seleziona un parametro dall’ispettore.':'In attesa di un parametro enum DMX V8.'}</p>`;
     else{
       sc.style.gridTemplateColumns=`repeat(${colsOf(w,opts.length)},minmax(0,1fr))`;
-      sc.innerHTML=opts.map((o,i)=>`<div class="si" data-i="${i}" data-opt="${esc(o)}" data-opt-type="${typeof o}"><span class="no">${String(i+1).padStart(2,'0')}</span><span class="nm">${esc(labels[i]??o)}</span><i class="chip"></i></div>`).join('');
+      sc.innerHTML=opts.map((o,i)=>`<div class="si" data-i="${i}" data-opt="${esc(o)}" data-opt-type="${typeof o}" title="${esc(labels[i]??o)}"><span class="no">${String(i+1).padStart(2,'0')}</span><span class="nm">${esc(labels[i]??o)}</span><i class="chip"></i></div>`).join('');
     }
   }
   sc.querySelectorAll('.si').forEach((n,i)=>n.classList.toggle('on',String(info.value)===String(opts[i])));

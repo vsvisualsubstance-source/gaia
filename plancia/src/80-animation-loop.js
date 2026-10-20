@@ -47,7 +47,6 @@ function loop(){
       el.querySelector('[data-act="play"]').disabled=locked;
       el.querySelector('[data-act="stop"]').disabled=locked;
       el.querySelector('[data-act="loop"]').disabled=controlled;
-      el.querySelector('[data-act="edit-cues"]').disabled=controlled;
       const remoteLabel=sample?.source==='mqtt'&&sample.state.cue?.label?
         `${sample.state.cue.index?`${sample.state.cue.index} · `:''}${sample.state.cue.label}`:null;
       const b=el.querySelector('.tl-cue b'),nm=remoteLabel|| (cues[r.cue]?`${r.cue+1} · ${cues[r.cue].name}`:'—');if(b.textContent!==nm)b.textContent=nm;

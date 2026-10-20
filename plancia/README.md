@@ -84,6 +84,7 @@ Il MIDI usa il pacchetto opzionale `easymidi`. Su Windows serve una porta virtua
 - Pad XY: `/indirizzo <x> <y>`
 - Scene: `/indirizzo <indice>` (0, 1, 2…); in selezione multipla un elenco di 0/1
 - Colore: `/indirizzo <r> <g> <b>` (0–1)
+- Timeline: l'editor cue (CUE) importa da DMX Master e invia a DMX Master la timeline (`show_timeline`, con verifica e conferma), vedi GAIA_PLANCIA_INTEGRATION.md 2026-10-20. Richiamo `fade=<s>` per il crossfade in TD.
 - Timeline `/show`: quando è disponibile lo stato retained `gaia/show/clock/state`, segue l'orologio master di DMX Master, manda i comandi su `gaia/show/clock/command` e mostra le cue pubblicate da TD. Stima la latenza via ping MQTT; se lo stato MQTT tace per 3,5 s congela la posizione. Senza stato MQTT usa il feedback OSC `/show/*` quando arriva; in pausa OSC non ha heartbeat e non consente di rilevare la disconnessione del master. Senza feedback mantiene il funzionamento locale/OSC precedente.
 
 Tutti i numeri partono come float OSC.

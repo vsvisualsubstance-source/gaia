@@ -103,10 +103,12 @@ button{cursor:pointer}
 
 /* griglia scene */
 .sc{position:absolute;inset:28px 6px 6px;display:grid;gap:5px;grid-auto-rows:1fr}
-.si{position:relative;min-height:0;min-width:0;border:1px solid var(--line2);border-radius:5px;background:var(--panel2);display:flex;flex-direction:column;justify-content:space-between;padding:4px 7px 5px 9px;overflow:hidden}
-.si .no{font-family:var(--mono);font-size:10px;color:var(--dim);line-height:1}
-.si .nm{font-family:var(--display);font-weight:600;font-size:14px;letter-spacing:.05em;text-transform:uppercase;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.si .chip{position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--ic,var(--c))}
+.si{position:relative;min-height:0;min-width:0;border:1px solid var(--line2);border-radius:5px;background:var(--panel2);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:11px 6px 5px 8px;overflow:hidden;container-type:size}
+.si .no{position:absolute;top:4px;left:8px;font-family:var(--mono);font-size:10px;color:var(--dim);line-height:1}
+/* nome centrato, fino a 2 righe, dimensione che segue la cella (cq = container query su .si) */
+.si .nm{font-family:var(--display);font-weight:600;font-size:clamp(12px,min(32cqh,14cqw),24px);letter-spacing:.03em;text-transform:uppercase;line-height:1.05;max-width:100%;overflow:hidden;overflow-wrap:break-word;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2}
+/* padding/bordo/raggio azzerati: senza, eredita lo stile pillola di .chip (riga ~253) e diventa una barra di ~25px che copre numero e nome */
+.si .chip{position:absolute;left:0;top:0;bottom:0;width:3px;padding:0;border:0;border-radius:0;background:var(--ic,var(--c))}
 .si .prog{position:absolute;left:0;bottom:0;height:2px;width:0;background:var(--fg)}
 .si.on{background:color-mix(in srgb,var(--ic,var(--c)) 26%,var(--panel2));border-color:var(--ic,var(--c));box-shadow:inset 0 0 18px color-mix(in srgb,var(--ic,var(--c)) 30%,transparent)}
 .si.on .no{color:var(--fg)}
@@ -148,7 +150,7 @@ button{cursor:pointer}
 .tl-ph{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;background:var(--fg);box-shadow:0 0 8px #fff8;pointer-events:none}
 .tl-ph::before{content:"";position:absolute;top:0;left:-5px;border:6px solid transparent;border-top:7px solid var(--fg)}
 .hp{position:absolute;inset:28px 6px 6px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:1fr;gap:5px}
-.hp button{min-width:0;border:1px solid var(--line2);border-radius:5px;background:var(--panel2);padding:3px 5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hp button{min-width:0;border:1px solid var(--line2);border-radius:5px;background:var(--panel2);padding:3px 5px;overflow:hidden;overflow-wrap:anywhere;text-align:center;font-family:var(--display);font-weight:600;font-size:15px;letter-spacing:.04em;line-height:1.05}
 .hp button[data-act="manage-presets"]{color:var(--accent);border-style:dashed}
 .cue-edit-list,.preset-edit-list{display:flex;flex-direction:column;gap:8px}
 .cue-edit-row,.preset-edit-row{display:grid;grid-template-columns:minmax(82px,.7fr) minmax(110px,1fr) minmax(150px,1.5fr) auto;gap:6px;align-items:center;padding:8px;border:1px solid var(--line);border-radius:7px}
@@ -156,7 +158,8 @@ button{cursor:pointer}
 .cue-edit-row .row,.preset-edit-row .row{gap:4px;flex-wrap:nowrap}
 .cue-edit-row .btn,.preset-edit-row .btn{padding:5px 8px}
 .cue-editor-target{font-family:var(--mono);font-size:12px}
-.cue-editor-actions{display:flex;gap:8px;justify-content:flex-end}
+.cue-editor-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+.cue-editor-actions .cue-td{margin-right:auto;gap:8px}
 @media(max-width:700px){
   .cue-edit-row{grid-template-columns:1fr 1fr}
   .cue-edit-row .cue-editor-target{grid-column:1/-1}
@@ -260,7 +263,7 @@ button{cursor:pointer}
 .dv-opts{display:flex;gap:4px;flex-wrap:wrap}
 .dv-empty{margin:auto;text-align:center;color:var(--dim);font-size:13px;line-height:1.45;max-width:34ch}
 .dz-pal{display:grid;grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:5px}
-.dz-sw{border:1px solid var(--line2);border-radius:5px;padding:18px 7px 6px;background:linear-gradient(var(--s),var(--s)) top/100% 12px no-repeat,var(--panel2);font-family:var(--display);font-weight:600;font-size:12.5px;letter-spacing:.04em;text-transform:uppercase;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dz-sw{border:1px solid var(--line2);border-radius:5px;padding:18px 7px 6px;background:linear-gradient(var(--s),var(--s)) top/100% 12px no-repeat,var(--panel2);font-family:var(--display);font-weight:600;font-size:14.5px;letter-spacing:.04em;line-height:1.05;text-transform:uppercase;text-align:center;overflow:hidden;overflow-wrap:anywhere}
 .dz-sw.on{border-color:var(--fg);box-shadow:0 0 0 1px var(--fg)}
 .dz-out{width:20px;height:20px;border-radius:50%;flex:none;--s:#000;background:var(--s);box-shadow:0 0 0 1px var(--line2),0 0 14px var(--s)}
 .dz-meter{flex:1;min-width:60px;height:6px;border-radius:3px;background:var(--bg);overflow:hidden}
