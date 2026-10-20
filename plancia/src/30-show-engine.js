@@ -96,6 +96,7 @@ function renderCueEditor(w,cues,meta={}){
   s.innerHTML=`<div class="sheet" role="dialog" aria-label="Editor timeline">
     <div class="top"><h3>Timeline · ${esc(w.label)}</h3><button class="btn ghost" id="cueClose">Chiudi</button></div>
     <p class="hint">Le cue si riordinano per posizione. Trascina un blocco nella timeline oppure modifica qui orario e richiamo; le modifiche vengono salvate nel layout condiviso OPS.</p>
+    <div class="row cue-dur"><label>Durata timeline (M:SS)<input id="cueDur" value="${esc(formatCueTime(duration))}" inputmode="decimal" aria-label="Durata timeline"></label><span class="hint">Le cue vanno da 0:00 a prima della fine: con il loop una cue sulla fine non scatta.</span></div>
     <div class="cue-edit-list">${rows||'<p class="hint">Nessuna cue. Aggiungine una per iniziare.</p>'}</div>
     <div class="row"><button class="btn" id="cueAdd">＋ Aggiungi cue</button></div>
     <p class="hint">Richiamo opzionale: indice scena OSC 1-based, parametro DMX V8 nel formato <code>dmx_a_palette=Warm</code>, crossfade in DMX Master con <code>fade=1.5</code> (secondi), o più valori separati da <code>;</code>. Esempio: <code>2; fade=3; dmx_b_palette=Cool</code>.</p>
@@ -107,38 +108,47 @@ function renderCueEditor(w,cues,meta={}){
     name:row.querySelector('.cue-name').value.trim()||'Cue',
     targets:row.querySelector('.cue-targets').value.trim()
   }));
-  const redraw=()=>renderCueEditor(w,readRows(),meta);
+  // durata modificabile qui (prima era fissa: con la timeline di TD a 10 s
+  // ogni cue oltre 0:10 veniva rifiutata e non c'era modo di allungarla)
+  const dur=()=>{const d=parseCueTime(s.querySelector('#cueDur').value);return d>0?d:duration};
+  // ridisegna con la lista data: prima rileggeva sempre le righe dal DOM,
+  // quindi la cue appena aggiunta (o tolta) da Aggiungi/× si perdeva
+  const redraw=(list=readRows())=>renderCueEditor(w,list,{...meta,duration:dur()});
+  s.querySelector('#cueDur').onchange=()=>{
+    if(!(parseCueTime(s.querySelector('#cueDur').value)>0)){showError('Durata: scrivi M:SS o secondi, maggiore di zero.');return}
+    redraw();
+  };
   s.querySelector('#cueClose').onclick=s.querySelector('#cueCancel').onclick=closeSheet;
   s.querySelector('#cueAdd').onclick=()=>{
-    const current=readRows(),times=current.map(c=>c.t).filter(Number.isFinite).sort((a,b)=>a-b);
+    const current=readRows(),times=current.map(c=>c.t).filter(Number.isFinite).sort((a,b)=>a-b),duration=dur();
     // 10 s dopo l'ultima; se non ci sta, a meta' del buco piu' grande della
     // timeline (prima finiva sopra l'ultima cue, a fine durata: nota TD 36)
     let t=(times.length?times[times.length-1]:-10)+10;
-    if(t>duration){const pts=[0,...times,duration];let gap=[0,0];
+    if(t>=duration){const pts=[0,...times,duration];let gap=[0,0];
       for(let i=1;i<pts.length;i++)if(pts[i]-pts[i-1]>gap[1]-gap[0])gap=[pts[i-1],pts[i]];
       t=(gap[0]+gap[1])/2}
     current.push({t:Math.round(t*100)/100,name:`Cue ${current.length+1}`,targets:''});
-    redraw();
+    redraw(current);
     s.querySelector('.cue-edit-row:last-child .cue-name')?.focus();
   };
   s.querySelectorAll('[data-cue-move]').forEach(button=>button.onclick=()=>{
     const current=readRows(),i=+button.closest('[data-cue-row]').dataset.cueRow,j=i+ +button.dataset.cueMove;
     if(j<0||j>=current.length)return;
     [current[i].t,current[j].t]=[current[j].t,current[i].t];
-    renderCueEditor(w,current.sort((a,b)=>a.t-b.t),meta);
+    renderCueEditor(w,current.sort((a,b)=>a.t-b.t),{...meta,duration:dur()});
   });
   s.querySelectorAll('[data-cue-delete]').forEach(button=>button.onclick=()=>{
-    const current=readRows();current.splice(+button.dataset.cueDelete,1);redraw();
+    const current=readRows();current.splice(+button.dataset.cueDelete,1);redraw(current);
   });
   const commit=()=>{
-    const current=readRows();
-    const invalid=current.find(c=>!Number.isFinite(c.t)||c.t<0||c.t>duration);
-    if(invalid){showError(`Timeline: inserisci un orario tra 0 e ${formatCueTime(duration)}.`);return false}
+    const current=readRows(),duration=dur();
+    const invalid=current.find(c=>!Number.isFinite(c.t)||c.t<0||c.t>=duration);
+    if(invalid){showError(`Timeline: "${invalid.name}" deve stare tra 0:00 e prima di ${formatCueTime(duration)} (fine timeline). Per andare oltre allunga la Durata.`);return false}
     if(current.some(c=>c.name.includes('>'))){showError('Il nome della cue non può contenere il separatore ">".');return false}
     const same=current.find((c,i)=>current.some((d,j)=>j!==i&&Math.abs(d.t-c.t)<.005));
     if(same){showError(`Due cue allo stesso istante (${formatCueTime(same.t)}): spostane una.`);return false}
     w.cues=serializeCues(current);
-    if(meta.duration)w.duration=meta.duration;
+    w.duration=duration;
     if(meta.bpm)w.bpm=meta.bpm;
     if(meta.rev)w.tdBaseRev=meta.rev;
     save();refresh(w);return true;
@@ -174,7 +184,7 @@ function timelineToTD(w){
     if(c.params.length)notes.push(`"${c.name}": ${c.params.map(p=>p.param).join(', ')}`);
     // nome = scena o "Cue n" sono i segnaposto di una label vuota (vedi
     // timelineFromTD): si rimanda "" cosi' l'andata e ritorno non cambia la rev
-    const placeholder=(known&&c.name===known.id)||/^Cue \d+$/.test(c.name);
+    const placeholder=(known&&c.name===known.id)||/^Cue( \d+)?$/.test(c.name);
     const d={time:+c.t.toFixed(3),scene:c.scene==null?null:known?known.id:c.scene,label:placeholder?'':c.name};
     if(c.fade!=null)d.fade=c.fade;
     return d;
