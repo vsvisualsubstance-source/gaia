@@ -270,18 +270,24 @@ function paintTdEnum(el,w){
     if(!info.meta||!opts.length)sc.innerHTML=`<p class="dv-empty">${info.missing?'Il parametro DMX V8 configurato non è più pubblicato.':info.meta?'Il parametro DMX V8 non pubblica opzioni.':info.noPalette?'DMX V8 non pubblica un parametro enum palette. Seleziona un parametro dall’ispettore.':'In attesa di un parametro enum DMX V8.'}</p>`;
     else{
       sc.style.gridTemplateColumns=`repeat(${colsOf(w,opts.length)},minmax(0,1fr))`;
-      sc.innerHTML=opts.map((o,i)=>`<div class="si" data-i="${i}" data-opt="${esc(o)}" data-opt-type="${typeof o}" title="${esc(labels[i]??o)}"><span class="no">${String(i+1).padStart(2,'0')}</span><span class="nm">${esc(labels[i]??o)}</span><i class="chip"></i></div>`).join('');
+      sc.innerHTML=opts.map((o,i)=>`<div class="si" data-i="${i}" data-opt="${esc(o)}" data-opt-type="${typeof o}" title="${esc(labels[i]??o)}"><span class="no">${String(i+1).padStart(2,'0')}</span><span class="nm">${esc(labels[i]??o)}</span><i class="chip"></i><i class="pal"></i></div>`).join('');
     }
   }
-  // Colori veri: TD pubblica le palette solo per nome. La palette attiva
-  // prende la tinta che il suo rig sta emettendo (dmx_output, media degli
-  // rgb_out del gruppo); "Custom" il primo colore custom del rig. Le altre
-  // restano neutre finche' TD non pubblica i colori di ogni palette.
-  const group=dmxPaletteGroup(info.meta?.n),live=group&&dmxOutputFresh()?dmxGroupColor(group,tdGroupOf):null;
-  const custom=(G.devices[info.id]?.params||{})[String(info.meta?.n||'').replace(/_palette$/,'_custom_color1')];
+  // Colori veri (nota TD 37): la striscia in basso mostra i colori della
+  // palette come li fa girare il rig (dmx_matrix ... dmx_palette.colors,
+  // a scatti se "stepped"); "Custom" i 5 custom_color del rig, che
+  // cambiano dal vivo. La palette attiva prende anche la tinta che il rig
+  // sta emettendo adesso (dmx_output, media degli rgb_out del gruppo).
+  const pp=String(info.meta?.n||''),params=G.devices[info.id]?.params||{};
+  const pal=dmxPaletteColors(G.dxm[info.id],pp);
+  const custom=[1,2,3,4,5].map(k=>params[pp.replace(/_palette$/,`_custom_color${k}`)]).filter(Array.isArray);
+  const group=dmxPaletteGroup(pp),live=group&&dmxOutputFresh()?dmxGroupColor(group,tdGroupOf):null;
   sc.querySelectorAll('.si').forEach((n,i)=>{
-    const on=String(info.value)===String(opts[i]);n.classList.toggle('on',on);
-    const col=on&&live?live:opts[i]==='Custom'&&Array.isArray(custom)?custom:null;
+    const o=String(opts[i]),on=String(info.value)===o;n.classList.toggle('on',on);
+    const cols=o==='Custom'?custom:pal?.colors?.[o]||null;
+    const grad=cols?.length?dmxGradient([[cols,o==='Custom'||pal?.stepped.has(o)]]):'';
+    const strip=n.querySelector('.pal');if(strip&&strip._g!==grad){strip._g=grad;strip.style.background=grad}
+    const col=on&&live?live:cols?.[0]||null;
     const hx=col?hex(col):'';if(n._ic!==hx){n._ic=hx;hx?n.style.setProperty('--ic',hx):n.style.removeProperty('--ic')}
   });
   const addr=el.querySelector('.addr');if(addr)addr.textContent=info.meta?`${info.id} · ${info.meta.n}`:'DMX V8 · parametro non disponibile';

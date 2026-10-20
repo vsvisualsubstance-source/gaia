@@ -129,7 +129,38 @@ function tdActiveScene(params,output=DMX_OUTPUT){
   return index==null?null:{index,id:a&&typeof a==='object'?a.scene??null:null};
 }
 
+// ── Colori di palette e scene (nota TD/Win-PD 37) ──────────────────────
+// dmx_matrix.rigs.<a|b|ledbar>.params.dmx_palette = {options, colors:
+// {"Warm": [[r,g,b]...]}, stepped: ["Basic 2"]}: i colori nell'ordine in
+// cui il rig li fa girare (0-1). "Custom" non c'e': sono i
+// dmx_<rig>_custom_color1..5 dello status.
+const dmxHex=c=>'#'+c.slice(0,3).map(v=>Math.round(Math.max(0,Math.min(1,+v||0))*255).toString(16).padStart(2,'0')).join('');
+function dmxPaletteColors(matrix,param){
+  const m=/^dmx_(.+)_palette$/.exec(String(param||'')),p=m?matrix?.rigs?.[m[1]]?.params?.dmx_palette:null;
+  if(!p||!p.colors||typeof p.colors!=='object')return null;
+  return{colors:p.colors,stepped:new Set(Array.isArray(p.stepped)?p.stepped:[])};
+}
+// CSS linear-gradient per segmenti affiancati [colori, stepped]: dentro un
+// segmento sfuma (o salta, se stepped); tra segmenti il bordo e' netto.
+function dmxGradient(segments){
+  const segs=(segments||[]).filter(s=>Array.isArray(s?.[0])&&s[0].some(Array.isArray));
+  if(!segs.length)return'';
+  const stops=[],pc=v=>`${+v.toFixed(2)}%`;
+  segs.forEach(([raw,stepped],k)=>{
+    const cols=raw.filter(Array.isArray),a=k*100/segs.length,w=100/segs.length;
+    if(cols.length===1||stepped)cols.forEach((c,i)=>stops.push(`${dmxHex(c)} ${pc(a+w*i/cols.length)}`,`${dmxHex(c)} ${pc(a+w*(i+1)/cols.length)}`));
+    else cols.forEach((c,i)=>stops.push(`${dmxHex(c)} ${pc(a+w*i/(cols.length-1))}`));
+  });
+  return`linear-gradient(90deg,${stops.join(',')})`;
+}
+// Anteprima di una scena di TD (show_scene_catalog[].preview): front |
+// back, ognuno con i colori della palette salvata nella scena.
+function tdScenePreview(scene,stepped=new Set()){
+  const p=scene?.preview;if(!p||typeof p!=='object')return[];
+  return[p.rig_a,p.rig_b].filter(r=>Array.isArray(r?.colors)&&r.colors.length).map(r=>[r.colors,stepped.has(r.palette)]);
+}
+
 if(typeof module==='object'&&module.exports){
   module.exports={DMX_OUTPUT,dmxOutputApplySnapshot,dmxOutputApplySource,dmxOutputApplyOsc,dmxOutputFresh,dmxOutputForFixture,dmxOutputSummary,
-    dmxHeadAngles,dmxGroupColor,dmxPaletteGroup,tdSceneList,tdActiveScene};
+    dmxHeadAngles,dmxGroupColor,dmxPaletteGroup,tdSceneList,tdActiveScene,dmxHex,dmxPaletteColors,dmxGradient,tdScenePreview};
 }

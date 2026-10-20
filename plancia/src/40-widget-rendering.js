@@ -30,14 +30,16 @@ function inner(w){
       const td=w.addr==='/dmx/scene'&&(!w.mode||w.mode==='push')?tdScenes():[];
       const it=td.length?td.map(s=>s.label||s.id):items(w),c=colsOf(w,it.length),lk=w.addr==='/dmx/scene'&&!td.length;
       if(w.mode==='head-select'&&!it.length)return '<div class="dv-empty">In attesa delle teste mobili pubblicate da DMX Master.</div>';
-      return `<div class="sc" style="grid-template-columns:repeat(${c},minmax(0,1fr))">${it.map((n,i)=>{const ic=lk&&LOOKS[i]?lookHex(i):'';
-        return `<div class="si" data-i="${i}" title="${esc(n)}"${ic?` style="--ic:${ic}"`:''}><span class="no">${String(i+1).padStart(2,'0')}</span><span class="nm">${esc(n)}</span><i class="chip"></i><i class="prog"></i></div>`}).join('')}</div>`}
+      // scene di TD: striscia con le palette salvate nella scena (front |
+      // back, preview della nota TD 37), barretta col primo colore front
+      return `<div class="sc" style="grid-template-columns:repeat(${c},minmax(0,1fr))">${it.map((n,i)=>{const look=td.length?tdSceneLook(td[i]):null,ic=look?look.ic:lk&&LOOKS[i]?lookHex(i):'';
+        return `<div class="si" data-i="${i}" title="${esc(n)}"${ic?` style="--ic:${ic}"`:''}><span class="no">${String(i+1).padStart(2,'0')}</span><span class="nm">${esc(n)}</span><i class="chip"></i><i class="prog"></i>${look?.grad?`<i class="pal" style="background:${look.grad}"></i>`:''}</div>`}).join('')}</div>`}
     case 'color': return `<div class="cw"><div class="disc"><i class="mk"></i></div><div class="sws">${SWC.map((c,i)=>`<i data-s="${i}" style="--s:${hex(c)}"></i>`).join('')}</div></div>`;
     case 'timeline':{const cues=timelineCues(w),D=timelineDuration(w),controlled=isShowTimeline(w)&&showClock.authority;
       const sample=controlled?showClockSample():null,available=!!sample&&showClockFresh(sample),locked=controlled&&!available;
       const step=[5,10,15,30,60,120,300].find(s=>D/s<=12)||600; let ticks='';
       for(let t=0;t<D;t+=step)ticks+=`<span style="left:${t/D*100}%">${Math.floor(t/60)}:${String(t%60).padStart(2,'0')}</span>`;
-      const blocks=cues.map((c,i)=>{const e=(cues[i+1]?.t??D);const col=c.scene!=null&&LOOKS[c.scene]?lookHex(c.scene):w.color;
+      const blocks=cues.map((c,i)=>{const e=(cues[i+1]?.t??D);const col=c.scene!=null&&LOOKS[c.scene]?lookHex(c.scene):c.sceneId&&tdSceneLook(tdScenes().find(s=>s.id===c.sceneId)).ic||w.color;
         const target=[c.scene!=null?'SC '+(c.scene+1):'',c.params.length?'DMX '+c.params.length:''].filter(Boolean).join(' · ');
         return `<div class="tl-blk" data-k="${i}" style="left:${c.t/D*100}%;width:${(e-c.t)/D*100}%;--ic:${col}"><span>${i+1} ${esc(c.name)}</span><em>${target}</em></div>`}).join('');
       return `<div class="tl" data-duration="${D}"><div class="tl-head"><span class="tl-name">${esc(w.label)}</span>

@@ -148,3 +148,41 @@ test('TD scenes come from the catalog in /dmx/scene order, active from dmx_outpu
   assert.deepEqual(tdActiveScene(params), { index: 0, id: 'TestScene1' }); // dmx_output vince
   assert.deepEqual(tdActiveScene(params, { scene: null }), { index: 1, id: 'Finale' });
 });
+
+// Colori di palette e scene come li pubblica DMX Master (nota TD 37)
+const { dmxHex, dmxPaletteColors, dmxGradient, tdScenePreview } = require('../src/49-dmx-output');
+const WARM = [[1, 0, 0], [1, 0.353, 0], [1, 0.667, 0], [1, 0.863, 0], [1, 0.353, 0]];
+const MATRIX = { rigs: { a: { params: { dmx_palette: { options: ['Warm', 'Basic 2', 'Custom'],
+  colors: { Warm: WARM, 'Basic 2': [[1, 0, 0], [0, 0, 1]] }, stepped: ['Basic 2'] } } }, haze: { params: {} } } };
+
+test('palette colours are read per rig from dmx_matrix', () => {
+  assert.deepEqual(dmxPaletteColors(MATRIX, 'dmx_a_palette').colors.Warm, WARM);
+  assert.equal(dmxPaletteColors(MATRIX, 'dmx_a_palette').stepped.has('Basic 2'), true);
+  assert.equal(dmxPaletteColors(MATRIX, 'dmx_b_palette'), null);
+  assert.equal(dmxPaletteColors(MATRIX, 'dmx_a_level'), null);
+  assert.equal(dmxPaletteColors(null, 'dmx_a_palette'), null);
+  assert.equal(dmxHex([1, 0.353, 0]), '#ff5a00');
+});
+
+test('gradient blends smooth palettes and hard-steps stepped ones', () => {
+  assert.equal(dmxGradient([[[[1, 0, 0]], false]]), 'linear-gradient(90deg,#ff0000 0%,#ff0000 100%)');
+  assert.equal(dmxGradient([[[[1, 0, 0], [0, 0, 1]], false]]), 'linear-gradient(90deg,#ff0000 0%,#0000ff 100%)');
+  assert.equal(dmxGradient([[[[1, 0, 0], [0, 0, 1]], true]]),
+    'linear-gradient(90deg,#ff0000 0%,#ff0000 50%,#0000ff 50%,#0000ff 100%)');
+  // due segmenti (front | back): bordo netto a meta'
+  assert.equal(dmxGradient([[[[1, 0, 0]], false], [[[0, 0, 1]], false]]),
+    'linear-gradient(90deg,#ff0000 0%,#ff0000 50%,#0000ff 50%,#0000ff 100%)');
+  assert.equal(dmxGradient([]), '');
+  assert.equal(dmxGradient([[[], false]]), '');
+});
+
+test('scene preview gives front and back palettes, stepped from the matrix', () => {
+  const scene = { id: 'sc1', preview: { rig_a: { palette: 'Warm', colors: WARM },
+    rig_b: { palette: 'Basic 2', colors: [[1, 0, 0], [0, 0, 1]] }, heads: [{ uid: 'p-fslozhy', rgb: [1, 1, 1] }] } };
+  const segs = tdScenePreview(scene, dmxPaletteColors(MATRIX, 'dmx_a_palette').stepped);
+  assert.equal(segs.length, 2);
+  assert.deepEqual(segs[0], [WARM, false]);
+  assert.equal(segs[1][1], true);
+  assert.deepEqual(tdScenePreview({ id: 'x' }), []);
+  assert.deepEqual(tdScenePreview({ preview: { heads: [] } }), []); // scena senza "rigs"
+});

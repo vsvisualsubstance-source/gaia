@@ -388,7 +388,7 @@ function showClockCues(){
     const position=c.t??c.pos??c.position??c.seconds??c.time_s??c.time??match?.[1];
     const t=typeof position==='string'?parseCueTime(position):+position;
     const name=c.label||c.name||match?.[2]||c.scene||`Cue ${i+1}`;
-    return Number.isFinite(t)?{t,name:String(name),index:Number.isFinite(+c.index)&&+c.index>0?+c.index:i+1,scene:null,params:[],invalid:[]}:null;
+    return Number.isFinite(t)?{t,name:String(name),sceneId:c.scene||null,index:Number.isFinite(+c.index)&&+c.index>0?+c.index:i+1,scene:null,params:[],invalid:[]}:null;
   }).filter(Boolean);
 }
 function showClockCommand(w,action,value){

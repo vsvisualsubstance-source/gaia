@@ -109,7 +109,10 @@ button{cursor:pointer}
 .si .nm{font-family:var(--display);font-weight:600;font-size:clamp(12px,min(32cqh,14cqw),24px);letter-spacing:.03em;text-transform:uppercase;line-height:1.05;max-width:100%;overflow:hidden;overflow-wrap:break-word;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2}
 /* padding/bordo/raggio azzerati: senza, eredita lo stile pillola di .chip (riga ~253) e diventa una barra di ~25px che copre numero e nome */
 .si .chip{position:absolute;left:0;top:0;bottom:0;width:3px;padding:0;border:0;border-radius:0;background:var(--ic,var(--c))}
-.si .prog{position:absolute;left:0;bottom:0;height:2px;width:0;background:var(--fg)}
+.si .prog{position:absolute;left:0;bottom:0;height:2px;width:0;background:var(--fg);z-index:1}
+/* colori veri della palette / della scena di TD (nota TD 37); vuota = niente striscia */
+.si .pal{position:absolute;left:3px;right:0;bottom:0;height:4px;pointer-events:none}
+.si:has(.pal[style*="gradient"]){padding-bottom:6px}
 .si.on{background:color-mix(in srgb,var(--ic,var(--c)) 26%,var(--panel2));border-color:var(--ic,var(--c));box-shadow:inset 0 0 18px color-mix(in srgb,var(--ic,var(--c)) 30%,transparent)}
 .si.on .no{color:var(--fg)}
 

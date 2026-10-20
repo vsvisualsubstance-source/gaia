@@ -214,6 +214,12 @@ const tdFixtureByUid=uid=>uid==null?null:(tdParams().dmx_fixtures||[]).find(f=>f
 const tdGroupOf=uid=>tdFixtureByUid(uid)?.group||null;
 const tdModelFor=f=>{const name=tdFixtureByUid(f.uid??f.id)?.profile||f.model;return tdModels().find(m=>m.model===name)||null};
 const tdScenes=()=>tdSceneList(tdParams());
+// colori di una scena di TD per pulsanti e cue: {grad, ic} (vuoti senza preview)
+function tdSceneLook(scene){
+  const stepped=dmxPaletteColors(G.dxm['td-dmx-win'],'dmx_a_palette')?.stepped||new Set();
+  const segs=tdScenePreview(scene,stepped),first=segs[0]?.[0]?.[0];
+  return{grad:dmxGradient(segs),ic:Array.isArray(first)?dmxHex(first):''};
+}
 const tdTypes=()=>tdParams().dmx_types||[];
 function modelFootprint(name){
   const m=tdModels().find(x=>x.model===name);
