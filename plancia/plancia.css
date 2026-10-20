@@ -362,3 +362,14 @@ button{cursor:pointer}
 .grp-row .row{gap:6px;flex-wrap:nowrap;align-items:center}
 @media (max-width:760px){.grp-row{grid-template-columns:1fr 1fr}.grp-row .row{grid-column:1/-1;justify-content:space-between}}
 .hint.warn{color:var(--accent);border:1px solid var(--accent);border-radius:6px;padding:6px 9px}
+.toast.ok{border-color:var(--ok)}
+.scn-list{display:flex;flex-direction:column;gap:8px}
+.scn-row{display:flex;flex-direction:column;gap:6px;padding:8px;border:1px solid var(--line);border-radius:7px}
+.scn-row.on{border-color:var(--accent)}
+.scn-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.scn-head .hint{flex-basis:100%}
+.scn-sw{width:56px;height:12px;border-radius:3px;background:var(--panel2);border:1px solid var(--line2);flex:none}
+.scn-act{gap:6px;flex-wrap:wrap}
+.scn-cats{display:flex;flex-wrap:wrap;gap:4px 14px}
+.scn-new{border-top:1px solid var(--line);padding-top:10px;display:flex;flex-direction:column;gap:8px}
+.scn-new h4{margin:0;font-family:var(--display);letter-spacing:.08em;text-transform:uppercase;font-size:13px}

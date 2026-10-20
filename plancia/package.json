@@ -6,7 +6,7 @@
   "scripts": {
     "build": "node build-app.js",
     "start": "node build-app.js && node bridge.js",
-    "test": "node --test test\\build-app.test.js test\\dmx-output.test.js test\\dmx-groups.test.js"
+    "test": "node --test test\\build-app.test.js test\\dmx-output.test.js test\\dmx-groups.test.js test\\dmx-scenes.test.js"
   },
   "dependencies": {
     "ws": "^8.18.0"

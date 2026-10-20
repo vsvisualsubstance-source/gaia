@@ -40,9 +40,11 @@ function connect(){
 }
 let toastTimer=0;
 function showError(message){
-  const toast=$('#toast');toast.textContent=message;toast.hidden=false;
+  const toast=$('#toast');toast.textContent=message;toast.hidden=false;toast.classList.remove('ok');
   clearTimeout(toastTimer);toastTimer=setTimeout(()=>{toast.hidden=true},5000);
 }
+// stesso toast, bordo verde: esito riuscito
+function showInfo(message){showError(message);$('#toast').classList.add('ok')}
 function emit(msg,quiet){
   if(ws&&ws.readyState===1)ws.send(JSON.stringify(msg));
   if(quiet)return;
