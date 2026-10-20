@@ -110,8 +110,14 @@ function renderCueEditor(w,cues,meta={}){
   const redraw=()=>renderCueEditor(w,readRows(),meta);
   s.querySelector('#cueClose').onclick=s.querySelector('#cueCancel').onclick=closeSheet;
   s.querySelector('#cueAdd').onclick=()=>{
-    const current=readRows(),last=current.reduce((max,c)=>Number.isFinite(c.t)?Math.max(max,c.t):max,0);
-    current.push({t:Math.min(duration,Math.max(0,last+10)),name:`Cue ${current.length+1}`,targets:''});
+    const current=readRows(),times=current.map(c=>c.t).filter(Number.isFinite).sort((a,b)=>a-b);
+    // 10 s dopo l'ultima; se non ci sta, a meta' del buco piu' grande della
+    // timeline (prima finiva sopra l'ultima cue, a fine durata: nota TD 36)
+    let t=(times.length?times[times.length-1]:-10)+10;
+    if(t>duration){const pts=[0,...times,duration];let gap=[0,0];
+      for(let i=1;i<pts.length;i++)if(pts[i]-pts[i-1]>gap[1]-gap[0])gap=[pts[i-1],pts[i]];
+      t=(gap[0]+gap[1])/2}
+    current.push({t:Math.round(t*100)/100,name:`Cue ${current.length+1}`,targets:''});
     redraw();
     s.querySelector('.cue-edit-row:last-child .cue-name')?.focus();
   };
@@ -129,6 +135,8 @@ function renderCueEditor(w,cues,meta={}){
     const invalid=current.find(c=>!Number.isFinite(c.t)||c.t<0||c.t>duration);
     if(invalid){showError(`Timeline: inserisci un orario tra 0 e ${formatCueTime(duration)}.`);return false}
     if(current.some(c=>c.name.includes('>'))){showError('Il nome della cue non può contenere il separatore ">".');return false}
+    const same=current.find((c,i)=>current.some((d,j)=>j!==i&&Math.abs(d.t-c.t)<.005));
+    if(same){showError(`Due cue allo stesso istante (${formatCueTime(same.t)}): spostane una.`);return false}
     w.cues=serializeCues(current);
     if(meta.duration)w.duration=meta.duration;
     if(meta.bpm)w.bpm=meta.bpm;
@@ -164,7 +172,10 @@ function timelineToTD(w){
   const cues=parseCues(w).map(c=>{
     const known=c.scene==null?null:cat.find(x=>x.index===c.scene);
     if(c.params.length)notes.push(`"${c.name}": ${c.params.map(p=>p.param).join(', ')}`);
-    const d={time:+c.t.toFixed(3),scene:c.scene==null?null:known?known.id:c.scene,label:c.name};
+    // nome = scena o "Cue n" sono i segnaposto di una label vuota (vedi
+    // timelineFromTD): si rimanda "" cosi' l'andata e ritorno non cambia la rev
+    const placeholder=(known&&c.name===known.id)||/^Cue \d+$/.test(c.name);
+    const d={time:+c.t.toFixed(3),scene:c.scene==null?null:known?known.id:c.scene,label:placeholder?'':c.name};
     if(c.fade!=null)d.fade=c.fade;
     return d;
   });
