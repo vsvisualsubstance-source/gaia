@@ -71,6 +71,7 @@ function loop(){
     else if(w.type==='scenes'&&w.mode==='dmx-enum'){if(gp)paintTdEnum(el,w)}
     else if(w.type==='fixgrid'){if(gp)paintFixGrid(el,w)}
     else if(w.type==='cuestack'){if(gp)paintCueStack(el,w)}
+    else if(w.type==='audiorigs'){if(gp)paintAudioRigs(el,w)}
     else if(w.type==='scenes'&&w.addr==='/dmx/scene'){const k=SH.fade>0?clamp((n-SH.t0)/(SH.fade*1000)):1;
       el.querySelectorAll('.si').forEach((x,i)=>{const p=x.querySelector('.prog');if(p)p.style.width=(i===SH.scene&&k<1)?k*100+'%':'0'})}
   }

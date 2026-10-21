@@ -32,7 +32,8 @@ const appModules = [
   '92-projects.js',
   '93-fixture-colors.js',
   '94-console-widgets.js',
-  '95-help-tour.js'
+  '95-help-tour.js',
+  '96-audio-rigs.js'
 ];
 
 function buildAppBundle(sourceDir = path.join(__dirname, 'src')) {

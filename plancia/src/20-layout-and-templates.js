@@ -94,7 +94,7 @@ TPL.regia={name:'Regia luci',desc:'Console di regia: pila scene con GO/BACK, sce
   W('cuestack',0,0,4,6,{label:'Scene GO',color:SWATCH[3]}),
   W('scenes',4,0,6,4,{label:'Scene · DMX Master',addr:'/dmx/scene',items:sceneList,cols:3,value:0}),
   W('stage',10,0,6,4,{label:'Palco',view:'render'}),
-  W('scenes',4,4,3,2,{label:'Chase',addr:'/dmx/chase',items:CHASE.join('\n'),cols:2,color:SWATCH[4],value:1}),
+  W('audiorigs',4,4,3,2,{label:'Audio',color:SWATCH[4]}),
   W('fader',7,4,3,2,{label:'Fade (s)',addr:'/dmx/fade',min:0,max:10,value:.15,color:SWATCH[1]}),
   W('fader',10,4,3,2,{label:'Strobo (Hz)',addr:'/dmx/strobe/rate',min:1,max:20,value:.37,color:SWATCH[5]}),
   W('clock',13,4,3,2,{label:'Show',mode:'show',color:SWATCH[0]}),
@@ -104,8 +104,11 @@ TPL.regia={name:'Regia luci',desc:'Console di regia: pila scene con GO/BACK, sce
   W('button',14,8,2,2,{label:'Flash strobo',addr:'/dmx/strobe',color:SWATCH[5]})])]};
 TPL.luci={name:'Luci · colori singoli',desc:'Tutte le luci della patch col colore reale: seleziona luci o gruppi e scegli la palette di ognuna.',pages:()=>[P('Luci',[
   W('fixgrid',0,0,16,10,{label:'Luci',color:SWATCH[0]})])]};
+// Audio: reattivita' dei gruppi (rig) di DMX Master, preset e kick.
+TPL.audio={name:'Audio · reattività',desc:'Audio per gruppo: on/off, kick, sorgente A/B, minimo/massimo, soglia, preset.',pages:()=>[P('Audio',[
+  W('audiorigs',0,0,16,10,{label:'Audio · reattività dei gruppi',color:SWATCH[4]})])]};
 TPL.full={name:'Show completo',desc:'Tutte le pagine insieme: Gaia, PatchDeck, DMX V8, panoramica show, DMX, teste mobili, timeline, palco, mix.',
-  pages:()=>['gaia','show','regia','luci','dmx','mh','timeline','palco','mix'].flatMap(k=>TPL[k].pages())};
+  pages:()=>['gaia','show','regia','luci','audio','dmx','mh','timeline','palco','mix'].flatMap(k=>TPL[k].pages())};
 const sample=()=>({pages:TPL.full.pages(),fixtures:defaultFixtures(),stage:stageDefaults()});
 
 let L=store.get(KEY)||sample();

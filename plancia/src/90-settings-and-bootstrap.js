@@ -157,4 +157,13 @@ function migrateUiConsolePages(){
   for(const k of ['regia','luci']){const fresh=TPL[k].pages()[0];if(!L.pages.some(p=>p.name===fresh.name))L.pages.splice(at++,0,fresh)}
   L.uiRev=2;save();
 }
-migrateLegacyHeadSelectors();migrateHeadPresetWidgets();migrateUiShowTimeline();migrateUiConsolePages();render(); initShow(); connect(); gStart(); requestAnimationFrame(loop);
+// 2026-10-21: pagina Audio dopo Luci; in Regia il Chase (non implementato da
+// DMX Master) diventa i controlli audio dei gruppi.
+function migrateUiAudioPage(){
+  if((L.uiRev||0)>=3)return;
+  if(!L.pages.some(p=>p.name==='Audio')){const at=L.pages.findIndex(p=>p.name==='Luci')+1||L.pages.length;L.pages.splice(at,0,TPL.audio.pages()[0])}
+  const regia=L.pages.find(p=>p.name==='Regia'),ch=regia?.widgets.find(w=>w.type==='scenes'&&w.addr==='/dmx/chase');
+  if(ch)regia.widgets[regia.widgets.indexOf(ch)]=W('audiorigs',ch.x,ch.y,ch.w,ch.h,{label:'Audio',color:ch.color});
+  L.uiRev=3;save();
+}
+migrateLegacyHeadSelectors();migrateHeadPresetWidgets();migrateUiShowTimeline();migrateUiConsolePages();migrateUiAudioPage();render(); initShow(); connect(); gStart(); requestAnimationFrame(loop);

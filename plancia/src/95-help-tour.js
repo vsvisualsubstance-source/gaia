@@ -5,6 +5,7 @@
 const HELP_PAGES={
   Show:'Pagina per ESEGUIRE lo show: vedi il palco, l\'orologio, le scene e la timeline (qui in sola lettura: si prepara nella pagina Timeline).',
   Regia:'Console di regia luci: fai andare lo show a mano. A sinistra la pila delle scene con GO/BACK, in basso master e gruppi.',
+  Audio:'Reattività audio: per ogni gruppo di luci decidi se segue la musica, quanto e con quale sorgente, oppure applichi un preset.',
   Luci:'Le luci una per una: vedi il colore che esce davvero e cambi la palette di singole luci o gruppi.',
   DMX:'Controlli DMX completi: scene, palette dei rig, chase, fade, strobo e livelli dei gruppi.',
   'Teste mobili':'Programmatore delle teste: selezione, posizione, colore, gobo, dimmer, zoom e fuoco.',
@@ -18,6 +19,7 @@ function helpForWidget(w){
   const a=w.addr||'';
   switch(w.type){
     case 'cuestack':return['Pila scene (GO/BACK)','Le scene di DMX Master in ordine. ▶ = scena in uscita, NEXT = la prossima. Tocca una riga per prepararla come NEXT, poi GO la manda con il fade impostato. BACK torna alla scena precedente.'];
+    case 'audiorigs':return['Audio dei gruppi',w.h<=3?'♪ accende o spegne la reattività audio del gruppo (spento = luce ferma), Kick = colpo sui bassi. Regolazioni complete nella pagina Audio.':'Una scheda per gruppo (rig): ♪ Audio ON/OFF (spento = luce ferma al massimo), Kick ON/OFF, sorgente A/B, Minimo e Massimo del dimmer, soglia del kick, morbidezza. Seleziona i gruppi con ☐ e tocca un preset; "Salva come preset" per crearne di tuoi.'];
     case 'fixgrid':return['Luci e colori singoli','Ogni tessera è una luce col colore che esce davvero. Toccale per selezionarle (o scegli un gruppo + "Seleziona tutte", pari/dispari), poi tocca una palette: cambia solo il colore, livello e audio restano del rig. "Segue il rig" toglie la palette propria.'];
     case 'stage':return['Palco','Render: come escono le luci (colori reali da DMX Master). Pianta: posizioni e patch, tocca una luce per nome, indirizzo, modello e colore. In alto: ⇪/⇩ TD scambiano la patch, ▣ Scene, ▤ Modelli (libreria), ▦ Gruppi, 💡 Lampade, ✨ AI.'];
     case 'timeline':return['Timeline dello show',w.readonly?'Segue l\'orologio dello show di DMX Master. LIVE/TIMELINE dice chi comanda le luci: in TIMELINE vanno da sole con le cue, in LIVE comandi tu.':'Le cue dello show: tocca un blocco per modificarlo, "Cue" per l\'editor (scena e fade di ogni cue). Play/stop/inizio comandano l\'orologio. Sotto, la corsia VIDEO per PatchDeck.'];

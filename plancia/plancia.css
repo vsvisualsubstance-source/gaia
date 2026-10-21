@@ -467,3 +467,23 @@ button{cursor:pointer}
 .tour-tip b{font:700 17px/1.2 var(--display,inherit);letter-spacing:.02em}
 .tour-tip p{margin:0;color:var(--fg);font-size:14px;line-height:1.4}
 .tour-n{font:500 11px var(--mono,monospace);color:var(--dim)}
+
+/* ---------- Audio dei gruppi ---------- */
+.ar{position:absolute;inset:30px 8px 8px;display:flex;flex-direction:column;gap:10px;min-height:0;overflow:auto}
+.ar-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.ar-card{border:1px solid var(--line2);border-radius:9px;padding:10px;display:grid;gap:8px;background:var(--panel2)}
+.ar-card.sel{border-color:#ffb23e;box-shadow:0 0 0 1px #ffb23e inset}
+.ar-head{display:flex;align-items:center;gap:8px}.ar-head b{flex:1;font:600 16px/1.1 inherit}
+.ar-pick{background:none;border:0;color:var(--fg);font-size:20px;cursor:pointer;padding:0 2px}
+.ar-src{display:flex;gap:3px}.ar-src button{min-width:30px;padding:4px 6px;border:1px solid var(--line2);border-radius:6px;background:none;color:var(--dim);font:600 12px var(--mono,monospace);cursor:pointer}
+.ar-src button.on{border-color:#3ec9ff;color:#3ec9ff}
+.ar-togs{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.ar-tog{display:flex;justify-content:space-between;align-items:center;gap:6px;padding:8px 10px;border:1px solid var(--line2);border-radius:7px;background:var(--panel);color:var(--fg);font:600 14px inherit;cursor:pointer;min-height:40px}
+.ar-tog i{font:600 11px var(--mono,monospace);font-style:normal;color:var(--dim)}
+.ar-tog.on{border-color:#9be15d;background:color-mix(in srgb,#9be15d 14%,var(--panel))}.ar-tog.on i{color:#9be15d}
+.ar-sl{display:grid;gap:2px;font-size:12px;color:var(--dim)}.ar-sl span{display:flex;justify-content:space-between}.ar-sl b{color:var(--fg);font-family:var(--mono,monospace)}
+.ar-sl input{width:100%;accent-color:#ffb23e}
+.ar-pres{display:grid;gap:6px;border-top:1px solid var(--line);padding-top:8px}
+.ar-mini{display:grid;gap:4px;align-content:start}
+.ar-mrow{display:grid;grid-template-columns:1fr auto auto;gap:4px;align-items:center}.ar-mrow b{font:600 12px/1.1 inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ar-mrow .ar-tog{min-height:26px;padding:3px 7px;font-size:12px}
