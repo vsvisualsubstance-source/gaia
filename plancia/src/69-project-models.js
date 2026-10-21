@@ -4,7 +4,14 @@
 // crei/modifichi un modello dall'editor. Su un DMX Master nuovo o rifatto,
 // "Allinea" manda solo i mancanti (add) e i diversi (update), con conferma.
 // Non si sincronizza tutto il catalogo: DMX Master tiene i modelli in uso.
-const MODEL_FIELDS=['model','kind','channels','footprint','manufacturer','notes','beam','colors','gobos','pan_range','tilt_range','defaults'];
+const MODEL_FIELDS=['model','kind','channels','footprint','manufacturer','notes','beam','colors','gobos','pan_range','tilt_range','defaults','lamp'];
+// lampada: oggetto {channel,on,off,hold} (TD) o testo "control on=250 off=11 hold=5"
+function lampSig(l){
+  if(!l)return null;
+  if(typeof l==='string'){const m=/^(\w+)\s+(.*)$/.exec(l.trim());if(!m)return l;
+    l={channel:m[1],...Object.fromEntries([...m[2].matchAll(/(on|off|hold)\s*=\s*([\d.]+)/gi)].map(x=>[x[1].toLowerCase(),+x[2]]))}}
+  return[l.channel,+l.on,+l.off,+(l.hold??5)];
+}
 function modelPayload(m){
   const v={};for(const k of MODEL_FIELDS)if(m&&m[k]!=null&&m[k]!=='')v[k]=JSON.parse(JSON.stringify(m[k]));
   return v;
@@ -14,7 +21,7 @@ const _r3=x=>Array.isArray(x)?x.map(_r3):x&&typeof x==='object'?Object.fromEntri
 function modelSig(m){
   if(!m)return'';const ch=Array.isArray(m.channels)?m.channels:null;
   return JSON.stringify(_r3({kind:m.kind||null,channels:ch,footprint:ch?ch.length:(+m.footprint||+m.channels||null),
-    colors:(m.colors||[]).map(c=>[c.name,c.value]),gobos:(m.gobos||[]).map(c=>[c.name,c.value]),pan:m.pan_range||null,tilt:m.tilt_range||null}));
+    colors:(m.colors||[]).map(c=>[c.name,c.value]),gobos:(m.gobos||[]).map(c=>[c.name,c.value]),pan:m.pan_range||null,tilt:m.tilt_range||null,lamp:lampSig(m.lamp)}));
 }
 // nomi dei modelli usati dalle fixture DMX (non wall/speaker)
 function projectModelNames(fixtures,defaultFor,patchable){

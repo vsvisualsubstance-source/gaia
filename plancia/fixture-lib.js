@@ -65,6 +65,9 @@ function finish(vendor, name, modes, extra) {
     };
     if (defaults) out.defaults = defaults;
     if (m.lamp) out.notes = `${out.notes || ''} · lampada: ${m.lamp}`.replace(/^ · /, '');
+    // campo lamp del modello (nota TD 43): canale, valori on/off, hold (stima: 5 s)
+    const L = m.lampSpec;
+    if (kind === 'heads' && L && channels[L.ch] && Number.isInteger(L.on) && Number.isInteger(L.off)) out.lamp = { channel: channels[L.ch], on: L.on, off: L.off, hold: 5 };
     return out;
   });
 }
@@ -124,8 +127,16 @@ function oflToModels(fx, vendor, key) {
     });
     const ci = roles.indexOf('color'), gi = roles.indexOf('gobo'), defaults = {};
     m.channels.forEach((c, i) => { if (typeof c !== 'string' || fineOf[c] || !ac[c]) return; const v = oflDefault(ac[c], roles[i]); if (v != null) defaults[i] = v; });
+    // lampada: capacita' con commento "Lamp on" / "Lamp off" sullo stesso canale
+    let lampSpec = null;
+    m.channels.forEach((c, i) => {
+      if (lampSpec || typeof c !== 'string' || !ac[c]) return;
+      const caps = oflCaps(ac[c]), at = re => caps.find(x => re.test(String(x.comment || '')) && x.dmxRange);
+      const on = at(/^lamp\s*on\b/i), off = at(/^lamp\s*off\b/i);
+      if (on && off) lampSpec = { ch: i, on: oflDmx(on.dmxRange[0]), off: oflDmx(off.dmxRange[0]) };
+    });
     modes.push({
-      mode: m.shortName || m.name, channels: roles, defaults,
+      mode: m.shortName || m.name, channels: roles, defaults, lampSpec,
       colors: ci >= 0 ? oflSlots(ac[m.channels[ci]], fx.wheels, 'color') : [],
       gobos: gi >= 0 ? oflSlots(ac[m.channels[gi]], fx.wheels, 'gobo') : [],
       pan_range: fx.physical?.focus?.panMax, tilt_range: fx.physical?.focus?.tiltMax,
@@ -239,12 +250,13 @@ function ddf2ToModels(doc, meta) {
     const n = first(ch, /^(off|open|no function|park|none|stop|no rotation|normal|standard|index)\b/i); if (n) defaults[ch] = n[0].lo;
   });
   const fmt = l => l && [...new Set(l.map(x => `${x.lo}–${x.hi}`))].slice(0, 2).join(', ');
-  let lamp = '';
+  let lamp = '', lampSpec = null;
   for (let ch = 0; ch < channels.length && !lamp; ch++) {
     const on = first(ch, /^lamp\s*on/i), off = first(ch, /^lamp\s*off/i);
     if (on || off) lamp = `canale ${ch + 1} (${channels[ch]})${on ? ' on ' + fmt(on) : ''}${off ? ', off ' + fmt(off) : ''}`;
+    if (on && off) lampSpec = { ch, on: on[0].lo, off: off[0].lo };
   }
-  return finish(meta.vendor, meta.name, [{ mode: meta.mode, channels, defaults, lamp, colors: items(/colou?r\s*1?_?(dropdown|$)|setcolou?r1?$/i, true), gobos: items(/gobo\s*1?_?(dropdown|$)|setgobo1?$/i, false) }], meta.extra);
+  return finish(meta.vendor, meta.name, [{ mode: meta.mode, channels, defaults, lamp, lampSpec, colors: items(/colou?r\s*1?_?(dropdown|$)|setcolou?r1?$/i, true), gobos: items(/gobo\s*1?_?(dropdown|$)|setgobo1?$/i, false) }], meta.extra);
 }
 function ddfToModels(xml, meta = {}) {
   const doc = parseXml(String(xml || ''));

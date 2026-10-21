@@ -114,6 +114,7 @@ test('DDF 2: type attribute or channel name, mode from the name, slots from the 
   // initsequence e dai menu (pan, comandato da TD, resta fuori); lampada nelle note
   assert.equal(m.defaults, 'shutter=245 color_2=0 control=0');
   assert.match(m.notes, /lampada: canale 9 \(control\) on 250–255, off 11–29$/);
+  assert.deepEqual(m.lamp, { channel: 'control', on: 250, off: 11, hold: 5 }); // campo lamp, nota TD 43
   assert.deepEqual(m.colors, [{ name: 'white', value: 0, rgb: [1, 1, 1] }, { name: 'orange', value: 8, rgb: [1, 0.502, 0] }]);
   assert.equal(roleFromName('Tilt (fine)'), 'tilt_fine');
 });

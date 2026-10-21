@@ -25,6 +25,14 @@ test('signature ignores notes, manufacturer, slot rgb rounding; sees channels an
   assert.equal(modelSig({ model: 'Dimmer 1CH', kind: 'level', channels: 1 }), modelSig({ model: 'Dimmer 1CH', kind: 'level', footprint: 1 }));
 });
 
+test('lamp (nota TD 43): part of the payload and of the signature, text and object compare equal', () => {
+  const withLamp = { ...SPOT, lamp: { channel: 'control', on: 250, off: 11, hold: 5 } };
+  assert.deepEqual(modelPayload(withLamp).lamp, withLamp.lamp);
+  assert.notEqual(modelSig(withLamp), modelSig(SPOT)); // la iSpot senza lamp in TD risulta "diversa"
+  assert.equal(modelSig({ ...SPOT, lamp: 'control on=250 off=11' }), modelSig(withLamp)); // hold 5 di default
+  assert.notEqual(modelSig({ ...SPOT, lamp: { channel: 'control', on: 250, off: 11, hold: 8 } }), modelSig(withLamp));
+});
+
 test('used models: fixture model or the type default, only patchable fixtures', () => {
   const fixtures = [{ type: 'mh', model: SPOT.model }, { type: 'mh', model: SPOT.model }, { type: 'par' }, { type: 'wall' }];
   const names = projectModelNames(fixtures, t => ({ par: 'D+RGB 4CH', wall: 'Wall' })[t], f => f.type !== 'wall');

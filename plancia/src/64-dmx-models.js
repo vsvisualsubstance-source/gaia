@@ -14,6 +14,19 @@ function parseModelRoles(text){
   const bad=roles.filter(r=>!/^[a-z][a-z0-9_]*$/.test(r));
   return{roles,error:!roles.length?'servono i ruoli dei canali, in ordine':bad.length?`ruoli non validi: ${bad.join(', ')} (minuscole, cifre, _)`:roles.length>512?'oltre 512 canali':''};
 }
+// lampada a scarica (nota TD 43): "control on=250 off=11 hold=5" <-> {channel,on,off,hold};
+// TD la accende/spegne con heads_lamp tenendo il valore per hold secondi
+function parseModelLamp(text,roles){
+  const t=String(text||'').trim();if(!t)return{lamp:null};
+  const m=/^([a-z][a-z0-9_]*)\s+(.*)$/i.exec(t);if(!m)return{error:'lampada: scrivi "<canale> on=<v> off=<v> hold=<s>"'};
+  const kv=Object.fromEntries([...m[2].matchAll(/(on|off|hold)\s*=\s*(\d+(?:\.\d+)?)/gi)].map(x=>[x[1].toLowerCase(),+x[2]]));
+  const lamp={channel:m[1].toLowerCase(),on:kv.on,off:kv.off,hold:kv.hold??5};
+  if(roles&&!roles.includes(lamp.channel))return{error:`lampada: "${lamp.channel}" non è tra i canali del modello`};
+  if(![lamp.on,lamp.off].every(v=>Number.isInteger(v)&&v>=0&&v<=255))return{error:'lampada: on e off sono valori DMX 0-255'};
+  if(!(lamp.hold>=2&&lamp.hold<=30))return{error:'lampada: hold da 2 a 30 secondi'};
+  return{lamp};
+}
+const formatModelLamp=l=>l&&typeof l==='object'?`${l.channel} on=${l.on} off=${l.off} hold=${l.hold??5}`:String(l||'');
 // righe slot dell'editor -> lista per TD [{name, value, rgb?}]
 function cleanModelSlots(rows,withColor){
   const out=[],errs=[],seen=new Set();
@@ -74,6 +87,7 @@ function openModelForm(m,opts={}){
       <label class="md-beam">Colore della lampada (beam) <input id="mfBeam" type="color" value="${dmxHex(m?.beam||[1,1,1])}"><span class="hint">la luce "bianca" della fixture: è il colore per i modelli senza miscelazione (solo dimmer) e quello che filtrano ruota e CMY.</span></label>
       ${kind==='heads'?`<div class="two"><label>Escursione pan (°)<input id="mfPan" type="number" min="1" value="${esc(m?.pan_range??540)}"></label><label>Escursione tilt (°)<input id="mfTilt" type="number" min="1" value="${esc(m?.tilt_range??270)}"></label></div>
       <label>Valori di default <em>per i canali non pilotati</em><input id="mfDefaults" class="mono" value="${esc(m?.defaults||'')}" placeholder="shutter=255 speed=0"></label>
+      <label>Lampada <em>solo lampade a scarica: canale, valori DMX di accensione e spegnimento, secondi da tenerli</em><input id="mfLamp" class="mono" value="${esc(formatModelLamp(m?.lamp))}" placeholder="control on=250 off=11 hold=5"></label>
       <h4>Ruota colori <em>slot = nome, valore DMX, colore</em></h4><div class="md-slots" id="mfColors">${slotRows(m?.colors,'sl-color',true)}</div>
       <div class="row"><button class="btn sm" id="mfAddColor">＋ Slot colore</button></div>
       <h4>Gobo</h4><div class="md-slots" id="mfGobos">${slotRows(m?.gobos,'sl-gobo',false)}</div>
@@ -103,11 +117,21 @@ function openModelForm(m,opts={}){
         const c=cleanModelSlots(read('.sl-color',true),true),g=cleanModelSlots(read('.sl-gobo',false),false);
         const errs=[...c.errors,...g.errors];if(errs.length){showError('Modello: '+errs.join(' · '));return}
         v.colors=c.slots;v.gobos=g.slots;
+        const lp=parseModelLamp(s.querySelector('#mfLamp').value,ch.roles);if(lp.error){showError('Modello: '+lp.error);return}
+        if(lp.lamp)v.lamp=lp.lamp;else if(m?.lamp&&!isNew)v.lamp=null; // svuotato = togli la lampada
       }
-      const sig=x=>JSON.stringify(x&&[x.kind,x.channels,x.beam,x.colors,x.gobos,x.pan_range,x.tilt_range,x.manufacturer,x.notes]);
+      const sig=x=>JSON.stringify(x&&[x.kind,x.channels,x.beam,x.colors,x.gobos,x.pan_range,x.tilt_range,x.manufacturer,x.notes,formatModelLamp(x.lamp)]);
       const before=sig(tdModels().find(x=>x.model===name));
+      const send=val=>tdSceneCommand(isNew?'dmx_model_add':'dmx_model_update',val,()=>{const x=tdModels().find(y=>y.model===name);return!!x&&(isNew||sig(x)!==before)});
       try{
-        await tdSceneCommand(isNew?'dmx_model_add':'dmx_model_update',v,()=>{const x=tdModels().find(y=>y.model===name);return!!x&&(isNew||sig(x)!==before)});
+        try{await send(v)}
+        catch(e){
+          // nota TD 43: canali cambiati su un modello in uso e fixture che si
+          // sovrapporrebbero -> rifiutato (reject); l'operatore puo' farle spostare
+          if(isNew||!/\d+-\d+ con /.test(e.message))throw e;
+          if(!confirm(`DMX Master non scrive: le fixture di questo modello si sovrapporrebbero ad altre.\n${e.message}\n\nOK = sposta in avanti le fixture che si sovrappongono (on_conflict auto).\nAnnulla = non scrivere niente.`))return;
+          await send({...v,on_conflict:'auto'});
+        }
         rememberModel(v);
         showInfo(`Modello "${name}" ${isNew?'creato':'aggiornato'} su DMX Master.`);
         if(opts.onDone)opts.onDone(name);else back();
@@ -126,4 +150,38 @@ function openModelForm(m,opts={}){
 
 if(typeof module==='object'&&module.exports){
   module.exports={MODEL_KINDS,dmxHexToRgb,parseModelRoles,cleanModelSlots};
+}
+
+// ---- lampade a scarica (nota TD 43): heads_lamp "on"/"off" su tutte le teste col campo lamp ----
+const headsResultText=r=>!r?'':typeof r==='string'?r:`${r.action||''} ${r.ok===false?'✖':'✔'} ${r.message||''}`.trim();
+function openLampPanel(){
+  const s=$('#scrim');s.hidden=false;
+  const paint=()=>{
+    const p=tdParams(),withLamp=new Map(tdModels().filter(m=>m.lamp).map(m=>[m.model,m.lamp]));
+    const heads=(p.dmx_fixtures||[]).filter(f=>withLamp.has(f.profile));
+    const byModel={};heads.forEach(f=>{(byModel[f.profile]=byModel[f.profile]||[]).push(f.name||f.uid)});
+    const last=(p.heads_list||[]).map(h=>h.lamp).filter(Boolean),lastCmd=last.length?last[last.length-1]:null;
+    s.innerHTML=`<div class="sheet" role="dialog" aria-label="Lampade">
+      <div class="top"><h3>💡 Lampade delle teste</h3><button class="btn ghost" id="lpClose">Chiudi</button></div>
+      <p class="hint">Per le lampade a scarica: DMX Master tiene il valore di accensione o spegnimento sul canale della lampada per qualche secondo (<em>hold</em> del modello), poi torna al riposo. Vale per tutte le teste il cui modello ha la lampada. DMX Master non sa se la lampada è accesa davvero: qui vedi solo l'ultimo comando dato.</p>
+      ${!tdCatalogKnown()?'<p class="hint"><b>DMX Master non collegato.</b></p>':heads.length?Object.entries(byModel).map(([mod,names])=>{const l=withLamp.get(mod);
+        return`<div class="md-row"><b>${esc(mod)}</b><span class="hint">${names.length} teste (${esc(names.join(', '))}) · ${esc(formatModelLamp(l))}</span></div>`}).join(''):
+        '<p class="hint">Nessuna testa in patch su DMX Master ha un modello con la lampada (campo "Lampada" in ▤ Modelli).</p>'}
+      <p class="hint">Ultimo comando: <b>${esc(lastCmd||'—')}</b> · ultimo esito delle teste: ${esc(headsResultText(p.heads_last_result)||'—')}</p>
+      <div class="row"><button class="btn primary" id="lpOn"${heads.length?'':' disabled'}>Accendi</button><button class="btn danger" id="lpOff"${heads.length?'':' disabled'}>Spegni</button></div>
+    </div>`;
+    s.querySelector('#lpClose').onclick=closeSheet;
+    const go=async v=>{
+      if(v==='off'&&!confirm('Spegnere le lampade? Una lampada a scarica spenta deve raffreddarsi qualche minuto prima di poter essere riaccesa.'))return;
+      if(v==='on'&&!confirm(`Accendere le lampade di ${heads.length} teste?`))return;
+      // esito in heads_last_result {seq, action, ok, message}: aspetta un seq nuovo
+      const seq0=tdParams().heads_last_result?.seq;
+      try{await tdSceneCommand('heads_lamp',v,()=>{const r=tdParams().heads_last_result;return!!r&&r.seq!==seq0&&r.action==='heads_lamp'});
+        const r=tdParams().heads_last_result;(r.ok===false?showError:showInfo)('Lampade: '+(r.message||v))}
+      catch(e){showError('Lampade: '+e.message)}
+      paint();
+    };
+    s.querySelector('#lpOn').onclick=()=>go('on');s.querySelector('#lpOff').onclick=()=>go('off');
+  };
+  paint();
 }

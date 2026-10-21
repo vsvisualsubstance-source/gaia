@@ -78,7 +78,7 @@ function showModelCandidates(list,o){
   s.querySelectorAll('[data-mq]').forEach(b=>b.onclick=()=>{const p=list[+b.dataset.mq];
     openModelForm({model:p.model,kind:p.kind,channels:p.channels,footprint:p.channels.length,manufacturer:p.manufacturer,
       notes:p.notes||`importato ${o.from} (${p.source}${p.mode?', modo '+p.mode:''}) — verificare sul manuale`,beam:[1,1,1],
-      pan_range:p.pan_range||540,tilt_range:p.tilt_range||270,defaults:'',colors:p.colors.map(c=>({...c})),gobos:p.gobos.map(c=>({...c}))},
+      pan_range:p.pan_range||540,tilt_range:p.tilt_range||270,defaults:p.defaults||'',lamp:p.lamp||null,colors:p.colors.map(c=>({...c})),gobos:p.gobos.map(c=>({...c}))},
       {asNew:true,from:o.from,back:()=>showModelCandidates(list,o)})});
 }
 
