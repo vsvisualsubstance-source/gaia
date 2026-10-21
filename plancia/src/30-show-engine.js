@@ -58,16 +58,18 @@ function parseCues(w){
   const k=w.cues||''; if(cueCache.has(k))return cueCache.get(k);
   const r=k.split('\n').map(s=>s.match(/^\s*(\d+):(\d{1,2}(?:\.\d+)?)\s+(.*?)(?:\s*>\s*(.+))?\s*$/)).filter(Boolean)
     .map(m=>{
-      const targets=(m[4]||'').split(';').map(s=>s.trim()).filter(Boolean),sceneTarget=targets.find(s=>/^[1-9]\d*$/.test(s));
+      const targets=(m[4]||'').split(';').map(s=>s.trim()).filter(Boolean),sceneTarget=targets.find(s=>/^[1-9]\d*$/.test(s)),sceneName=targets.find(s=>s.startsWith('@')&&s.length>1);
       // fade=<s>: crossfade della cue in DMX Master (show_timeline), non un parametro DMX V8
       const isFade=s=>/^fade\s*=/i.test(s),fadeTarget=targets.find(isFade),fade=fadeTarget?parseFloat(fadeTarget.split('=')[1]):NaN;
-      return{t:+m[1]*60+ +m[2],name:m[3]||'Cue',scene:sceneTarget!=null?+sceneTarget-1:null,fade:fade>=0?fade:null,
+      return{t:+m[1]*60+ +m[2],name:m[3]||'Cue',scene:sceneTarget!=null?+sceneTarget-1:null,sceneId:sceneName?sceneName.slice(1).trim():null,fade:fade>=0?fade:null,
         params:targets.filter(s=>s.includes('=')&&!isFade(s)).map(s=>{const i=s.indexOf('=');return{param:s.slice(0,i).trim(),value:s.slice(i+1).trim()}}),
-        invalid:targets.filter(s=>!s.includes('=')&&!/^\d+$/.test(s))};
+        invalid:targets.filter(s=>!s.includes('=')&&!/^\d+$/.test(s)&&!s.startsWith('@'))};
     }).sort((a,b)=>a.t-b.t);
   cueCache.set(k,r); return r;
 }
-const cueTargets=c=>[c.scene!=null?String(c.scene+1):'',c.fade!=null?`fade=${c.fade}`:'',...c.params.map(p=>`${p.param}=${p.value}`),...c.invalid].filter(Boolean).join('; ');
+// scena per nome (@id, stabile) o per indice 1-based (look locali / vecchie cue)
+const cueSceneIndex=c=>c.sceneId!=null?(tdScenes().find(x=>x.id===c.sceneId)?.index??null):c.scene;
+const cueTargets=c=>[c.sceneId!=null?'@'+c.sceneId:c.scene!=null?String(c.scene+1):'',c.fade!=null?`fade=${c.fade}`:'',...c.params.map(p=>`${p.param}=${p.value}`),...c.invalid].filter(Boolean).join('; ');
 function formatCueTime(value){
   const total=Math.round(value*100),minutes=Math.floor(total/6000),seconds=(total%6000)/100;
   const whole=Math.floor(seconds),fraction=String(seconds.toFixed(2)).split('.')[1]?.replace(/0+$/,'')||'';
@@ -84,21 +86,24 @@ function serializeCues(cues){
 // Testo cue -> {scene (1-based, stringa), fade, extra (parametri DMX V8)}
 function cueSplitTargets(targets){
   const parts=String(targets||'').split(';').map(x=>x.trim()).filter(Boolean);
-  const scene=parts.find(x=>/^[1-9]\d*$/.test(x))||'',fadeTok=parts.find(x=>/^fade\s*=/i.test(x));
+  const scene=parts.find(x=>/^[1-9]\d*$/.test(x)||(x.startsWith('@')&&x.length>1))||'',fadeTok=parts.find(x=>/^fade\s*=/i.test(x));
   return{scene,fade:fadeTok?String(parseFloat(fadeTok.split('=')[1])):'',extra:parts.filter(x=>x!==scene&&x!==fadeTok).join('; ')};
 }
 // colore della scena (scena di TD) o del look locale in simulazione
 function cueSceneSwatch(v){
+  if(String(v).startsWith('@')){const sc=tdScenes().find(x=>x.id===String(v).slice(1));return sc?tdSceneLook(sc).grad||'':''}
   const i=+v-1;if(!(i>=0))return'';
   const td=tdScenes();if(td.length){const sc=td.find(x=>x.index===i);return sc?tdSceneLook(sc).grad||'':''}
   return LOOKS[i]?lookHex(i):'';
 }
 // Menu scena: le scene di DMX Master; senza TD i look locali (simulazione)
 function cueSceneFields(targets,i){
-  const{scene,fade}=cueSplitTargets(targets),td=tdScenes();
-  const list=td.length?td.map(x=>({v:String(x.index+1),t:`${String(x.index+1).padStart(2,'0')} · ${x.label||x.id}`})):LOOKS.map((l,k)=>({v:String(k+1),t:`${String(k+1).padStart(2,'0')} · ${l.n} (simulazione)`}));
-  const opts=['<option value="">— marker, nessuna scena —</option>',...list.map(o=>`<option value="${o.v}"${o.v===scene?' selected':''}>${esc(o.t)}</option>`)];
-  if(scene&&!list.some(o=>o.v===scene))opts.push(`<option value="${scene}" selected>scena ${scene} (non esiste)</option>`);
+  let{scene,fade}=cueSplitTargets(targets);const td=tdScenes();
+  // vecchia cue per numero: con TD si converte al nome della scena
+  if(td.length&&/^\d+$/.test(scene)){const sc=td.find(x=>x.index===+scene-1);if(sc)scene='@'+sc.id}
+  const list=td.length?td.map(x=>({v:'@'+x.id,t:`${String(x.index+1).padStart(2,'0')} · ${x.label||x.id}`})):LOOKS.map((l,k)=>({v:String(k+1),t:`${String(k+1).padStart(2,'0')} · ${l.n} (simulazione)`}));
+  const opts=['<option value="">— marker, nessuna scena —</option>',...list.map(o=>`<option value="${esc(o.v)}"${o.v===scene?' selected':''}>${esc(o.t)}</option>`)];
+  if(scene&&!list.some(o=>o.v===scene))opts.push(`<option value="${esc(scene)}" selected>scena ${esc(scene.replace(/^@/,''))} (non esiste)</option>`);
   return`<label>Scena<span class="cue-scene-wrap"><span class="cue-sw" style="background:${cueSceneSwatch(scene)}"></span><select class="cue-scene" aria-label="Scena cue ${i+1}">${opts.join('')}</select></span></label>
     <label>Fade (s)<input class="cue-fade" type="number" min="0" step="0.1" inputmode="decimal" value="${esc(fade)}" placeholder="2" aria-label="Fade cue ${i+1}"></label>`;
 }
@@ -221,12 +226,12 @@ function onTdTimelineRev(doc){
 function timelineToTD(w){
   const cat=tdSceneCatalog(),notes=[];
   const cues=parseCues(w).map(c=>{
-    const known=c.scene==null?null:cat.find(x=>x.index===c.scene);
+    const known=c.sceneId!=null?cat.find(x=>x.id===c.sceneId):c.scene==null?null:cat.find(x=>x.index===c.scene);
     if(c.params.length)notes.push(`"${c.name}": ${c.params.map(p=>p.param).join(', ')}`);
     // nome = scena o "Cue n" sono i segnaposto di una label vuota (vedi
     // timelineFromTD): si rimanda "" cosi' l'andata e ritorno non cambia la rev
     const placeholder=(known&&c.name===known.id)||/^Cue( \d+)?$/.test(c.name);
-    const d={time:+c.t.toFixed(3),scene:c.scene==null?null:known?known.id:c.scene,label:placeholder?'':c.name};
+    const d={time:+c.t.toFixed(3),scene:c.sceneId!=null?c.sceneId:c.scene==null?null:known?known.id:c.scene,label:placeholder?'':c.name};
     if(c.fade!=null)d.fade=c.fade;
     return d;
   });
@@ -241,7 +246,7 @@ function timelineFromTD(doc){
     const known=c.scene?cat.find(x=>x.id===c.scene):null;
     // fade 2 = default_fade di TD: omesso, al reinvio torna uguale
     const fade=Number.isFinite(+c.fade)&&+c.fade!==2?`fade=${+c.fade}`:'';
-    const targets=[known?String(known.index+1):c.scene?String(c.scene):'',fade].filter(Boolean).join('; ');
+    const targets=[c.scene?'@'+c.scene:'',fade].filter(Boolean).join('; ');
     return{t:+c.time||0,name:String(c.label||c.scene||`Cue ${i+1}`).replace(/>/g,'›'),targets};
   });
 }
@@ -392,7 +397,9 @@ function fireCue(w,i){
   const c=parseCues(w)[i];if(!c)return;
   if(c.invalid.length)showError(`Cue "${c.name}": destinazione non riconosciuta (${c.invalid.join(', ')}).`);
   fire(w.addr+'/cue',[i+1],w.oscChannel);
-  if(c.scene!=null)fire('/dmx/scene',[c.scene],w.oscChannel);
+  const idx=cueSceneIndex(c);
+  if(idx!=null)fire('/dmx/scene',[idx],w.oscChannel);
+  else if(c.sceneId!=null)showError(`Cue "${c.name}": la scena "${c.sceneId}" non esiste in DMX Master.`);
   if(c.params.length){
     c.params.forEach(p=>{
       const device=w.dmxDevice||devIds('dmx').find(id=>devParams(id).some(meta=>meta.n===p.param));
