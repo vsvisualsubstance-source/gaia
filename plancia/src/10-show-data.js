@@ -151,8 +151,29 @@ const PROJKEY='plancia.projects.v1';
 const PROJECT_TEMPLATES=[
   {tid:'tpl-small',name:'Palco piccolo (4 teste)',rig:{heads:4,uplights:2,bars:2,wall:false,speakers:true}},
   {tid:'tpl-standard',name:'Palco standard (8 teste + LED wall)',rig:{heads:8,uplights:6,bars:8,wall:true,speakers:true}},
-  {tid:'tpl-large',name:'Palco grande (12 teste + 2 LED wall)',rig:{heads:12,uplights:8,bars:12,walls:2,speakers:true}}
+  {tid:'tpl-large',name:'Palco grande (12 teste + 2 LED wall)',rig:{heads:12,uplights:8,bars:12,walls:2,speakers:true}},
+  // Locale reale, dal Light Plot del technical rider (pag. 4) di BASE Milano,
+  // Sala 1400: palco 6x4 m h0.6; americana back con 6 Coemar iSpot 575 EB
+  // (22 ch, 7..117), 4 PAR LED (9 ch, 139..166) e 1 strobo LED (300);
+  // americana front con 4 PC a incandescenza (1..4) per il piazzato bianco.
+  // Ordine da sinistra come nello schema. I modelli sono i generici del
+  // catalogo: le personalita' vere vanno create (▤ Modelli, anche da MagicQ).
+  {tid:'tpl-base-1400',name:'BASE Milano · Sala 1400 (dal rider)',venue:'base1400'}
 ];
+function venueBase1400(){
+  const back=[['mh',7],['par',139],['mh',29],['par',148],['mh',51],['strobe',300],['mh',73],['par',157],['mh',95],['par',166],['mh',117]];
+  const out=[];let nMh=0,nPar=0;
+  back.forEach(([k,a],i)=>{const x=+(-4+8*i/(back.length-1)).toFixed(2);
+    const f=k==='mh'?mkFix('mh',`MH${++nMh}`,x,.3,1,a):k==='par'?mkFix('par',`PAR${++nPar}`,x,.3,1,a):mkFix('blinder','STROBO',x,.3,1,a);
+    if(k==='par')f.group='back';if(k==='strobe')f.group='blinder';
+    f.z=4.4;f.mountToTruss=true;out.push(f)});
+  [-2.6,-1.8,1.8,2.6].forEach((x,i)=>{const f=mkFix('blinder',`PC${i+1}`,x,5.2,1,i+1);f.group='piazzato';f.z=4.4;f.mountToTruss=true;out.push(f)});
+  return out;
+}
+const VENUES={base1400:{stage:{width:6,depth:4,floorHeight:.6,trussHeight:4.4,audience:{x:0,y:6,width:12,depth:4},foh:{x:-1,y:10.5,width:2,depth:1}},fixtures:venueBase1400,
+  groups:[{group:'front',kind:'chase',label:'Front',bind:'rig_a'},{group:'back',kind:'chase',label:'Back · PAR LED',bind:'rig_b'},
+    {group:'mh',kind:'heads',label:'Teste · iSpot',bind:'heads'},{group:'ledbar',kind:'chase',label:'LED bar'},
+    {group:'haze',kind:'level',label:'Haze'},{group:'blinder',kind:'level',label:'Strobo'},{group:'piazzato',kind:'level',label:'Piazzato PC'}]}};
 const projList=()=>store.get(PROJKEY)||[];
 const projSnapshot=()=>JSON.parse(JSON.stringify(L));
 function projSaveAs(name){
@@ -181,8 +202,10 @@ function projDelete(id){
 }
 function projLoadTemplate(tid){
   const t=PROJECT_TEMPLATES.find(x=>x.tid===tid);if(!t)return;
-  L={pages:TPL.full.pages(),fixtures:defaultFixtures(t.rig),stage:stageDefaults()};
-  delete L._projectId;delete L._projectName;
+  const v=t.venue&&VENUES[t.venue];
+  L=v?{pages:TPL.full.pages(),fixtures:v.fixtures(),stage:{...stageDefaults(),...v.stage},groups:v.groups.map(g=>({...g})),uiRev:1}
+    :{pages:TPL.full.pages(),fixtures:defaultFixtures(t.rig),stage:stageDefaults(),uiRev:1};
+  delete L._projectId;delete L._projectName;ensureStageData(L);
   pi=0;selId=null;save();render();initShow();
 }
 function nextAddress(type,universe){ // primo indirizzo libero per quel tipo+universo, mai sovrapposto a una fixture esistente

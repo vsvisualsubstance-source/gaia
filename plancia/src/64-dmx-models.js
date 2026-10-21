@@ -46,21 +46,23 @@ function openModelEditor(){
       <div class="md-row" data-model="${esc(m.model)}"><span class="md-sw" style="background:${sw(m)}"></span>
         <b>${esc(m.model)}</b><span class="hint">${m.footprint} ch · ${esc((m.color_mix||[]).join('+')||'nessun colore')} · ${esc(m.source||'')}${m.complete===false?' · <b>ruoli da completare</b>':''}</span>
         <button class="btn sm ghost" data-md="edit">✎ Modifica</button></div>`).join('')}</div>`).join('')}
-    <div class="row"><button class="btn" id="mdNew">＋ Nuovo modello</button></div>
+    <div class="row"><button class="btn" id="mdNew">＋ Nuovo modello</button><button class="btn ghost" id="mdMagicQ" title="Legge le personalità da un file show di ChamSys MagicQ (.shw)">⇪ Da MagicQ (.shw)</button></div>
   </div>`;
   s.querySelector('#mdClose').onclick=closeSheet;
   s.querySelector('#mdNew').onclick=()=>openModelForm(null,{back:openModelEditor});
+  s.querySelector('#mdMagicQ').onclick=()=>importMagicQModels(openModelEditor);
   s.querySelectorAll('.md-row').forEach(r=>r.querySelector('[data-md="edit"]').onclick=()=>openModelForm(tdModels().find(m=>m.model===r.dataset.model),{back:openModelEditor}));
 }
 // m = modello esistente (update) o null (nuovo). opts: {kind, back, onDone(name)}
 function openModelForm(m,opts={}){
-  const isNew=!m,kind0=m?.kind||opts.kind||'chase',s=$('#scrim');s.hidden=false;
+  // opts.asNew: m e' solo il precompilato (es. import MagicQ), si crea un modello nuovo
+  const isNew=!m||!!opts.asNew,kind0=m?.kind||opts.kind||'chase',s=$('#scrim');s.hidden=false;
   const slotRows=(list,cls,withColor)=>(list||[]).map(sl=>`<div class="md-slot ${cls}"><input class="sl-name" value="${esc(sl.name)}" placeholder="nome">
     <input class="sl-val" type="number" min="0" max="255" value="${esc(sl.value)}" placeholder="DMX">${withColor?`<input class="sl-hex" type="color" value="${dmxHex(sl.rgb||[1,1,1])}" title="colore dello slot">`:''}<button class="btn sm danger sl-del" title="Togli">×</button></div>`).join('');
   const render=kind=>{
     const roles=modelRolesFor(kind);
     s.innerHTML=`<div class="sheet" role="dialog" aria-label="Modello DMX">
-      <div class="top"><h3>${isNew?'Nuovo modello':'Modello · '+esc(m.model)}</h3><button class="btn ghost" id="mfBack">${opts.back?'← Elenco':'Chiudi'}</button></div>
+      <div class="top"><h3>${isNew?'Nuovo modello':'Modello · '+esc(m.model)}${opts.asNew?' · da MagicQ':''}</h3><button class="btn ghost" id="mfBack">${opts.back?'← Elenco':'Chiudi'}</button></div>
       <div class="two"><label>Nome<input id="mfName" value="${esc(m?.model||'')}"${isNew?'':' disabled'} placeholder="es. Spot XYZ 14ch"></label>
         <label>Tipo<select id="mfKind">${MODEL_KINDS.map(k=>`<option value="${k.id}"${k.id===kind?' selected':''}>${esc(k.label)}</option>`).join('')}</select></label></div>
       <div class="two"><label>Produttore<input id="mfMan" value="${esc(m?.manufacturer||'')}"></label><label>Note<input id="mfNotes" value="${esc(m?.notes||'')}" placeholder="es. verificato sul manuale"></label></div>
