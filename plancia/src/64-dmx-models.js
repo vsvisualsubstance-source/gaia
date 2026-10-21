@@ -41,6 +41,7 @@ function openModelEditor(){
     return'';};
   s.innerHTML=`<div class="sheet" role="dialog" aria-label="Modelli DMX">
     <div class="top"><h3>Modelli · catalogo DMX Master</h3><button class="btn ghost" id="mdClose">Chiudi</button></div>
+    ${projectModelsBox()}
     <p class="hint">Il modello dice cos'è una luce: i suoi canali DMX in ordine e come fa colore (RGB, ruota colori, lampada fissa). Da qui DMX Master calcola il colore reale che vedi nel Render. I valori "generici" vanno controllati sul manuale della luce vera.</p>
     ${byKind.map(({k,list})=>`<h4 class="md-kind">${esc(k.label)}</h4><div class="md-list">${list.map(m=>`
       <div class="md-row" data-model="${esc(m.model)}"><span class="md-sw" style="background:${sw(m)}"></span>
@@ -52,6 +53,7 @@ function openModelEditor(){
   s.querySelector('#mdNew').onclick=()=>openModelForm(null,{back:openModelEditor});
   s.querySelector('#mdMagicQ').onclick=()=>importMagicQModels(openModelEditor);
   s.querySelector('#mdLib').onclick=()=>openFixtureLibrary(openModelEditor);
+  s.querySelector('#mdAlign')?.addEventListener('click',()=>alignProjectModels().then(()=>openModelEditor()));
   s.querySelectorAll('.md-row').forEach(r=>r.querySelector('[data-md="edit"]').onclick=()=>openModelForm(tdModels().find(m=>m.model===r.dataset.model),{back:openModelEditor}));
 }
 // m = modello esistente (update) o null (nuovo). opts: {kind, back, onDone(name)}
@@ -106,6 +108,7 @@ function openModelForm(m,opts={}){
       const before=sig(tdModels().find(x=>x.model===name));
       try{
         await tdSceneCommand(isNew?'dmx_model_add':'dmx_model_update',v,()=>{const x=tdModels().find(y=>y.model===name);return!!x&&(isNew||sig(x)!==before)});
+        rememberModel(v);
         showInfo(`Modello "${name}" ${isNew?'creato':'aggiornato'} su DMX Master.`);
         if(opts.onDone)opts.onDone(name);else back();
       }catch(e){

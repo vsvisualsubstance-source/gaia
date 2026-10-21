@@ -36,7 +36,8 @@ function roleFromName(name) {
 const uniqueRoles = roles => { const used = {}; return roles.map(r => { if (used[r]) { used[r]++; return `${r}_${used[r]}`; } used[r] = 1; return r; }); };
 const kindOf = roles => roles.includes('pan') && roles.includes('tilt') ? 'heads' : ['red', 'green', 'blue'].some(r => roles.includes(r)) ? 'chase' : 'level';
 const hexToRgb = h => { const m = /^#?([0-9a-f]{6})$/i.exec(String(h || '').trim()); if (!m) return null; const v = parseInt(m[1], 16); return [(v >> 16 & 255) / 255, (v >> 8 & 255) / 255, (v & 255) / 255].map(x => +x.toFixed(3)); };
-const dedupSlots = list => { const seen = new Set(); return list.filter(s => s.name && Number.isFinite(s.value) && s.value >= 0 && s.value <= 255 && !seen.has(s.value) && seen.add(s.value)).sort((a, b) => a.value - b.value); };
+// nomi slot come li salva l'editor dei modelli: spazi -> _
+const dedupSlots = list => { const seen = new Set(); return list.map(s => ({ ...s, name: String(s.name || '').trim().replace(/\s+/g, '_') })).filter(s => s.name && Number.isFinite(s.value) && s.value >= 0 && s.value <= 255 && !seen.has(s.value) && seen.add(s.value)).sort((a, b) => a.value - b.value); };
 // nome modello: "Produttore Nome 22ch" (+ modo se due modi hanno gli stessi canali)
 function modelNames(vendor, name, modes) {
   const base = `${vendor} ${name}`.replace(/\s+/g, ' ').trim();

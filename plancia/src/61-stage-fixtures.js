@@ -8,9 +8,18 @@
 // per singola fixture qui (troppo lento su molte fixture): il
 // riscontro resta il dmx_patch_report che si vede dopo, in TD o nella
 // Pianta (tdFixtures()).
-function syncAllFixtures(){
+async function syncAllFixtures(){
   const list=(L.fixtures||[]).filter(f=>FIX_TYPES[f.type].ch);
   if(!list.length){alert('Nessuna fixture patchabile da mandare (wall/speaker sono esclusi, TD li salta).');return}
+  // prima i modelli: una fixture con un modello che TD non conosce verrebbe rifiutata
+  if(tdCatalogKnown()){
+    const d=projModelDiff(),miss=d.filter(x=>x.state==='missing').map(x=>x.name),unk=d.filter(x=>x.state==='unknown').map(x=>x.name);
+    if(unk.length&&!confirm(`DMX Master non conosce ${unk.join(', ')} e il progetto non ne ha la definizione: quelle fixture verranno rifiutate. Mandare comunque le altre?`))return;
+    if(miss.length){
+      if(!confirm(`Prima mando a DMX Master i modelli del progetto che non ha: ${miss.join(', ')}. Continuare?`))return;
+      if(!await alignProjectModels({only:'missing',ask:false}))return;
+    }
+  }
   let sent=0;
   for(const f of list){
     // on_conflict:"reject" (nota TD 20): se l'indirizzo e' occupato NON

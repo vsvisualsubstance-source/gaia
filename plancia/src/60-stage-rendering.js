@@ -418,7 +418,9 @@ function drawPlot(g,W,H,t,w){
   if(ui)ui.hits=hits;
   // legenda patch (conteggi reali, non piu' da L.rig)
   const cnt=fixCounts();
-  const lg=Object.entries(FIX_TYPES).filter(([k,ft])=>cnt[k]&&ft.ch).map(([k,ft])=>[`${ft.label} ×${cnt[k]}`,footprintFor(k)+' ch']);
+  // canali dal modello di ogni fixture (es. iSpot 22 ch), non da quello di default del tipo
+  const fpOf=k=>{const v=[...new Set((L.fixtures||[]).filter(f=>f.type===k).map(f=>footprintFor(f)))].sort((a,b)=>a-b);return v.length>1?`${v[0]}–${v[v.length-1]}`:v[0]};
+  const lg=Object.entries(FIX_TYPES).filter(([k,ft])=>cnt[k]&&ft.ch).map(([k,ft])=>[`${ft.label} ×${cnt[k]}`,fpOf(k)+' ch']);
   const lx=10,ly=H-10-Math.max(1,lg.length)*14;
   // Testo corto apposta: visto dal vivo (screenshot Playwright) che la
   // versione lunga di prima si sovrapponeva al marcatore FOH, disegnato

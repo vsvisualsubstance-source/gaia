@@ -156,21 +156,24 @@ const PROJECT_TEMPLATES=[
   // Sala 1400: palco 6x4 m h0.6; americana back con 6 Coemar iSpot 575 EB
   // (22 ch, 7..117), 4 PAR LED (9 ch, 139..166) e 1 strobo LED (300);
   // americana front con 4 PC a incandescenza (1..4) per il piazzato bianco.
-  // Ordine da sinistra come nello schema. I modelli sono i generici del
-  // catalogo: le personalita' vere vanno create (▤ Modelli, anche da MagicQ).
+  // Ordine da sinistra come nello schema. Le teste hanno il modello vero
+  // (BASE_ISPOT, salvato nel progetto); PAR, strobo e PC i generici.
   {tid:'tpl-base-1400',name:'BASE Milano · Sala 1400 (dal rider)',venue:'base1400'}
 ];
+// iSpot 575 EB dalla libreria DDF di DMXControl (#100, CC-BY-SA-4.0), 22 ch
+// come nel rider: va nel progetto, "Allinea" lo crea su DMX Master.
+const BASE_ISPOT={"model":"Coemar iSpot 575 EB 22ch","manufacturer":"Coemar","kind":"heads","channels":["pan","pan_fine","tilt","tilt_fine","speed","dimmer","shutter","iris","zoom","focus","gobo","gobo_1_index","gobo_1_rotation","gobo_2","gobo_2_index","gobo_2_rotation","prism","color","color_2","gobo_color_positioning","black_out_activation","control"],"footprint":22,"colors":[{"name":"white","value":0,"rgb":[1,1,1]},{"name":"orange","value":8,"rgb":[1,0.502,0]},{"name":"red","value":28,"rgb":[1,0,0]},{"name":"green","value":48,"rgb":[0,1,0]},{"name":"dark_blue","value":68,"rgb":[0,0,1]},{"name":"yellow","value":88,"rgb":[1,1,0]},{"name":"dark_green","value":108,"rgb":[0,0.502,0]}],"gobos":[{"name":"no_gobo","value":0},{"name":"gobo_1","value":11},{"name":"gobo_2","value":41},{"name":"gobo_3","value":71},{"name":"gobo_4","value":101},{"name":"gobo_5","value":131},{"name":"gobo_6","value":161}],"pan_range":540,"tilt_range":270,"notes":"DMXControl DDF #100 di S. Hartmann, Mario Lipinski (CC-BY-SA-4.0) — verificare sul manuale"};
 function venueBase1400(){
   const back=[['mh',7],['par',139],['mh',29],['par',148],['mh',51],['strobe',300],['mh',73],['par',157],['mh',95],['par',166],['mh',117]];
   const out=[];let nMh=0,nPar=0;
   back.forEach(([k,a],i)=>{const x=+(-4+8*i/(back.length-1)).toFixed(2);
-    const f=k==='mh'?mkFix('mh',`MH${++nMh}`,x,.3,1,a):k==='par'?mkFix('par',`PAR${++nPar}`,x,.3,1,a):mkFix('blinder','STROBO',x,.3,1,a);
+    const f=k==='mh'?Object.assign(mkFix('mh',`MH${++nMh}`,x,.3,1,a),{model:BASE_ISPOT.model}):k==='par'?mkFix('par',`PAR${++nPar}`,x,.3,1,a):mkFix('blinder','STROBO',x,.3,1,a);
     if(k==='par')f.group='back';if(k==='strobe')f.group='blinder';
     f.z=4.4;f.mountToTruss=true;out.push(f)});
   [-2.6,-1.8,1.8,2.6].forEach((x,i)=>{const f=mkFix('blinder',`PC${i+1}`,x,5.2,1,i+1);f.group='piazzato';f.z=4.4;f.mountToTruss=true;out.push(f)});
   return out;
 }
-const VENUES={base1400:{stage:{width:6,depth:4,floorHeight:.6,trussHeight:4.4,audience:{x:0,y:6,width:12,depth:4},foh:{x:-1,y:10.5,width:2,depth:1}},fixtures:venueBase1400,
+const VENUES={base1400:{models:[BASE_ISPOT],stage:{width:6,depth:4,floorHeight:.6,trussHeight:4.4,audience:{x:0,y:6,width:12,depth:4},foh:{x:-1,y:10.5,width:2,depth:1}},fixtures:venueBase1400,
   groups:[{group:'front',kind:'chase',label:'Front',bind:'rig_a'},{group:'back',kind:'chase',label:'Back · PAR LED',bind:'rig_b'},
     {group:'mh',kind:'heads',label:'Teste · iSpot',bind:'heads'},{group:'ledbar',kind:'chase',label:'LED bar'},
     {group:'haze',kind:'level',label:'Haze'},{group:'blinder',kind:'level',label:'Strobo'},{group:'piazzato',kind:'level',label:'Piazzato PC'}]}};
@@ -178,12 +181,14 @@ const projList=()=>store.get(PROJKEY)||[];
 const projSnapshot=()=>JSON.parse(JSON.stringify(L));
 function projSaveAs(name){
   const id='proj-'+uid();
+  captureProjectModels();
   L._projectId=id;L._projectName=name;save(); // PRIMA di fare lo snapshot, altrimenti lo snapshot porta dentro di se' l'id/nome del progetto vecchio (se ce n'era uno caricato)
   store.set('plancia.project.'+id,projSnapshot());
   const list=projList();list.push({id,name,updated:Date.now()});store.set(PROJKEY,list);
   return id;
 }
 function projUpdate(id){
+  captureProjectModels();save();
   store.set('plancia.project.'+id,projSnapshot());
   const list=projList();const e=list.find(x=>x.id===id);if(e){e.updated=Date.now();store.set(PROJKEY,list)}
 }
@@ -192,7 +197,7 @@ function projLoad(id){
   L=data;if(!L.fixtures)L.fixtures=defaultFixtures(L.rig);
   ensureStageData(L);
   L._projectId=id;const e=projList().find(x=>x.id===id);L._projectName=e?e.name:'';
-  pi=0;selId=null;save();render();initShow();
+  pi=0;selId=null;save();render();initShow();checkProjectModelsSoon();
   return true;
 }
 function projDelete(id){
@@ -203,10 +208,10 @@ function projDelete(id){
 function projLoadTemplate(tid){
   const t=PROJECT_TEMPLATES.find(x=>x.tid===tid);if(!t)return;
   const v=t.venue&&VENUES[t.venue];
-  L=v?{pages:TPL.full.pages(),fixtures:v.fixtures(),stage:{...stageDefaults(),...v.stage},groups:v.groups.map(g=>({...g})),uiRev:1}
+  L=v?{pages:TPL.full.pages(),fixtures:v.fixtures(),stage:{...stageDefaults(),...v.stage},groups:v.groups.map(g=>({...g})),models:Object.fromEntries((v.models||[]).map(m=>[m.model,modelPayload(m)])),uiRev:1}
     :{pages:TPL.full.pages(),fixtures:defaultFixtures(t.rig),stage:stageDefaults(),uiRev:1};
   delete L._projectId;delete L._projectName;ensureStageData(L);
-  pi=0;selId=null;save();render();initShow();
+  pi=0;selId=null;save();render();initShow();checkProjectModelsSoon();
 }
 function nextAddress(type,universe){ // primo indirizzo libero per quel tipo+universo, mai sovrapposto a una fixture esistente
   const ch=footprintFor(type)||1, used=(L.fixtures||[]).filter(f=>f.universe===universe).map(f=>[f.address,f.address+(footprintFor(f)||1)-1]);
@@ -235,7 +240,8 @@ const tdModels=()=>tdParams().dmx_models||[];
 // Dati reali di DMX Master per il Render e i menu (helper in 49-dmx-output.js)
 const tdFixtureByUid=uid=>uid==null?null:(tdParams().dmx_fixtures||[]).find(f=>f.uid===String(uid))||null;
 const tdGroupOf=uid=>tdFixtureByUid(uid)?.group||null;
-const tdModelFor=f=>{const name=tdFixtureByUid(f.uid??f.id)?.profile||f.model;return tdModels().find(m=>m.model===name)||null};
+// senza DMX Master collegato vale la definizione salvata nel progetto (L.models)
+const tdModelFor=f=>{const name=tdFixtureByUid(f.uid??f.id)?.profile||f.model;return tdModels().find(m=>m.model===name)||L?.models?.[name]||null};
 const tdScenes=()=>tdSceneList(tdParams());
 // colori di una scena di TD per pulsanti e cue: {grad, ic} (vuoti senza preview)
 function tdSceneLook(scene){
@@ -245,7 +251,7 @@ function tdSceneLook(scene){
 }
 const tdTypes=()=>tdParams().dmx_types||[];
 function modelFootprint(name){
-  const m=tdModels().find(x=>x.model===name);
+  const m=tdModels().find(x=>x.model===name)||L?.models?.[name];
   if(!m)return null;
   if(Number.isFinite(+m.footprint))return+m.footprint;
   if(Array.isArray(m.channels))return m.channels.length;

@@ -40,7 +40,7 @@ test('OFL: roles, fine channels, wheel slots, one model per mode (matrix modes s
   assert.deepEqual(bas.channels, ['pan', 'tilt', 'dimmer', 'shutter', 'color', 'red', 'ch_7']);
   assert.equal(std.kind, 'heads');
   assert.equal(std.tilt_range, 250);
-  assert.deepEqual(std.colors, [{ name: 'White', value: 0, rgb: [1, 1, 1] }, { name: 'Red', value: 10, rgb: [1, 0, 0] }, { name: 'Colore 3', value: 20 }]);
+  assert.deepEqual(std.colors, [{ name: 'White', value: 0, rgb: [1, 1, 1] }, { name: 'Red', value: 10, rgb: [1, 0, 0] }, { name: 'Colore_3', value: 20 }]);
   assert.match(std.notes, /MIT/);
 });
 
@@ -58,7 +58,7 @@ test('DDF 3: functions by tag, gaps filled, wheel steps with colours', () => {
   assert.deepEqual(m.channels, ['color', 'shutter', 'dimmer', 'gobo', 'ch_5', 'pan', 'pan_fine', 'tilt', 'tilt_fine']);
   assert.equal(m.kind, 'heads');
   assert.deepEqual(m.colors, [{ name: 'White', value: 0, rgb: [1, 1, 1] }, { name: 'Red', value: 14, rgb: [0.886, 0.114, 0.149] }]);
-  assert.deepEqual(m.gobos.map(g => g.name), ['Open', 'Gobo 1']);
+  assert.deepEqual(m.gobos.map(g => g.name), ['Open', 'Gobo_1']);
   assert.match(m.notes, /DDF #857 di P & G \(CC-BY-SA-4\.0\)/);
 });
 

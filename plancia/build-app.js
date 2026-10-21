@@ -22,6 +22,7 @@ const appModules = [
   '66-video-timeline.js',
   '67-magicq-import.js',
   '68-fixture-library.js',
+  '69-project-models.js',
   '70-gaia-mqtt.js',
   '71-gaia-widgets.js',
   '72-gaia-interactions.js',
