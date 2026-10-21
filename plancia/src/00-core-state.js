@@ -1,7 +1,7 @@
 const COLS=16, ROWS=10;
 const SWATCH=['#ffb23e','#3ec9ff','#ff5fa2','#9be15d','#b18cff','#e9ebef'];
-const DEF={fader:[2,5],knob:[2,2],button:[2,2],xy:[4,4],meter:[1,5],label:[4,1],scenes:[4,3],color:[4,4],timeline:[10,3],clock:[4,2],stage:[8,6],gaia:[10,8],patchdeck:[8,6],tddevice:[8,4],gaiadmx:[6,6]};
-const NAMES={fader:'Fader',knob:'Manopola',button:'Pulsante',xy:'Pad XY',meter:'Indicatore',label:'Testo',scenes:'Scene',color:'Colore',timeline:'Timeline',clock:'Orologio',stage:'Palco',gaia:'Gaia',patchdeck:'PatchDeck',tddevice:'Device TD',gaiadmx:'DMX stanza'};
+const DEF={fader:[2,5],knob:[2,2],button:[2,2],xy:[4,4],meter:[1,5],label:[4,1],scenes:[4,3],color:[4,4],timeline:[10,3],clock:[4,2],stage:[8,6],gaia:[10,8],patchdeck:[8,6],tddevice:[8,4],gaiadmx:[6,6],fixgrid:[10,6],cuestack:[4,6]};
+const NAMES={fader:'Fader',knob:'Manopola',button:'Pulsante',xy:'Pad XY',meter:'Indicatore',label:'Testo',scenes:'Scene',color:'Colore',timeline:'Timeline',clock:'Orologio',stage:'Palco',gaia:'Gaia',patchdeck:'PatchDeck',tddevice:'Device TD',gaiadmx:'DMX stanza',fixgrid:'Luci',cuestack:'Scene GO'};
 const KEY='plancia.layout.v3', CKEY='plancia.conn.v1';
 const $=s=>document.querySelector(s);
 const uid=()=>Math.random().toString(36).slice(2,9);

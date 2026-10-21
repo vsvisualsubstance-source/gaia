@@ -24,7 +24,7 @@ button{cursor:pointer}
 .brand .mark{width:14px;height:14px;border:2px solid var(--accent);border-radius:3px;position:relative}
 .brand .mark::after{content:"";position:absolute;inset:3px;background:var(--accent);border-radius:1px}
 .tabs{display:flex;gap:4px;min-width:0;flex:1 1 0;overflow-x:auto;scrollbar-width:none;touch-action:pan-x}
-.tab{background:none;border:1px solid transparent;border-radius:6px;padding:6px 12px;font-family:var(--display);font-weight:600;font-size:15px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);white-space:nowrap}
+.tab{background:none;border:1px solid transparent;border-radius:6px;padding:6px 9px;font-family:var(--display);font-weight:600;font-size:14px;letter-spacing:.04em;text-transform:uppercase;color:var(--dim);white-space:nowrap}
 .tab[aria-current="true"]{color:var(--fg);border-color:var(--line2);background:var(--panel)}
 .tab.add{color:var(--accent);font-family:var(--mono);font-size:14px}
 .spacer{display:none}
@@ -344,7 +344,7 @@ button{cursor:pointer}
   .mon .rate{display:none}
   .brand .txt{display:none}
   .tl-bpm,.tl-cue{display:none}
-  .bar{display:grid;grid-template-columns:minmax(0,1fr) auto auto;grid-template-areas:"brand edit menu" "proj proj proj" "gconn conn save" "tabs tabs tabs";gap:6px;padding-block:8px}
+  .bar{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;grid-template-areas:"brand help edit menu" "proj proj proj proj" "gconn conn save save" "tabs tabs tabs tabs";gap:6px;padding-block:8px}
   .brand{grid-area:brand}
   #projBtn{grid-area:proj;max-width:none}
   #gconn{grid-area:gconn}
@@ -352,6 +352,7 @@ button{cursor:pointer}
   #saveStatus{grid-area:save}
   #editBtn{grid-area:edit}
   #menuBtn{grid-area:menu}
+  #helpBtn{grid-area:help}
   .tabs{grid-area:tabs;min-width:0;flex:none;gap:3px}
   .tab{min-height:40px;padding-inline:10px}
   .pill{max-width:none;min-height:34px;box-sizing:border-box;justify-content:flex-start;padding-inline:8px;font-size:11px;gap:5px}
@@ -370,7 +371,7 @@ button{cursor:pointer}
   .ga-dim{grid-template-columns:minmax(64px,76px) minmax(0,1fr) 36px 36px}
 }
 @media (max-width:420px){
-  .bar{grid-template-columns:minmax(0,1fr) auto auto;gap:5px}
+  .bar{grid-template-columns:minmax(0,1fr) auto auto auto;gap:5px}
   .pill{font-size:10px;padding-inline:6px;gap:4px}
   .pill i{width:7px;height:7px}
   .tab{padding-inline:8px}
@@ -433,3 +434,36 @@ button{cursor:pointer}
 .vc-fx{grid-column:1/-1;font-size:12px;color:var(--dim)}
 .vc-fxs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-top:4px}
 @media (max-width:760px){.vcue-row{grid-template-columns:1fr 1fr}.vc-fxs{grid-template-columns:repeat(3,minmax(0,1fr))}}
+
+/* ---------- Luci (fixgrid) e pila scene (cuestack) ---------- */
+.fg,.cs{position:absolute;inset:30px 8px 8px;display:flex;flex-direction:column;gap:8px;min-height:0}
+.fg-bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.fg-sp{flex:1}
+.fg-tiles{flex:1;min-height:0;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px;align-content:start}
+.fg-tile{display:grid;grid-template-columns:auto 1fr;grid-template-rows:auto auto;column-gap:8px;align-items:center;text-align:left;padding:8px;border:1px solid var(--line2);border-radius:8px;background:var(--panel2);color:var(--fg);cursor:pointer;min-height:56px}
+.fg-tile .fg-sw{grid-row:1/3;width:26px;height:26px;border-radius:50%;background:#3a404b;box-shadow:0 0 10px rgba(255,255,255,.08) inset}
+.fg-tile b{font:600 15px/1.1 inherit}
+.fg-tile span{font-size:11px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fg-tile.on{border-color:#ffb23e;box-shadow:0 0 0 2px #ffb23e inset;background:color-mix(in srgb,#ffb23e 10%,var(--panel2))}
+.fg-foot{display:grid;gap:6px;max-height:45%;overflow:auto}
+.cs-list{flex:1;min-height:0;overflow:auto;display:grid;gap:4px;align-content:start}
+.cs-row{display:grid;grid-template-columns:44px 1fr;grid-template-rows:auto 4px;align-items:center;column-gap:8px;text-align:left;padding:7px 8px 5px;border:1px solid var(--line2);border-radius:7px;background:var(--panel2);color:var(--fg);cursor:pointer}
+.cs-row b{font:600 15px/1.15 inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cs-row i{grid-column:1/3;height:4px;border-radius:2px;margin-top:5px}
+.cs-no{font:600 11px var(--mono,monospace);color:var(--dim)}
+.cs-row.act{border-color:#9be15d;background:color-mix(in srgb,#9be15d 14%,var(--panel2))}
+.cs-row.act .cs-no{color:#9be15d}
+.cs-row.nxt{border-color:#ffb23e;border-style:dashed}
+.cs-row.nxt .cs-no{color:#ffb23e}
+.cs-btns{display:grid;grid-template-columns:1fr 2fr;gap:8px}
+.cs-btns .btn{min-height:64px;font:700 20px/1 inherit;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.cs-go small{font:500 11px inherit;opacity:.8}
+
+/* ---------- tutorial "?" ---------- */
+#helpBtn{flex:none;font-weight:700;min-width:38px}
+.tour-hole{position:fixed;z-index:90;border:2px solid #ffb23e;border-radius:10px;box-shadow:0 0 0 9999px rgba(4,5,8,.62);transition:all .18s ease;pointer-events:auto}
+.tour-hole.full{left:50%!important;top:40%!important;width:0!important;height:0!important;border:0}
+.tour-tip{position:fixed;z-index:91;background:var(--panel,#14171c);border:1px solid #ffb23e;border-radius:10px;padding:12px 14px;box-shadow:0 10px 30px rgba(0,0,0,.5);display:grid;gap:6px}
+.tour-tip b{font:700 17px/1.2 var(--display,inherit);letter-spacing:.02em}
+.tour-tip p{margin:0;color:var(--fg);font-size:14px;line-height:1.4}
+.tour-n{font:500 11px var(--mono,monospace);color:var(--dim)}

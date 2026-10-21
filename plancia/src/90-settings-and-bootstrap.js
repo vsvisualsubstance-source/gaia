@@ -149,4 +149,12 @@ function migrateUiShowTimeline(){
   for(const p of L.pages)if(p!==fresh)for(const w of p.widgets)if(w.type==='timeline'&&w.addr==='/show')w.readonly=true;
   L.uiRev=1;save();
 }
-migrateLegacyHeadSelectors();migrateHeadPresetWidgets();migrateUiShowTimeline();render(); initShow(); connect(); gStart(); requestAnimationFrame(loop);
+// 2026-10-21: pagine console scelte dall'operatore (Regia, Luci), aggiunte una volta
+// sola dopo "Show"; se esistono gia' (o sono state tolte dopo) non si toccano.
+function migrateUiConsolePages(){
+  if((L.uiRev||0)>=2)return;
+  let at=L.pages.findIndex(p=>p.name==='Show')+1||L.pages.length;
+  for(const k of ['regia','luci']){const fresh=TPL[k].pages()[0];if(!L.pages.some(p=>p.name===fresh.name))L.pages.splice(at++,0,fresh)}
+  L.uiRev=2;save();
+}
+migrateLegacyHeadSelectors();migrateHeadPresetWidgets();migrateUiShowTimeline();migrateUiConsolePages();render(); initShow(); connect(); gStart(); requestAnimationFrame(loop);

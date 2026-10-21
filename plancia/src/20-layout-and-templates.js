@@ -87,8 +87,25 @@ TPL.gaia={name:'Gaia live',desc:'Agent Gaia (mood, pensieri, chat), PatchDeck V8
   P('PatchDeck',[W('patchdeck',0,0,8,6,{label:'Deck A',deck:'a',color:SWATCH[1]}),W('patchdeck',8,0,8,6,{label:'Deck B',deck:'b',color:SWATCH[2]}),
     W('tddevice',0,6,9,4,{label:'FX e servizi',fam:'patchdeck',color:SWATCH[1]}),W('tddevice',9,6,7,4,{label:'Controller',fam:'mixeraudio',color:SWATCH[3]})]),
   P('DMX V8',[W('tddevice',0,0,10,10,{label:'DMX V8',fam:'dmx',color:SWATCH[0]}),W('gaiadmx',10,0,6,10,{label:'DMX stanza',color:SWATCH[4]})])]};
+// Console (2026-10-21, scelta dell'operatore): Regia luci = eseguire lo show
+// a mano (pila scene GO/BACK, scene, master e gruppi); Luci = colore delle
+// singole luci (palette per fixture).
+TPL.regia={name:'Regia luci',desc:'Console di regia: pila scene con GO/BACK, scene di DMX Master, render, master e fader di gruppo, blackout e flash.',pages:()=>[P('Regia',[
+  W('cuestack',0,0,4,6,{label:'Scene GO',color:SWATCH[3]}),
+  W('scenes',4,0,6,4,{label:'Scene · DMX Master',addr:'/dmx/scene',items:sceneList,cols:3,value:0}),
+  W('stage',10,0,6,4,{label:'Palco',view:'render'}),
+  W('scenes',4,4,3,2,{label:'Chase',addr:'/dmx/chase',items:CHASE.join('\n'),cols:2,color:SWATCH[4],value:1}),
+  W('fader',7,4,3,2,{label:'Fade (s)',addr:'/dmx/fade',min:0,max:10,value:.15,color:SWATCH[1]}),
+  W('fader',10,4,3,2,{label:'Strobo (Hz)',addr:'/dmx/strobe/rate',min:1,max:20,value:.37,color:SWATCH[5]}),
+  W('clock',13,4,3,2,{label:'Show',mode:'show',color:SWATCH[0]}),
+  ...[['Master','/dmx/master',0],['Front','/dmx/group/front',0],['Back','/dmx/group/back',4],['Teste','/dmx/group/mh',1],['LED bar','/dmx/group/ledbar',2],['Haze','/dmx/group/haze',5],['Blinder','/dmx/group/blinder',5]]
+    .map(([label,addr,c],i)=>W('fader',i*2,6,2,4,{label,addr,value:i?1:.9,color:SWATCH[c]})),
+  W('button',14,6,2,2,{label:'Blackout',addr:'/dmx/blackout',mode:'toggle',color:SWATCH[2]}),
+  W('button',14,8,2,2,{label:'Flash strobo',addr:'/dmx/strobe',color:SWATCH[5]})])]};
+TPL.luci={name:'Luci · colori singoli',desc:'Tutte le luci della patch col colore reale: seleziona luci o gruppi e scegli la palette di ognuna.',pages:()=>[P('Luci',[
+  W('fixgrid',0,0,16,10,{label:'Luci',color:SWATCH[0]})])]};
 TPL.full={name:'Show completo',desc:'Tutte le pagine insieme: Gaia, PatchDeck, DMX V8, panoramica show, DMX, teste mobili, timeline, palco, mix.',
-  pages:()=>['gaia','show','dmx','mh','timeline','palco','mix'].flatMap(k=>TPL[k].pages())};
+  pages:()=>['gaia','show','regia','luci','dmx','mh','timeline','palco','mix'].flatMap(k=>TPL[k].pages())};
 const sample=()=>({pages:TPL.full.pages(),fixtures:defaultFixtures(),stage:stageDefaults()});
 
 let L=store.get(KEY)||sample();
