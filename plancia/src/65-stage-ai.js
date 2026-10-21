@@ -58,8 +58,8 @@ const pendingTD=()=>(L.fixtures||[]).filter(f=>FIX_TYPES[f.type]?.ch&&!f._synced
 // dmx_fixtures set = sostituisce TUTTA la patch di TD (nota 39) con le
 // fixture DMX della Pianta, nello schema dell'editor (nota 17)
 async function replacePatchInTD(){
-  const list=(L.fixtures||[]).filter(f=>FIX_TYPES[f.type]?.ch).map(f=>({id:f.id,type:f.type,name:f.name,group:f.group,model:f.model,
-    universe:f.universe,address:f.address,x:f.x,y:f.y,enabled:f.enabled!==false}));
+  // palette e audio inclusi: senza, dmx_fixtures li azzera (nota 44)
+  const list=(L.fixtures||[]).filter(f=>FIX_TYPES[f.type]?.ch).map(fixtureTdValue);
   const before=(tdParams().dmx_fixtures||[]).length;
   if(!confirm(`Sostituire TUTTA la patch di DMX Master (${before} fixture) con le ${list.length} della Pianta?
 Le fixture che ora sono in TD e non nella Pianta vengono tolte.`))return;

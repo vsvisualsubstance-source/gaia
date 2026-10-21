@@ -307,7 +307,7 @@ function importFromTD(silent){
     id:x.uid,type:GROUP_TO_TYPE[x.group]||'par',name:x.name||x.uid,
     group:normGroupName(x.group,groupsOf()),model:x.profile||undefined,universe:portIdToUniverse(x.port_id),address:x.address,
     x:typeof x.x==='number'?x.x:0,y:typeof x.y==='number'?x.y:0,
-    enabled:x.enabled!==0&&x.enabled!==false,palette:x.palette||'',_synced:true
+    enabled:x.enabled!==0&&x.enabled!==false,palette:x.palette||'',audio:x.audio||'',audio_gain:x.audio_gain??'',_synced:true
   })),...localOnly];
   ensureStageData(L); // altezza/truss/sorgente LED di default -- import non li aveva mai riempiti
   save();
