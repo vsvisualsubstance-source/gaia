@@ -2,18 +2,19 @@
 // Due livelli (nota TD 44):
 // - RIG: taratura del motore audio (dmx_<rig>_min/max_dimmer, kick con il
 //   servizio dmx_<rig>_kick_enable e le soglie, sorgente dmx_<rig>_audio_source);
+// - RIG: quanto segue la musica, dmx_<rig>_audio_amount 0..1 (nota 45): ♪ ON/OFF = 1/0;
 // - LUCI del gruppo: modo audio (full = come il gruppo, off = ferma, bass/
 //   mid/high = una banda, kick = solo colpi) e guadagno 0..2, per tutte le
-//   luci del gruppo con dmx_fixture_audio {groups:[gruppo]}. ♪ ON/OFF = full/off.
+//   luci del gruppo con dmx_fixture_audio (elenco uid). Misura dal vivo: dmx_output.rigs.
 // Le scene catturate con "Look dei rig" ricordano modo e guadagno di ogni luce.
-const AUDIO_PRESETS=[ // non toccano la taratura (min/max) del rig: solo modo, guadagno e kick
-  {name:'Statico',desc:'luci ferme, niente audio',audio:'off'},
-  {name:'Morbido',desc:'segue piano la musica',audio:'full',gain:.6,kick:false},
-  {name:'Club',desc:'segue forte, colpo sul kick',audio:'full',gain:1.3,kick:true},
-  {name:'Solo bassi',desc:'solo la banda dei bassi',audio:'bass',gain:1.2},
-  {name:'Solo kick',desc:'ferme al minimo, salgono sui colpi',audio:'kick',gain:1.5,kick:true},
+const AUDIO_PRESETS=[ // non toccano la taratura (min/max) del rig: quanto segue, modo, guadagno e kick
+  {name:'Statico',desc:'luci ferme, niente audio',p:{audio_amount:0}},
+  {name:'Morbido',desc:'segue a meta\' la musica',p:{audio_amount:.5},audio:'full',gain:1,kick:false},
+  {name:'Club',desc:'segue forte, colpo sul kick',p:{audio_amount:1},audio:'full',gain:1.3,kick:true},
+  {name:'Solo bassi',desc:'solo la banda dei bassi',p:{audio_amount:1},audio:'bass',gain:1.2},
+  {name:'Solo kick',desc:'ferme al minimo, salgono sui colpi',p:{audio_amount:1},audio:'kick',gain:1.5,kick:true},
 ];
-const AUDIO_KEYS=['min_dimmer','max_dimmer','smooth_factor','kick_threshold','kick_boost','kick_decay'];
+const AUDIO_KEYS=['audio_amount','min_dimmer','max_dimmer','smooth_factor','kick_threshold','kick_boost','kick_decay'];
 const AR_SEL=new Set(); // rig selezionati per i preset (in memoria)
 const TD_DEV='td-dmx-win';
 // rig con motore audio (chase): quelli che pubblicano la soglia del kick
@@ -25,6 +26,18 @@ function audioRigs(){
   });
 }
 const arVal=(k,n)=>{const v=tdParams()[`dmx_${k}_${n}`];return v==null?null:+v};
+const arAmount=k=>arVal(k,'audio_amount');
+function arToggleAmount(k){
+  const a=arAmount(k);L.audioAmountRestore=L.audioAmountRestore||{};
+  if(a>0){L.audioAmountRestore[k]=a;save();arSet(k,'audio_amount',0)}else arSet(k,'audio_amount',L.audioAmountRestore[k]||1);
+}
+const arMeter=k=>DMX_OUTPUT.rigs?.['rig_'+k]||DMX_OUTPUT.rigs?.[k]||null;
+// barre di livello e lampo del kick: ogni fotogramma, senza ridisegnare le schede
+function updateAudioMeters(el){
+  el.querySelectorAll('[data-meter]').forEach(m=>{const r=dmxOutputFresh()?arMeter(m.dataset.meter):null,i=m.firstElementChild;
+    const lv=r?.level??0;if(i._lv!==lv){i._lv=lv;i.style.width=(lv*100).toFixed(1)+'%'}
+    m.classList.toggle('kick',!!r&&now()-r.kickAt<140);m.classList.toggle('none',!r)});
+}
 const arKickOn=k=>G.devices[TD_DEV]?.services?.[`dmx_${k}_kick_enable`]==='active';
 const arSet=(k,n,v)=>setDmxParam(TD_DEV,`dmx_${k}_${n}`,String(v));
 const arKick=(k,on)=>devCmd(TD_DEV,{action:on?'enable':'disable',service:`dmx_${k}_kick_enable`});
@@ -68,16 +81,18 @@ function paintAudioRigs(el,w,force){
   const box=el.querySelector('.ar');if(!box)return;
   if(box.contains(document.activeElement)&&document.activeElement.type==='range'&&!force)return; // non ridisegnare mentre trascini
   const rigs=audioRigs(),compact=w.h<=3,p=tdParams();
-  const sig=JSON.stringify([rigs,compact,[...AR_SEL],arPresets().map(x=>x.name),rigs.map(r=>[arKickOn(r.key),arGroupAudio(r),AUDIO_KEYS.map(n=>p[`dmx_${r.key}_${n}`]),p[`dmx_${r.key}_audio_source`]])]);
+  const sig=JSON.stringify([rigs,compact,[...AR_SEL],rigs.map(r=>arAmount(r.key)),arPresets().map(x=>x.name),rigs.map(r=>[arKickOn(r.key),arGroupAudio(r),AUDIO_KEYS.map(n=>p[`dmx_${r.key}_${n}`]),p[`dmx_${r.key}_audio_source`]])]);
   if(!force&&box._sig===sig)return;box._sig=sig;
   if(!rigs.length){box.innerHTML='<p class="hint">Nessun gruppo con audio da DMX Master (non collegato?).</p>';return}
   const tog=(on,act,k,label,title)=>`<button class="ar-tog${on?' on':on===null?' mix':''}" data-ar="${act}" data-ar-k="${k}" title="${esc(title||'')}">${label}<i>${on?'ON':on===null?'MISTO':'OFF'}</i></button>`;
-  const audioOn=a=>!a.n?false:a.mode===null?null:a.mode!=='off';
-  if(compact){box.innerHTML=`<div class="ar-mini">${rigs.map(r=>{const a=arGroupAudio(r);return`<div class="ar-mrow"><b>${esc(r.label)}</b>${tog(audioOn(a),'audio',r.key,'♪','Luci del gruppo: segue la musica / ferma')}${tog(arKickOn(r.key),'kick',r.key,'Kick')}</div>`}).join('')}</div>`;return}
+  const audioOn=(k,a)=>arAmount(k)!=null?arAmount(k)>0:!a.n?false:a.mode===null?null:a.mode!=='off';
+  if(compact){box.innerHTML=`<div class="ar-mini">${rigs.map(r=>{const a=arGroupAudio(r);return`<div class="ar-mrow"><b>${esc(r.label)}</b><span class="ar-meter sm" data-meter="${r.key}"><i></i></span>${tog(audioOn(r.key,a),'audio',r.key,'♪','Quanto segue la musica: tutto / niente')}${tog(arKickOn(r.key),'kick',r.key,'Kick')}</div>`}).join('')}</div>`;return}
   box.innerHTML=`<div class="ar-cards">${rigs.map(r=>{const k=r.key,src=p[`dmx_${k}_audio_source`],a=arGroupAudio(r);return`<div class="ar-card${AR_SEL.has(k)?' sel':''}">
       <div class="ar-head"><button class="ar-pick" data-ar="pick" data-ar-k="${k}" title="Seleziona per i preset">${AR_SEL.has(k)?'☑':'☐'}</button><b>${esc(r.label)}</b>
         <span class="ar-src">${['a','b'].map(s=>`<button class="${src===s?'on':''}" data-ar="src" data-ar-v="${s}" data-ar-k="${k}" title="Sorgente audio ${s.toUpperCase()}">${s.toUpperCase()}</button>`).join('')}</span></div>
-      <div class="ar-togs">${tog(audioOn(a),'audio',k,'♪ Audio','Tutte le luci del gruppo: come il gruppo (ON) o ferme (OFF)')}${tog(arKickOn(k),'kick',k,'Kick','Colpo sui bassi del motore del gruppo')}</div>
+      <div class="ar-meter" data-meter="${k}" title="Livello audio del gruppo dal vivo; lampeggia sui kick"><i></i><b>KICK</b></div>
+      <div class="ar-togs">${tog(audioOn(k,a),'audio',k,'♪ Audio','Il gruppo segue la musica (ON) o resta fermo (OFF)')}${tog(arKickOn(k),'kick',k,'Kick','Colpo sui bassi del motore del gruppo')}</div>
+      ${arAmount(k)!=null?arSlider(k,'audio_amount','Quanto segue la musica',0,1,.01):''}
       ${a.n?`<p class="hint">${a.n} luci · modo: <b>${esc(a.mode?AUDIO_MODE_IT[a.mode]||a.mode:'diversi')}</b>${a.gain!=null&&a.gain!==1?` · ×${a.gain.toFixed(2)}`:''}</p>${audioControlsHtml(a.mode,a.gain,`arAud-${k}`)}`:'<p class="hint">Nessuna luce di questo gruppo nella patch di DMX Master.</p>'}
       <details class="ar-cal"><summary>Taratura del gruppo</summary>
       ${arSlider(k,'min_dimmer','Minimo',0,255,1)}${arSlider(k,'max_dimmer','Massimo',0,255,1)}
@@ -96,7 +111,7 @@ async function audioRigsDown(e,el,w){
   try{
     if(b.dataset.aud){const k=b.closest('[id^="arAud-"]').id.slice(6);await arSetGroupAudio([rig(k)],{audio:b.dataset.aud})}
     else{const k=b.dataset.arK,a=b.dataset.ar;
-      if(a==='audio'){const r=rig(k),st=arGroupAudio(r);await arSetGroupAudio([r],{audio:st.mode==='off'?'full':'off'})}
+      if(a==='audio'){if(arAmount(k)!=null)arToggleAmount(k);else{const r=rig(k),st=arGroupAudio(r);await arSetGroupAudio([r],{audio:st.mode==='off'?'full':'off'})}}
       else if(a==='kick')arKick(k,!arKickOn(k));
       else if(a==='src')arSet(k,'audio_source',b.dataset.arV);
       else if(a==='pick'){AR_SEL.has(k)?AR_SEL.delete(k):AR_SEL.add(k)}

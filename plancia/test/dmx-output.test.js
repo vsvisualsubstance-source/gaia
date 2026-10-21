@@ -197,3 +197,17 @@ test('quick patch params are the four destructive ones (nota TD 38)', () => {
   const { DMX_QUICK_PATCH } = require('../src/49-dmx-output');
   assert.deepEqual(DMX_QUICK_PATCH, ['fixture_count', 'start_address', 'output_port', 'fixture_profile']);
 });
+
+test('rig meters (nota TD 45): level, amount and a kick when the counter changes', () => {
+  const { dmxRigMeters } = require('../src/49-dmx-output');
+  const first = dmxRigMeters({ rig_a: { level: 0.42, kicks: 65, amount: 1, kick_enable: true } }, {}, 1000);
+  assert.deepEqual(first.rig_a, { level: 0.42, kicks: 65, amount: 1, kickEnable: true, kickAt: 0 });
+  const same = dmxRigMeters({ rig_a: { level: 0.5, kicks: 65, amount: 1 } }, first, 1100);
+  assert.equal(same.rig_a.kickAt, 0);
+  const kick = dmxRigMeters({ rig_a: { level: 0.9, kicks: 66, amount: 1 } }, same, 1200);
+  assert.equal(kick.rig_a.kickAt, 1200);
+  const restart = dmxRigMeters({ rig_a: { level: 0.1, kicks: 0, amount: 0.5 } }, kick, 1300); // motore ricaricato
+  assert.equal(restart.rig_a.kickAt, 1300);
+  assert.equal(restart.rig_a.amount, 0.5);
+  assert.deepEqual(dmxRigMeters(null, kick, 1400), {});
+});

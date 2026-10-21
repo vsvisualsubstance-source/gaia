@@ -1,6 +1,6 @@
 const DMX_OUTPUT={
   source:'unknown',sourceAt:0,lastAt:0,deviceId:null,seq:null,master:null,blackout:null,strobe:null,scene:null,
-  fixtures:new Map()
+  fixtures:new Map(),rigs:{}
 };
 const dmxNumber=value=>value==null||value===''||!Number.isFinite(+value)?null:+value;
 const dmxUnit=value=>{const n=dmxNumber(value);return n==null||n<0?null:Math.max(0,Math.min(1,n))};
@@ -15,8 +15,23 @@ function dmxFixtureRecord(f,receivedAt){
     key,uid,id,sent:f.sent===true,intensity:dmxUnit(f.intensity),rgbOut:rgb&&rgb.every(v=>v!=null)?rgb:null,
     group:f.group==null?null:String(f.group),colorSource:f.color_source??null,
     pan:dmxNumber(f.pan),tilt:dmxNumber(f.tilt),gobo:dmxNumber(f.gobo),
-    colorWheel:dmxNumber(f.color_wheel),shutter:dmxNumber(f.shutter),receivedAt
+    colorWheel:dmxNumber(f.color_wheel),shutter:dmxNumber(f.shutter),
+    // audio della luce (solo rig chase, nota TD 45): full|off|bass|mid|high|kick, guadagno 0..2
+    audio:typeof f.audio==='string'?(f.audio||'full'):null,audioGain:dmxNumber(f.audio_gain),receivedAt
   };
+}
+// misura dal vivo per rig (nota TD 45): {rig_a:{level,kicks,amount,kick_enable}}.
+// kicks e' un contatore che riparte da 0 col motore: kick = "diverso da prima".
+function dmxRigMeters(raw,prev,receivedAt){
+  const out={};
+  if(!raw||typeof raw!=='object')return out;
+  for(const[key,r]of Object.entries(raw)){
+    if(!r||typeof r!=='object')continue;
+    const kicks=dmxNumber(r.kicks),old=prev?.[key];
+    out[key]={level:dmxUnit(r.level),kicks,amount:dmxUnit(r.amount),kickEnable:typeof r.kick_enable==='boolean'?r.kick_enable:null,
+      kickAt:old&&kicks!=null&&old.kicks!=null&&kicks!==old.kicks?receivedAt:old?.kickAt||0};
+  }
+  return out;
 }
 function dmxOutputApplySnapshot(payload,deviceId,receivedAt=Date.now()){
   if(!payload||typeof payload!=='object'||payload.v!==1||!Array.isArray(payload.fixtures))return false;
@@ -33,6 +48,7 @@ function dmxOutputApplySnapshot(payload,deviceId,receivedAt=Date.now()){
   DMX_OUTPUT.strobe=typeof payload.strobe==='boolean'?payload.strobe:null;
   DMX_OUTPUT.scene=payload.scene??null;
   DMX_OUTPUT.fixtures=fixtures;
+  DMX_OUTPUT.rigs=dmxRigMeters(payload.rigs,DMX_OUTPUT.rigs,receivedAt);
   return true;
 }
 function dmxOutputApplySource(args,receivedAt=Date.now()){
@@ -166,6 +182,6 @@ function tdScenePreview(scene,stepped=new Set()){
 const DMX_QUICK_PATCH=['fixture_count','start_address','output_port','fixture_profile'];
 
 if(typeof module==='object'&&module.exports){
-  module.exports={DMX_OUTPUT,dmxOutputApplySnapshot,dmxOutputApplySource,dmxOutputApplyOsc,dmxOutputFresh,dmxOutputForFixture,dmxOutputSummary,
+  module.exports={DMX_OUTPUT,dmxRigMeters,dmxOutputApplySnapshot,dmxOutputApplySource,dmxOutputApplyOsc,dmxOutputFresh,dmxOutputForFixture,dmxOutputSummary,
     dmxHeadAngles,dmxGroupColor,dmxPaletteGroup,tdSceneList,tdActiveScene,dmxHex,dmxPaletteColors,dmxGradient,tdScenePreview,DMX_QUICK_PATCH};
 }

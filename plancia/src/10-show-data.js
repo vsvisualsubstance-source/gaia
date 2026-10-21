@@ -208,8 +208,8 @@ function projDelete(id){
 function projLoadTemplate(tid){
   const t=PROJECT_TEMPLATES.find(x=>x.tid===tid);if(!t)return;
   const v=t.venue&&VENUES[t.venue];
-  L=v?{pages:TPL.full.pages(),fixtures:v.fixtures(),stage:{...stageDefaults(),...v.stage},groups:v.groups.map(g=>({...g})),models:Object.fromEntries((v.models||[]).map(m=>[m.model,modelPayload(m)])),uiRev:3}
-    :{pages:TPL.full.pages(),fixtures:defaultFixtures(t.rig),stage:stageDefaults(),uiRev:3};
+  L=v?{pages:TPL.full.pages(),fixtures:v.fixtures(),stage:{...stageDefaults(),...v.stage},groups:v.groups.map(g=>({...g})),models:Object.fromEntries((v.models||[]).map(m=>[m.model,modelPayload(m)])),uiRev:4}
+    :{pages:TPL.full.pages(),fixtures:defaultFixtures(t.rig),stage:stageDefaults(),uiRev:4};
   delete L._projectId;delete L._projectName;ensureStageData(L);
   pi=0;selId=null;save();render();initShow();checkProjectModelsSoon();
 }

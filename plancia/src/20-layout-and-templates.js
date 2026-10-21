@@ -18,7 +18,7 @@ const TPL={
     W('scenes',0,0,8,5,{label:'Scene OSC',addr:'/dmx/scene',items:sceneList,cols:4,value:0}),
     W('scenes',8,0,4,5,{label:'Palette · Rig A',mode:'dmx-enum',device:'',param:'dmx_a_palette',cols:4,color:SWATCH[1]}),
     W('scenes',12,0,4,5,{label:'Palette · Rig B',mode:'dmx-enum',device:'',param:'dmx_b_palette',cols:4,color:SWATCH[4]}),
-    W('scenes',0,5,4,2,{label:'Chase',addr:'/dmx/chase',items:CHASE.join('\n'),cols:2,value:0,color:SWATCH[4]}),
+    W('audiorigs',0,5,4,2,{label:'Audio',color:SWATCH[4]}),
     W('button',4,5,2,2,{label:'Blackout',addr:'/dmx/blackout',mode:'toggle',color:SWATCH[2]}),
     W('button',6,5,2,2,{label:'Strobo',addr:'/dmx/strobe',mode:'toggle',color:SWATCH[5]}),
     W('fader',8,5,4,2,{label:'Fade (s)',addr:'/dmx/fade',min:0,max:10,value:.15,color:SWATCH[1]}),
