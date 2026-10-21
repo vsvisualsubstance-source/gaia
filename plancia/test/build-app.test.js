@@ -23,7 +23,7 @@ test('app bundle preserves module order and parses as one client scope', () => {
     '/* ---------- simulazione:',
     '/* ---------- ciclo principale ---------- */',
     '/* ---------- impostazioni e template ---------- */',
-    'migrateLegacyHeadSelectors();migrateHeadPresetWidgets();render();'
+    'migrateLegacyHeadSelectors();migrateHeadPresetWidgets();migrateUiShowTimeline();render();'
   ].map(marker => bundle.indexOf(marker));
 
   assert.equal(bundle.startsWith('(()=>{\n'), true);

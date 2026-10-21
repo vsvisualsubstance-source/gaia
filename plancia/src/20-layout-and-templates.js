@@ -9,7 +9,7 @@ const TPL={
     W('clock',11,0,5,2,{label:'Ora',mode:'tod',color:SWATCH[5]}),
     W('clock',11,2,5,2,{label:'Show',mode:'show',color:SWATCH[0]}),
     W('scenes',11,4,5,3,{label:'Scene',addr:'/dmx/scene',items:sceneList,cols:4,value:0}),
-    W('timeline',0,7,11,3,{label:'Timeline',...tlOpts()}),
+    W('timeline',0,7,11,3,{label:'Timeline',...tlOpts(),readonly:true}),
     W('fader',11,7,2,3,{label:'Master',addr:'/dmx/master',value:1}),
     W('button',13,7,3,2,{label:'Blackout',addr:'/dmx/blackout',mode:'toggle',color:SWATCH[2]}),
     W('button',13,9,3,1,{label:'Flash strobo',addr:'/dmx/strobe',color:SWATCH[5]})
@@ -43,14 +43,23 @@ const TPL={
     W('button',14,7,2,1,{label:'Segui',addr:'/mh/follow',mode:'toggle',color:SWATCH[3]}),
     W('button',14,8,2,2,{label:'Rilascia',addr:'/mh/release',color:SWATCH[1]})
   ])]},
-  timeline:{name:'Timeline e clock',desc:'Cue list a tempo, timecode 25 fps, countdown a fine show, GO e Back.',pages:()=>[P('Timeline',[
-    W('timeline',0,0,16,5,{label:'Timeline',...tlOpts()}),
-    W('clock',0,5,6,2,{label:'Timecode',mode:'show',color:SWATCH[0]}),
-    W('clock',6,5,5,2,{label:'Fine show',mode:'countdown',target:'23:30',color:SWATCH[1]}),
-    W('clock',11,5,5,2,{label:'Ora',mode:'tod',color:SWATCH[5]}),
-    W('button',0,7,4,3,{label:'GO',addr:'/show/go',color:SWATCH[3]}),
-    W('button',4,7,2,3,{label:'Back',addr:'/show/back',color:SWATCH[5]}),
-    W('scenes',6,7,10,3,{label:'Scena attiva',addr:'/dmx/scene',items:sceneList,cols:6,value:0})
+  // Timeline = PREPARARE lo show (Show = eseguirlo, timeline in sola lettura):
+  // timeline modificabile, scene di DMX Master con "＋ Scene…" per catturarle,
+  // e i controlli per comporre una scena (colori, teste, strobo).
+  timeline:{name:'Timeline (preparazione)',desc:'Timeline modificabile, scene di DMX Master e controlli per comporre e catturare le scene.',pages:()=>[P('Timeline',[
+    W('timeline',0,0,11,3,{label:'Timeline show',...tlOpts()}),
+    W('scenes',11,0,5,3,{label:'Scene · DMX Master',addr:'/dmx/scene',items:sceneList,cols:3,value:0}),
+    W('scenes',0,3,4,4,{label:'Palette FRONT · rig A',mode:'dmx-enum',device:'',param:'dmx_a_palette',cols:4,color:SWATCH[1]}),
+    W('scenes',4,3,4,4,{label:'Palette BACK · rig B',mode:'dmx-enum',device:'',param:'dmx_b_palette',cols:4,color:SWATCH[4]}),
+    W('scenes',8,3,3,4,{label:'Palette LED bar',mode:'dmx-enum',device:'',param:'dmx_ledbar_palette',cols:3,color:SWATCH[2]}),
+    W('scenes',11,3,3,4,{label:'Posizioni teste',addr:'/mh/position',items:POS.join('\n'),cols:2,value:-1}),
+    W('scenes',14,3,2,4,{label:'Preset PTZ',mode:'head-presets',headPresets:[],color:SWATCH[4]}),
+    W('scenes',0,7,4,3,{label:'Selezione teste',addr:'/mh/select/heads',mode:'head-select',items:'',headValues:[],selectedHeads:[],value:[],cols:4,color:SWATCH[1]}),
+    W('color',4,7,3,3,{label:'Colore teste',addr:'/mh/color',value:{h:.58,s:.55},color:SWATCH[1]}),
+    W('button',7,7,2,3,{label:'Strobo',addr:'/dmx/strobe',mode:'toggle',color:SWATCH[5]}),
+    W('fader',9,7,2,3,{label:'Strobo (Hz)',addr:'/dmx/strobe/rate',min:1,max:20,value:.37,color:SWATCH[5]}),
+    W('button',11,7,3,3,{label:'GO',addr:'/show/go',color:SWATCH[3]}),
+    W('button',14,7,2,3,{label:'Back',addr:'/show/back',color:SWATCH[5]})
   ])]},
   palco:{name:'Design palco',desc:'Pianta del rig con patch DMX, render live, contenuti LED wall e blinder.',pages:()=>[P('Palco',[
     W('stage',0,0,12,10,{label:'Design',view:'plot'}),

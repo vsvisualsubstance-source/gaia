@@ -81,6 +81,27 @@ function parseCueTime(value){
 function serializeCues(cues){
   return[...cues].sort((a,b)=>a.t-b.t).map(c=>`${formatCueTime(c.t)} ${c.name.trim()||'Cue'}${c.targets.trim()?` > ${c.targets.trim()}`:''}`).join('\n');
 }
+// Testo cue -> {scene (1-based, stringa), fade, extra (parametri DMX V8)}
+function cueSplitTargets(targets){
+  const parts=String(targets||'').split(';').map(x=>x.trim()).filter(Boolean);
+  const scene=parts.find(x=>/^[1-9]\d*$/.test(x))||'',fadeTok=parts.find(x=>/^fade\s*=/i.test(x));
+  return{scene,fade:fadeTok?String(parseFloat(fadeTok.split('=')[1])):'',extra:parts.filter(x=>x!==scene&&x!==fadeTok).join('; ')};
+}
+// colore della scena (scena di TD) o del look locale in simulazione
+function cueSceneSwatch(v){
+  const i=+v-1;if(!(i>=0))return'';
+  const td=tdScenes();if(td.length){const sc=td.find(x=>x.index===i);return sc?tdSceneLook(sc).grad||'':''}
+  return LOOKS[i]?lookHex(i):'';
+}
+// Menu scena: le scene di DMX Master; senza TD i look locali (simulazione)
+function cueSceneFields(targets,i){
+  const{scene,fade}=cueSplitTargets(targets),td=tdScenes();
+  const list=td.length?td.map(x=>({v:String(x.index+1),t:`${String(x.index+1).padStart(2,'0')} · ${x.label||x.id}`})):LOOKS.map((l,k)=>({v:String(k+1),t:`${String(k+1).padStart(2,'0')} · ${l.n} (simulazione)`}));
+  const opts=['<option value="">— marker, nessuna scena —</option>',...list.map(o=>`<option value="${o.v}"${o.v===scene?' selected':''}>${esc(o.t)}</option>`)];
+  if(scene&&!list.some(o=>o.v===scene))opts.push(`<option value="${scene}" selected>scena ${scene} (non esiste)</option>`);
+  return`<label>Scena<span class="cue-scene-wrap"><span class="cue-sw" style="background:${cueSceneSwatch(scene)}"></span><select class="cue-scene" aria-label="Scena cue ${i+1}">${opts.join('')}</select></span></label>
+    <label>Fade (s)<input class="cue-fade" type="number" min="0" step="0.1" inputmode="decimal" value="${esc(fade)}" placeholder="2" aria-label="Fade cue ${i+1}"></label>`;
+}
 // meta: valori in sospeso da applicare solo con Salva (duration/bpm/rev di una
 // timeline appena importata da TD); meta.td = timeline /show che segue TD,
 // dove Salva significa inviare a DMX Master.
@@ -91,16 +112,17 @@ function renderCueEditor(w,cues,meta={}){
   const rows=cues.map((c,i)=>`<div class="cue-edit-row" data-cue-row="${i}">
     <label>Posizione (M:SS)<input class="cue-time" value="${esc(formatCueTime(c.t))}" inputmode="decimal" aria-label="Posizione cue ${i+1}"></label>
     <label>Nome<input class="cue-name" value="${esc(c.name)}" aria-label="Nome cue ${i+1}"></label>
-    <label>Richiami<input class="cue-editor-target cue-targets" value="${esc(c.targets)}" placeholder="2; dmx_a_palette=Warm" aria-label="Richiami cue ${i+1}"></label>
+    ${cueSceneFields(c.targets,i)}
     <div class="row"><button class="btn sm" data-cue-move="-1" aria-label="Sposta cue ${i+1} su"${i===0?' disabled':''}>↑</button><button class="btn sm" data-cue-move="1" aria-label="Sposta cue ${i+1} giù"${i===cues.length-1?' disabled':''}>↓</button><button class="btn sm danger" data-cue-delete="${i}" aria-label="Elimina cue ${i+1}">×</button></div>
+    <details class="cue-adv"${cueSplitTargets(c.targets).extra?' open':''}><summary>Avanzate · parametri DMX V8 (solo Plancia)</summary><input class="cue-extra mono" value="${esc(cueSplitTargets(c.targets).extra)}" placeholder="dmx_a_palette=Warm; dmx_b_palette=Cool" aria-label="Parametri DMX cue ${i+1}"></details>
   </div>`).join('');
   s.innerHTML=`<div class="sheet" role="dialog" aria-label="Editor timeline">
     <div class="top"><h3>Timeline · ${esc(w.label)}</h3><button class="btn ghost" id="cueClose">Chiudi</button></div>
-    <p class="hint">Le cue si riordinano per posizione. Trascina un blocco nella timeline oppure modifica qui orario e richiamo; le modifiche vengono salvate nel layout condiviso OPS.</p>
+    <p class="hint">Per ogni cue scegli quando (posizione), quale scena e in quanti secondi arrivarci (fade). Le cue si riordinano da sole per posizione.</p>
     <div class="row cue-dur"><label>Durata timeline (M:SS)<input id="cueDur" value="${esc(formatCueTime(duration))}" inputmode="decimal" aria-label="Durata timeline"></label><span class="hint">Le cue vanno da 0:00 a prima della fine: con il loop una cue sulla fine non scatta.</span></div>
     <div class="cue-edit-list">${rows||'<p class="hint">Nessuna cue. Aggiungine una per iniziare.</p>'}</div>
     <div class="row"><button class="btn" id="cueAdd">＋ Aggiungi cue</button></div>
-    <p class="hint">Richiamo opzionale: indice scena OSC 1-based, parametro DMX V8 nel formato <code>dmx_a_palette=Warm</code>, crossfade in DMX Master con <code>fade=1.5</code> (secondi), o più valori separati da <code>;</code>. Esempio: <code>2; fade=3; dmx_b_palette=Cool</code>.</p>
+    <p class="hint">Ogni cue richiama una <b>scena</b> di DMX Master all'istante indicato, sfumando per <b>Fade</b> secondi (vuoto = 2 s). Le scene si creano e si modificano in <b>＋ Scene…</b>. Una cue senza scena è un <b>marker</b>: solo un nome sulla timeline. Le scene si sommano: una cue "colore" e una "teste" restano attive tutte e due.</p>
     <p id="cueTdChanged" class="hint warn" hidden>TD ha cambiato la timeline mentre la modificavi (rev <b></b>). "⇩ Importa da TD" riparte dalla sua; Salva prova a sovrascriverla e TD chiede conferma del conflitto.</p>
     ${tdMode?'<p class="hint">Timeline dello show di DMX Master: Salva la invia a TD, che la valida prima di caricarla.</p>':''}
     <div class="cue-editor-actions"><div class="row cue-td"><button class="btn ghost" id="cueImportTD" title="Carica nell'editor la timeline attuale di DMX Master (show_timeline)">⇩ Importa da TD</button>${tdMode?'':'<button class="btn" id="cueSendTD" title="Salva e invia questa timeline a DMX Master: TD la valida, poi chiede conferma">⇪ Invia a TD</button>'}</div><button class="btn ghost" id="cueCancel">Annulla</button><button class="btn primary" id="cueSave">${tdMode?'Salva e invia a TD':'Salva timeline'}</button></div>
@@ -108,8 +130,11 @@ function renderCueEditor(w,cues,meta={}){
   const readRows=()=>[...s.querySelectorAll('.cue-edit-row')].map(row=>({
     t:parseCueTime(row.querySelector('.cue-time').value),
     name:row.querySelector('.cue-name').value.trim()||'Cue',
-    targets:row.querySelector('.cue-targets').value.trim()
+    // ricompone il testo della cue: "<scena 1-based>; fade=<s>; <avanzate>"
+    targets:[row.querySelector('.cue-scene').value,row.querySelector('.cue-fade').value.trim()!==''?`fade=${+row.querySelector('.cue-fade').value}`:'',
+      row.querySelector('.cue-extra').value.trim()].filter(Boolean).join('; ')
   }));
+  s.querySelectorAll('.cue-scene').forEach(sel=>sel.onchange=()=>{const sw=sel.closest('.cue-edit-row').querySelector('.cue-sw');if(sw)sw.style.background=cueSceneSwatch(sel.value)});
   // durata modificabile qui (prima era fissa: con la timeline di TD a 10 s
   // ogni cue oltre 0:10 veniva rifiutata e non c'era modo di allungarla)
   const dur=()=>{const d=parseCueTime(s.querySelector('#cueDur').value);return d>0?d:duration};

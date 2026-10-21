@@ -156,7 +156,13 @@ button{cursor:pointer}
 .hp button{min-width:0;border:1px solid var(--line2);border-radius:5px;background:var(--panel2);padding:3px 5px;overflow:hidden;overflow-wrap:anywhere;text-align:center;font-family:var(--display);font-weight:600;font-size:15px;letter-spacing:.04em;line-height:1.05}
 .hp button[data-act="manage-presets"]{color:var(--accent);border-style:dashed}
 .cue-edit-list,.preset-edit-list{display:flex;flex-direction:column;gap:8px}
-.cue-edit-row,.preset-edit-row{display:grid;grid-template-columns:minmax(82px,.7fr) minmax(110px,1fr) minmax(150px,1.5fr) auto;gap:6px;align-items:center;padding:8px;border:1px solid var(--line);border-radius:7px}
+.preset-edit-row{display:grid;grid-template-columns:minmax(82px,.7fr) minmax(110px,1fr) minmax(150px,1.5fr) auto;gap:6px;align-items:center;padding:8px;border:1px solid var(--line);border-radius:7px}
+.cue-edit-row{display:grid;grid-template-columns:minmax(76px,.6fr) minmax(100px,1fr) minmax(160px,1.5fr) 78px auto;gap:6px;align-items:end;padding:8px;border:1px solid var(--line);border-radius:7px}
+.cue-edit-row select{min-width:0;width:100%}
+.cue-scene-wrap{display:flex;gap:6px;align-items:center}
+.cue-sw{width:22px;height:22px;flex:none;border-radius:4px;border:1px solid var(--line2);background:var(--panel2)}
+.cue-adv{grid-column:1/-1;font-size:12px;color:var(--dim)}
+.cue-adv input{width:100%;margin-top:4px;box-sizing:border-box}
 .cue-edit-row input,.preset-edit-row input{min-width:0}
 .cue-edit-row .row,.preset-edit-row .row{gap:4px;flex-wrap:nowrap}
 .cue-edit-row .btn,.preset-edit-row .btn{padding:5px 8px}
@@ -165,7 +171,7 @@ button{cursor:pointer}
 .cue-editor-actions .cue-td{margin-right:auto;gap:8px}
 @media(max-width:700px){
   .cue-edit-row{grid-template-columns:1fr 1fr}
-  .cue-edit-row .cue-editor-target{grid-column:1/-1}
+  .cue-edit-row label:has(.cue-scene){grid-column:1/-1}
   .cue-edit-row .row{grid-column:1/-1;justify-content:flex-end}
 }
 
@@ -373,3 +379,5 @@ button{cursor:pointer}
 .scn-cats{display:flex;flex-wrap:wrap;gap:4px 14px}
 .scn-new{border-top:1px solid var(--line);padding-top:10px;display:flex;flex-direction:column;gap:8px}
 .scn-new h4{margin:0;font-family:var(--display);letter-spacing:.08em;text-transform:uppercase;font-size:13px}
+.si.si-manage{border-style:dashed;color:var(--accent);background:transparent}
+.simtag{position:absolute;top:6px;right:8px;font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--accent);border:1px solid var(--accent);border-radius:4px;padding:1px 5px;z-index:3}

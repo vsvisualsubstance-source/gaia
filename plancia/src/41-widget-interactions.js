@@ -29,6 +29,8 @@ function bind(el,w){
           if(cue)showClockCommand(w,'cue',cue.index||(+block.dataset.k+1));
           return;
         }
+        // sola lettura (pagina Show): il blocco salta alla cue, non si sposta
+        if(w.readonly){e.preventDefault();const cue=parseCues(w)[+block.dataset.k];if(cue)seek(w,cue.t);return}
         e.preventDefault();el.setPointerCapture(e.pointerId);
         const cues=parseCues(w).map(c=>({t:c.t,name:c.name,targets:cueTargets(c)})),i=+block.dataset.k,r=lane.getBoundingClientRect(),startX=e.clientX,startT=cues[i]?.t??0;
         block.classList.add('dragging');
@@ -46,6 +48,7 @@ function bind(el,w){
       const mv=ev=>seek(w,clamp((ev.clientX-r.left)/r.width)*timelineDuration(w)); mv(e); el.onpointermove=mv; el.onpointerup=el.onpointercancel=end; return;
     }
     if(w.type==='scenes'){
+      if(e.target.closest('[data-act="manage-scenes"]')){e.preventDefault();openSceneEditor();return}
       if(w.mode==='head-presets'){
         const manage=e.target.closest('[data-act="manage-presets"]'),preset=e.target.closest('[data-head-preset]');
         if(manage){e.preventDefault();openHeadPresetEditor(w);return}
@@ -164,7 +167,7 @@ function renderInsp(){
         <p class="hint">Le voci arrivano dalla matrice <code>dmx_matrix</code>; il click invia al device il valore originale dell'enum via MQTT. Nessuna opzione o stato viene inventato.</p>`
         :w.mode==='head-presets'?'<p class="hint">I preset PTZ si gestiscono dal widget in modalità normale. Sono snapshot locali condivisi nel layout; non sono preset interni al motore TD.</p>'
         :'<p class="hint">Invia l’indice della voce (0, 1, 2…) oppure, in selezione multipla, un elenco di 0 e 1.</p>'}`:''}
-    ${T==='timeline'?`<div class="two"><label>Durata (s)<input id="fDur" type="number" min="10"></label><label>BPM<input id="fBpm" type="number" min="40" max="240"></label></div>
+    ${T==='timeline'?`<div class="two"><label class="chk"><input id="fReadonly" type="checkbox"> Sola lettura: si esegue, le cue si modificano nella pagina Timeline</label><label>Durata (s)<input id="fDur" type="number" min="10"></label><label>BPM<input id="fBpm" type="number" min="40" max="240"></label></div>
       <label>Cue<textarea id="fCues" spellcheck="false" style="min-height:180px"></textarea></label>
       <button class="btn" id="fCueEditor">Apri editor cue</button>
       <label>Device DMX V8 per le cue<select id="fTLDmxDevice"><option value="">Automatico</option>${devIds('dmx').map(id=>`<option value="${esc(id)}"${id===w.dmxDevice?' selected':''}>${esc(id)}</option>`).join('')}</select></label>
@@ -221,6 +224,7 @@ function renderInsp(){
   if(T==='timeline'){val('#fDur',w.duration);val('#fBpm',w.bpm);val('#fCues',w.cues);
     on('#fDur',v=>{if(+v>=10)w.duration=+v});on('#fBpm',v=>{if(+v>0)w.bpm=+v});on('#fCues',v=>w.cues=v);
     if($('#fCueEditor'))$('#fCueEditor').onclick=()=>openCueEditor(w);
+    if($('#fReadonly')){$('#fReadonly').checked=!!w.readonly;$('#fReadonly').onchange=e=>{w.readonly=e.target.checked;save();refresh(w)}}
     if($('#fTLDmxDevice'))$('#fTLDmxDevice').addEventListener('change',e=>{w.dmxDevice=e.target.value;save();renderInsp()})}
   if(T==='clock'){val('#fCMode',w.mode);val('#fTarget',w.target||'23:30');on('#fCMode',v=>w.mode=v,'change');on('#fTarget',v=>w.target=v)}
   if(T==='stage'){

@@ -103,7 +103,7 @@ function openSheet(){
   const tmsg=t=>$('#tMsg').textContent=t;
   s.querySelectorAll('[data-tadd]').forEach(b=>b.onclick=()=>{const t=TPL[b.dataset.tadd],ps=t.pages();L.pages.push(...ps);pi=L.pages.length-ps.length;selId=null;save();render();initShow();tmsg(`Aggiunto "${t.name}" (${ps.length} ${ps.length>1?'pagine':'pagina'}).`);$('#sJson').value=JSON.stringify(L,null,1)});
   s.querySelectorAll('[data-trep]').forEach(b=>{let armed=false;b.onclick=()=>{if(!armed){armed=true;b.textContent='Conferma';b.classList.add('danger');return}
-    const t=TPL[b.dataset.trep];L={pages:t.pages(),fixtures:L.fixtures||defaultFixtures(L.rig),stage:L.stage||stageDefaults()};ensureStageData(L);pi=0;selId=null;save();render();initShow();tmsg(`Layout sostituito con "${t.name}".`);$('#sJson').value=JSON.stringify(L,null,1);
+    const t=TPL[b.dataset.trep];L={pages:t.pages(),fixtures:L.fixtures||defaultFixtures(L.rig),stage:L.stage||stageDefaults(),...(L.groups?{groups:L.groups}:{})};ensureStageData(L);pi=0;selId=null;save();render();initShow();tmsg(`Layout sostituito con "${t.name}".`);$('#sJson').value=JSON.stringify(L,null,1);
     armed=false;b.textContent='Sostituisci';b.classList.remove('danger')}});
   $('#sApply').onclick=()=>{
     const port=Number($('#sPort').value),host=$('#sHost').value.trim();
@@ -165,4 +165,16 @@ function initShow(){
   goScene(sc,0);
 }
 
-migrateLegacyHeadSelectors();migrateHeadPresetWidgets();render(); initShow(); connect(); gStart(); requestAnimationFrame(loop);
+// 2026-10-21, scelta dell'operatore: Timeline = preparare, Show = eseguire.
+// Una volta sola (L.uiRev): la pagina Timeline diventa quella di
+// preparazione (la vecchia resta in L.pagesBackup), le timeline /show delle
+// altre pagine diventano in sola lettura.
+function migrateUiShowTimeline(){
+  if((L.uiRev||0)>=1)return;
+  const old=L.pages.find(p=>p.name==='Timeline'),fresh=TPL.timeline.pages()[0];
+  L.pagesBackup={...(L.pagesBackup||{}),timeline_20261021:old?JSON.parse(JSON.stringify(old)):null};
+  if(old){fresh.id=old.id;L.pages[L.pages.indexOf(old)]=fresh}else L.pages.push(fresh);
+  for(const p of L.pages)if(p!==fresh)for(const w of p.widgets)if(w.type==='timeline'&&w.addr==='/show')w.readonly=true;
+  L.uiRev=1;save();
+}
+migrateLegacyHeadSelectors();migrateHeadPresetWidgets();migrateUiShowTimeline();render(); initShow(); connect(); gStart(); requestAnimationFrame(loop);
