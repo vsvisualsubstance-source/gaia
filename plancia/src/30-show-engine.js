@@ -481,7 +481,22 @@ function refreshShowTimelines(){
 function seek(w,t,quietCue){if(isShowTimeline(w)&&showClock.authority){showClockCommand(w,'seek',clamp(t,0,timelineDuration(w)));return}
   const r=rt(w),cues=parseCues(w);r.t=clamp(t,0,w.duration);const i=cueAt(cues,r.t);
   if(i!==r.cue){r.cue=i;if(!quietCue&&i>=0)fireCue(w,i)} fire(w.addr+'/time',[+r.t.toFixed(2)],w.oscChannel)}
-function tlAct(w,act){const r=rt(w),cues=parseCues(w);
+// Live/Timeline = servizio show_active di DMX Master (nota TD 40): spento,
+// la timeline non scrive le luci e si compone dal tablet; riacceso, TD
+// riapplica subito (senza fade) tutto lo stato a strati del tempo corrente.
+function tdShowActive(){
+  const st=G.devices['td-dmx-win']?.services?.show_active;
+  if(st==='active'||st==='inactive')return st==='active';
+  const a=showClock.state?.active;return typeof a==='boolean'?a:null;
+}
+function toggleShowActive(){
+  const on=tdShowActive();
+  if(on===null){showError('Stato della timeline di DMX Master non disponibile (Gaia collegata?).');return}
+  if(!on&&!confirm('Tornare alla TIMELINE?\nDMX Master riapplica subito, senza fade, la scena del tempo corrente: il look composto qui viene sostituito.'))return;
+  if(!devCmd('td-dmx-win',{action:on?'disable':'enable',service:'show_active'})){showError('Non collegata a Gaia: apri ⋯ → Gaia.');return}
+  showInfo(on?'LIVE: la timeline non comanda più le luci. Componi e cattura le scene.':'TIMELINE: le luci seguono di nuovo la timeline.');
+}
+function tlAct(w,act){if(act==='live'){toggleShowActive();return}const r=rt(w),cues=parseCues(w);
   if(isShowTimeline(w)&&showClock.authority){
     const sample=showClockSample();
     if(act==='edit-cues'){openCueEditor(w);return}

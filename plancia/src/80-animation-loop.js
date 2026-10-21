@@ -39,7 +39,10 @@ function loop(){
       const W=c.width/c._d,H=c.height/c._d;if(w.view==='plot')drawPlot(g,W,H,n,w);else drawRender(g,W,H,n,level);
       const hud=w.view==='plot'?'':`${SH.blackout?'<b>BLACKOUT</b> · ':''}SC ${SH.scene+1} ${esc((tdScenes().length?tdScenes().find(s=>s.index===SH.scene)?.label:LOOKS[SH.scene]?.n)||'')} · fade ${SH.fade.toFixed(1)}s · chase ${CHASE[SH.chase]||'Off'}${SH.strobe?' · <b>STROBO</b>':''} · ${esc(dmxOutputSummary())}`;
       const h=el.querySelector('.hud');if(h._v!==hud){h.innerHTML=hud;h._v=hud}}
-    else if(w.type==='timeline'){const r=rt(w),D=timelineDuration(w),cues=timelineCues(w);
+    else if(w.type==='timeline'){
+      const lb=el.querySelector('.tl-live');if(lb){const on=tdShowActive(),t=on===null?'—':on?'TIMELINE':'LIVE';
+        if(lb.textContent!==t){lb.textContent=t;lb.classList.toggle('live',on===false);lb.classList.toggle('tl',on===true)}}
+      const r=rt(w),D=timelineDuration(w),cues=timelineCues(w);
       el.querySelector('.tl-ph').style.left=r.t/D*100+'%';el.querySelector('.tl-tc').textContent=tc(r.t);
       const sample=isShowTimeline(w)&&showClock.authority?showClockSample():null;
       const controlled=isShowTimeline(w)&&showClock.authority,locked=controlled&&(!sample||!showClockFresh(sample));
