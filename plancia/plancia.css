@@ -29,6 +29,19 @@ button{cursor:pointer}
 .tab.add{color:var(--accent);font-family:var(--mono);font-size:14px}
 .spacer{display:none}
 .bar>.pill,.bar>.btn{flex:none}
+.projchip{flex:none;display:flex;align-items:center;gap:6px;max-width:26ch;padding:5px 10px;border:1px solid var(--line2);border-radius:8px;background:var(--panel2);color:var(--fg);font:600 14px/1.1 var(--sans,inherit);cursor:pointer}
+.projchip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.projchip.none span{color:var(--dim);font-weight:500}
+.projchip i{width:8px;height:8px;border-radius:50%;flex:none;display:none;background:#ffb23e;box-shadow:0 0 6px #ffb23e}
+.projchip.dirty i{display:block}
+.pr-ask{border:1px solid #ffb23e;border-radius:8px;padding:10px;margin-bottom:10px;display:grid;gap:8px}
+.pr-cur{border:1px solid var(--line);border-radius:8px;padding:10px;display:grid;gap:8px;margin-bottom:6px}
+.pr-dirty{color:#ffb23e}
+.md-row.pr-on{border-color:var(--c,#ffb23e)}
+.pal-chips{display:flex;flex-wrap:wrap;gap:6px}
+.pal-chip{display:flex;align-items:center;gap:6px;padding:5px 9px;border:1px solid var(--line2);border-radius:7px;background:var(--panel2);color:var(--fg);font:500 13px/1.1 inherit;cursor:pointer;min-height:34px}
+.pal-chip i{width:28px;height:12px;border-radius:3px;flex:none}
+.pal-chip.on{border-color:#ffb23e;box-shadow:0 0 0 1px #ffb23e inset}
 .pill{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:99px;padding:5px 12px 5px 10px;font-size:13px;color:var(--dim);max-width:100%;min-width:0}
 .pill span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pill i{width:8px;height:8px;border-radius:50%;background:var(--bad);flex:none}
@@ -331,8 +344,9 @@ button{cursor:pointer}
   .mon .rate{display:none}
   .brand .txt{display:none}
   .tl-bpm,.tl-cue{display:none}
-  .bar{display:grid;grid-template-columns:minmax(0,1fr) auto auto;grid-template-areas:"brand edit menu" "gconn conn save" "tabs tabs tabs";gap:6px;padding-block:8px}
+  .bar{display:grid;grid-template-columns:minmax(0,1fr) auto auto;grid-template-areas:"brand edit menu" "proj proj proj" "gconn conn save" "tabs tabs tabs";gap:6px;padding-block:8px}
   .brand{grid-area:brand}
+  #projBtn{grid-area:proj;max-width:none}
   #gconn{grid-area:gconn}
   #conn{grid-area:conn}
   #saveStatus{grid-area:save}

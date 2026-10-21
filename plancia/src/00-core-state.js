@@ -14,7 +14,7 @@ let sharedBaseline=JSON.stringify(sharedState);
 function saveStatus(text,ok=false){
   const button=$('#saveStatus');
   if(!button)return;
-  button.classList.toggle('on',ok);$('#saveStatusTxt').textContent=text;button.title=text;
+  button.classList.toggle('on',ok);$('#saveStatusTxt').textContent=ok?'Auto ✓':text;button.title='Salvataggio automatico del layout su OPS: '+text;
 }
 function localGet(key){try{return JSON.parse(localStorage.getItem(key))}catch{return null}}
 function importLocalProjects(){

@@ -254,6 +254,8 @@ function drawRender(g,W,H,t,level){
     g.beginPath();g.roundRect(x-size,y-size*.35,size*2,size*.7,2);g.fill();g.stroke();
     g.save();g.translate(x,y);g.rotate(-p[0]*.9);g.beginPath();g.roundRect(-size*.45,-size*.4,size*.9,size*.9,3);g.fill();g.stroke();g.restore()}
   g.globalCompositeOperation='lighter';
+  // etichette feedback: se le teste sono vicine si sfalsano in altezza (una si', una no)
+  const byX=heads.map(hd=>hd[0]).sort((a,b)=>a-b),minGap=byX.slice(1).reduce((m,v,i)=>Math.min(m,v-byX[i]),Infinity);
   for(const [x,y,h,p,size,feedback,f] of heads){
     const k=feedback?outputLevel(feedback):p[5]*SH.g.mh*M*(h.strobe?(((t/1000*13)%1)<.3?1:0):1);
     // con il feedback: colore e livello da rgb_out, posizione da pan/tilt
@@ -273,12 +275,14 @@ function drawRender(g,W,H,t,level){
       }
     }
     if(feedback){
-      const values=[feedback.sent?'OUT':'OFF',feedback.intensity==null?null:`${Math.round(feedback.intensity*100)}%`,
-        feedback.pan==null?null:`P ${Math.round(feedback.pan)}°`,feedback.tilt==null?null:`T ${Math.round(feedback.tilt)}°`,
+      // due righe corte e centrate: livello (o OFF) e posizione
+      const l1=[feedback.sent?(feedback.intensity==null?'OUT':`${Math.round(feedback.intensity*100)}%`):'OFF',
         // ruota colori con slot senza colore nel catalogo: TD manda bianco (nota 34)
-        feedback.colorSource==='unknown'?'colore ?':null].filter(Boolean);
-      g.save();g.globalCompositeOperation='source-over';g.font='8px JetBrains Mono, monospace';
-      g.fillStyle='#dce4f2';g.shadowColor='#000';g.shadowBlur=2;g.fillText(values.join(' · '),x-size,y+size+11);g.restore();
+        feedback.colorSource==='unknown'?'col ?':null].filter(Boolean).join(' '),
+        l2=[feedback.pan==null?null:`P${Math.round(feedback.pan)}`,feedback.tilt==null?null:`T${Math.round(feedback.tilt)}`].filter(Boolean).join(' ');
+      g.save();g.globalCompositeOperation='source-over';g.font='9px JetBrains Mono, monospace';g.textAlign='center';
+      const w=Math.max(g.measureText(l1).width,g.measureText(l2).width),dy=w+4>minGap&&byX.indexOf(x)%2?22:0;
+      g.fillStyle='#dce4f2';g.shadowColor='#000';g.shadowBlur=3;g.fillText(l1,x,y+size+11+dy);if(l2)g.fillText(l2,x,y+size+21+dy);g.restore();
     }
   }
   // casse

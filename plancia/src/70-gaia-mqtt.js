@@ -140,7 +140,8 @@ function nrConnect(){
 }
 function gStatus(){
   const p=$('#gconn');if(!p)return;p.classList.toggle('on',G.ok);p.classList.toggle('sim',!G.ok&&G.sim);
-  $('#gconnTxt').textContent=G.ok?`Gaia · ${net().name} · ${G.host}`:G.sim?'Gaia · simulazione':GC.on?'Gaia · offline':'Gaia · spenta';
+  const full=G.ok?`Gaia · ${net().name} · ${G.host}`:G.sim?'Gaia · simulazione':GC.on?'Gaia · offline':'Gaia · spenta';
+  $('#gconnTxt').textContent=G.ok?'Gaia':full;p.title=full;
 }
 function gIn(t,p){
   const seg=t.split('/'),obj=p&&typeof p==='object';

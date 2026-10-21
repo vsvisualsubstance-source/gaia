@@ -27,7 +27,7 @@ async function syncAllFixtures(){
     // suggerimento -- meglio di scrivere comunque e aggiungere un
     // altro doppione (come successo ieri, 19+ gruppi).
     const ok=devCmd('td-dmx-win',{action:'set',param:f._synced?'dmx_fixture_update':'dmx_fixture_add',
-      value:{id:f.id,type:f.type,name:f.name,group:f.group,model:f.model,universe:f.universe,address:f.address,x:f.x,y:f.y,enabled:f.enabled!==false,on_conflict:'reject'}});
+      value:{id:f.id,type:f.type,name:f.name,group:f.group,model:f.model,universe:f.universe,address:f.address,x:f.x,y:f.y,enabled:f.enabled!==false,...(f.palette!==undefined?{palette:f.palette}:{}),on_conflict:'reject'}});
     if(ok)sent++;
   }
   if(sent)list.forEach(f=>f._synced=true);
@@ -185,6 +185,7 @@ function openFixEditor(w,f){
     <label>Modello <em>profilo DMX, nota 19</em><span class="md-pick"><select id="feModel"></select><button class="btn sm ghost" id="feModelEdit" title="Canali, colore lampada, ruota colori del modello">✎ Modello</button></span></label>
     <div class="two"><label>Universo<select id="feUni"></select></label><label>Indirizzo<input id="feAddr" type="number" min="1" max="512"></label></div>
     <div class="row"><button class="btn sm ghost" id="feAuto">Primo indirizzo libero (da DMX Master)</button></div>`:''}
+    ${fixtureHasPalette(f)?`<label>Colore <em>palette propria: cambia solo il colore, livello e audio restano quelli del rig</em></label>${paletteChipsHtml(fixturePaletteOf(f),'fePal')}<p class="hint" id="fePalMsg"></p>`:''}
     <label class="chk"><input id="feOn" type="checkbox"> Attiva</label>
     ${FIX_TYPES[f.type].ch?`<div class="row"><button class="btn" id="feSync">${f._synced?'Aggiorna su DMX Master':'Manda a DMX Master'}</button></div>
     <p class="hint" id="feSyncMsg"></p>`:'<p class="hint">Tipo non patchabile via DMX -- DMX Master lo salta (confermato da TD).</p>'}
@@ -198,6 +199,10 @@ function openFixEditor(w,f){
     $('#feNdiPick').hidden=$('#feSource').value!=='ndi';
   }
   if($('#feAngle')){val2('#feAngle',f.angle);val2('#feSpread',f.spread)}
+  if($('#fePal'))$('#fePal').querySelectorAll('[data-pal]').forEach(b=>b.onclick=async()=>{
+    const name=b.dataset.pal;$('#fePal').querySelectorAll('.pal-chip').forEach(x=>x.classList.toggle('on',x===b));$('#fePalMsg').textContent='Mando a DMX Master…';
+    try{const r=await setFixturesPalette([f],name);$('#fePalMsg').textContent=r.done?`Confermato da DMX Master: ${name||'segue il rig'}.`:'Salvato in Plancia: la luce non è ancora su DMX Master ("Manda a DMX Master" qui sotto).'}
+    catch(e){$('#fePalMsg').textContent='DMX Master: '+e.message}});
   if($('#feGroup')){
     val2('#feGroup',normGroupName(f.group,groupsOf()));val2('#feAddr',f.address);
     // Universi reali da DMX Master (dmx_universe_map, nota 20) -- solo
@@ -301,7 +306,7 @@ function openFixEditor(w,f){
     // scelto a mano, un conflitto deve dare un errore leggibile (con
     // suggerimento) invece di scrivere comunque sopra un'altra fixture.
     const ok=devCmd('td-dmx-win',{action:'set',param:f._synced?'dmx_fixture_update':'dmx_fixture_add',
-      value:{id:f.id,type:f.type,name:f.name,group:f.group,model:f.model,universe:f.universe,address:f.address,x:f.x,y:f.y,enabled:f.enabled!==false,on_conflict:'reject'}});
+      value:{id:f.id,type:f.type,name:f.name,group:f.group,model:f.model,universe:f.universe,address:f.address,x:f.x,y:f.y,enabled:f.enabled!==false,...(f.palette!==undefined?{palette:f.palette}:{}),on_conflict:'reject'}});
     if(!ok){$('#feSyncMsg').textContent='Non collegata a Gaia — apri ⋯ → Gaia e collegati prima.';return}
     const btn=$('#feSync'); btn.disabled=true; $('#feSyncMsg').textContent='Mandato, verifico la conferma da DMX Master…';
     let tries=0;

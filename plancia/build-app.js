@@ -28,7 +28,9 @@ const appModules = [
   '72-gaia-interactions.js',
   '73-gaia-simulation.js',
   '80-animation-loop.js',
-  '90-settings-and-bootstrap.js'
+  '90-settings-and-bootstrap.js',
+  '92-projects.js',
+  '93-fixture-colors.js'
 ];
 
 function buildAppBundle(sourceDir = path.join(__dirname, 'src')) {

@@ -41,10 +41,8 @@ function openSheet(){
       <p class="note">Per esempio, configura qui DMX, PatchDeck o Controller Audio con host e porta OSC realmente in ascolto nel relativo progetto. La famiglia e l’istanza sono etichette di routing: non trasformano né verificano il contratto degli indirizzi.</p>
     </section>
     <section><h3 style="font-size:14px">Progetti</h3>
-      <p class="note" id="pCur"></p>
-      <div id="pList"></div>
-      <div class="row"><input id="pName" placeholder="Nome nuovo progetto" style="flex:1"><button class="btn primary" id="pSaveAs">Salva come nuovo</button></div>
-      <p class="note">Le modifiche al layout corrente si salvano automaticamente su OPS, ma non aggiornano lo snapshot del progetto. “Aggiorna” salva nel progetto corrente; “Salva come nuovo” crea uno snapshot separato. “Modifica griglia” serve solo a disporre i widget: per spostare o aggiungere luci usa direttamente la Pianta. I comandi ⇪/⇩ TD scambiano la patch DMX, non salvano il layout.</p>
+      <div class="row"><button class="btn primary" id="pOpen">📁 Apri Progetti</button></div>
+      <p class="note">Salva, apri, rinomina, duplica, esporta e importa i progetti, o creane uno da un modello. Anche dal nome del progetto in alto.</p>
     </section>
     <section><h3 style="font-size:14px">Layout</h3>
       <textarea id="sJson" spellcheck="false"></textarea>
@@ -124,33 +122,7 @@ function openSheet(){
   $('#sCopy').onclick=()=>{const ta=$('#sJson');const fb=()=>{ta.select();msg('Testo selezionato: copialo con Ctrl/Cmd+C.')};
     if(navigator.clipboard)navigator.clipboard.writeText(ta.value).then(()=>msg('Layout copiato negli appunti.'),fb);else fb()};
   $('#sLoad').onclick=()=>{try{const j=JSON.parse($('#sJson').value);if(!Array.isArray(j.pages)||!j.pages.length)throw 0;L=j;if(!L.fixtures)L.fixtures=defaultFixtures(L.rig);ensureStageData(L);pi=0;selId=null;save();render();initShow();msg('Layout applicato.')}catch{msg('JSON non valido: serve un oggetto con un elenco "pages".')}};
-  function renderProjList(){
-    $('#pCur').textContent=L._projectId?`Progetto corrente: ${L._projectName||'(senza nome)'} · snapshot separato dal layout autosalvato`:'Progetto corrente: nessuno · il layout corrente è comunque autosalvato su OPS.';
-    const list=projList();
-    $('#pList').innerHTML=
-      PROJECT_TEMPLATES.map(t=>`<div class="row" style="align-items:center"><span style="flex:1">🧩 ${esc(t.name)}</span><button class="btn sm" data-tpl="${t.tid}">Carica</button></div>`).join('')+
-      (list.length?list.map(p=>`<div class="row" style="align-items:center"><span style="flex:1">${esc(p.name)}${p.id===L._projectId?' · attuale':''}</span>
-        <button class="btn sm" data-pload="${p.id}">Carica</button>
-        <button class="btn sm" data-pupd="${p.id}"${p.id===L._projectId?'':' disabled'}>Aggiorna</button>
-        <button class="btn sm danger" data-pdel="${p.id}">Elimina</button></div>`).join(''):'<p class="hint">Nessun progetto salvato ancora.</p>');
-    $('#pList').querySelectorAll('[data-tpl]').forEach(b=>b.onclick=()=>{
-      if(!confirm('Sostituisce il progetto attuale (se non salvato, lo perdi). Continuare?'))return;
-      projLoadTemplate(b.dataset.tpl);closeSheet();
-    });
-    $('#pList').querySelectorAll('[data-pload]').forEach(b=>b.onclick=()=>{
-      if(!confirm('Sostituisce il progetto attuale (se non salvato, lo perdi). Continuare?'))return;
-      projLoad(b.dataset.pload);closeSheet();
-    });
-    $('#pList').querySelectorAll('[data-pupd]').forEach(b=>b.onclick=()=>{projUpdate(b.dataset.pupd);renderProjList()});
-    $('#pList').querySelectorAll('[data-pdel]').forEach(b=>{let armed=false;b.onclick=()=>{
-      if(!armed){armed=true;b.textContent='Conferma';return}
-      projDelete(b.dataset.pdel);renderProjList()}});
-  }
-  renderProjList();
-  $('#pSaveAs').onclick=()=>{
-    const name=$('#pName').value.trim();if(!name)return;
-    projSaveAs(name);$('#pName').value='';renderProjList();
-  };
+  $('#pOpen').onclick=openProjects;
 }
 function closeSheet(){$('#scrim').hidden=true;$('#scrim').innerHTML=''}
 $('#menuBtn').onclick=openSheet; $('#conn').onclick=openSheet; $('#gconn').onclick=openSheet;

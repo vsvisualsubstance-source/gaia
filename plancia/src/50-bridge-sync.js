@@ -2,7 +2,8 @@
 function status(){
   const on=ws&&ws.readyState===1;
   $('#conn').classList.toggle('on',on);
-  $('#connTxt').textContent=on?`Bridge → ${hello?.target?.host??C.host}:${hello?.target?.port??C.port}`:'Non connesso · simulazione';
+  const full=on?`Bridge → ${hello?.target?.host??C.host}:${hello?.target?.port??C.port}`:'Non connesso · simulazione';
+  $('#connTxt').textContent=on?'OSC':'OSC · sim';$('#conn').title='Connessione OSC: '+full;
 }
 function connect(){
   clearTimeout(retry); if(ws){ws.onclose=null;try{ws.close()}catch{}} ws=null; hello=null; status();
