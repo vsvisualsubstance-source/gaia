@@ -173,7 +173,7 @@ function openFixEditor(w,f){
     ${f.type==='laser'?`<div class="two"><label>Orientamento (gradi)<input id="feAngle" type="number" min="-180" max="180" step="1"></label><label>Apertura pattern (gradi)<input id="feSpread" type="number" min="1" max="120" step="1"></label></div>
     <p class="hint">Visualizzazione locale, senza comandi OSC/DMX. Il trasporto verso TouchDesigner sarà definito separatamente.</p>`:''}
     ${FIX_TYPES[f.type].ch?`<label>Gruppo <em>rig di DMX Master · ▦ Gruppi nel Palco</em><select id="feGroup">${groupOptionsHtml(f.group)}</select></label>
-    <label>Modello <em>profilo DMX, nota 19</em><select id="feModel"></select></label>
+    <label>Modello <em>profilo DMX, nota 19</em><span class="md-pick"><select id="feModel"></select><button class="btn sm ghost" id="feModelEdit" title="Canali, colore lampada, ruota colori del modello">✎ Modello</button></span></label>
     <div class="two"><label>Universo<select id="feUni"></select></label><label>Indirizzo<input id="feAddr" type="number" min="1" max="512"></label></div>
     <div class="row"><button class="btn sm ghost" id="feAuto">Primo indirizzo libero (da DMX Master)</button></div>`:''}
     <label class="chk"><input id="feOn" type="checkbox"> Attiva</label>
@@ -267,28 +267,15 @@ function openFixEditor(w,f){
   // fixture, non ancora cliccato = non ancora creato.
   if($('#feModel'))$('#feModel').addEventListener('change',e=>{
     if(e.target.value!=='__new__'){f.model=e.target.value||f.model; save(); checkDirty(); return}
-    const revert=()=>{e.target.value=f.model||''};
-    const name=prompt('Nome nuovo modello (come lo conoscerà DMX Master), es. "RGB 3CH"');
-    if(!name){revert();return}
-    const chStr=prompt('Numero di canali DMX (footprint) — i ruoli si completano dopo in TD o da qui','8');
-    const ch=Number(chStr);
-    if(!Number.isFinite(ch)||ch<1){alert('Numero di canali non valido.');revert();return}
-    const kind=FIX_TYPES[f.type].kind||'chase';
-    const ok=devCmd('td-dmx-win',{action:'set',param:'dmx_model_add',value:{model:name,kind,channels:ch}});
-    if(!ok){alert('Non collegata a Gaia — apri ⋯ → Gaia e collegati prima.');revert();return}
-    let tries=0;
-    const check=()=>{
-      tries++;
-      if(tdModels().some(m=>m.model===name)){f.model=name; save(); openFixEditor(w,f); return}
-      if(tries>=6){
-        const err=G.devices['td-dmx-win']?.last_error;
-        alert('Nessuna conferma da DMX Master per il nuovo modello'+(err?' — '+err:'.'));
-        revert();return;
-      }
-      setTimeout(check,500);
-    };
-    setTimeout(check,500);
+    // nota 34: l'editor dei modelli al posto dei due prompt (nome, canali)
+    e.target.value=f.model||'';
+    openModelForm(null,{kind:FIX_TYPES[f.type].kind||'chase',back:()=>{closeSheet();openFixEditor(w,f)},onDone:name=>{f.model=name;save();closeSheet();openFixEditor(w,f)}});
   });
+  if($('#feModelEdit'))$('#feModelEdit').onclick=()=>{
+    const m=tdModels().find(x=>x.model===(f.model||$('#feModel').value));
+    if(!m){showError('Modello non nel catalogo di DMX Master (collegati a Gaia, o scegline uno).');return}
+    openModelForm(m,{back:()=>{closeSheet();openFixEditor(w,f)},onDone:()=>{closeSheet();openFixEditor(w,f)}});
+  };
   // Canale 1b, confermato dal vivo da TD (GAIA_TD_INTEGRATION.md, note
   // interface 17/18): dmx_fixture_add/dmx_fixtures accettano la
   // fixture Plancia COSI' COM'E' -- id stringa (il loro uid), universe
