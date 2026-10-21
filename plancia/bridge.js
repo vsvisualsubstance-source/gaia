@@ -211,6 +211,9 @@ const broadcast = (msg, except) => {
   const s = JSON.stringify(msg);
   for (const c of wss.clients) if (c !== except && c.readyState === 1) c.send(s);
 };
+// Timeline video di PatchDeck: la esegue il bridge (sempre acceso su OPS),
+// seguendo l'orologio dello show. Documento in layout.videoTimeline.
+const videoTimeline = require('./video-timeline').startVideoTimeline({ getDoc: () => persistedState?.layout?.videoTimeline, broadcast });
 
 wss.on('connection', ws => {
   ws.send(hello());

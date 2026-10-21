@@ -19,6 +19,7 @@ const appModules = [
   '63-dmx-scenes.js',
   '64-dmx-models.js',
   '65-stage-ai.js',
+  '66-video-timeline.js',
   '70-gaia-mqtt.js',
   '71-gaia-widgets.js',
   '72-gaia-interactions.js',

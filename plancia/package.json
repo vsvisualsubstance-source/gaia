@@ -6,9 +6,10 @@
   "scripts": {
     "build": "node build-app.js",
     "start": "node build-app.js && node bridge.js",
-    "test": "node --test test\\build-app.test.js test\\dmx-output.test.js test\\dmx-groups.test.js test\\dmx-scenes.test.js test\\dmx-models.test.js test\\stage-ai.test.js"
+    "test": "node --test test\\build-app.test.js test\\dmx-output.test.js test\\dmx-groups.test.js test\\dmx-scenes.test.js test\\dmx-models.test.js test\\stage-ai.test.js test\\video-timeline.test.js"
   },
   "dependencies": {
+    "mqtt": "^5.16.1",
     "ws": "^8.18.0"
   },
   "optionalDependencies": {

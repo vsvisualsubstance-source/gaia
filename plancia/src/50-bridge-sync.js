@@ -12,6 +12,7 @@ function connect(){
   ws.onclose=()=>{ws=null;status();saveStatus(sharedDirty?'Offline · layout in copia locale':'Server OPS non connesso');retry=setTimeout(connect,3000)};
   ws.onerror=()=>{};
   ws.onmessage=ev=>{let m;try{m=JSON.parse(ev.data)}catch{return}
+  if(m.type==='video'){VIDEO_ST=m.state||null;return} // stato della timeline video dal bridge
     if(m.type==='hello'){
       hello=m;status();
       if(m.sharedState?.layout){
