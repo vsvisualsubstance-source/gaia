@@ -184,7 +184,12 @@ function gIn(t,p){
         showClock.minRtt=Math.min(...showClock.rtts)}
     }
   }else if(seg[1]==='device'&&seg[3]==='status'){if(obj){const oldShowCues=JSON.stringify(G.devices[seg[2]]?.params?.show_cues),oldScenes=JSON.stringify(G.devices[seg[2]]?.params?.show_scene_catalog);p._seen=Date.now();G.devices[seg[2]]=p;
-    if(seg[2]==='td-dmx-win'&&!G.tdAutoSynced&&Array.isArray(p.params?.dmx_fixtures)){G.tdAutoSynced=true;importFromTD(true)}
+    // reimport automatico della patch di TD all'apertura, ma MAI sopra
+    // fixture della Pianta non ancora mandate (palco AI, fixture nuove):
+    // le cancellerebbe dal layout condiviso al primo tablet che si apre
+    if(seg[2]==='td-dmx-win'&&!G.tdAutoSynced&&Array.isArray(p.params?.dmx_fixtures)){G.tdAutoSynced=true;
+      const pending=(L.fixtures||[]).filter(f=>FIX_TYPES[f.type]?.ch&&!f._synced).length;
+      if(pending)showInfo(`Pianta con ${pending} fixture non ancora mandate a DMX Master: non la reimporto da TD (⇩ TD per farlo a mano).`);else importFromTD(true)}
     if(seg[2]==='td-dmx-win'){
       syncHeadSelectors();
       if(oldShowCues!==JSON.stringify(p.params?.show_cues))refreshShowTimelines();

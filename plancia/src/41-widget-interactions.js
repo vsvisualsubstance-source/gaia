@@ -13,6 +13,7 @@ function bind(el,w){
       else if(e.target.closest('[data-act="groups"]'))openGroupEditor();
       else if(e.target.closest('[data-act="scenes"]'))openSceneEditor();
       else if(e.target.closest('[data-act="models"]'))openModelEditor();
+      else if(e.target.closest('[data-act="stage-ai"]'))openStageAI();
       else if(w.view==='plot')stageDown(e,el,w);
       else if(e.target.closest('canvas'))(L.fixtures||[]).forEach(f=>{
         const state=wallVideoPlayers.get(f.id);

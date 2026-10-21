@@ -14,6 +14,7 @@ const path = require('path');
 const os = require('os');
 const dgram = require('dgram');
 const { WebSocketServer } = require('ws');
+const stageAI = require('./stage-ai');
 
 const PORT = +process.env.PORT || 8080;
 const OSC_IN = +process.env.OSC_IN || 9000;
@@ -183,6 +184,18 @@ const server = http.createServer((req, res) => {
       console.error(`Plancia asset load failed (${asset.file}):`, error.message);
       res.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' });
       res.end('Plancia asset could not be loaded.');
+    });
+  } else if (req.url.split('?')[0] === '/api/stage-ai' && req.method === 'POST') {
+    // "Palco da descrizione": i tablet non possono chiamare Ollama (gira su
+    // OPS, origini limitate), quindi passa dal bridge. Vedi stage-ai.js.
+    let body = '';
+    req.on('data', c => { body += c; if (body.length > 8192) req.destroy(); });
+    req.on('end', () => {
+      let prompt = '';
+      try { prompt = String(JSON.parse(body).prompt || '').trim(); } catch { /* sotto */ }
+      const reply = (code, obj) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(obj)); };
+      if (!prompt) return reply(400, { ok: false, error: 'Descrizione del palco mancante.' });
+      stageAI.generatePlan(prompt, (err, out) => err ? reply(502, { ok: false, error: err.message }) : reply(200, { ok: true, ...out }));
     });
   } else if (req.url.split('?')[0] === '/vendor/mqtt.min.js') {
     // stesso mqtt.js che usano le pagine web di Gaia: niente CDN, funziona anche senza internet

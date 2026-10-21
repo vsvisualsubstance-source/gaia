@@ -397,3 +397,9 @@ button{cursor:pointer}
 .md-slot input[type=color],.md-beam input[type=color]{width:44px;height:30px;padding:0;border:1px solid var(--line2);border-radius:5px;background:none}
 .md-beam{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .md-pick{display:flex;gap:6px}.md-pick select{flex:1;min-width:0}
+.ai-mode{gap:16px;flex-wrap:wrap}
+.ai-plan{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:8px}
+.ai-plan h4{margin:0}
+.ai-table{border-collapse:collapse;font-size:13px}
+.ai-table th,.ai-table td{border-bottom:1px solid var(--line);padding:4px 8px;text-align:left}
+.ai-table th{color:var(--dim);font-weight:500}
