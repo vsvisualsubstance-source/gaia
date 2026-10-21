@@ -15,7 +15,7 @@ const OFL = {
     Pan: { fineChannelAliases: ['Pan fine'], capability: { type: 'Pan' } },
     Tilt: { capability: { type: 'Tilt' } },
     Dimmer: { capability: { type: 'Intensity' } },
-    'Shutter / Strobe': { capabilities: [{ type: 'ShutterStrobe' }, { type: 'ShutterStrobe' }] },
+    'Shutter / Strobe': { capabilities: [{ dmxRange: [0, 9], type: 'ShutterStrobe', shutterEffect: 'Closed' }, { dmxRange: [10, 255], type: 'ShutterStrobe', shutterEffect: 'Open' }] },
     'Color Wheel': { capabilities: [
       { dmxRange: [0, 9], type: 'WheelSlot', slotNumber: 1 },
       { dmxRange: [10, 19], type: 'WheelSlot', slotNumber: 2 },
@@ -42,6 +42,23 @@ test('OFL: roles, fine channels, wheel slots, one model per mode (matrix modes s
   assert.equal(std.tilt_range, 250);
   assert.deepEqual(std.colors, [{ name: 'White', value: 0, rgb: [1, 1, 1] }, { name: 'Red', value: 10, rgb: [1, 0, 0] }, { name: 'Colore_3', value: 20 }]);
   assert.match(std.notes, /MIT/);
+  assert.equal(std.defaults, 'shutter=10'); // inizio di "Open" (nota TD 42)
+});
+
+test('OFL defaults (nota TD 42): defaultValue, NoFunction, reversed speed keeps its name', () => {
+  const fx = {
+    name: 'Mini', availableChannels: {
+      Pan: { capability: { type: 'Pan' } }, Tilt: { capability: { type: 'Tilt' } },
+      'PT Speed': { capabilities: [{ dmxRange: [0, 255], type: 'PanTiltSpeed', speedStart: 'slow', speedEnd: 'fast' }] },
+      Iris: { defaultValue: 0, capability: { type: 'Iris' } },
+      Frost: { defaultValue: '50%', capability: { type: 'Frost' } },
+      Macro: { capabilities: [{ dmxRange: [0, 7], type: 'NoFunction' }, { dmxRange: [8, 255], type: 'Effect' }] },
+    },
+    modes: [{ name: 'M', channels: ['Pan', 'Tilt', 'PT Speed', 'Iris', 'Frost', 'Macro'] }],
+  };
+  const [m] = oflToModels(fx, 'Acme', 'acme/mini');
+  assert.deepEqual(m.channels, ['pan', 'tilt', 'pt_speed', 'iris', 'frost', 'macro']);
+  assert.equal(m.defaults, 'iris=0 frost=128 macro=0');
 });
 
 const DDF3 = `<?xml version="1.0"?><device type="DMXDevice" dmxcversion="3.0.0"><information><ddf-library-id>857</ddf-library-id>
@@ -60,19 +77,43 @@ test('DDF 3: functions by tag, gaps filled, wheel steps with colours', () => {
   assert.deepEqual(m.colors, [{ name: 'White', value: 0, rgb: [1, 1, 1] }, { name: 'Red', value: 14, rgb: [0.886, 0.114, 0.149] }]);
   assert.deepEqual(m.gobos.map(g => g.name), ['Open', 'Gobo_1']);
   assert.match(m.notes, /DDF #857 di P & G \(CC-BY-SA-4\.0\)/);
+  assert.equal(m.defaults, 'shutter=252');
 });
 
-const DDF2 = `<?xml version="1.0"?><device><information><ddf-library-id>100</ddf-library-id><vendor>Coemar</vendor><name>iSpot 575 EB (Mode 1)</name></information>
+const DDF2 = `<?xml version="1.0"?><device initsequence="set 0 128;set 7 0"><information><ddf-library-id>100</ddf-library-id><vendor>Coemar</vendor><name>iSpot 575 EB (Mode 1)</name></information>
 <channels><function channel="0" name="pan" type="pan"/><function channel="1" name="pan (fine)" type="panfine"/><function channel="2" name="tilt" type="tilt"/>
 <function channel="3" name="movement speed"/><function channel="4" name="dimmer" type="dimmer"/><function channel="5" name="shutter, strobe"/>
-<function channel="6" name="color 1" type="color"/><function channel="7" name="color 2" type="color"/></channels>
-<form><dropdown name="color1_dropdown" action="SetColor1"><item caption="white" value="0" color="#ffffff"/><item caption="orange" value="8" color="#ff8000"/><item caption="rainbow*" value="-1"/></dropdown></form></device>`;
+<function channel="6" name="color 1" type="color"/><function channel="7" name="color 2" type="color"/><function channel="8" name="control" action="GetControl"/></channels>
+<form><dropdown name="color1_dropdown" action="SetColor1"><item caption="white" value="0" color="#ffffff"/><item caption="orange" value="8" color="#ff8000"/><item caption="rainbow*" value="-1"/></dropdown>
+<dropdown name="shutter_mode"><item caption="shutter closed" value="1"/><item caption="shutter open" value="2"/></dropdown>
+<dropdown name="control"><item caption="park, no function" value="1"/><item caption="lamp off" value="2"/><item caption="lamp on, fans off" value="3"/><item caption="fans max (only when lamp on)" value="4"/></dropdown></form>
+<code><procedure name="GetShutter">!if|({channel_5} &gt; -1) and ({channel_5} &lt; 10)|
+ !set_control|shutter_mode|1$
+$
+!if|(({channel_5} &gt; 66) and ({channel_5} &lt; 69)) or (({channel_5} &gt; 244) and ({channel_5} &lt; 256))|
+ !set_control|shutter_mode|2$
+$</procedure><procedure name="GetControl">!if|({channel_8} &gt; -1) and ({channel_8} &lt; 11)|
+ !set_control|control|1$
+$
+!if|({channel_8} &gt; 10) and ({channel_8} &lt; 30)|
+ !set_control|control|2$
+$
+!if|({channel_8} &gt; 209) and ({channel_8} &lt; 250)|
+ !set_control|control|4$
+$
+!if|({channel_8} &gt; 249) and ({channel_8} &lt; 256)|
+ !set_control|control|3$
+$</procedure></code></device>`;
 
 test('DDF 2: type attribute or channel name, mode from the name, slots from the panel menu', () => {
   const [m] = ddfToModels(DDF2);
-  assert.equal(m.model, 'Coemar iSpot 575 EB 8ch');
+  assert.equal(m.model, 'Coemar iSpot 575 EB 9ch');
   assert.equal(m.mode, 'Mode 1');
-  assert.deepEqual(m.channels, ['pan', 'pan_fine', 'tilt', 'speed', 'dimmer', 'shutter', 'color', 'color_2']);
+  assert.deepEqual(m.channels, ['pan', 'pan_fine', 'tilt', 'speed', 'dimmer', 'shutter', 'color', 'color_2', 'control']);
+  // nota TD 42: shutter = inizio dell'intervallo "open" piu' ampio; neutri da
+  // initsequence e dai menu (pan, comandato da TD, resta fuori); lampada nelle note
+  assert.equal(m.defaults, 'shutter=245 color_2=0 control=0');
+  assert.match(m.notes, /lampada: canale 9 \(control\) on 250–255, off 11–29$/);
   assert.deepEqual(m.colors, [{ name: 'white', value: 0, rgb: [1, 1, 1] }, { name: 'orange', value: 8, rgb: [1, 0.502, 0] }]);
   assert.equal(roleFromName('Tilt (fine)'), 'tilt_fine');
 });
@@ -96,7 +137,7 @@ test('library: index from both sources, search, fixture cached on disk', async (
   assert.deepEqual(r.results, [{ src: 'ddf', id: '100', vendor: 'Coemar', name: 'iSpot 575 EB', mode: '' }]);
   assert.equal((await lib.search('acme')).results[0].id, 'acme/test-spot');
   const models = await lib.fixture('ddf', '100');
-  assert.equal(models[0].model, 'Coemar iSpot 575 EB 8ch');
+  assert.equal(models[0].model, 'Coemar iSpot 575 EB 9ch');
   const n = calls.length;
   await createLibrary({ dir, fetchImpl }).fixture('ddf', '100'); // indice e file dalla cache
   assert.equal(calls.length, n);

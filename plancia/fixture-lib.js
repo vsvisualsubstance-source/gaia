@@ -44,15 +44,28 @@ function modelNames(vendor, name, modes) {
   const count = {}; modes.forEach(m => { count[m.channels.length] = (count[m.channels.length] || 0) + 1; });
   return modes.map(m => `${base} ${m.channels.length}ch${count[m.channels.length] > 1 && m.mode ? ' ' + m.mode : ''}`.trim());
 }
+// ruoli che il motore heads di DMX Master comanda (nota TD 42): gli altri
+// escono al loro valore in "defaults", altrimenti a 0
+const TD_DRIVEN = new Set(['pan', 'pan_fine', 'tilt', 'tilt_fine', 'dimmer', 'shutter', 'red', 'green', 'blue', 'white', 'cyan', 'magenta', 'yellow', 'color', 'gobo', 'zoom', 'focus', 'speed']);
+// m.defaults = {indice canale: valore}: valore neutro dei canali non comandati
+// e, per lo shutter, il valore di "aperto" (TD manda defaults.shutter, nota 42)
+function defaultsString(channels, defs) {
+  return Object.entries(defs || {}).map(([i, v]) => [+i, Math.round(+v)])
+    .filter(([i, v]) => channels[i] && Number.isFinite(v) && v >= 0 && v <= 255 && (!TD_DRIVEN.has(channels[i]) || channels[i] === 'shutter'))
+    .sort((a, b) => a[0] - b[0]).map(([i, v]) => `${channels[i]}=${v}`).join(' ');
+}
 function finish(vendor, name, modes, extra) {
   const names = modelNames(vendor, name, modes);
   return modes.map((m, i) => {
-    const channels = uniqueRoles(m.channels), kind = kindOf(channels);
-    return {
+    const channels = uniqueRoles(m.channels), kind = kindOf(channels), defaults = kind === 'heads' ? defaultsString(channels, m.defaults) : '';
+    const out = {
       model: names[i], manufacturer: vendor, mode: m.mode || '', kind, channels, footprint: channels.length,
       colors: kind === 'heads' ? dedupSlots(m.colors || []) : [], gobos: kind === 'heads' ? dedupSlots(m.gobos || []) : [],
       pan_range: m.pan_range || 540, tilt_range: m.tilt_range || 270, ...extra,
     };
+    if (defaults) out.defaults = defaults;
+    if (m.lamp) out.notes = `${out.notes || ''} · lampada: ${m.lamp}`.replace(/^ · /, '');
+    return out;
   });
 }
 
@@ -68,7 +81,19 @@ function oflChannelRole(name, ch) {
     const w = String((caps.find(x => x.type === 'WheelSlot') || c).wheel || name);
     return /colou?r/i.test(w) ? 'color' : /gobo/i.test(w) ? 'gobo' : slug(w);
   }
+  // velocita' al contrario (0 = lento): resta col suo nome, non e' 'speed' (nota TD 42)
+  if (c.type === 'PanTiltSpeed' && /slow/i.test(String(c.speedStart || ''))) return slug(name);
   return OFL_TYPE[c.type] || roleFromName(name);
+}
+const oflDmx = v => { v = +v; return v > 255 ? Math.floor(v / 256) : v; };
+// valore neutro di un canale OFL: shutter = inizio di "Open", altrimenti
+// defaultValue della scheda, altrimenti inizio del primo "NoFunction"
+function oflDefault(ch, role) {
+  const caps = oflCaps(ch);
+  if (role === 'shutter') { const o = caps.find(x => x.type === 'ShutterStrobe' && x.shutterEffect === 'Open' && x.dmxRange); return o ? oflDmx(o.dmxRange[0]) : null; }
+  if (ch.defaultValue != null) { const d = ch.defaultValue; return typeof d === 'string' && /%$/.test(d) ? Math.round(parseFloat(d) * 255 / 100) : oflDmx(d); }
+  const nf = caps.length > 1 && caps.find(x => x.type === 'NoFunction' && x.dmxRange);
+  return nf ? oflDmx(nf.dmxRange[0]) : null;
 }
 function oflSlots(ch, wheels, want) {
   const out = [];
@@ -97,9 +122,10 @@ function oflToModels(fx, vendor, key) {
       if (fineOf[c]) { const [base, k] = fineOf[c]; return `${oflChannelRole(base, ac[base])}_fine${k ? k + 1 : ''}`; }
       return oflChannelRole(c, ac[c]);
     });
-    const ci = roles.indexOf('color'), gi = roles.indexOf('gobo');
+    const ci = roles.indexOf('color'), gi = roles.indexOf('gobo'), defaults = {};
+    m.channels.forEach((c, i) => { if (typeof c !== 'string' || fineOf[c] || !ac[c]) return; const v = oflDefault(ac[c], roles[i]); if (v != null) defaults[i] = v; });
     modes.push({
-      mode: m.shortName || m.name, channels: roles,
+      mode: m.shortName || m.name, channels: roles, defaults,
       colors: ci >= 0 ? oflSlots(ac[m.channels[ci]], fx.wheels, 'color') : [],
       gobos: gi >= 0 ? oflSlots(ac[m.channels[gi]], fx.wheels, 'gobo') : [],
       pan_range: fx.physical?.focus?.panMax, tilt_range: fx.physical?.focus?.tiltMax,
@@ -149,13 +175,36 @@ function ddf3ToModels(doc, meta) {
     const o = { name: (s.attrs.caption || (s.attrs.type === 'open' ? 'Open' : s.attrs.type)).trim(), value: +s.attrs.mindmx };
     const rgb = s.attrs.type === 'open' ? [1, 1, 1] : hexToRgb(s.attrs.val); if (rgb && types.includes('color')) o.rgb = rgb; return o;
   }) : [];
-  const pan = find(fn, 'pan'), tilt = find(fn, 'tilt');
+  const pan = find(fn, 'pan'), tilt = find(fn, 'tilt'), defaults = {};
+  // shutter: inizio del primo step "open" (nota TD 42)
+  const sh = findAll(fn, 'shutter').find(x => x.attrs.dmxchannel !== undefined), open = sh?.children.find(x => x.tag === 'step' && x.attrs.type === 'open');
+  if (open && channels[+sh.attrs.dmxchannel] === 'shutter') defaults[+sh.attrs.dmxchannel] = +open.attrs.mindmx;
   return finish(meta.vendor, meta.name, [{
-    mode: meta.mode, channels, colors: steps(find(fn, 'colorwheel'), ['color', 'open']), gobos: steps(find(fn, 'gobowheel'), ['gobo', 'open']),
+    mode: meta.mode, channels, defaults, colors: steps(find(fn, 'colorwheel'), ['color', 'open']), gobos: steps(find(fn, 'gobowheel'), ['gobo', 'open']),
     pan_range: +(pan?.attrs.range || find(pan || fn, 'range')?.attrs.range) || 0, tilt_range: +(tilt?.attrs.range) || 0,
   }], meta.extra);
 }
 const DDF2_TYPE = { pan: 'pan', panfine: 'pan_fine', tilt: 'tilt', tiltfine: 'tilt_fine', dimmer: 'dimmer', r: 'red', g: 'green', b: 'blue', red: 'red', green: 'green', blue: 'blue', color: 'color', gobo: 'gobo', shutter: 'shutter', strobe: 'shutter', iris: 'iris', zoom: 'zoom', focus: 'focus', prism: 'prism' };
+// DDF 2: gli script "Get..." dicono per ogni intervallo del canale quale voce
+// di menu mostrare: !if|({channel_6} > 244) and ({channel_6} < 256)| !set_control|shutter_mode|2$
+// -> [{ch, lo, hi, caption}] incrociando con le voci (item value -> caption) dei dropdown
+function ddf2MenuRanges(doc) {
+  const captions = {};
+  for (const d of findAll(doc, 'dropdown')) for (const it of d.children) if (it.tag === 'item') captions[`${d.attrs.name}|${it.attrs.value}`] = String(it.attrs.caption || '').replace(/\*$/, '').trim();
+  const out = [];
+  for (const p of findAll(doc, 'procedure')) {
+    for (const block of p.text.split('!if|').slice(1)) {
+      const bar = block.indexOf('|'); if (bar < 0) continue;
+      const cond = block.slice(0, bar), body = block.slice(bar + 1);
+      const ranges = [...cond.matchAll(/\{channel_(\d+)\}\s*>\s*(-?\d+)\)\s*and\s*\(\{channel_\1\}\s*<\s*(\d+)/g)].map(m => ({ ch: +m[1], lo: +m[2] + 1, hi: +m[3] - 1 }));
+      if (!ranges.length) continue;
+      for (const m of body.matchAll(/!set_control\|([\w]+)\|(-?\d+)\$/g)) {
+        const caption = captions[`${m[1]}|${m[2]}`]; if (caption) ranges.forEach(r => out.push({ ...r, caption }));
+      }
+    }
+  }
+  return out;
+}
 function ddf2ToModels(doc, meta) {
   const fns = findAll(doc, 'function').filter(f => f.attrs.channel !== undefined);
   if (!fns.length) return [];
@@ -177,7 +226,25 @@ function ddf2ToModels(doc, meta) {
       const rgb = color && hexToRgb(i.attrs.color); if (rgb) o.rgb = rgb; return o;
     });
   };
-  return finish(meta.vendor, meta.name, [{ mode: meta.mode, channels, colors: items(/colou?r\s*1?_?(dropdown|$)|setcolou?r1?$/i, true), gobos: items(/gobo\s*1?_?(dropdown|$)|setgobo1?$/i, false) }], meta.extra);
+  // valori di default (nota TD 42): sequenza di inizializzazione della scheda,
+  // poi gli intervalli DMX che gli script del pannello danno a ogni voce
+  // dei menu ("open", "off", "park, no function", "lamp on"...)
+  const defaults = {};
+  String(doc.attrs.initsequence || '').split(';').forEach(c => { const m = /^\s*set\s+(\d+)\s+(\d+)\s*$/i.exec(c); if (m) defaults[+m[1]] = +m[2]; });
+  const menu = ddf2MenuRanges(doc), first = (ch, re) => { const r = menu.filter(x => x.ch === ch && re.test(x.caption)); return r.length ? r : null; };
+  const sh = channels.indexOf('shutter'), open = sh >= 0 && first(sh, /^(shutter\s+)?open/i);
+  if (open) { const w = open.reduce((a, b) => (b.hi - b.lo > a.hi - a.lo ? b : a)); defaults[sh] = w.lo; }
+  channels.forEach((r, ch) => {
+    if (TD_DRIVEN.has(r) || defaults[ch] != null) return;
+    const n = first(ch, /^(off|open|no function|park|none|stop|no rotation|normal|standard|index)\b/i); if (n) defaults[ch] = n[0].lo;
+  });
+  const fmt = l => l && [...new Set(l.map(x => `${x.lo}–${x.hi}`))].slice(0, 2).join(', ');
+  let lamp = '';
+  for (let ch = 0; ch < channels.length && !lamp; ch++) {
+    const on = first(ch, /^lamp\s*on/i), off = first(ch, /^lamp\s*off/i);
+    if (on || off) lamp = `canale ${ch + 1} (${channels[ch]})${on ? ' on ' + fmt(on) : ''}${off ? ', off ' + fmt(off) : ''}`;
+  }
+  return finish(meta.vendor, meta.name, [{ mode: meta.mode, channels, defaults, lamp, colors: items(/colou?r\s*1?_?(dropdown|$)|setcolou?r1?$/i, true), gobos: items(/gobo\s*1?_?(dropdown|$)|setgobo1?$/i, false) }], meta.extra);
 }
 function ddfToModels(xml, meta = {}) {
   const doc = parseXml(String(xml || ''));
@@ -265,4 +332,4 @@ function createLibrary({ dir, fetchImpl = globalThis.fetch, log = console } = {}
   };
 }
 
-module.exports = { createLibrary, oflToModels, ddfToModels, parseXml, search, roleFromName };
+module.exports = { createLibrary, oflToModels, ddfToModels, parseXml, search, roleFromName, ddf2MenuRanges };
