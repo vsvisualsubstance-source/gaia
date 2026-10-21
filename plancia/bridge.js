@@ -15,10 +15,12 @@ const os = require('os');
 const dgram = require('dgram');
 const { WebSocketServer } = require('ws');
 const stageAI = require('./stage-ai');
+const { createLibrary } = require('./fixture-lib');
 
 const PORT = +process.env.PORT || 8080;
 const OSC_IN = +process.env.OSC_IN || 9000;
 const STATE_FILE = process.env.PLANCIA_STATE_FILE || path.join(__dirname, 'data', 'state.json');
+const fixtureLib = createLibrary({ dir: path.join(path.dirname(STATE_FILE), 'fixture-lib') });
 const STATIC_ASSETS = {
   '/app.js': { file: 'app.js', contentType: 'text/javascript; charset=utf-8' },
   '/plancia.css': { file: 'plancia.css', contentType: 'text/css; charset=utf-8' }
@@ -197,6 +199,13 @@ const server = http.createServer((req, res) => {
       if (!prompt) return reply(400, { ok: false, error: 'Descrizione del palco mancante.' });
       stageAI.generatePlan(prompt, (err, out) => err ? reply(502, { ok: false, error: err.message }) : reply(200, { ok: true, ...out }));
     });
+  } else if (req.url.split('?')[0] === '/api/fixture-lib' || req.url.split('?')[0] === '/api/fixture-lib/fixture') {
+    // Libreria fixture (Open Fixture Library + DMXControl DDF): il bridge
+    // scarica e tiene in cache, i tablet chiedono solo ricerca e conversione.
+    const u = new URL(req.url, 'http://plancia'), q = u.searchParams;
+    const reply = (code, obj) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(obj)); };
+    const job = u.pathname === '/api/fixture-lib' ? fixtureLib.search(q.get('q') || '', q.get('refresh') === '1') : fixtureLib.fixture(q.get('src') || '', q.get('id') || '').then(models => ({ models }));
+    job.then(out => reply(200, { ok: true, ...out }), err => reply(502, { ok: false, error: err.message }));
   } else if (req.url.split('?')[0] === '/vendor/mqtt.min.js') {
     // stesso mqtt.js che usano le pagine web di Gaia: niente CDN, funziona anche senza internet
     res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'max-age=86400' });

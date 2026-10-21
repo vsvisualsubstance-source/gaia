@@ -60,20 +60,26 @@ function importMagicQModels(back){
   inp.click();
 }
 function showMagicQList(list,file,back){
+  showModelCandidates(list,{title:`Da MagicQ · ${file}`,from:'da MagicQ',back,
+    hint:`Personalità trovate nel file. "Prepara modello" apre l'editor già compilato (canali tradotti nei ruoli di DMX Master, slot di ruota colori e gobo): controlla e premi "Crea su DMX Master". La patch delle teste (indirizzi) di questo file non viene importata qui.`});
+}
+// elenco di modelli candidati (import MagicQ, libreria fixture): "Prepara
+// modello" apre l'editor precompilato, che crea un modello nuovo su DMX Master
+function showModelCandidates(list,o){
   const s=$('#scrim');s.hidden=false;const have=new Set(tdModels().map(m=>m.model));
-  s.innerHTML=`<div class="sheet" role="dialog" aria-label="Import MagicQ">
-    <div class="top"><h3>Da MagicQ · ${esc(file)}</h3><button class="btn ghost" id="mqBack">← Modelli</button></div>
-    <p class="hint">Personalità trovate nel file. "Prepara modello" apre l'editor già compilato (canali tradotti nei ruoli di DMX Master, slot di ruota colori e gobo): controlla e premi "Crea su DMX Master". La patch delle teste (indirizzi) di questo file non viene importata qui.</p>
+  s.innerHTML=`<div class="sheet" role="dialog" aria-label="Modelli da importare">
+    <div class="top"><h3>${esc(o.title)}</h3><button class="btn ghost" id="mqBack">${esc(o.backLabel||'← Modelli')}</button></div>
+    <p class="hint">${esc(o.hint||'')}</p>
     <div class="md-list">${list.map((p,i)=>`<div class="md-row"><b>${esc(p.model)}</b>
       <span class="hint">${p.channels.length} ch · ${esc(p.kind)} · ${esc(p.channels.join(' '))}${p.colors.length?` · ruota: ${esc(p.colors.map(c=>c.name+'='+c.value).join(' '))}`:''}${have.has(p.model)?' · <b>già nel catalogo</b>':''}</span>
       <button class="btn sm" data-mq="${i}">Prepara modello</button></div>`).join('')}</div>
   </div>`;
-  s.querySelector('#mqBack').onclick=back||openModelEditor;
+  s.querySelector('#mqBack').onclick=o.back||openModelEditor;
   s.querySelectorAll('[data-mq]').forEach(b=>b.onclick=()=>{const p=list[+b.dataset.mq];
     openModelForm({model:p.model,kind:p.kind,channels:p.channels,footprint:p.channels.length,manufacturer:p.manufacturer,
-      notes:`importato da MagicQ (${p.source}${p.mode?', modo '+p.mode:''}) — verificare sul manuale`,beam:[1,1,1],
-      pan_range:540,tilt_range:270,defaults:'',colors:p.colors.map(c=>({...c})),gobos:p.gobos.map(c=>({...c}))},
-      {asNew:true,back:()=>showMagicQList(list,file,back)})});
+      notes:p.notes||`importato ${o.from} (${p.source}${p.mode?', modo '+p.mode:''}) — verificare sul manuale`,beam:[1,1,1],
+      pan_range:p.pan_range||540,tilt_range:p.tilt_range||270,defaults:'',colors:p.colors.map(c=>({...c})),gobos:p.gobos.map(c=>({...c}))},
+      {asNew:true,from:o.from,back:()=>showModelCandidates(list,o)})});
 }
 
 if(typeof module==='object'&&module.exports){module.exports={parseMagicQShow,mqRole,mqSlotRgb};}
