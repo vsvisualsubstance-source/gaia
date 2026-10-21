@@ -382,8 +382,9 @@ button{cursor:pointer}
 .si.si-manage{border-style:dashed;color:var(--accent);background:transparent}
 .simtag{position:absolute;top:6px;right:8px;font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--accent);border:1px solid var(--accent);border-radius:4px;padding:1px 5px;z-index:3}
 .tl-live{height:28px;padding:0 10px;border-radius:5px;border:1px solid var(--line2);background:var(--panel2);font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--dim)}
-.tl-live.tl{border-color:var(--ok);color:var(--ok)}
-.tl-live.live{border-color:var(--accent);color:#000;background:var(--accent)}
+/* classi di stato is-*: .tl e' gia' il contenitore della timeline (absolute, inset 0) */
+.tl-live.is-tl{border-color:var(--ok);color:var(--ok)}
+.tl-live.is-live{border-color:var(--accent);color:#000;background:var(--accent)}
 .tl-live:disabled{opacity:.85;cursor:default}
 .md-kind{margin:6px 0 2px;font-family:var(--display);letter-spacing:.06em;text-transform:uppercase;font-size:12px;color:var(--dim)}
 .md-list{display:flex;flex-direction:column;gap:6px}

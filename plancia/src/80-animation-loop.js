@@ -41,7 +41,7 @@ function loop(){
       const h=el.querySelector('.hud');if(h._v!==hud){h.innerHTML=hud;h._v=hud}}
     else if(w.type==='timeline'){
       const lb=el.querySelector('.tl-live');if(lb){const on=tdShowActive(),t=on===null?'—':on?'TIMELINE':'LIVE';
-        if(lb.textContent!==t){lb.textContent=t;lb.classList.toggle('live',on===false);lb.classList.toggle('tl',on===true)}}
+        if(lb.textContent!==t){lb.textContent=t;lb.classList.toggle('is-live',on===false);lb.classList.toggle('is-tl',on===true)}}
       const r=rt(w),D=timelineDuration(w),cues=timelineCues(w);
       el.querySelector('.tl-ph').style.left=r.t/D*100+'%';el.querySelector('.tl-tc').textContent=tc(r.t);
       const sample=isShowTimeline(w)&&showClock.authority?showClockSample():null;
