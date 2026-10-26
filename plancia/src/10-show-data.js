@@ -51,9 +51,11 @@ const FIX_TYPES={
   blinder:{label:'Blinder',      group:'blinder', ch:4,  kind:'level', model:'Dimmer 1CH'},
   haze:   {label:'Haze',         group:'haze',    ch:2,  kind:'level', model:'Haze 2CH'},
   laser:  {label:'Laser (solo render)',group:'',   ch:0},
-  speaker:{label:'Cassa',        group:'',        ch:0,  kind:'none'}
+  speaker:{label:'Cassa',        group:'',        ch:0,  kind:'none'},
+  screen: {label:'Schermo proiezione',group:'',   ch:0,  kind:'none'},
+  projector:{label:'Proiettore', group:'',        ch:0,  kind:'none'}
 };
-const FIX_COLOR={mh:'#58a6ff',par:'#ffb23e',bar:'#3fb950',wall:'#ff6fae',blinder:'#f85149',haze:'#8a92a0',laser:'#ff365c',speaker:'#c9ced8'};
+const FIX_COLOR={mh:'#58a6ff',par:'#ffb23e',bar:'#3fb950',wall:'#ff6fae',blinder:'#f85149',haze:'#8a92a0',laser:'#ff365c',speaker:'#c9ced8',screen:'#dfe6f0',projector:'#9fe0ff'};
 // DMX Master risolve i gruppi "live" (mh/front/back) negli ALIAS fisici
 // del rig (heads/rig_a/rig_b) prima di salvarli in dmx_fixtures (nota TD
 // 19/20) -- per ricostruire il "type" di Plancia da li' serve la mappa
@@ -70,7 +72,7 @@ const STAGE_DEFAULT={width:12,depth:8,floorHeight:0,trussHeight:7,
   audience:{x:0,y:9,width:12,depth:6},foh:{x:-1,y:11.2,width:2,depth:1}};
 const stageDefaults=()=>JSON.parse(JSON.stringify(STAGE_DEFAULT));
 const fixtureZDefault=(type,stage=STAGE_DEFAULT)=>type==='mh'||type==='laser'?(stage?.trussHeight||STAGE_DEFAULT.trussHeight):
-  type==='wall' ? 0 : type==='bar' ? 0.15 : type==='speaker' ? 0.6 : type==='haze' ? 0.8 : type==='blinder' ? 1 : 1.2;
+  type==='wall' ? 0 : type==='screen' ? 1 : type==='projector' ? 3.5 : type==='bar' ? 0.15 : type==='speaker' ? 0.6 : type==='haze' ? 0.8 : type==='blinder' ? 1 : 1.2;
 function ensureStageData(layout){
   const current=layout.stage||{};
   const defaults=stageDefaults();
@@ -113,7 +115,8 @@ function ensureStageData(layout){
   }
 }
 const mkFix=(type,name,x,y,universe,address)=>({id:'p-'+uid(),type,name,group:FIX_TYPES[type].group,model:FIX_TYPES[type].model,universe,address,x,y,
-  z:fixtureZDefault(type),w:type==='wall'?6:undefined,h:type==='wall'?3.5:undefined,rot:type==='wall'?0:undefined,
+  z:fixtureZDefault(type),w:type==='wall'?6:type==='screen'?5:undefined,h:type==='wall'?3.5:type==='screen'?2.8:undefined,rot:['wall','screen','projector'].includes(type)?0:undefined,
+  target:type==='projector'?'':undefined,throw:type==='projector'?1.5:undefined,
   sourceType:type==='wall'?'procedural':undefined,sourceRef:type==='wall'?'':undefined,
   angle:type==='laser'?0:undefined,spread:type==='laser'?28:undefined,mountToTruss:type==='mh',enabled:true});
 function defaultFixtures(rig){

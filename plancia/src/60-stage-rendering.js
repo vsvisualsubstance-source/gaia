@@ -176,6 +176,7 @@ function drawRender(g,W,H,t,level){
   const fixtureZ=f=>f.mountToTruss?geom.trussHeight:f.z;
   g.globalCompositeOperation='lighter';
   glow(g,W/2,H*.35,W*.6,SH.back.c,.12*hz*M*SH.g.back);
+  drawScreensRender(g,project,zScale,t);drawProjectorsRender(g,project,zScale);g.globalCompositeOperation='lighter';
   for(const wallF of wallFixtures){
     const wp=project(wallF.x,wallF.y,wallF.z),rot=(wallF.rot||0)*Math.PI/180;
     const wallWidth=(wallF.w||6)*wp.scale*Math.max(.08,Math.abs(Math.cos(rot)));
@@ -345,6 +346,7 @@ function plotProjection(W,H,stage,fixtures){
     xs.push(area.x-area.width/2-1,area.x+area.width/2+1);
     ys.push(area.y-1,area.y+area.depth+1);
   }
+  {const v=venueRect(stage);xs.push(v.x0,v.x0+v.width);ys.push(v.y0,v.y0+v.depth)} // la sala intera nella vista
   for(const f of fixtures){xs.push(f.x-1,f.x+1);ys.push(f.y-1,f.y+1)}
   for(const f of tdFixtures())if(Number.isFinite(f.x)&&Number.isFinite(f.y)){xs.push(f.x-1,f.x+1);ys.push(f.y-1,f.y+1)}
   const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
@@ -370,6 +372,7 @@ function drawPlot(g,W,H,t,w){
     g.fillRect(left,top,area.width*s,area.depth*s);g.strokeRect(left,top,area.width*s,area.depth*s);g.setLineDash([]);
     txt(label,left+5,top+13,color,'left',9);
   };
+  drawVenuePlot(g,X,Y,s,txt);
   drawArea(geom.audience,'PLATEA','#7b8493');
   drawArea(geom.foh,'FOH','#ffb23e');
   g.fillStyle='#12151a';g.strokeStyle='#4a515e';g.lineWidth=1.5;
@@ -408,16 +411,18 @@ function drawPlot(g,W,H,t,w){
       g.fillStyle=col+'40';g.fillRect(-ww/2,-hh/2,ww,hh);g.strokeStyle=col;g.lineWidth=f.id===sel?2.4:1.3;g.strokeRect(-ww/2,-hh/2,ww,hh);
       g.restore();
     }
+    else if(f.type==='screen')drawScreenPlot(g,f,x,y,s,col,f.id===sel);
+    else if(f.type==='projector')drawProjectorPlot(g,f,x,y,s,col,f.id===sel,X,Y);
     else if(f.type==='bar'){g.fillStyle=col;g.fillRect(x-.9*s,y-.08*s,1.8*s,.16*s)}
     else if(f.type==='speaker'){g.fillStyle='#1b1f26';g.strokeStyle=col;g.lineWidth=1.2;g.fillRect(x-s*.32,y-s*.4,s*.64,s*.8);g.strokeRect(x-s*.32,y-s*.4,s*.64,s*.8)}
     else{g.fillStyle='#1c2027';g.strokeStyle=col;g.lineWidth=f.id===sel?2.6:1.3;g.beginPath();g.arc(x,y,r,0,Math.PI*2);g.fill();g.stroke();
       g.fillStyle=col;g.beginPath();g.arc(x,y,r*.4,0,Math.PI*2);g.fill()}
-    if(f.id===sel&&f.type!=='wall'){g.strokeStyle='#00ffcc';g.lineWidth=1.5;g.beginPath();g.arc(x,y,r+5,0,Math.PI*2);g.stroke()}
+    if(f.id===sel&&f.type!=='wall'&&f.type!=='screen'){g.strokeStyle='#00ffcc';g.lineWidth=1.5;g.beginPath();g.arc(x,y,r+5,0,Math.PI*2);g.stroke()}
     g.globalAlpha=1;
-    const labelR=f.type==='wall'?.18*s:r;
-    txt(f.type==='wall'?`${f.name} · ${(f.w||6)}×${(f.h||3.5)}m`:f.name,x,y-labelR-6,'#e9ebef');
+    const flat=f.type==='wall'||f.type==='screen',labelR=flat?.18*s:r,fw=f.w||(f.type==='wall'?6:5),fh=f.h||(f.type==='wall'?3.5:2.8);
+    txt(flat?`${f.name} · ${fw}×${fh}m`:f.type==='projector'&&projectorInfo(f)?`${f.name} · ${projectorInfo(f).dist.toFixed(1)} m`:f.name,x,y-labelR-6,'#e9ebef');
     if(FIX_TYPES[f.type].ch)txt(f.universe+'.'+String(f.address).padStart(3,'0'),x,y+r+12,'#5d6573');
-    hits.push({f,x,y,r:f.type==='wall'?Math.max((f.w||6)*s/2,s*.4):Math.max(r,s*.4)});
+    hits.push({f,x,y,r:flat?Math.max(fw*s/2,s*.4):Math.max(r,s*.4)});
   }
   if(ui)ui.hits=hits;
   // legenda patch (conteggi reali, non piu' da L.rig)

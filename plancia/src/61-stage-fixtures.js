@@ -171,6 +171,10 @@ function openFixEditor(w,f){
     <label>Nome<input id="feName"></label>
     <label>Altezza dal piano palco (m)<input id="feZ" type="number" min="-5" max="30" step="0.1"></label>
     ${f.type==='mh'||f.type==='laser'?`<label class="chk"><input id="feTruss" type="checkbox"> Segue altezza del truss</label>`:''}
+    ${f.type==='screen'?`<div class="two"><label>Larghezza (m)<input id="feW" type="number" min="0.5" max="40" step="0.1"></label><label>Altezza (m)<input id="feH" type="number" min="0.3" max="20" step="0.1"></label></div>
+    <label>Rotazione (gradi)<input id="feRot" type="number" min="-180" max="180" step="5"></label><p class="hint">Altezza dal piano = bordo inferiore dello schermo. Nel Render si illumina quando un proiettore lo punta.</p>`:''}
+    ${f.type==='projector'?`<label>Schermo puntato<select id="fePrTarget"><option value="">— nessuno —</option>${(L.fixtures||[]).filter(x=>x.type==='screen').map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('')}</select></label>
+    <div class="two"><label>Rapporto di tiro <em>distanza / larghezza immagine</em><input id="fePrThrow" type="number" min="0.2" max="10" step="0.05"></label><label>Rotazione senza schermo (gradi)<input id="feRot" type="number" min="-180" max="180" step="5"></label></div><p class="hint" id="fePrInfo"></p>`:''}
     ${f.type==='wall'?`<div class="two"><label>Lunghezza (m)<input id="feW" type="number" min="1" max="20" step="0.1"></label><label>Altezza (m)<input id="feH" type="number" min="0.5" max="10" step="0.1"></label></div>
     <label>Rotazione (gradi)<input id="feRot" type="number" min="-180" max="180" step="5"></label>
     <label>Sorgente LED<select id="feSource"><option value="procedural">Procedurale</option><option value="url">URL video diretto</option><option value="ndi">NDI (via Video Service)</option><option value="file">File (Video Service futuro)</option><option value="rtsp">RTSP (Video Service futuro)</option></select></label>
@@ -235,7 +239,10 @@ function openFixEditor(w,f){
     if(current&&!models.some(m=>m.model===current))html+=`<option value="${esc(current)}" selected>${esc(current)} (attuale)</option>`;
     $('#feModel').innerHTML=html+'<option value="__new__">+ Nuovo modello…</option>';
   }
-  if($('#feW')){val2('#feW',f.w||6);val2('#feH',f.h||3.5);val2('#feRot',f.rot||0)} $('#feOn').checked=f.enabled!==false;
+  if($('#feW')){val2('#feW',f.w||(f.type==='screen'?5:6));val2('#feH',f.h||(f.type==='screen'?2.8:3.5));val2('#feRot',f.rot||0)}
+  // proiettore: distanza dallo schermo e immagine che ne esce col rapporto di tiro
+  const prInfo=()=>{const i=projectorInfo(f);if($('#fePrInfo'))$('#fePrInfo').textContent=i?`Distanza ${i.dist.toFixed(1)} m · immagine larga ${i.img.toFixed(1)} m su schermo da ${(i.screen.w||5).toFixed(1)} m${i.fit<.9?' → più piccola dello schermo: serve un tiro più corto o avvicinarlo':i.fit>1.1?' → esce dallo schermo: serve un tiro più lungo o allontanarlo':' → ok'}`:'Scegli lo schermo che il proiettore punta (aggiungilo prima dalla Pianta).'};
+  if($('#fePrTarget')){val2('#fePrTarget',f.target||'');val2('#fePrThrow',f.throw||1.5);val2('#feRot',f.rot||0);prInfo()} $('#feOn').checked=f.enabled!==false;
   // Rilevamento modifiche non mandate (bug reale trovato il 2026-10-16:
   // spostare l'universo nell'editor sembrava "non salvare" -- in realta'
   // salvava SOLO in locale, l'indirizzo restava quello vecchio (valido
@@ -256,7 +263,8 @@ function openFixEditor(w,f){
     const z=Number($('#feZ').value);if(Number.isFinite(z))f.z=clamp(z,-5,30);
     if($('#feTruss')){f.mountToTruss=$('#feTruss').checked;$('#feZ').disabled=f.mountToTruss}
     if($('#feGroup')){f.group=$('#feGroup').value.trim();f.universe=+$('#feUni').value||0;f.address=clamp(+$('#feAddr').value||1,1,512)}
-    if($('#feW')){f.w=clamp(+$('#feW').value||6,1,20);f.h=clamp(+$('#feH').value||3.5,.5,10);f.rot=clamp(+$('#feRot').value||0,-180,180)}
+    if($('#feW')){f.w=clamp(+$('#feW').value||6,f.type==='screen'?.5:1,f.type==='screen'?40:20);f.h=clamp(+$('#feH').value||3.5,f.type==='screen'?.3:.5,f.type==='screen'?20:10);f.rot=clamp(+$('#feRot').value||0,-180,180)}
+    if($('#fePrTarget')){f.target=$('#fePrTarget').value;f.throw=clamp(+$('#fePrThrow').value||1.5,.2,10);f.rot=clamp(+$('#feRot').value||0,-180,180);prInfo()}
     if($('#feSource')){
       f.sourceType=$('#feSource').value;f.sourceRef=$('#feSourceRef').value.trim();
       const hint=$('#fePreviewStatus');hint.textContent=wallPreviewMessage(f);hint.className='hint preview-status';
@@ -264,7 +272,7 @@ function openFixEditor(w,f){
     }
     if($('#feAngle')){f.angle=clamp(+$('#feAngle').value||0,-180,180);f.spread=clamp(+$('#feSpread').value||28,1,120)}
     f.enabled=$('#feOn').checked; save(); checkDirty()};
-  ['feName','feZ','feGroup','feAddr','feW','feH','feRot','feSource','feSourceRef','feAngle','feSpread'].forEach(id=>{const n=$('#'+id);if(n){n.addEventListener('input',upd);n.addEventListener('change',upd)}});
+  ['feName','feZ','feGroup','feAddr','feW','feH','feRot','feSource','feSourceRef','feAngle','feSpread','fePrTarget','fePrThrow'].forEach(id=>{const n=$('#'+id);if(n){n.addEventListener('input',upd);n.addEventListener('change',upd)}});
   $('#feOn').addEventListener('change',upd);if($('#feTruss'))$('#feTruss').addEventListener('change',upd);
   if($('#feNdiSearch'))$('#feNdiSearch').onclick=()=>pickNdiSource(f);
   // Universo: cambiarlo da solo non basta, l'indirizzo scelto per
