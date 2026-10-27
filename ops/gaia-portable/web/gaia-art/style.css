@@ -1,0 +1,41 @@
+/* GAIA · Arte Viva — chrome minimale, coerente con welcome/dashboard
+   (bg #050810, accento #00ffcc, testo #c9d1d9, muted #6b7a99) */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+    background: #050810;
+    overflow: hidden;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    touch-action: manipulation;
+}
+
+canvas {
+    display: block;
+    position: fixed;
+    inset: 0;
+}
+
+/* Stato connessione — stesso pattern ws-dot di dashboard/welcome */
+#ws-dot {
+    position: fixed;
+    top: 20px;
+    right: 24px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #1e2840;
+    z-index: 10;
+    transition: background .3s;
+}
+#ws-dot.ok  { background: #3fb950; box-shadow: 0 0 6px #3fb950; }
+#ws-dot.err { background: #f85149; }
+

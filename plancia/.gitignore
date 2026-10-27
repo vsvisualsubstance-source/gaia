@@ -1,0 +1,5 @@
+# Runtime / copie locali, non sorgenti
+node_modules/
+backup/
+data/
+*.bak-*

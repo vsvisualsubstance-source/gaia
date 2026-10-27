@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GAIA MixerAudio</title>
+<style>
+:root {
+  --bg:#08090f; --card:#0e1221; --border:#1e2840;
+  --accent:#00ffcc; --blue:#58a6ff; --green:#3fb950; --red:#f85149;
+  --yellow:#e3b341; --cyan:#39c5cf;
+  --text:#c9d1d9; --muted:#6b7a99;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;padding:24px;max-width:960px;margin:0 auto}
+h1{color:var(--accent);font-size:1.6rem;margin-bottom:4px}
+.subtitle{color:var(--muted);font-size:.9rem;margin-bottom:24px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:16px}
+h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:8px}
+button{
+  background:var(--accent);color:#000;border:none;border-radius:6px;
+  padding:8px 16px;cursor:pointer;font-size:.85rem;font-weight:600;
+  transition:opacity .15s;
+}
+button:hover{opacity:.85}
+button:disabled{opacity:.3;cursor:default}
+button.secondary{background:var(--card);color:var(--text);border:1px solid var(--border)}
+button.gray{background:var(--border);color:var(--text)}
+button.red{background:var(--red);color:#fff}
+button.green{background:var(--green);color:#02150a}
+button.small{padding:4px 10px;font-size:.78rem}
+
+.topnav{display:flex;align-items:center;gap:10px;padding-bottom:10px;margin-bottom:20px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.topnav-title{font-size:1.1rem;font-weight:700;color:var(--accent);margin-right:4px}
+.topnav-link{color:var(--muted);text-decoration:none;font-size:.8rem;padding:4px 10px;border-radius:6px;border:1px solid transparent}
+.topnav-link:hover{color:var(--text);border-color:var(--border)}
+.topnav-link.active{color:var(--accent);background:rgba(0,255,204,.06);border-color:var(--border)}
+.mqtt-dot{width:8px;height:8px;border-radius:50%;background:#444;display:inline-block;transition:background .3s;flex-shrink:0;margin-left:auto}
+.mqtt-dot.ok{background:var(--green);box-shadow:0 0 5px var(--green)}
+.mqtt-dot.err{background:var(--red)}
+
+.dev-status{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.dev-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;font-size:.8rem;font-weight:600}
+.dev-badge.online{background:#0f2418;color:var(--green)}
+.dev-badge.offline{background:#2a0f0f;color:var(--red)}
+.dev-meta{color:var(--muted);font-size:.8rem}
+.svc-row{display:flex;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap}
+.svc-row .svc-label{font-size:.82rem;color:var(--text);min-width:130px}
+.svc-state{font-size:.75rem;color:var(--muted);padding:2px 8px;border-radius:10px;background:var(--bg)}
+.svc-state.active{color:var(--accent)}
+
+.chan-strip{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px}
+.chan-btn{
+  width:38px;height:32px;background:var(--bg);border:1px solid var(--border);border-radius:6px;
+  color:var(--muted);font-size:.78rem;font-weight:600;cursor:pointer;padding:0;
+}
+.chan-btn:hover{border-color:var(--accent);color:var(--accent)}
+.chan-btn.sel{background:#001a12;border-color:var(--accent);color:var(--accent)}
+.chan-empty{color:var(--muted);font-size:.85rem;padding:8px 0}
+
+.band-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin-top:16px}
+.band{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px}
+.band-title{font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--cyan);margin-bottom:10px}
+.param-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.param-row:last-child{margin-bottom:0}
+.param-row label{font-size:.78rem;color:var(--muted);width:64px;flex-shrink:0}
+.param-row input{
+  flex:1;background:var(--card);border:1px solid var(--border);border-radius:6px;
+  color:var(--text);padding:5px 8px;font-size:.85rem;min-width:0;
+}
+.param-row input:focus{border-color:var(--accent);outline:none}
+.param-row input.dirty{border-color:var(--yellow)}
+.param-row input.sent{border-color:var(--accent)}
+
+.level-bar-wrap{height:6px;border-radius:3px;background:var(--border);overflow:hidden;flex:1}
+.level-bar{height:100%;width:0;background:var(--cyan);transition:width .1s linear}
+.level-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.level-row:last-child{margin-bottom:0}
+.level-row label{font-size:.72rem;color:var(--muted);width:64px;flex-shrink:0}
+.level-row .level-val{font-size:.72rem;color:var(--text);width:42px;text-align:right;flex-shrink:0;font-variant-numeric:tabular-nums}
+.band.live{border-color:#173044}
+.band.live .band-title{color:var(--cyan)}
+.live-stale{opacity:.35}
+.live-dot{width:6px;height:6px;border-radius:50%;background:#444;display:inline-block}
+.live-dot.on{background:var(--cyan);box-shadow:0 0 4px var(--cyan)}
+.chan-err{color:var(--yellow);font-size:.78rem;margin-top:4px}
+
+.preset-row{display:flex;align-items:center;gap:12px;margin-top:16px;padding-top:14px;border-top:1px solid var(--border);flex-wrap:wrap}
+.preset-slots{display:flex;gap:10px;flex-wrap:wrap}
+.preset-slot{display:flex;align-items:center;gap:5px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:5px 6px}
+.preset-slot .slot-name{font-size:.78rem;font-weight:700;color:var(--muted);width:16px;text-align:center}
+.preset-slot.filled .slot-name{color:var(--accent)}
+.preset-slot .slot-dot{width:5px;height:5px;border-radius:50%;background:#333}
+.preset-slot.filled .slot-dot{background:var(--accent)}
+</style>
+</head>
+<body>
+
+<div class="topnav">
+  <div class="topnav-title">GAIA MixerAudio</div>
+  <a href="portal.html" class="topnav-link">⌂ Portal</a>
+  <a href="admin.html" class="topnav-link">Admin</a>
+  <a href="patchdeck.html" class="topnav-link">🎛 PatchDeck</a>
+  <a href="dmx.html" class="topnav-link">💡 DMX</a>
+  <a href="madmapper.html" class="topnav-link">🗺 MadMapper</a>
+  <a href="tccm.html" class="topnav-link">🎙 TCC M</a>
+  <span id="mqtt-dot" class="mqtt-dot"></span>
+</div>
+
+<h1>🎚 MixerAudio</h1>
+<div class="subtitle">Parametri del mixer audio per canale — ControllerV7 (analisi audio a 47 canali)</div>
+
+<div class="card">
+  <h2>Stato device</h2>
+  <div class="dev-status">
+    <span id="dev-badge" class="dev-badge offline">● offline</span>
+    <span class="dev-meta" id="dev-meta">nessun dato ricevuto</span>
+    <span class="dev-meta"><span id="live-dot" class="live-dot"></span> live</span>
+  </div>
+  <div class="level-row" style="margin-top:10px">
+    <label>Input</label>
+    <div class="level-bar-wrap"><div id="input-level-bar" class="level-bar"></div></div>
+    <span id="input-level-val" class="level-val">—</span>
+  </div>
+  <div class="svc-row">
+    <span class="svc-label">Audio Device</span>
+    <span id="svc-audio_device-state" class="svc-state">—</span>
+    <button class="small green" data-svc="audio_device" data-action="enable">▶ Start</button>
+    <button class="small red" data-svc="audio_device" data-action="disable">■ Stop</button>
+    <button class="small gray" data-svc="audio_device" data-action="restart">↺ Restart</button>
+  </div>
+  <div class="svc-row">
+    <span class="svc-label">Sorgente</span>
+    <span id="svc-audio_source_live-state" class="svc-state">live: —</span>
+    <button class="small secondary" data-svc="audio_source_live" data-action="enable">🎙 Live</button>
+    <span id="svc-audio_source_file-state" class="svc-state">file: —</span>
+    <button class="small secondary" data-svc="audio_source_file" data-action="enable">📁 File demo</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Canale</h2>
+  <div id="chan-strip" class="chan-strip"></div>
+  <div id="chan-empty" class="chan-empty" style="display:none">In attesa dati dal device (nessun canale scoperto ancora)…</div>
+  <div id="chan-err" class="chan-err" style="display:none"></div>
+  <div id="live-band" class="band live" style="margin-top:12px;display:none">
+    <div class="band-title">🔴 Live (reattivo, sola lettura)</div>
+    <div id="live-rows"></div>
+  </div>
+  <div id="band-grid" class="band-grid"></div>
+  <div class="preset-row">
+    <span class="svc-label" style="min-width:auto">Preset canale</span>
+    <div id="preset-slots" class="preset-slots"></div>
+  </div>
+</div>
+
+<script>
+// Stesso pattern MQTT-over-WS di admin.html/patchdeck.html.
+const MX_BROKER = '192.168.1.240';
+// Device_id scoperto dal vivo (2026-08-30, era fisso -- "td-controllerv7-
+// macbook-air-di-mauro" -- e non seguiva un rename lato TD, segnalato dal
+// vivo: "se cambio DeviceID/name non lo vedo più via Web"). Identificato
+// per `family === 'mixeraudio'` sullo status, non serve la conferma via
+// matrice come PatchDeck (ControllerV7 non ne pubblica una, vedi
+// GAIA_INTERFACE.md) -- e a differenza di PatchDeck qui non c'è uno stato
+// persistito in localStorage da "avvelenare": si riparte da null ad ogni
+// caricamento pagina, quindi Core (che non pubblica mai `family`) non può
+// mai essere scambiato per il device giusto.
+let MX_DEVICE_ID = null;
+
+// Ordine noto dei suffissi per canale (GAIA_INTERFACE.md / TD4Gaia
+// 2026-08-24,3) -- raggruppati per banda. Un canale puo' non avere tutti
+// questi param (o averne di nuovi): la lista reale viene sempre scoperta
+// dal payload live "params" del device, questo e' solo l'ordine di
+// visualizzazione preferito quando presenti.
+const MX_BANDS = [
+  { title: 'Low',  strip: /^Low/,  params: ['Lowgain', 'Lowthresh', 'Lowsmooth'] },
+  { title: 'Mid',  strip: /^Mid/,  params: ['Midgain', 'Midthresh', 'Midsmooth'] },
+  { title: 'High', strip: /^High/, params: ['Highgain', 'Highthresh', 'Highsmooth'] },
+  { title: 'Percussione', strip: /thresh$/, params: ['Kickthresh', 'Snarethresh', 'Rythmthresh'] },
+];
+
+// Valori reattivi live per canale (GAIA_INTERFACE.md / TD4Gaia 2026-08-24,4
+// -- gaia/device/{id}/audio_levels, NON retained, ~1s). Diversi dai
+// parametri di configurazione sopra (quelli restano su register_param/
+// action:"set") -- questi sono sola lettura, calcolati ogni frame dal
+// componente di analisi audio. Assunti in [0,1] dagli esempi nel
+// changelog (Low/Mid/High/detection/Spectralcentroid/Smp/Fmp), barra
+// clampata per non rompersi visivamente se non lo fossero.
+const MX_LEVEL_KEYS = ['Low', 'Mid', 'High', 'Kickdetection', 'Snaredetection', 'Rythm', 'Spectralcentroid', 'Smp', 'Fmp'];
+const MX_LEVELS_STALE_MS = 3000;   // non retained: se si ferma, il device ha smesso di mandare (o e' offline)
+
+// Preset per canale -- retained su MQTT (stesso principio di
+// patchdeck_matrix/status: il broker persiste, nessun backend nuovo da
+// scrivere, e qualunque browser che apre la pagina li ritrova gia'
+// pronti alla subscribe). Un topic per (canale, slot), non un unico
+// blob: cosi' salvare/caricare un canale non tocca gli altri 48.
+const MX_PRESET_SLOTS = ['A', 'B', 'C'];
+function mxPresetTopic(chan, slot) { return `gaia/mixeraudio/preset/${MX_DEVICE_ID}/ch${chan}/${slot}`; }
+
+let mxClient = null;
+let mxDevice = null;
+let mxLevels = null;   // {device_id, input_level, channels:{N:{...}}, channels_error:[...], ts, _lastSeen}
+let mxPresets = {};    // {[channel]: {[slot]: {params:{...}, ts}}}
+let mxChannel = null;   // numero canale selezionato
+
+function mxSetConn(ok) {
+  document.getElementById('mqtt-dot').className = 'mqtt-dot ' + (ok ? 'ok' : 'err');
+}
+
+function mxSendAction(service, action) {
+  if (!mxClient || !mxClient.connected || !MX_DEVICE_ID) return;
+  mxClient.publish(`gaia/device/${MX_DEVICE_ID}/command`, JSON.stringify({ action, service }));
+}
+
+function mxSendParam(param, value) {
+  if (!mxClient || !mxClient.connected || !MX_DEVICE_ID) return;
+  mxClient.publish(`gaia/device/${MX_DEVICE_ID}/command`, JSON.stringify({ action: 'set', param, value }));
+}
+
+// Il device pubblica lo status via heartbeat throttlato lato TD (~20-30s,
+// gaia_device_agent.py._HEARTBEAT_S), troppo lento per "leggere ogni
+// secondo". Ma _apply_command() rifà SEMPRE un _publish_status() a fine
+// funzione qualunque sia l'azione (anche "status" su un service inventato,
+// verificato dal vivo) -- lo sfruttiamo per forzare un refresh ogni
+// secondo mentre questa pagina è aperta e visibile, senza bisogno di
+// nessuna modifica lato TD.
+let mxPollTimer = null;
+function mxStartPolling() {
+  if (mxPollTimer) return;
+  mxPollTimer = setInterval(() => {
+    if (document.hidden || !mxClient?.connected || !MX_DEVICE_ID) return;
+    mxClient.publish(`gaia/device/${MX_DEVICE_ID}/command`, JSON.stringify({ action: 'status', service: '_poll' }));
+  }, 1000);
+}
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && mxClient?.connected && MX_DEVICE_ID) {
+    mxClient.publish(`gaia/device/${MX_DEVICE_ID}/command`, JSON.stringify({ action: 'status', service: '_poll' }));
+  }
+});
+
+// ch{N}_{Suffisso} -> { N: {Suffisso: valore} }, scoperto dal vivo dal
+// payload "params" (non c'e' un topic-matrice come patchdeck_matrix per
+// questo device, quindi qui la convenzione di naming e' l'unica fonte).
+function mxChannelsFromParams(params) {
+  const byChan = {};
+  for (const [key, val] of Object.entries(params || {})) {
+    const m = key.match(/^ch(\d+)_(.+)$/);
+    if (!m) continue;
+    const n = parseInt(m[1], 10);
+    (byChan[n] ||= {})[m[2]] = val;
+  }
+  return byChan;
+}
+
+function mxRenderChanStrip(byChan) {
+  const strip = document.getElementById('chan-strip');
+  const empty = document.getElementById('chan-empty');
+  const nums = Object.keys(byChan).map(Number).sort((a, b) => a - b);
+  if (!nums.length) {
+    strip.innerHTML = '';
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+  if (mxChannel === null || !nums.includes(mxChannel)) mxChannel = nums[0];
+  const key = nums.join(',');
+  if (strip.dataset.key !== key) {
+    strip.dataset.key = key;
+    strip.innerHTML = nums.map(n => `<button class="chan-btn" data-chan="${n}">${n}</button>`).join('');
+    strip.querySelectorAll('.chan-btn').forEach(btn => {
+      btn.onclick = () => { mxChannel = parseInt(btn.dataset.chan, 10); mxRenderAll(); };
+    });
+  }
+  strip.querySelectorAll('.chan-btn').forEach(btn => {
+    btn.classList.toggle('sel', parseInt(btn.dataset.chan, 10) === mxChannel);
+  });
+}
+
+function mxCommitField(input, param) {
+  const v = parseFloat(input.value);
+  if (Number.isNaN(v)) return;
+  input.classList.remove('dirty');
+  input.classList.add('sent');
+  setTimeout(() => input.classList.remove('sent'), 400);
+  mxSendParam(param, v);
+}
+
+// Ricostruisce i controlli SOLO quando cambia il canale selezionato --
+// vedi mxUpdateBandValues() per l'aggiornamento periodico dei valori
+// (deve toccare solo il .value degli input, mai rifare l'innerHTML: con
+// un poll ogni secondo, ricreare il DOM ad ogni giro cancellerebbe la
+// digitazione in corso e il focus, esattamente il bug segnalato).
+let mxBuiltForChannel = null;
+function mxBuildBands(chanParams) {
+  const grid = document.getElementById('band-grid');
+  mxBuiltForChannel = mxChannel;
+  if (!chanParams) { grid.innerHTML = ''; return; }
+  const known = new Set(MX_BANDS.flatMap(b => b.params));
+  const extra = Object.keys(chanParams).filter(k => !known.has(k)).sort();
+  const bands = extra.length ? [...MX_BANDS, { title: 'Altro', params: extra }] : MX_BANDS;
+
+  grid.innerHTML = bands.map(band => {
+    const rows = band.params.filter(p => p in chanParams).map(p => {
+      const label = band.strip ? (p.replace(band.strip, '') || p) : p;
+      return `
+      <div class="param-row">
+        <label title="ch${mxChannel}_${p}">${label}</label>
+        <input type="number" step="0.01" value="${chanParams[p]}" data-param="ch${mxChannel}_${p}">
+      </div>`;
+    }).join('');
+    return rows ? `<div class="band"><div class="band-title">${band.title}</div>${rows}</div>` : '';
+  }).join('');
+
+  grid.querySelectorAll('input[data-param]').forEach(input => {
+    input.addEventListener('input', () => input.classList.add('dirty'));
+    input.addEventListener('blur', () => { if (input.classList.contains('dirty')) mxCommitField(input, input.dataset.param); });
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur(); });
+  });
+}
+
+function mxUpdateBandValues(chanParams) {
+  if (!chanParams) return;
+  document.querySelectorAll('#band-grid input[data-param]').forEach(input => {
+    // Non toccare un campo che l'utente sta editando ora (focus) o ha
+    // gia' modificato ma non ancora inviato (dirty, in attesa del blur) --
+    // altrimenti un valore letto dal device sovrascriverebbe la modifica
+    // dell'utente prima che parta il comando "set".
+    if (input === document.activeElement || input.classList.contains('dirty')) return;
+    const suffix = input.dataset.param.replace(/^ch\d+_/, '');
+    if (suffix in chanParams) {
+      const v = String(chanParams[suffix]);
+      if (input.value !== v) input.value = v;
+    }
+  });
+}
+
+function mxClamp01(v) { return Math.max(0, Math.min(1, Number(v) || 0)); }
+
+function mxRenderInputLevel() {
+  const stale = !mxLevels || (Date.now() - mxLevels._lastSeen) > MX_LEVELS_STALE_MS;
+  document.getElementById('live-dot').classList.toggle('on', !stale);
+  const bar = document.getElementById('input-level-bar');
+  const val = document.getElementById('input-level-val');
+  if (!mxLevels) { bar.style.width = '0%'; val.textContent = '—'; return; }
+  const v = mxClamp01(mxLevels.input_level);
+  bar.style.width = (v * 100) + '%';
+  val.textContent = Number(mxLevels.input_level).toFixed(2);
+  bar.parentElement.parentElement.classList.toggle('live-stale', stale);
+}
+
+function mxRenderLiveBand() {
+  const wrap = document.getElementById('live-band');
+  const rows = document.getElementById('live-rows');
+  const errEl = document.getElementById('chan-err');
+  if (mxChannel === null || !mxLevels) { wrap.style.display = 'none'; errEl.style.display = 'none'; return; }
+  if ((mxLevels.channels_error || []).includes(mxChannel)) {
+    wrap.style.display = 'none';
+    errEl.style.display = '';
+    errEl.textContent = `⚠ canale ${mxChannel}: non ancora costruito in ControllerV7 (nessun dato live disponibile)`;
+    return;
+  }
+  errEl.style.display = 'none';
+  const chan = (mxLevels.channels || {})[mxChannel];
+  if (!chan) { wrap.style.display = 'none'; return; }
+  const stale = (Date.now() - mxLevels._lastSeen) > MX_LEVELS_STALE_MS;
+  wrap.style.display = '';
+  wrap.classList.toggle('live-stale', stale);
+  rows.innerHTML = MX_LEVEL_KEYS.filter(k => k in chan).map(k => {
+    const v = mxClamp01(chan[k]);
+    return `
+    <div class="level-row">
+      <label>${k}</label>
+      <div class="level-bar-wrap"><div class="level-bar" style="width:${v * 100}%"></div></div>
+      <span class="level-val">${Number(chan[k]).toFixed(2)}</span>
+    </div>`;
+  }).join('');
+}
+
+function mxSavePreset(slot) {
+  if (mxChannel === null) return;
+  const byChan = mxChannelsFromParams(mxDevice?.params);
+  const chanParams = byChan[mxChannel];
+  if (!chanParams) return;
+  // Salva lo stato REALE del device (mxDevice.params), non i campi
+  // eventualmente in modifica non ancora inviata (.dirty) -- un preset
+  // deve riflettere cio' che il canale sta davvero suonando ora.
+  const preset = { params: { ...chanParams }, ts: Date.now() };
+  mxPresets[mxChannel] ||= {};
+  mxPresets[mxChannel][slot] = preset;   // aggiornamento ottimistico, il retained in arrivo conferma
+  mxClient?.publish(mxPresetTopic(mxChannel, slot), JSON.stringify(preset), { retain: true });
+  mxRenderPresetSlots();
+}
+
+function mxLoadPreset(slot) {
+  if (mxChannel === null) return;
+  const preset = mxPresets[mxChannel]?.[slot];
+  if (!preset) return;
+  for (const [suffix, value] of Object.entries(preset.params)) {
+    mxSendParam(`ch${mxChannel}_${suffix}`, value);
+    const input = document.querySelector(`#band-grid input[data-param="ch${mxChannel}_${suffix}"]`);
+    if (input && input !== document.activeElement) {
+      input.value = value;
+      input.classList.remove('dirty');
+      input.classList.add('sent');
+      setTimeout(() => input.classList.remove('sent'), 400);
+    }
+  }
+}
+
+function mxRenderPresetSlots() {
+  const wrap = document.getElementById('preset-slots');
+  if (mxChannel === null) { wrap.innerHTML = ''; return; }
+  const forChan = mxPresets[mxChannel] || {};
+  wrap.innerHTML = MX_PRESET_SLOTS.map(slot => {
+    const p = forChan[slot];
+    const title = p ? `salvato ${new Date(p.ts).toLocaleTimeString('it-IT')}` : 'slot vuoto';
+    return `
+    <div class="preset-slot${p ? ' filled' : ''}" title="${title}">
+      <span class="slot-dot"></span>
+      <span class="slot-name">${slot}</span>
+      <button class="small secondary" data-preset-save="${slot}">💾</button>
+      <button class="small secondary" data-preset-load="${slot}" ${p ? '' : 'disabled'}>▶</button>
+    </div>`;
+  }).join('');
+  wrap.querySelectorAll('[data-preset-save]').forEach(b => b.onclick = () => mxSavePreset(b.dataset.presetSave));
+  wrap.querySelectorAll('[data-preset-load]').forEach(b => b.onclick = () => mxLoadPreset(b.dataset.presetLoad));
+}
+
+function mxRenderSvc(svc) {
+  const el = document.getElementById(`svc-${svc}-state`);
+  if (!el) return;
+  const state = (mxDevice?.services || {})[svc] || 'inactive';
+  const label = svc === 'audio_source_live' ? 'live' : svc === 'audio_source_file' ? 'file' : state;
+  el.textContent = svc.startsWith('audio_source_') ? `${label}: ${state}` : state;
+  el.classList.toggle('active', state === 'active');
+}
+
+function mxRenderAll() {
+  const badge = document.getElementById('dev-badge');
+  const meta = document.getElementById('dev-meta');
+  if (!mxDevice) return;
+  const offline = mxDevice._offline;
+  badge.className = 'dev-badge ' + (offline ? 'offline' : 'online');
+  badge.textContent = offline ? '● offline' : '● online';
+  meta.textContent = `${mxDevice.name || MX_DEVICE_ID} · stanza ${mxDevice.stanza || '?'} · ip ${mxDevice.ip || '?'}`;
+  mxRenderSvc('audio_device');
+  mxRenderSvc('audio_source_live');
+  mxRenderSvc('audio_source_file');
+
+  const byChan = mxChannelsFromParams(mxDevice.params);
+  mxRenderChanStrip(byChan);
+  const chanParams = mxChannel !== null ? byChan[mxChannel] : null;
+  if (mxBuiltForChannel !== mxChannel) mxBuildBands(chanParams);
+  else mxUpdateBandValues(chanParams);
+  mxRenderLiveBand();
+  mxRenderPresetSlots();
+}
+
+// Fallback Tailscale (2026-09-09, TERZO giro). Il secondo giro
+// (bidirezionale ma con reconnectPeriod:0 su ogni tentativo) disattivava
+// il riconnect automatico di mqtt.js anche sullo stesso host -- un blip
+// di rete normalissimo (prima autorisolto in background) faceva scattare
+// un cambio LAN<->Tailscale completo ad ogni piccola interruzione,
+// segnalato dal vivo "non sembra funzionare" su una pagina gemella. Fix
+// corretto: reconnect automatico LASCIATO ATTIVO, un watchdog ESTERNO
+// (fuori da start()) prova l'altro lato solo dopo 10s consecutivi
+// scollegato (non un blip).
+const MX_BROKER_TAILSCALE = '100.91.251.83';
+// 2026-10-26: broker e pagina sono sulla stessa macchina (OPS): prima l'host della pagina
+const BROKER_HOSTS = [...new Set([location.hostname, MX_BROKER, MX_BROKER_TAILSCALE].filter(Boolean))]; let brokerIdx = 0;
+let mxSwitching = false;
+let mxOfflineSince = null;
+let mxCurrentIsFallback = false;
+
+function mxInit() {
+  function start(host, isFallback) {
+    mxCurrentIsFallback = isFallback;
+    const mqttUrl = `ws://${host}:19001`;
+    mxClient = mqtt.connect(mqttUrl, { connectTimeout: 4000 });
+    mxClient.on('connect', () => {
+      mxOfflineSince = null;
+      mxSetConn(true);
+      mxClient.subscribe('gaia/device/+/status');
+      // Wildcard invece di un topic per-device fisso (2026-08-30, vedi nota
+      // su MX_DEVICE_ID sopra) -- filtrati nel message handler una volta
+      // noto il device_id reale.
+      mxClient.subscribe('gaia/device/+/audio_levels');
+      mxClient.subscribe('gaia/mixeraudio/preset/+/+/+');
+      mxStartPolling();
+    });
+    mxClient.on('error',   () => { mxSetConn(false); if (mxOfflineSince === null) mxOfflineSince = Date.now(); });
+    mxClient.on('offline', () => { mxSetConn(false); if (mxOfflineSince === null) mxOfflineSince = Date.now(); });
+    mxClient.on('message', (topic, raw) => {
+      if (topic.startsWith('gaia/mixeraudio/preset/')) {
+        const m = topic.match(/^gaia\/mixeraudio\/preset\/([^/]+)\/ch(\d+)\/([A-Z])$/);
+        if (!m || m[1] !== MX_DEVICE_ID) return;
+        const chan = parseInt(m[2], 10), slot = m[3];
+        if (!raw || !raw.length) { delete mxPresets[chan]?.[slot]; }
+        else {
+          try {
+            mxPresets[chan] ||= {};
+            mxPresets[chan][slot] = JSON.parse(raw.toString());
+          } catch (e) { return; }
+        }
+        if (chan === mxChannel) mxRenderPresetSlots();
+        return;
+      }
+      if (!raw || !raw.length) return;
+      if (topic.endsWith('/audio_levels')) {
+        try {
+          const lv = JSON.parse(raw.toString());
+          if (lv.device_id !== MX_DEVICE_ID) return;
+          lv._lastSeen = Date.now();
+          mxLevels = lv;
+          mxRenderInputLevel();
+          mxRenderLiveBand();
+        } catch (e) {}
+        return;
+      }
+      try {
+        const d = JSON.parse(raw.toString());
+        // Adozione (2026-08-30): il PRIMO status con family "mixeraudio"
+        // visto in questa sessione diventa il device -- sticky da lì in
+        // poi. Nessun rischio di agganciare Core per errore: Core non
+        // pubblica mai `family`, a differenza del bug storico di
+        // PatchDeck (quello sì confondibile, serviva la matrice come
+        // prova) questo filtro categorico basta da solo.
+        if (MX_DEVICE_ID === null) {
+          if ((d.family || '').toLowerCase() !== 'mixeraudio') return;
+          MX_DEVICE_ID = d.device_id;
+        }
+        if (d.device_id !== MX_DEVICE_ID) return;
+        // Usa il ts INCORPORATO nel messaggio, non l'orario di ricezione --
+        // un retained vecchio arriva "ora" ma non e' fresco (bug gia' noto,
+        // vedi TDDeviceRegistry lato Python).
+        d._lastSeen = d.ts || Date.now();
+        // 1800000ms (30min), non 90000: i device TD non hanno un
+        // heartbeat periodico fisso, non ogni 30s come Pi/OPS -- 90s li
+        // marcava offline anche se attivi (stesso bug trovato su
+        // patchdeck.html 2026-09-11, td-pd-winnic: intervallo reale
+        // osservato sia ~6.5min che ~15.5min tra due publish). 30min e'
+        // volutamente permissiva finche' non si sa se/come rendere il
+        // publish TD-side piu' regolare.
+        d._offline = (Date.now() - d._lastSeen) > 1800000;
+        mxDevice = d;
+        mxRenderAll();
+      } catch (e) {}
+    });
+  }
+  // Watchdog LAN/Tailscale, unico, fuori da start() -- prova l'altro lato
+  // solo dopo 10s consecutivi scollegato (non un blip breve, quello lo
+  // risolve gia' da solo il reconnect automatico di mqtt.js).
+  setInterval(() => {
+    if (mxOfflineSince !== null && !mxSwitching && Date.now() - mxOfflineSince > 10000) {
+      mxSwitching = true;
+      const wasFallback = mxCurrentIsFallback;
+      mxClient.end(true);
+      setTimeout(() => {
+        mxSwitching = false;
+        mxOfflineSince = null;
+        (brokerIdx = (brokerIdx + 1) % BROKER_HOSTS.length, start(BROKER_HOSTS[brokerIdx], brokerIdx > 0));
+      }, 500);
+    }
+  }, 3000);
+  // Fuori da start() apposta: start() puo' essere chiamata due volte
+  // (LAN poi fallback Tailscale), interval duplicati altrimenti.
+  setInterval(() => { mxRenderInputLevel(); mxRenderLiveBand(); }, 1000);
+  setInterval(() => {
+    if (mxDevice && Date.now() - mxDevice._lastSeen > 1800000 && !mxDevice._offline) {
+      mxDevice._offline = true;
+      mxRenderAll();
+    }
+  }, 10000);
+  if (typeof mqtt !== 'undefined') {
+    start(BROKER_HOSTS[0], false);
+  } else {
+    const s = document.createElement('script');
+    s.src = 'vendor/mqtt.min.js';
+    s.onload = () => start(BROKER_HOSTS[0], false);
+    document.head.appendChild(s);
+  }
+}
+
+document.querySelectorAll('[data-svc][data-action]').forEach(btn => {
+  btn.onclick = () => mxSendAction(btn.dataset.svc, btn.dataset.action);
+});
+
+mxInit();
+</script>
+</body>
+</html>

@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GAIA DMX</title>
+<style>
+:root {
+  --bg:#08090f; --card:#0e1221; --border:#1e2840;
+  --accent:#00ffcc; --blue:#58a6ff; --green:#3fb950; --red:#f85149;
+  --yellow:#e3b341; --cyan:#39c5cf;
+  --text:#c9d1d9; --muted:#6b7a99;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;padding:24px;max-width:960px;margin:0 auto}
+h1{color:var(--accent);font-size:1.6rem;margin-bottom:4px}
+.subtitle{color:var(--muted);font-size:.9rem;margin-bottom:24px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:16px}
+h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:8px}
+button{
+  background:var(--accent);color:#000;border:none;border-radius:6px;
+  padding:8px 16px;cursor:pointer;font-size:.85rem;font-weight:600;
+  transition:opacity .15s;
+}
+button:hover{opacity:.85}
+button:disabled{opacity:.3;cursor:default}
+button.secondary{background:var(--card);color:var(--text);border:1px solid var(--border)}
+button.gray{background:var(--border);color:var(--text)}
+button.red{background:var(--red);color:#fff}
+button.green{background:var(--green);color:#02150a}
+button.small{padding:4px 10px;font-size:.78rem}
+
+.topnav{display:flex;align-items:center;gap:10px;padding-bottom:10px;margin-bottom:20px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.topnav-title{font-size:1.1rem;font-weight:700;color:var(--accent);margin-right:4px}
+.topnav-link{color:var(--muted);text-decoration:none;font-size:.8rem;padding:4px 10px;border-radius:6px;border:1px solid transparent}
+.topnav-link:hover{color:var(--text);border-color:var(--border)}
+.topnav-link.active{color:var(--accent);background:rgba(0,255,204,.06);border-color:var(--border)}
+.mqtt-dot{width:8px;height:8px;border-radius:50%;background:#444;display:inline-block;transition:background .3s;flex-shrink:0;margin-left:auto}
+.mqtt-dot.ok{background:var(--green);box-shadow:0 0 5px var(--green)}
+.mqtt-dot.err{background:var(--red)}
+
+.dmx-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+.dmx-tab{display:flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:7px 14px;cursor:pointer;font-size:.85rem;color:var(--muted)}
+.dmx-tab:hover{border-color:#2e3a5e;color:var(--text)}
+.dmx-tab.active{border-color:var(--accent);color:var(--accent);background:#001a12}
+.dmx-tab .tab-dot{width:6px;height:6px;border-radius:50%;background:var(--green)}
+.dmx-tab.offline .tab-dot{background:var(--red)}
+.dmx-no-scenarios{color:var(--muted);font-size:.85rem}
+
+.dev-status{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.dev-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;font-size:.8rem;font-weight:600}
+.dev-badge.online{background:#0f2418;color:var(--green)}
+.dev-badge.offline{background:#2a0f0f;color:var(--red)}
+.dev-meta{color:var(--muted);font-size:.8rem}
+.dev-warn{color:var(--yellow);font-size:.78rem;margin-top:10px}
+
+.svc-row{display:flex;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap}
+.svc-row .svc-label{font-size:.82rem;color:var(--text);min-width:150px}
+.svc-state{font-size:.75rem;color:var(--muted);padding:2px 8px;border-radius:10px;background:var(--bg)}
+.svc-state.active{color:var(--accent)}
+
+.dmx-ports-table{width:100%;margin-bottom:16px;font-size:.8rem;border-collapse:collapse}
+.dmx-ports-table th{text-align:left;color:var(--muted);font-weight:600;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;padding:4px 8px;border-bottom:1px solid var(--border)}
+.dmx-ports-table td{padding:5px 8px;border-bottom:1px solid var(--border);color:var(--text)}
+.dmx-ports-table td.port-online{text-align:center}
+
+.sect-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.sect{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px}
+.sect-title{font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--cyan);margin-bottom:10px}
+.param-row{margin-bottom:12px}
+.param-row:last-child{margin-bottom:0}
+.param-row .p-label-row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}
+.param-row label{font-size:.78rem;color:var(--muted)}
+.param-row .p-val{font-size:.78rem;color:var(--text);font-variant-numeric:tabular-nums}
+.param-row .p-val.default{color:var(--muted);font-style:italic}
+.param-row input[type=range]{width:100%;accent-color:var(--accent)}
+.param-row select, .param-row input[type=number]{
+  width:100%;background:var(--card);border:1px solid var(--border);border-radius:6px;
+  color:var(--text);padding:5px 8px;font-size:.85rem;
+}
+.param-row input[type=color]{width:100%;height:30px;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:2px;cursor:pointer}
+.param-row.dirty label{color:var(--yellow)}
+.param-row.sent label{color:var(--accent)}
+</style>
+</head>
+<body>
+
+<div class="topnav">
+  <div class="topnav-title">GAIA DMX</div>
+  <a href="portal.html" class="topnav-link">⌂ Portal</a>
+  <a href="admin.html" class="topnav-link">Admin</a>
+  <a href="patchdeck.html" class="topnav-link">🎛 PatchDeck</a>
+  <a href="mixeraudio.html" class="topnav-link">🎚 MixerAudio</a>
+  <a href="madmapper.html" class="topnav-link">🗺 MadMapper</a>
+  <a href="tccm.html" class="topnav-link">🎙 TCC M</a>
+  <span id="mqtt-dot" class="mqtt-dot"></span>
+</div>
+
+<h1>💡 DMX</h1>
+<div class="subtitle">Chase audio-reattivo DMX (TouchDesigner) — uno scenario/fixture-set per tab, dimmer, colore, kick, fixture</div>
+
+<div id="dmx-tabs" class="dmx-tabs"></div>
+<div id="dmx-no-scenarios" class="dmx-no-scenarios" style="display:none">Nessuno scenario DMX scoperto ancora — in attesa di un device che pubblichi <code>dmx_matrix</code>…</div>
+
+<div id="dmx-panel" style="display:none">
+<div class="card">
+  <h2>Stato scenario</h2>
+  <div class="dev-status">
+    <span id="dev-badge" class="dev-badge offline">● offline</span>
+    <span class="dev-meta" id="dev-meta">nessun dato ricevuto</span>
+  </div>
+  <div id="dev-warn" class="dev-warn" style="display:none"></div>
+  <div id="svc-rows"></div>
+</div>
+
+<div class="card">
+  <h2>Parametri</h2>
+  <div id="param-sections"></div>
+</div>
+</div>
+
+<script>
+// Stesso pattern MQTT-over-WS di admin.html/patchdeck.html/mixeraudio.html.
+const DX_BROKER = '192.168.1.240';
+// 1800000ms (30min), non 90000: i device TD non hanno un heartbeat
+// periodico fisso, non ogni 30s come Pi/OPS -- 90s li marcava offline
+// anche se attivi (stesso bug trovato su patchdeck.html 2026-09-11,
+// td-pd-winnic: intervallo reale osservato sia ~6.5min che ~15.5min tra
+// due publish). 30min e' volutamente permissiva finche' non si sa se/come
+// rendere il publish TD-side piu' regolare.
+const DX_STALE_MS = 1800000;
+
+// Raggruppamento SOLO visivo (etichette/ordine) -- il set reale di
+// parametri/tipi/range/opzioni viene sempre dalla dmx_matrix di ogni
+// scenario (introspezione TD vera, par.min/par.max/par.menuNames), mai
+// hardcodato qui. Un gruppo "Altro" raccoglie qualunque param nella
+// matrice non elencato sotto -- così un nuovo scenario con parametri
+// diversi resta comunque utilizzabile senza modifiche a questa pagina.
+const DX_SECTIONS = [
+  { title: 'Dimmer', params: ['dmx_min_dimmer', 'dmx_max_dimmer', 'dmx_dimmer_boost', 'dmx_dimmer_gamma'] },
+  { title: 'Colore / Smoothing', params: ['dmx_color_curve', 'dmx_color_fade', 'dmx_color_speed', 'dmx_color_phase', 'dmx_bar_phase', 'dmx_smooth_factor', 'dmx_global_smooth'] },
+  { title: 'Audio / Kick', params: ['dmx_agc_release', 'dmx_min_range', 'dmx_kick_threshold', 'dmx_kick_boost', 'dmx_kick_decay', 'dmx_kick_cooldown', 'dmx_kick_smooth'] },
+  { title: 'Fixture patch', params: ['dmx_fixture_count', 'dmx_start_address', 'dmx_palette', 'dmx_fixture_profile'] },
+  { title: 'Colori custom', params: ['dmx_custom_color1', 'dmx_custom_color2', 'dmx_custom_color3', 'dmx_custom_color4', 'dmx_custom_color5'] },
+  // Pseudo-scenari "Sorgente Audio A/B" (audio_engine condiviso, 2026-10-01,
+  // vedi TD4Gaia GAIA_INTERFACE.md "TD/Win-PD, 6") -- un device espone al
+  // massimo UNA delle due liste qui sotto per volta (la matrice di ogni
+  // sorgente contiene solo i propri param audio_a_*/audio_b_*), quindi
+  // elencarle entrambe nello stesso DX_SECTIONS globale è innocuo: il
+  // filtro "solo i param presenti nella matrice attiva" di dxBuildSections
+  // esclude da sé quelli dell'altra sorgente o dei rig dmx_*.
+  // audio_<x>_sender (2026-10-01, "TD/Win-PD, 8"): mittente Touch LAN
+  // scoperto via gaia/device/+/status -- enum coi device_id trovati,
+  // valido solo quando audio_<x>_type è touch_audio/touch_bands (gli
+  // altri tipi lo ignorano, il param resta comunque nella matrice).
+  { title: 'Sorgente', params: ['audio_a_type', 'audio_a_sender', 'audio_a_driver', 'audio_a_device', 'audio_b_type', 'audio_b_sender', 'audio_b_driver', 'audio_b_device'] },
+  { title: 'Audio — EQ / Gain', params: ['audio_a_gain', 'audio_a_bass_cutoff', 'audio_a_mid_low', 'audio_a_mid_high', 'audio_a_high_cutoff', 'audio_a_bass_gain', 'audio_a_mid_gain', 'audio_a_high_gain', 'audio_b_gain', 'audio_b_bass_cutoff', 'audio_b_mid_low', 'audio_b_mid_high', 'audio_b_high_cutoff', 'audio_b_bass_gain', 'audio_b_mid_gain', 'audio_b_high_gain'] },
+];
+
+let dxClient = null;
+// Multi-scenario: ogni device che pubblica dmx_matrix diventa una o due tab
+// -- nessun device_id hardcoded, scoperti dal vivo (gaia/devices/+/dmx_matrix
+// è il segnale di appartenenza autoritativo, non un pattern sul nome).
+//
+// Due schemi coesistono sul broker dal 2026-08-29 (migrazione Agent
+// unico multi-rig, vedi TD4Gaia GAIA_INTERFACE.md sezione "DMX, agente
+// unico multi-rig"): il vecchio (un device = un rig, dmx_matrix piatta
+// {params,services} come sempre) e il nuovo (un device copre 2 rig,
+// dmx_matrix = {device_id, rigs:{a:{params,services}, b:{...}}}, con
+// nomi servizio/parametro PREFISSATI per rig in status/profile
+// (dmx_a_kick_enable) ma NON prefissati dentro rigs.a/rigs.b della
+// matrice (dmx_kick_enable) -- due forme diverse per lo stesso dato,
+// verificato dal vivo). `dxDevices` qui sotto è quindi chiavato per
+// SCENARIO (id reale per un device a rig singolo, `${device_id}::a`/
+// `::b` per un device multi-rig), non necessariamente per device_id --
+// ogni scenario porta con sé `realDeviceId` (dove mandare i comandi) e
+// `rigLabel` (per ri-aggiungere il prefisso ai nomi servizio/parametro
+// prima di inviarli, null per gli scenari a rig singolo). Tutto il
+// rendering sotto (sezioni, slider, servizi) resta identico in entrambi
+// i casi: legge sempre matrix/status "scoped" al singolo rig.
+let dxDevices = {};     // scenario_id -> { matrix, status, order, realDeviceId, rigLabel }
+let dxOrder = 0;
+// Bug reale trovato dal vivo (2026-08-27): senza questa memoria, la tab
+// attiva di default era "il primo dmx_matrix che arriva" -- con più
+// scenari registrati (oggi 4: due con nome, due anonimi da vecchie prove)
+// l'ordine di consegna dei retained non è garantito, quindi un reload
+// poteva atterrare su un device diverso ogni volta, anche uno anonimo
+// senza dati interessanti -- sembrava "tutto sparito" anche con dati
+// reali presenti su un'altra tab. Ricorda l'ultima scelta esplicita.
+let dxActiveId = localStorage.getItem('gaiaDmxActiveId') || null;
+// true finché il device ricordato non si è ripresentato -- durante questa
+// finestra dxRenderTabs() non deve "scappare" verso il primo disponibile
+// solo perché il ricordato non è ancora arrivato (diverso da essere
+// davvero offline). Scade da sola dopo una breve grazia, vedi dxInit().
+let dxPersistPending = !!dxActiveId;
+let dxBuiltFor = null;  // device_id per cui il DOM di #param-sections è aggiornato ora
+
+function dxSetConn(ok) {
+  document.getElementById('mqtt-dot').className = 'mqtt-dot ' + (ok ? 'ok' : 'err');
+}
+
+// Ri-aggiunge il prefisso di rig (dmx_kick_enable -> dmx_a_kick_enable) --
+// no-op per uno scenario a rig singolo (rigLabel null). I nomi dentro
+// matrix/status "scoped" restano sempre SENZA prefisso (vedi nota sopra
+// su dxDevices), solo il comando reale sul wire lo richiede.
+function dxRePrefix(name, rigLabel) {
+  return rigLabel ? name.replace(/^dmx_/, `dmx_${rigLabel}_`) : name;
+}
+
+function dxSendAction(service, action) {
+  const dev = dxActive();
+  if (!dxClient || !dxClient.connected || !dev) return;
+  const realService = dxRePrefix(service, dev.rigLabel);
+  dxClient.publish(`gaia/device/${dev.realDeviceId}/command`, JSON.stringify({ action, service: realService }));
+}
+
+function dxSendParam(param, value) {
+  const dev = dxActive();
+  if (!dxClient || !dxClient.connected || !dev) return;
+  const realParam = dxRePrefix(param, dev.rigLabel);
+  dxClient.publish(`gaia/device/${dev.realDeviceId}/command`, JSON.stringify({ action: 'set', param: realParam, value }));
+}
+
+function dxPollActive() {
+  const dev = dxActive();
+  if (!dxClient?.connected || !dev) return;
+  // Per un device multi-rig questo polla il device intero (non solo il
+  // rig della tab attiva) -- innocuo, l'altro rig riceve comunque un
+  // refresh gratis se la sua tab viene aperta subito dopo.
+  dxClient.publish(`gaia/device/${dev.realDeviceId}/command`, JSON.stringify({ action: 'status', service: '_poll' }));
+}
+
+// Stesso trucco di mixeraudio.html: _apply_command() lato TD rifà sempre
+// _publish_status() a fine funzione qualunque sia l'azione -- usato per
+// forzare un refresh ogni secondo dello SOLO scenario attivo (non tutti,
+// per non moltiplicare il traffico MQTT per N scenari mai guardati).
+let dxPollTimer = null;
+function dxStartPolling() {
+  if (dxPollTimer) return;
+  dxPollTimer = setInterval(() => { if (!document.hidden) dxPollActive(); }, 1000);
+}
+// I browser rallentano/bloccano i timer delle schede in background -- se
+// il valore cambia in TD mentre questa pagina non è la scheda attiva, il
+// poll da 1s può non ripartire subito al ritorno in primo piano. Forza un
+// refresh immediato appena la scheda torna visibile (stesso fix già in
+// mixeraudio.html).
+document.addEventListener('visibilitychange', () => { if (!document.hidden) dxPollActive(); });
+
+function dxRgbToHex(arr) {
+  const c = (v) => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0');
+  return '#' + c(arr[0]) + c(arr[1]) + c(arr[2]);
+}
+function dxHexToRgb(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+}
+
+function dxActive() { return dxActiveId ? dxDevices[dxActiveId] : null; }
+
+function dxCurrentValue(name, def) {
+  const live = dxActive()?.status?.params || {};
+  return (name in live) ? { value: live[name], isDefault: false } : { value: def.default, isDefault: def.default !== undefined };
+}
+
+function dxLabel(name) { return name.replace(/^dmx_/, '').replace(/^audio_[ab]_/, '').replace(/_/g, ' '); }
+
+// ── Tab bar ──────────────────────────────────────────────────────────
+// Uno scenario offline (o mai visto pubblicare uno status) viene tolto
+// dalla barra tab, non solo affievolito -- ricompare da solo appena
+// torna a mandare un heartbeat fresco. Evita di riempire l'interfaccia
+// di vecchie prove/scenari abbandonati (visto dal vivo 2026-08-25: 17
+// device registrati nel Device Registry, solo 4 realmente vivi in quel
+// momento, alcuni fermi da giorni).
+function dxIsOnline(id) {
+  return !!(dxDevices[id]?.status && !dxDevices[id].status._offline);
+}
+
+function dxRenderTabs() {
+  const wrap = document.getElementById('dmx-tabs');
+  const empty = document.getElementById('dmx-no-scenarios');
+  const panel = document.getElementById('dmx-panel');
+  const allIds = Object.keys(dxDevices).sort((a, b) => dxDevices[a].order - dxDevices[b].order);
+  const ids = allIds.filter(dxIsOnline);
+
+  // Se lo scenario attivo non è (più) online, passa al primo disponibile --
+  // MA non durante la finestra di grazia per un device ricordato che
+  // semplicemente non è ancora arrivato (dxPersistPending): altrimenti la
+  // riassegnazione scatterebbe PRIMA che il suo dmx_matrix/status abbia
+  // anche solo una possibilità di arrivare, vanificando la memoria appena
+  // introdotta al primo giro utile.
+  if (dxActiveId !== null && !dxPersistPending && !ids.includes(dxActiveId)) {
+    dxActiveId = ids[0] ?? null;
+    dxBuiltFor = null;
+    // Bug trovato dal vivo (2026-08-28): senza questa riga la riassegnazione
+    // automatica non veniva mai salvata (solo il click manuale lo faceva) --
+    // ogni singolo reload ripartiva dal device morto ricordato e rifaceva
+    // tutta la finestra di grazia da capo invece di ricordare la scelta
+    // buona della volta precedente.
+    if (dxActiveId !== null) localStorage.setItem('gaiaDmxActiveId', dxActiveId);
+  }
+
+  if (!ids.length) {
+    wrap.innerHTML = '';
+    const hiddenCount = allIds.length;
+    empty.textContent = hiddenCount
+      ? `Nessuno scenario DMX online (${hiddenCount} registrato/i ma offline) — in attesa di un heartbeat fresco…`
+      : 'Nessuno scenario DMX scoperto ancora — in attesa di un device che pubblichi dmx_matrix…';
+    empty.style.display = '';
+    panel.style.display = 'none';
+    return;
+  }
+  empty.style.display = 'none';
+  panel.style.display = '';
+  wrap.innerHTML = ids.map(id => {
+    const d = dxDevices[id];
+    const base = d.status?.name || d.status?.stanza || d.realDeviceId;
+    const label = d.tabLabel ? `${base} · ${d.tabLabel}` : (d.rigLabel ? `${base} · Rig ${d.rigLabel.toUpperCase()}` : base);
+    return `<div class="dmx-tab${id === dxActiveId ? ' active' : ''}" data-tab="${id}">
+      <span class="tab-dot"></span>${label}
+    </div>`;
+  }).join('');
+  wrap.querySelectorAll('[data-tab]').forEach(el => {
+    el.onclick = () => dxSelectTab(el.dataset.tab);
+  });
+}
+
+function dxSelectTab(id) {
+  if (id === dxActiveId || !dxDevices[id]) return;
+  dxActiveId = id;
+  dxPersistPending = false;
+  localStorage.setItem('gaiaDmxActiveId', id);
+  dxRenderTabs();
+  dxRenderAll();
+  dxPollActive();
+}
+
+// ── Servizi (dinamici dalla matrice, non hardcodati -- uno scenario
+// futuro potrebbe avere servizi diversi da dmx_kick_enable/ecc.) ──────
+function dxServiceRow(name, def) {
+  const label = dxLabel(name);
+  if (def.type === 'action') {
+    return `<div class="svc-row" data-svc-row="${name}">
+      <span class="svc-label">${label}</span>
+      <span class="svc-state">azione</span>
+      <button class="small secondary" data-svc="${name}" data-action="enable">⚡ Applica</button>
+    </div>`;
+  }
+  return `<div class="svc-row" data-svc-row="${name}">
+    <span class="svc-label">${label}</span>
+    <span id="svc-${name}-state" class="svc-state">—</span>
+    <button class="small green" data-svc="${name}" data-action="enable">▶ On</button>
+    <button class="small red" data-svc="${name}" data-action="disable">■ Off</button>
+  </div>`;
+}
+
+function dxBuildServices() {
+  const wrap = document.getElementById('svc-rows');
+  const dev = dxActive();
+  const services = dev?.matrix?.services || {};
+  wrap.innerHTML = Object.entries(services).map(([name, def]) => dxServiceRow(name, def)).join('');
+  wrap.querySelectorAll('[data-svc][data-action]').forEach(btn => {
+    btn.onclick = () => dxSendAction(btn.dataset.svc, btn.dataset.action);
+  });
+  dxUpdateServices();
+}
+
+function dxUpdateServices() {
+  const dev = dxActive();
+  const services = dev?.matrix?.services || {};
+  const live = dev?.status?.services || {};
+  for (const [name, def] of Object.entries(services)) {
+    if (def.type === 'action') continue;
+    const el = document.getElementById(`svc-${name}-state`);
+    if (!el) continue;
+    const state = live[name] || 'inactive';
+    el.textContent = state;
+    el.classList.toggle('active', state === 'active');
+  }
+}
+
+// ── Parametri ────────────────────────────────────────────────────────
+function dxBuildParamRow(name, def) {
+  const { value, isDefault } = dxCurrentValue(name, def);
+  const label = dxLabel(name);
+  const valBadge = `<span class="p-val${isDefault ? ' default' : ''}" data-valdisp="${name}">${isDefault ? '(predefinito)' : ''}</span>`;
+
+  if (def.type === 'enum') {
+    const opts = (def.options || []).map(o => `<option value="${o}" ${o === value ? 'selected' : ''}>${o}</option>`).join('');
+    return `<div class="param-row" data-row="${name}">
+      <div class="p-label-row"><label>${label}</label>${valBadge}</div>
+      <select data-param="${name}" data-kind="enum">${opts}</select>
+    </div>`;
+  }
+  if (def.type === 'color_rgb') {
+    const hex = Array.isArray(value) ? dxRgbToHex(value) : '#000000';
+    return `<div class="param-row" data-row="${name}">
+      <div class="p-label-row"><label>${label}</label>${valBadge}</div>
+      <input type="color" value="${hex}" data-param="${name}" data-kind="color_rgb">
+    </div>`;
+  }
+  // float/int con range noto -> slider + numero
+  const [min, max] = def.range || [0, 1];
+  const step = def.type === 'int' ? 1 : (max - min) / 500 || 0.01;
+  return `<div class="param-row" data-row="${name}">
+    <div class="p-label-row"><label>${label}</label>${valBadge}</div>
+    <input type="range" min="${min}" max="${max}" step="${step}" value="${value ?? min}" data-param="${name}" data-kind="range">
+  </div>`;
+}
+
+// Tabella sola-lettura dei nodi Art-Net scoperti dall'ultimo dmx_scan --
+// non param/servizio Gaia, solo elenco informativo (vedi dxRegisterMatrix).
+function dxBuildPortsTable(ports) {
+  if (!Array.isArray(ports)) return '';
+  if (!ports.length) {
+    return '<div class="dev-meta" style="margin-bottom:16px">Nessun nodo Art-Net scoperto ancora — usa il servizio "Scan" qui sotto.</div>';
+  }
+  const rows = ports.map(p => `<tr>
+      <td>${p.label || p.node || p.port_id || '—'}</td>
+      <td>${p.ip || '—'}</td>
+      <td>U ${p.net ?? '?'}:${p.subnet ?? '?'}:${p.universe ?? '?'}</td>
+      <td class="port-online">${String(p.online) === '1' ? '🟢' : '⚪'}</td>
+    </tr>`).join('');
+  return `<div class="dev-meta" style="margin-bottom:8px">Nodi Art-Net scoperti (ultimo scan):</div>
+    <table class="dmx-ports-table">
+      <thead><tr><th>Nodo</th><th>IP</th><th>Universo</th><th class="port-online">Online</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function dxBuildSections() {
+  const wrap = document.getElementById('param-sections');
+  const dev = dxActive();
+  const matrix = dev?.matrix;
+  if (!matrix) { wrap.innerHTML = '<div class="dev-meta">In attesa della matrice (gaia/devices/…/dmx_matrix)…</div>'; return; }
+  // Matrice ricevuta ma nessun status live ancora arrivato: costruire gli
+  // slider ora userebbe i default della matrice come se fossero i valori
+  // reali (visto dal vivo: "appare a zero poi vedo i valori" -- uno scatto
+  // confuso, non un dato sbagliato). Meglio un'attesa esplicita; NON segna
+  // dxBuiltFor, quindi il prossimo dxRenderAll (status in arrivo) ritenta
+  // automaticamente la build vera.
+  if (!dev.status) { wrap.innerHTML = '<div class="dev-meta">Matrice ricevuta, in attesa dei valori live dal device…</div>'; return; }
+  const known = new Set(DX_SECTIONS.flatMap(s => s.params));
+  const extra = Object.keys(matrix.params || {}).filter(k => !known.has(k)).sort();
+  const sections = extra.length ? [...DX_SECTIONS, { title: 'Altro', params: extra }] : DX_SECTIONS;
+
+  wrap.innerHTML = dxBuildPortsTable(matrix.ports) + `<div class="sect-grid">${sections.map(sect => {
+    const rows = sect.params.filter(p => matrix.params[p]).map(p => dxBuildParamRow(p, matrix.params[p])).join('');
+    return rows ? `<div class="sect"><div class="sect-title">${sect.title}</div>${rows}</div>` : '';
+  }).join('')}</div>`;
+
+  wrap.querySelectorAll('[data-param]').forEach(el => {
+    const name = el.dataset.param;
+    const kind = el.dataset.kind;
+    const row = () => el.closest('.param-row');
+    if (kind === 'range') {
+      // 'dirty' blocca gli aggiornamenti in arrivo da TD finché l'interazione
+      // non si considera "completa" (change = al rilascio dello slider) --
+      // se 'change' non scatta mai per qualunque motivo (bug trovato dal
+      // vivo 2026-08-25: un campo restava bloccato per sempre, ignorando
+      // ogni valore live successivo mentre gli altri funzionavano), il
+      // campo resterebbe sordo per sempre. Rete di sicurezza: un timeout
+      // e un fallback su 'blur' risolvono comunque l'interazione.
+      let dirtyTimer = null;
+      const resolve = () => {
+        if (!row().classList.contains('dirty')) return;   // già risolta (change/blur/timeout arrivati in ordine diverso)
+        clearTimeout(dirtyTimer);
+        row().classList.remove('dirty');
+        row().classList.add('sent');
+        setTimeout(() => row().classList.remove('sent'), 400);
+        dxSendParam(name, parseFloat(el.value));
+      };
+      el.addEventListener('input', () => {
+        row().classList.add('dirty');
+        const disp = wrap.querySelector(`[data-valdisp="${name}"]`);
+        if (disp) { disp.textContent = Number(el.value).toFixed(3); disp.classList.remove('default'); }
+        clearTimeout(dirtyTimer);
+        dirtyTimer = setTimeout(resolve, 4000);
+      });
+      el.addEventListener('change', resolve);   // 'change' su un range = al rilascio, non ad ogni tick di drag
+      el.addEventListener('blur', resolve);
+    } else if (kind === 'enum') {
+      el.addEventListener('change', () => {
+        row().classList.add('sent');
+        setTimeout(() => row().classList.remove('sent'), 400);
+        dxSendParam(name, el.value);
+      });
+    } else if (kind === 'color_rgb') {
+      el.addEventListener('change', () => {
+        row().classList.add('sent');
+        setTimeout(() => row().classList.remove('sent'), 400);
+        dxSendParam(name, dxHexToRgb(el.value));
+      });
+    }
+  });
+  dxBuildServices();
+  dxBuiltFor = dxActiveId;
+}
+
+function dxUpdateValues() {
+  const dev = dxActive();
+  const matrix = dev?.matrix;
+  if (!matrix) return;
+  for (const [name, def] of Object.entries(matrix.params || {})) {
+    const el = document.querySelector(`[data-param="${name}"]`);
+    if (!el || el === document.activeElement) continue;
+    const row = el.closest('.param-row');
+    if (row.classList.contains('dirty')) continue;
+    const { value, isDefault } = dxCurrentValue(name, def);
+    const disp = document.querySelector(`[data-valdisp="${name}"]`);
+    if (def.type === 'color_rgb') {
+      if (Array.isArray(value)) el.value = dxRgbToHex(value);
+    } else if (def.type === 'enum') {
+      if (value !== undefined) el.value = value;
+    } else {
+      if (value !== undefined && el.value !== String(value)) el.value = value;
+      if (disp) disp.textContent = value !== undefined ? Number(value).toFixed(3) : '';
+    }
+    if (disp) disp.classList.toggle('default', isDefault);
+  }
+  dxUpdateServices();
+}
+
+function dxRenderAll() {
+  const dev = dxActive();
+  const badge = document.getElementById('dev-badge');
+  const meta = document.getElementById('dev-meta');
+  const warn = document.getElementById('dev-warn');
+  if (!dev) return;
+  const st = dev.status;
+  if (!st) {
+    badge.className = 'dev-badge offline';
+    badge.textContent = '● in attesa';
+    meta.textContent = dxActiveId;
+  } else {
+    const offline = st._offline;
+    badge.className = 'dev-badge ' + (offline ? 'offline' : 'online');
+    badge.textContent = offline ? '● offline' : '● online';
+    const rigSuffix = dev.tabLabel ? ` · ${dev.tabLabel}` : (dev.rigLabel ? ` · Rig ${dev.rigLabel.toUpperCase()}` : '');
+    meta.textContent = `${st.name || dev.realDeviceId} · ip ${st.ip || '?'} · ${st.stanza || '?'}${rigSuffix}`;
+    const empty = !Object.keys(st.services || {}).length && !Object.keys(st.params || {}).length;
+    if (empty) {
+      warn.style.display = '';
+      warn.textContent = '⚠ lo scenario non riporta ancora servizi/parametri live (registro vuoto) — i controlli sotto mostrano i valori predefiniti dalla matrice, non lo stato reale finché il device non li pubblica.';
+    } else {
+      warn.style.display = 'none';
+    }
+  }
+  if (dxBuiltFor !== dxActiveId) dxBuildSections();
+  else dxUpdateValues();
+}
+
+// ── Discovery + MQTT ─────────────────────────────────────────────────
+// Un device con "rigs" (schema multi-rig, 2026-08-29) genera UNO scenario
+// per rig; un device col vecchio schema piatto (params/services diretti,
+// niente "rigs") genera UNO scenario che coincide col device stesso --
+// stesso trattamento di sempre, zero regressione per gli scenari vecchi
+// ancora eventualmente in giro.
+// BUG REALE trovato dal vivo col browser vero (2026-08-29, stessa firma
+// già vista e risolta stamattina su patchdeck.html "status arrivato prima
+// della matrice veniva scartato"): le due subscribe (status/matrix) non
+// garantiscono ordine di consegna -- se lo status di un device arriva
+// PRIMA della sua matrice, nessuno scenario esiste ancora per quel
+// device_id e lo status veniva scartato per sempre (i retained si
+// consegnano una sola volta). La pagina restava bloccata su "nessun dato
+// ricevuto" nonostante il device fosse davvero online -- intermittente,
+// dipende dall'ordine di arrivo dei retained in quel preciso avvio.
+// Fix: bufferizzare SEMPRE l'ultimo status grezzo per device_id reale
+// (dxPendingStatus), a prescindere da quali scenari esistano già --
+// applicato subito se possibile, e ri-applicato non appena la matrice
+// mancante arriva (dentro dxRegisterScenario).
+let dxPendingStatus = {};   // realDeviceId -> ultimo payload status grezzo
+
+function dxRegisterMatrix(m) {
+  const deviceId = m.device_id;
+  if (!deviceId) return;
+  if (m.rigs && typeof m.rigs === 'object') {
+    for (const [rigLabel, rigMatrix] of Object.entries(m.rigs)) {
+      dxRegisterScenario(`${deviceId}::${rigLabel}`, deviceId, rigLabel, rigMatrix);
+    }
+  } else {
+    dxRegisterScenario(deviceId, deviceId, null, m);
+  }
+  // Sorgenti audio condivise (audio_engine, 2026-10-01, vedi TD4Gaia
+  // GAIA_INTERFACE.md "TD/Win-PD, 6") -- NON sono un rig (infrastruttura
+  // condivisa fra dmx_a/dmx_b dello stesso device, selezionata da ciascun
+  // rig col proprio dmx_audio_source), quindi rigLabel resta null: i nomi
+  // dentro audio.sources.{a,b} sono già quelli definitivi sul wire
+  // (audio_a_gain, non "gain" come nei rig), nessuna ri-prefissazione da
+  // fare, stesso trattamento "flat" di un device a rig singolo. tabLabel
+  // distingue la tab da quelle dei rig veri.
+  if (m.audio?.sources && typeof m.audio.sources === 'object') {
+    for (const [srcLabel, srcMatrix] of Object.entries(m.audio.sources)) {
+      dxRegisterScenario(`${deviceId}::audio_${srcLabel}`, deviceId, null, srcMatrix, `🔊 Sorgente ${srcLabel.toUpperCase()}`);
+    }
+  }
+  // Scan & Patch Art-Net (/project1/dmx_patch, 2026-10-01) -- unico per
+  // device (non per rig, non per sorgente): 3 servizi (dmx_scan azione,
+  // dmx_output/dmx_blackout bool) già nomi finali sul wire, nessun param.
+  // `ports` (l'elenco dei nodi scoperti dall'ultimo scan) non è un
+  // param/servizio Gaia, è dato informativo in sola lettura -- portato
+  // dentro la stessa matrice "scoped" cosi' dxBuildSections lo trova
+  // (vedi dxBuildPortsTable) senza bisogno di un fetch separato.
+  if (m.patch && typeof m.patch === 'object') {
+    dxRegisterScenario(`${deviceId}::patch`, deviceId, null,
+      { params: {}, services: m.patch.services || {}, ports: m.patch.ports || [] },
+      '⚡ Patch Art-Net');
+  }
+}
+
+function dxRegisterScenario(scenarioId, realDeviceId, rigLabel, matrix, tabLabel) {
+  const isNew = !dxDevices[scenarioId];
+  if (isNew) dxDevices[scenarioId] = { order: dxOrder++, status: null, matrix: null, realDeviceId, rigLabel, tabLabel };
+  dxDevices[scenarioId].matrix = matrix;
+  dxDevices[scenarioId].realDeviceId = realDeviceId;
+  dxDevices[scenarioId].rigLabel = rigLabel;
+  if (tabLabel !== undefined) dxDevices[scenarioId].tabLabel = tabLabel;
+  if (dxActiveId === null) dxActiveId = scenarioId;   // primo scenario scoperto -> attivo di default
+  if (scenarioId === dxActiveId) dxPersistPending = false;   // lo scenario ricordato è ricomparso
+  // Applica subito uno status già arrivato in precedenza per questo stesso
+  // device_id reale (vedi nota sopra) -- niente attesa del prossimo
+  // heartbeat live, che su un device silenzioso potrebbe non arrivare mai.
+  if (dxPendingStatus[realDeviceId]) dxApplyStatus(dxPendingStatus[realDeviceId]);
+  dxRenderTabs();
+  if (scenarioId === dxActiveId) dxRenderAll();
+}
+
+// Toglie il prefisso di rig da un dict di servizi/parametri (dmx_a_x ->
+// dmx_x) -- l'inverso esatto di dxRePrefix, per riportare lo status
+// "piatto per-device" del canale 4 alla stessa forma "scoped per-rig"
+// usata dalla matrice (vedi nota su dxDevices in cima al file).
+function dxStripPrefix(obj, rigLabel) {
+  const out = {};
+  const prefix = `dmx_${rigLabel}_`;
+  for (const [k, v] of Object.entries(obj || {})) {
+    if (k.startsWith(prefix)) out['dmx_' + k.slice(prefix.length)] = v;
+  }
+  return out;
+}
+
+// Applica un payload status grezzo a TUTTI gli scenari già noti per il suo
+// device_id reale (uno per un device a rig singolo, fino a due per un
+// device multi-rig) -- estratta a parte perché va richiamata sia da un
+// nuovo status in arrivo sia, con lo stesso identico payload, da una
+// matrice che arriva in ritardo su uno status già bufferizzato.
+function dxApplyStatus(d) {
+  const realDeviceId = d.device_id;
+  const scenarioIds = Object.keys(dxDevices).filter(sid => dxDevices[sid].realDeviceId === realDeviceId);
+  if (!scenarioIds.length) return false;   // nessuno scenario noto ancora -- resta solo nel buffer
+  // Usa il ts INCORPORATO nel messaggio, non l'orario di ricezione -- un
+  // retained vecchio di ore/giorni arriva "ora" ma non e' affatto fresco.
+  const lastSeen = d.ts || Date.now();
+  const offline = (Date.now() - lastSeen) > DX_STALE_MS;
+  for (const sid of scenarioIds) {
+    const rigLabel = dxDevices[sid].rigLabel;
+    const scoped = rigLabel
+      ? { ...d, services: dxStripPrefix(d.services, rigLabel), params: dxStripPrefix(d.params, rigLabel) }
+      : d;
+    scoped._lastSeen = lastSeen;
+    scoped._offline = offline;
+    dxDevices[sid].status = scoped;
+  }
+  if (dxActiveId === null && !offline) {
+    dxActiveId = scenarioIds[0];
+    localStorage.setItem('gaiaDmxActiveId', dxActiveId);
+  }
+  dxRenderTabs();   // il nome nella tab può essere cambiato
+  if (scenarioIds.includes(dxActiveId)) dxRenderAll();
+  return true;
+}
+
+function dxRegisterStatus(d) {
+  if (!d.device_id) return;
+  dxPendingStatus[d.device_id] = d;   // bufferizza SEMPRE, anche se già applicabile
+  dxApplyStatus(d);
+}
+
+// Fallback Tailscale (2026-09-09, TERZO giro). Il secondo giro
+// (bidirezionale ma con reconnectPeriod:0 su ogni tentativo) disattivava
+// il riconnect automatico di mqtt.js anche sullo stesso host -- un blip
+// di rete normalissimo (prima autorisolto in background) faceva scattare
+// un cambio LAN<->Tailscale completo ad ogni piccola interruzione,
+// segnalato dal vivo "non sembra funzionare". Fix corretto: reconnect
+// automatico LASCIATO ATTIVO, un watchdog ESTERNO (fuori da start())
+// prova l'altro lato solo dopo 10s consecutivi scollegato (non un blip).
+const DX_BROKER_TAILSCALE = '100.91.251.83';
+// 2026-10-26: broker e pagina sono sulla stessa macchina (OPS): prima l'host della pagina
+const BROKER_HOSTS = [...new Set([location.hostname, DX_BROKER, DX_BROKER_TAILSCALE].filter(Boolean))]; let brokerIdx = 0;
+let dxSwitching = false;
+let dxOfflineSince = null;
+let dxCurrentIsFallback = false;
+
+function dxInit() {
+  function start(host, isFallback) {
+    dxCurrentIsFallback = isFallback;
+    const mqttUrl = `ws://${host}:19001`;
+    dxClient = mqtt.connect(mqttUrl, { connectTimeout: 4000 });
+    dxClient.on('connect', () => {
+      dxOfflineSince = null;
+      dxSetConn(true);
+      dxClient.subscribe('gaia/device/+/status');
+      dxClient.subscribe('gaia/devices/+/dmx_matrix');
+      // Il topic della matrice prende il nome della FAMILY (gaia_client): il DMX
+      // integrato in Herbarium (family 'herbarum', ortografia del progetto TD, e la
+      // variante corretta per sicurezza) pubblica herbarum_matrix, non dmx_matrix --
+      // stesso schema {device_id, rigs:{a:{params,services}}}, prima mai visto qui
+      // (2026-09-24, segnalato: si vedeva solo il DMX di PatchDeck).
+      dxClient.subscribe('gaia/devices/+/herbarum_matrix');
+      dxClient.subscribe('gaia/devices/+/herbarium_matrix');
+      dxStartPolling();
+      // Il device ricordato potrebbe essere stato rimosso/rinominato per
+      // sempre (non solo momentaneamente offline) -- senza questo timeout
+      // dxPersistPending resterebbe true all'infinito e la tab bar
+      // aspetterebbe un device che non tornerà mai più. 1.5s basta e avanza
+      // (i retained arrivano in pochi ms dalla subscribe, verificato dal
+      // vivo) -- 5s lasciava la pagina in uno stato confuso troppo a lungo
+      // (tab non evidenziata, pannello fermo) prima di autocorreggersi.
+      setTimeout(() => {
+        if (dxPersistPending) { dxPersistPending = false; dxRenderTabs(); dxRenderAll(); }
+      }, 1500);
+    });
+    dxClient.on('error',   () => { dxSetConn(false); if (dxOfflineSince === null) dxOfflineSince = Date.now(); });
+    dxClient.on('offline', () => { dxSetConn(false); if (dxOfflineSince === null) dxOfflineSince = Date.now(); });
+    dxClient.on('message', (topic, raw) => {
+      if (!raw || !raw.length) return;
+      if (topic.endsWith('/dmx_matrix') || topic.endsWith('/herbarum_matrix') || topic.endsWith('/herbarium_matrix')) {
+        try { dxRegisterMatrix(JSON.parse(raw.toString())); } catch (e) {}
+        return;
+      }
+      if (topic.startsWith('gaia/device/') && topic.endsWith('/status')) {
+        try { dxRegisterStatus(JSON.parse(raw.toString())); } catch (e) {}
+      }
+    });
+  }
+  // Watchdog LAN/Tailscale, unico, fuori da start() -- prova l'altro lato
+  // solo dopo 10s consecutivi scollegato (non un blip breve, quello lo
+  // risolve gia' da solo il reconnect automatico di mqtt.js).
+  setInterval(() => {
+    if (dxOfflineSince !== null && !dxSwitching && Date.now() - dxOfflineSince > 10000) {
+      dxSwitching = true;
+      const wasFallback = dxCurrentIsFallback;
+      dxClient.end(true);
+      setTimeout(() => {
+        dxSwitching = false;
+        dxOfflineSince = null;
+        (brokerIdx = (brokerIdx + 1) % BROKER_HOSTS.length, start(BROKER_HOSTS[brokerIdx], brokerIdx > 0));
+      }, 500);
+    }
+  }, 3000);
+  setInterval(() => {
+    let changed = false;
+    for (const dev of Object.values(dxDevices)) {
+      const st = dev.status;
+      if (st && !st._offline && Date.now() - st._lastSeen > DX_STALE_MS) { st._offline = true; changed = true; }
+    }
+    if (changed) { dxRenderTabs(); dxRenderAll(); }
+  }, 10000);
+  if (typeof mqtt !== 'undefined') {
+    start(BROKER_HOSTS[0], false);
+  } else {
+    const s = document.createElement('script');
+    s.src = 'vendor/mqtt.min.js';
+    s.onload = () => start(BROKER_HOSTS[0], false);
+    document.head.appendChild(s);
+  }
+}
+
+dxInit();
+</script>
+</body>
+</html>

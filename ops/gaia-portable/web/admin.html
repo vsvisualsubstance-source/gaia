@@ -1,0 +1,2123 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GAIA Admin</title>
+<style>
+:root {
+  /* Token GAIA condivisi (stessa famiglia di welcome/dashboard/arte):
+     sfondo blu-nero profondo, accento ciano #00ffcc, blu come secondario */
+  --bg:#08090f; --card:#0e1221; --border:#1e2840;
+  --accent:#00ffcc; --blue:#58a6ff; --green:#3fb950; --red:#f85149;
+  --yellow:#e3b341; --cyan:#39c5cf;
+  --text:#c9d1d9; --muted:#6b7a99;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;padding:24px;max-width:960px;margin:0 auto}
+h1{color:var(--accent);font-size:1.6rem;margin-bottom:4px}
+.subtitle{color:var(--muted);font-size:.9rem;margin-bottom:24px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:8px}
+@media(max-width:640px){.grid{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px}
+h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:8px}
+label{display:block;font-size:.82rem;color:var(--muted);margin-bottom:3px;margin-top:10px}
+label:first-of-type{margin-top:0}
+input[type=range]{width:100%;accent-color:var(--accent);margin-bottom:2px}
+.val{font-weight:700;color:var(--accent)}
+input[type=text],input[type=number]{
+  background:var(--bg);border:1px solid var(--border);border-radius:6px;
+  color:var(--text);padding:7px 11px;font-size:.88rem;
+}
+input[type=text]{width:100%;margin-bottom:6px}
+input[type=number]{width:70px}
+button{
+  background:var(--accent);color:#000;border:none;border-radius:6px;
+  padding:8px 16px;cursor:pointer;font-size:.85rem;font-weight:600;margin-top:8px;
+  transition:opacity .15s;
+}
+button:hover{opacity:.85}
+button:disabled{opacity:.4;cursor:default}
+button.secondary{background:var(--card);color:var(--text);border:1px solid var(--border)}
+button.danger{background:var(--red);color:#fff}
+button.small{padding:3px 9px;font-size:.78rem;margin:0}
+
+.rms-wrap{height:18px;border-radius:4px;background:var(--border);overflow:hidden;margin:8px 0}
+.rms-bar{height:100%;width:0;background:var(--green);transition:width .15s}
+.threshold-tick{position:relative;height:4px}
+.threshold-tick::after{
+  content:'';position:absolute;top:0;width:2px;height:10px;
+  background:var(--yellow);border-radius:1px;
+}
+
+.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:.78rem;font-weight:600}
+.badge.idle{background:#162016;color:var(--green)}
+.badge.listening{background:#161e35;color:var(--accent)}
+.badge.processing{background:#2a2010;color:var(--yellow)}
+.badge.enrolling{background:#0f2020;color:var(--cyan)}
+.badge.calibrating{background:#1e1028;color:#c678dd}
+.badge.offline{background:#2a0f0f;color:var(--red)}
+
+.pill-list{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;min-height:28px}
+.pill{display:flex;align-items:center;gap:6px;background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:.82rem}
+.pill .del{background:none;border:none;color:var(--red);cursor:pointer;padding:0;margin:0;font-size:.9rem;line-height:1}
+
+/* ── Persone: card con avatar/thumbnail ─────────────────────────── */
+.person-grid{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px;min-height:28px}
+.person-tile{display:flex;align-items:center;gap:10px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 10px 8px 8px;transition:border-color .15s}
+.person-tile:hover{border-color:#2e3a5e}
+.person-face{width:44px;height:44px;border-radius:50%;object-fit:cover;border:1px solid var(--border);background:#101a2e;flex-shrink:0}
+.person-initial{width:44px;height:44px;border-radius:50%;background:#0c1e2a;color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1.1rem;flex-shrink:0}
+.person-info{display:flex;flex-direction:column;gap:2px;min-width:70px}
+.person-name{font-size:.88rem;font-weight:600;color:var(--text)}
+.person-meta{font-size:.72rem;color:var(--muted)}
+.person-del{background:none;border:none;color:var(--muted);cursor:pointer;font-size:.95rem;padding:4px 6px;margin:0;line-height:1;border-radius:6px;transition:all .15s}
+.person-del:hover{color:var(--red);background:#200d0d}
+
+/* ── Clip audio: strip scorrevole ───────────────────────────────── */
+.clip-strip{display:flex;flex-wrap:wrap;gap:6px;max-height:96px;overflow-y:auto;padding:6px;background:var(--bg);border:1px solid var(--border);border-radius:8px;margin:3px 0 6px}
+.clip-tile{display:inline-flex;align-items:center;background:var(--card);border:1px solid var(--border);border-radius:6px;overflow:hidden}
+.clip-play{background:none;border:none;color:var(--accent);cursor:pointer;font-size:.74rem;padding:3px 8px;margin:0;font-weight:600}
+.clip-play:hover{background:#001a12}
+.clip-del{background:none;border:none;color:var(--muted);cursor:pointer;font-size:.74rem;padding:3px 7px;margin:0;border-left:1px solid var(--border)}
+.clip-del:hover{color:var(--red);background:#200d0d}
+
+.msg{font-size:.82rem;margin-top:8px;min-height:1.1em;color:var(--muted)}
+.section-hdr{grid-column:1/-1;display:flex;align-items:center;gap:12px;margin:12px 0 -4px}
+.section-hdr span{font-size:.72rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);white-space:nowrap;font-weight:600}
+.section-hdr div{flex:1;height:1px;background:var(--border)}
+.msg.ok{color:var(--green)}
+.msg.err{color:var(--red)}
+.msg.info{color:var(--yellow)}
+
+.progress-bar-wrap{height:6px;background:var(--border);border-radius:3px;margin:6px 0;display:none}
+.progress-bar{height:100%;background:var(--cyan);border-radius:3px;transition:width .3s;width:0}
+
+.inline-row{display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap}
+.sep{margin:6px 0;border:none;border-top:1px solid var(--border)}
+
+.automation-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)}
+.automation-row:last-child{border-bottom:none}
+.automation-label{font-size:.88rem}
+.room-toggle-list{margin-left:16px;margin-top:2px;margin-bottom:6px}
+
+/* ── Tab nav ─────────────────────────────────────────────────────── */
+.topnav{display:flex;align-items:center;gap:10px;padding-bottom:10px;margin-bottom:16px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.topnav-title{font-size:1.1rem;font-weight:700;color:var(--accent);margin-right:4px}
+.topnav-link{color:var(--muted);text-decoration:none;font-size:.8rem;padding:4px 10px;border-radius:6px;border:1px solid transparent}
+.topnav-link:hover{color:var(--text);border-color:var(--border)}
+.topnav-link.active{color:var(--accent);background:rgba(0,255,204,.06);border-color:var(--border)}
+.tab-bar{display:flex;gap:2px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:2px;margin-left:auto}
+.tab-btn{background:none;border:none;color:var(--muted);padding:5px 14px;border-radius:6px;cursor:pointer;font-size:.82rem;font-weight:500;margin:0;transition:all .15s;display:flex;align-items:center;gap:5px}
+.tab-btn:hover{color:var(--text);background:var(--border)}
+.tab-btn.active{background:var(--border);color:var(--text)}
+.tab-panel{display:none}
+.tab-panel.active{display:block}
+.mqtt-dot{width:7px;height:7px;border-radius:50%;background:#444;display:inline-block;transition:background .3s;flex-shrink:0}
+.mqtt-dot.ok{background:var(--green);box-shadow:0 0 5px var(--green)}
+.mqtt-dot.err{background:var(--red)}
+
+/* ── Pi Manager cards (embedded) ─────────────────────────────────── */
+.pm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;margin-top:12px}
+.pi-card{background:var(--bg);border:1px solid var(--border);border-radius:10px;overflow:hidden;transition:border-color .2s}
+.pi-card:hover{border-color:#2e3a5e}
+.pi-card.offline{opacity:.5}
+.pi-card-header{display:flex;align-items:center;gap:10px;padding:12px 16px;background:var(--card);border-bottom:1px solid var(--border)}
+.pi-status-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;background:var(--green)}
+.pi-card.offline .pi-status-dot{background:var(--border)}
+.pi-name-block{flex:1;min-width:0}
+.pi-display-name{font-size:.9rem;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pi-device-id{font-size:.7rem;color:var(--muted);font-family:monospace}
+.pi-uptime{font-size:.72rem;color:var(--muted);white-space:nowrap}
+.pi-card-body{padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.pm-td-perf{display:flex;gap:10px;flex-wrap:wrap;font-size:.72rem}
+.pm-perf-fps{color:var(--muted);font-family:monospace}
+.pm-perf-err{color:var(--red);background:#2a1216;border:1px solid #4a1f26;border-radius:5px;padding:2px 8px}
+.pm-badge{font-size:.72rem;padding:2px 8px;border-radius:4px;background:var(--card);border:1px solid var(--border);color:var(--muted);display:flex;align-items:center;gap:5px}
+.pm-badge.active{color:var(--green);border-color:#1e4030;background:#0d1f18}
+.pm-badge.cap{color:var(--accent);border-color:#1a2e50;background:#0c1428}
+.pm-section-label{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:4px}
+.pm-advanced{border:1px solid var(--border);border-radius:6px;padding:0;background:var(--bg)}
+.pm-advanced summary{cursor:pointer;padding:7px 10px;font-size:.78rem;color:var(--muted);user-select:none;list-style:none}
+.pm-advanced summary::-webkit-details-marker{display:none}
+.pm-advanced summary::before{content:'▸ ';display:inline-block;transition:transform .15s}
+.pm-advanced[open] summary::before{transform:rotate(90deg)}
+.pm-advanced-body{display:flex;flex-direction:column;gap:10px;padding:0 10px 10px}
+.pm-rename-row{display:flex;flex-direction:column;gap:6px}
+.pm-rename-inputs{display:flex;gap:6px}
+.pm-rename-row input{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:6px 10px;color:var(--text);font-size:.82rem;outline:none;min-width:0}
+.pm-rename-row input:focus{border-color:var(--accent)}
+.pm-btn{padding:6px 12px;border:none;border-radius:5px;font-size:.78rem;cursor:pointer;font-weight:500;transition:opacity .15s;margin:0}
+.pm-btn:hover{opacity:.85}
+.pm-btn.blue{background:#1e4a9e;color:#d0e0ff}
+.pm-btn.green{background:#1a5e38;color:#a0eec0}
+.pm-btn.red{background:#5e1a1a;color:#eea0a0}
+.pm-btn.gray{background:#1e2640;color:#7a8aaa}
+.pm-btn.amber{background:#5e3a10;color:#f0c080}
+.pm-svc-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.pm-svc-btn{display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 5px;border-radius:6px;border:1px solid var(--border);background:var(--bg);cursor:default}
+.pm-svc-btn .svc-icon{font-size:1.1rem}
+.pm-svc-btn .svc-name{font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.pm-svc-btn .svc-state{font-size:.65rem;font-weight:600;padding:1px 6px;border-radius:3px;background:var(--card);color:var(--muted)}
+.pm-svc-btn.running .svc-state{background:#0d2018;color:var(--green)}
+.pm-svc-btn.failed  .svc-state{background:#200d0d;color:var(--red)}
+.pm-svc-toggle{display:flex;gap:3px;margin-top:1px;justify-content:center}
+.pm-svc-toggle .pm-btn{padding:2px 6px;font-size:.65rem}
+.pm-card-actions{display:flex;gap:6px;border-top:1px solid var(--border);padding-top:10px;flex-wrap:wrap}
+.pm-card-actions .pm-btn{flex:1;text-align:center;min-width:60px}
+.pm-log-wrap{margin-top:16px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px}
+.pm-log-wrap h3{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+#pm-log-lines{font-family:monospace;font-size:.72rem;color:var(--muted);max-height:100px;overflow-y:auto}
+.pm-log-entry{padding:1px 0;border-bottom:1px solid var(--card)}
+.pm-log-entry.in{color:var(--green)}
+.pm-log-entry.out{color:var(--accent)}
+.pm-log-entry.err{color:var(--red)}
+
+.toggle{position:relative;display:inline-block;width:42px;height:22px;flex-shrink:0}
+.toggle input{opacity:0;width:0;height:0}
+.toggle-slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:var(--border);border-radius:22px;transition:.15s}
+.toggle-slider::before{position:absolute;content:"";height:16px;width:16px;left:3px;bottom:3px;background:var(--text);border-radius:50%;transition:.15s}
+.toggle input:checked + .toggle-slider{background:var(--green)}
+.toggle input:checked + .toggle-slider::before{transform:translateX(20px);background:#04150a}
+</style>
+</head>
+<body>
+
+<div class="topnav">
+  <div class="topnav-title">GAIA Admin</div>
+  <a href="portal.html" class="topnav-link">⌂ Portal</a>
+  <a href="dashboard.html" class="topnav-link">Dashboard</a>
+  <a href="livestream.html" class="topnav-link">LiveStream</a>
+  <a href="telegram.html" class="topnav-link">🤖 Telegram</a>
+  <a href="welcome.html" class="topnav-link">Welcome</a>
+  <a href="cameras.html" class="topnav-link">Camere</a>
+  <a href="game.html" class="topnav-link">Gioco</a>
+  <a href="musica.html" class="topnav-link">Musica</a>
+  <a href="gaia-art/index.html" class="topnav-link">Arte</a>
+  <a href="mattoni.html" class="topnav-link">Mattoni</a>
+  <a href="patchdeck.html" class="topnav-link">🎛 PatchDeck</a>
+  <a href="mixeraudio.html" class="topnav-link">🎚 MixerAudio</a>
+  <a href="dmx.html" class="topnav-link">💡 DMX</a>
+  <a href="dmx-editor.html" class="topnav-link">✏️ Preset DMX Pi</a>
+  <a href="madmapper.html" class="topnav-link">🗺 MadMapper</a>
+  <a href="tccm.html" class="topnav-link">🎙 TCC M</a>
+  <a href="voce-volti.html" class="topnav-link">🗣 Voce &amp; Volti</a>
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="showTab('cfg',this)">⚙ Configurazione</button>
+    <button class="tab-btn" onclick="showTab('pi',this)">🍓 Pi Devices <span id="mqtt-dot" class="mqtt-dot"></span></button>
+  </div>
+  <span id="conn-status" style="color:var(--muted);font-size:.8rem">connessione…</span>
+</div>
+
+<div id="tab-cfg" class="tab-panel active">
+<div class="grid">
+
+  <!-- ── Sezione: Voce di Gaia ──────────────────────────────────────────── -->
+  <div class="section-hdr"><span>Voce di Gaia</span><div></div></div>
+
+  <div class="card">
+    <h2>Registro dei pensieri</h2>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:10px">
+      Il tono con cui Gaia genera i pensieri spontanei (Build Prompt Contestuale). "Poetica" è il
+      registro di sempre; "Underground" è più asciutto e diretto — pensato per installazioni fuori
+      casa (es. un locale).
+    </p>
+    <select id="register-select" onchange="setRegister(this.value)" style="width:100%;padding:8px">
+      <option value="">Caricamento…</option>
+    </select>
+    <div id="register-msg" class="msg"></div>
+  </div>
+
+  <div class="card">
+    <h2>Ore di silenzio</h2>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:10px">
+      In questa fascia oraria i pensieri spontanei restano visibili (dashboard, Telegram) ma Gaia non
+      li dice a voce (né sugli Echo). Utile per la notte — se lavori spesso presto la mattina, alza
+      l'ora di fine.
+    </p>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <label style="font-size:.82rem;color:var(--muted)">Da
+        <input type="number" id="quiet-start" min="0" max="23" style="width:60px;padding:6px;margin:0 4px">
+      </label>
+      <label style="font-size:.82rem;color:var(--muted)">a
+        <input type="number" id="quiet-end" min="0" max="23" style="width:60px;padding:6px;margin:0 4px">
+      </label>
+      <button onclick="saveQuietHours()">Salva</button>
+    </div>
+    <div id="quiet-msg" class="msg"></div>
+  </div>
+
+  <!-- ── Sezione: Automazioni ──────────────────────────────────────────── -->
+  <div class="section-hdr"><span>Automazioni</span><div></div></div>
+
+  <!-- Automazioni -->
+  <div class="card">
+    <h2>Automazioni</h2>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:10px">
+      Comportamenti automatici che agiscono senza intervento esplicito (luci, alert).
+      Le luci automatiche da mood sono per-stanza e disattive di default.
+    </p>
+    <div id="automations-list">
+      <span style="color:var(--muted);font-size:.82rem">Caricamento…</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Gaia VJ — intervallo palette/clip</h2>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:10px">
+      Ogni quanti secondi Gaia sceglie una nuova palette DMX / clip PatchDeck dal mood (i due
+      interruttori "Gaia VJ" qui sopra decidono SE è attivo, questo decide con che ritmo).
+      Default 60s; per una demo dal vivo può convenire abbassarlo (es. 7-8s). Per PatchDeck
+      questo è anche il tempo tra un cambio e l'altro dei due deck: A e B non cambiano mai
+      insieme, si alternano (prima A, poi B, poi di nuovo A…).
+    </p>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <label style="font-size:.82rem;color:var(--muted)">Ogni
+        <input type="number" id="vj-interval" min="3" max="600" style="width:70px;padding:6px;margin:0 4px">
+        secondi
+      </label>
+      <button onclick="saveVjInterval()">Salva</button>
+    </div>
+    <div id="vj-interval-msg" class="msg"></div>
+  </div>
+
+  <div class="card">
+    <h2>Gaia VJ — patch PatchDeck ammesse</h2>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:10px">
+      Elenco delle patch tra cui Gaia può scegliere per i deck A/B — utile per limitare
+      la scelta a quelle preparate per l'occasione (es. una demo) invece di pescare tra tutte
+      quelle disponibili. Il numero totale segue la matrice reale del device (non più fisso
+      a 38 — vedi <span id="vj-clips-available">…</span>). Numeri separati da virgola, es.
+      "3, 7, 12, 18". Vuoto = tutte.
+    </p>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <input type="text" id="vj-clips" placeholder="vuoto = tutte quelle disponibili" style="flex:1;min-width:200px;padding:6px">
+      <button onclick="saveVjClips()">Salva</button>
+    </div>
+    <div id="vj-clips-msg" class="msg"></div>
+  </div>
+
+  <div class="card">
+    <h2>Gaia VJ — quali DMX pilotare</h2>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:10px">
+      Se più device si annunciano come DMX insieme (es. il DMX integrato di PatchDeck +
+      quello dedicato su OPS/Herbarium, <strong>oppure un Pi con servizio dmx attivo</strong>),
+      Gaia VJ manda la stessa palette a TUTTI quelli online per default (ognuno nel proprio
+      linguaggio — il Pi ha una sua tavolozza più piccola, Warm/Cool/Fire/Ocean/Forest/Sunset/
+      Magenta/White). Seleziona qui per restringere a solo alcuni — nessuna selezione
+      = tutti quelli online (comportamento di sempre).
+    </p>
+    <div id="vj-dmx-devices-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">
+      <span style="color:var(--muted);font-size:.82rem">Caricamento…</span>
+    </div>
+    <button onclick="saveVjDmxDevices()">Salva</button>
+    <div id="vj-dmx-devices-msg" class="msg"></div>
+  </div>
+
+</div><!-- end .grid -->
+</div><!-- end tab-cfg -->
+
+<!-- ── Pi Devices tab ──────────────────────────────────────────────── -->
+<div id="tab-pi" class="tab-panel">
+
+  <!-- ── miniPC (Gaia Core) ─────────────────────────────────────────── -->
+  <div class="card" style="margin-bottom:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <h2 style="margin:0">Gaia Core (miniPC)</h2>
+      <span id="core-status-badge" class="badge offline">offline</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:.82rem">
+
+      <!-- gaia-listener (voce) -->
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px">
+        <div style="font-size:.72rem;font-weight:600;color:var(--cyan);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Voice (gaia-listener)</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span id="core-listener-dot" style="width:8px;height:8px;border-radius:50%;background:var(--border);flex-shrink:0"></span>
+          <span id="core-listener-txt" style="color:var(--muted);font-size:.78rem">—</span>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="small secondary" onclick="controlListener('restart')" title="Riavvia">↺</button>
+          <button class="small danger"    id="core-stop-btn"  onclick="controlListener('stop')"  title="Ferma">■ Stop</button>
+          <button class="small secondary" id="core-start-btn" onclick="controlListener('start')" title="Avvia" style="display:none">▶ Start</button>
+        </div>
+      </div>
+
+      <!-- gaia-face -->
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px">
+        <div style="font-size:.72rem;font-weight:600;color:var(--cyan);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Face Recognition</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span id="core-face-dot" style="width:8px;height:8px;border-radius:50%;background:var(--border);flex-shrink:0"></span>
+          <span id="core-face-txt" style="color:var(--muted);font-size:.78rem">—</span>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="small secondary" onclick="coreServiceCtrl('gaia-face','restart')">↺</button>
+          <button class="small danger"    onclick="coreServiceCtrl('gaia-face','stop')">■ Stop</button>
+          <button class="small secondary" onclick="coreServiceCtrl('gaia-face','start')">▶ Start</button>
+        </div>
+      </div>
+
+      <!-- gaia-camera -->
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px">
+        <div style="font-size:.72rem;font-weight:600;color:var(--cyan);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Camera Server :8766</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span id="core-cam-dot" style="width:8px;height:8px;border-radius:50%;background:var(--border);flex-shrink:0"></span>
+          <span id="core-cam-txt" style="color:var(--muted);font-size:.78rem">—</span>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="small secondary" onclick="coreServiceCtrl('gaia-camera','restart')">↺</button>
+          <button class="small danger"    onclick="coreServiceCtrl('gaia-camera','stop')">■ Stop</button>
+          <button class="small secondary" onclick="coreServiceCtrl('gaia-camera','start')">▶ Start</button>
+        </div>
+      </div>
+
+      <!-- MJPEG preview -->
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px;display:flex;flex-direction:column;gap:6px">
+        <div style="font-size:.72rem;font-weight:600;color:var(--cyan);text-transform:uppercase;letter-spacing:.05em">Camera Preview</div>
+        <img id="core-cam-preview" src="" alt="stream non disponibile"
+             style="width:100%;border-radius:6px;max-height:120px;object-fit:cover;background:#0a0e1a;display:none">
+        <button class="small secondary" onclick="toggleCamPreview()" id="core-cam-preview-btn">▶ Apri preview</button>
+      </div>
+
+      <!-- Herbarium → superfici web -->
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px">
+        <div style="font-size:.72rem;font-weight:600;color:var(--cyan);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">🌿 Herbarium → Web</div>
+        <div style="color:var(--muted);font-size:.78rem;margin-bottom:8px">Le note delle piante scritte in glifi asemici sulla welcome (verde foglia). Sul display del Pi la scrittura è locale e resta sempre attiva.</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span id="herbweb-dot" style="width:8px;height:8px;border-radius:50%;background:var(--border);flex-shrink:0"></span>
+          <button class="small secondary" id="herbweb-btn" onclick="toggleHerbWeb()">…</button>
+        </div>
+      </div>
+
+    </div>
+    <div id="core-svc-msg" class="msg" style="margin-top:8px"></div>
+  </div>
+
+  <!-- ── Pi Devices (MQTT) ──────────────────────────────────────────── -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+    <span style="font-size:.8rem;color:var(--muted)">Connessione MQTT ws:<span id="pm-broker-label"></span>:19001</span>
+    <span id="pm-conn-label" style="font-size:.8rem;color:var(--muted)">Disconnesso</span>
+    <span id="pm-offline-count" style="font-size:.78rem;color:var(--muted);display:none"></span>
+    <button class="secondary small" onclick="pmCleanRooms()" title="Rimuove le stanze senza device e fuori mappa (dati live + topic retained)">🧹 Stanze orfane</button>
+    <button class="secondary small" onclick="pmCleanOfflineDevices()" title="Dimentica i device muti da 10+ minuti (registry + topic retained) — non tocca chi è ancora vivo">🧹 Device offline</button>
+  </div>
+  <div id="pm-welcome-menu" style="display:none;flex-wrap:wrap;gap:6px;margin-bottom:10px"></div>
+  <div id="pm-no-devices" style="text-align:center;padding:40px 20px;color:var(--muted);font-size:.9rem">
+    Nessun Pi connesso — in attesa di heartbeat…
+  </div>
+  <div class="pm-grid" id="pm-devices-grid" style="display:none"></div>
+
+  <!-- ── TouchDesigner — pausa/ripresa dei flussi OSC per istanza ────── -->
+  <div style="margin-top:24px">
+    <h3 style="margin-bottom:8px">🌉 TouchDesigner — Flussi OSC</h3>
+    <div id="pm-td-no-targets" style="text-align:center;padding:20px;color:var(--muted);font-size:.85rem">
+      Nessuna istanza TD conosciuta dal bridge.
+    </div>
+    <div id="pm-td-targets" style="display:none"></div>
+  </div>
+
+  <!-- ── Mocap diretto (mani/viso/posa) — abilitazione per istanza, opt-in ── -->
+  <div style="margin-top:24px">
+    <h3 style="margin-bottom:8px">🎭 Mocap diretto (mani / viso / posa)</h3>
+    <div id="pm-mocap-no-targets" style="text-align:center;padding:20px;color:var(--muted);font-size:.85rem">
+      Nessuna sorgente mocap attiva.
+    </div>
+    <div id="pm-mocap-targets" style="display:none"></div>
+  </div>
+
+  <!-- ── Piante monitorate — luogo (roomGraph, 13 stanze canoniche) ── -->
+  <div style="margin-top:24px">
+    <h3 style="margin-bottom:8px">🌿 Piante — luogo</h3>
+    <div id="pm-plants-no-items" style="text-align:center;padding:20px;color:var(--muted);font-size:.85rem">
+      Caricamento…
+    </div>
+    <div id="pm-plants-list" style="display:none"></div>
+  </div>
+
+  <!-- ── Matrice Dante — schema di riferimento per zona, SOLO conoscenza:
+       non tocca/legge il routing reale della rete Dante (quello vive
+       nella XC-SUB/Solaro, fuori da qui) — dichiara quale canale mic/
+       speaker un device Gaia dovrebbe usare per una zona, letto da chi
+       vuole usare Dante invece di avere valori sparsi/hardcoded. ── -->
+  <div style="margin-top:24px">
+    <h3 style="margin-bottom:8px">🔊 Matrice Dante — schema per zona</h3>
+    <div style="color:var(--muted);font-size:.8rem;margin-bottom:10px">
+      Riferimento manuale, non controlla la rete Dante reale (quella la gestisce il Solaro).
+    </div>
+    <div id="pm-dante-no-items" style="text-align:center;padding:20px;color:var(--muted);font-size:.85rem">
+      Caricamento…
+    </div>
+    <div id="pm-dante-list" style="display:none"></div>
+    <div class="pi-card" style="display:flex;align-items:center;gap:12px;padding:12px 16px;margin-top:8px">
+      <input class="pm-inp-stanza" id="pm-dante-new-zone" placeholder="nuova zona (es. zona-giorno)" style="flex:1">
+      <button class="pm-btn blue" onclick="pmDanteMatrixAddZone()">➕ Aggiungi zona</button>
+    </div>
+  </div>
+
+  <div class="pm-log-wrap">
+    <h3>Log MQTT</h3>
+    <div id="pm-log-lines"></div>
+  </div>
+
+  <!-- ── Device registrati (provisioning) ───────────────────────────── -->
+  <div class="card" style="margin-top:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <h2 style="margin:0">Device registrati</h2>
+      <button class="small secondary" onclick="loadProvision()">↺ Aggiorna</button>
+    </div>
+    <div style="font-size:.78rem;color:var(--muted);margin-bottom:10px">
+      Device che si sono presentati via <code>/api/provision</code> al boot.
+      Assegna una stanza per renderla autoritativa: il device la applica subito se online.
+    </div>
+    <div id="prov-empty" style="color:var(--muted);font-size:.85rem;text-align:center;padding:16px">Nessun device registrato.</div>
+    <div id="prov-list" style="display:none;overflow-x:auto"></div>
+    <div id="prov-msg" class="msg"></div>
+  </div>
+</div>
+
+<script>
+// gaia_admin.py (8765) e gaia-camera (8766) restano su Core anche se
+// Node-RED gira altrove (2026-08-07, migrazione OPS) -- non seguono
+// location.hostname come il resto della pagina (:1881), sono ancorati
+// all'hardware/filesystem di Core (voice_db, faces, camera fisica).
+// Fallback Tailscale (2026-09-09, segnalato dal vivo: "da tailscale non
+// funziona") -- questi due, a differenza del resto della pagina (MQTT,
+// che ha già startMqtt/tryFallback sotto), restavano fissi sulla LAN
+// senza nessun ripiego: da fuori casa via Tailscale la pagina si carica
+// ma status/volti/camera restano vuoti in silenzio. Stesso principio:
+// prova LAN, se non risponde passa al Tailscale IP di Core -- `let`
+// non `const`, poll() (già in loop ogni 2s) rilegge il valore aggiornato
+// da sé senza bisogno di riavviare nulla.
+let API = `http://192.168.1.142:8765`;
+let MJPEG_URL = `http://192.168.1.142:8766/video`;
+(async function resolveAdminApiHost() {
+  try {
+    await fetch(`${API}/api/status`, { signal: AbortSignal.timeout(2500) });
+  } catch (e) {
+    API = `http://100.94.220.65:8765`;
+    MJPEG_URL = `http://100.94.220.65:8766/video`;
+  }
+})();
+function setMsg(id, text, cls='') {
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.className   = 'msg ' + cls;
+}
+
+// ── Automazioni (Node-RED, non il backend admin su :8765) ──────────────────
+const NODERED_API = `http://${location.hostname}:1881`;
+
+function renderAutomationRow(a) {
+  if (a.scope === 'global') {
+    return `
+      <div class="automation-row">
+        <span class="automation-label">${a.label}</span>
+        <label class="toggle">
+          <input type="checkbox" ${a.enabled ? 'checked' : ''} onchange="toggleAutomation('${a.id}', this.checked)">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>`;
+  }
+  const rooms = Object.entries(a.rooms || {});
+  const roomsHtml = rooms.length
+    ? rooms.map(([room, enabled]) => `
+      <div class="automation-row">
+        <span class="automation-label" style="color:var(--muted)">↳ ${room}</span>
+        <label class="toggle">
+          <input type="checkbox" ${enabled ? 'checked' : ''} onchange="toggleAutomation('${a.id}', this.checked, '${room}')">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>`).join('')
+    : '<div style="color:var(--muted);font-size:.78rem;padding:4px 0">Nessuna stanza nota</div>';
+  return `
+    <div class="automation-row" style="border-bottom:none;padding-bottom:0">
+      <span class="automation-label">${a.label}</span>
+    </div>
+    <div class="room-toggle-list">${roomsHtml}</div>`;
+}
+
+async function loadAutomations() {
+  const el = document.getElementById('automations-list');
+  try {
+    const r = await fetch(`${NODERED_API}/gaia/automations`, {signal: AbortSignal.timeout(3000)});
+    if (!r.ok) throw new Error();
+    const d = await r.json();
+    el.innerHTML = (d.automations || []).map(renderAutomationRow).join('');
+  } catch {
+    el.innerHTML = '<span style="color:var(--red);font-size:.82rem">Errore di connessione a Node-RED</span>';
+  }
+}
+
+async function toggleAutomation(id, enabled, room) {
+  try {
+    const r = await fetch(`${NODERED_API}/gaia/automations/toggle`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({id, enabled, room})
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'errore sconosciuto');
+  } catch (e) {
+    alert("Errore nel salvare l'automazione: " + (e.message || e));
+  }
+  loadAutomations();
+}
+
+async function loadRegister() {
+  const sel = document.getElementById('register-select');
+  try {
+    const r = await fetch(`${NODERED_API}/gaia/register`, {signal: AbortSignal.timeout(3000)});
+    if (!r.ok) throw new Error();
+    const d = await r.json();
+    sel.innerHTML = (d.options || []).map(o => `<option value="${o.id}">${o.label}</option>`).join('');
+    sel.value = d.register;
+  } catch {
+    sel.innerHTML = '<option value="">Errore di connessione</option>';
+  }
+}
+
+async function setRegister(register) {
+  try {
+    const r = await fetch(`${NODERED_API}/gaia/register/set`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({register})
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'errore sconosciuto');
+    setMsg('register-msg', `✓ Registro: ${register}`, 'ok');
+  } catch (e) {
+    setMsg('register-msg', `✗ Errore nel salvare il registro: ${e.message || e}`, 'err');
+    loadRegister();
+  }
+}
+
+async function loadQuietHours() {
+  try {
+    const r = await fetch(`${NODERED_API}/gaia/quiethours`, {signal: AbortSignal.timeout(3000)});
+    if (!r.ok) throw new Error();
+    const d = await r.json();
+    document.getElementById('quiet-start').value = d.start;
+    document.getElementById('quiet-end').value = d.end;
+  } catch {
+    setMsg('quiet-msg', 'Errore di connessione', 'err');
+  }
+}
+
+async function saveQuietHours() {
+  const start = parseInt(document.getElementById('quiet-start').value, 10);
+  const end = parseInt(document.getElementById('quiet-end').value, 10);
+  if (isNaN(start) || isNaN(end) || start < 0 || start > 23 || end < 0 || end > 23) {
+    setMsg('quiet-msg', '✗ Ore non valide (0-23)', 'err');
+    return;
+  }
+  try {
+    const r = await fetch(`${NODERED_API}/gaia/quiethours/set`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({start, end})
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'errore sconosciuto');
+    setMsg('quiet-msg', `✓ Silenzio dalle ${start} alle ${end}`, 'ok');
+  } catch (e) {
+    setMsg('quiet-msg', `✗ Errore nel salvare: ${e.message || e}`, 'err');
+    loadQuietHours();
+  }
+}
+
+async function loadVjInterval() {
+  try {
+    const r = await fetch(`${NODERED_API}/gaia/vj/interval`, {signal: AbortSignal.timeout(3000)});
+    if (!r.ok) throw new Error();
+    const d = await r.json();
+    document.getElementById('vj-interval').value = d.interval_s;
+  } catch {
+    setMsg('vj-interval-msg', 'Errore di connessione', 'err');
+  }
+}
+
+async function saveVjInterval() {
+  const s = parseInt(document.getElementById('vj-interval').value, 10);
+  if (isNaN(s) || s < 3 || s > 600) {
+    setMsg('vj-interval-msg', '✗ Intervallo non valido (3-600s)', 'err');
+    return;
+  }
+  try {
+    const r = await fetch(`${NODERED_API}/gaia/vj/interval`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({interval_s: s})
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'errore sconosciuto');
+    setMsg('vj-interval-msg', `✓ Intervallo VJ: ${s}s`, 'ok');
+  } catch (e) {
+    setMsg('vj-interval-msg', `✗ Errore nel salvare: ${e.message || e}`, 'err');
+    loadVjInterval();
+  }
+}
+
+async function loadVjClips() {
+  try {
+    const r = await fetch(`${NODERED_API}/gaia/vj/patchdeck-clips`, {signal: AbortSignal.timeout(3000)});
+    if (!r.ok) throw new Error();
+    const d = await r.json();
+    document.getElementById('vj-clips').value = (d.clips || []).join(', ');
+    const avail = d.available || [];
+    document.getElementById('vj-clips-available').textContent = avail.length
+      ? `oggi ${avail.length}: ${avail[0]}-${avail[avail.length - 1]}`
+      : 'nessun device visto ancora';
+  } catch {
+    setMsg('vj-clips-msg', 'Errore di connessione', 'err');
+  }
+}
+
+async function saveVjClips() {
+  const raw = document.getElementById('vj-clips').value.trim();
+  const clips = raw ? raw.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n)) : [];
+  if (raw && !clips.length) {
+    setMsg('vj-clips-msg', '✗ Nessun numero valido trovato', 'err');
+    return;
+  }
+  try {
+    const r = await fetch(`${NODERED_API}/gaia/vj/patchdeck-clips`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({clips})
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'errore sconosciuto');
+    setMsg('vj-clips-msg', d.clips.length ? `✓ Patch ammesse: ${d.clips.join(', ')}` : '✓ Tutte le 38 patch ammesse', 'ok');
+    document.getElementById('vj-clips').value = d.clips.join(', ');
+  } catch (e) {
+    setMsg('vj-clips-msg', `✗ Errore nel salvare: ${e.message || e}`, 'err');
+    loadVjClips();
+  }
+}
+
+async function loadVjDmxDevices() {
+  const list = document.getElementById('vj-dmx-devices-list');
+  try {
+    const r = await fetch(`${NODERED_API}/gaia/vj/dmx-devices`, {signal: AbortSignal.timeout(3000)});
+    if (!r.ok) throw new Error();
+    const d = await r.json();
+    const allowed = new Set(d.devices || []);
+    const available = d.available || [];
+    // Un device attualmente selezionato ma non (più) visto tra i family=dmx
+    // noti (es. spento in questo momento) resta comunque in lista, altrimenti
+    // salvare di nuovo lo farebbe sparire silenziosamente dall'allowlist.
+    for (const id of allowed) {
+      if (!available.some(a => a.id === id)) available.push({id, stanza: null, online: false});
+    }
+    if (!available.length) {
+      list.innerHTML = '<span style="color:var(--muted);font-size:.82rem">Nessun device DMX visto finora — accendi PatchDeck/DMX/Herbarium almeno una volta.</span>';
+      return;
+    }
+    list.innerHTML = available.map(a => `
+      <label style="display:flex;align-items:center;gap:8px;font-size:.85rem">
+        <input type="checkbox" data-dmx-id="${a.id}" ${allowed.has(a.id) ? 'checked' : ''}>
+        <span>${a.id}</span>
+        <span style="color:var(--muted)">${a.stanza ? '(' + a.stanza + ')' : ''} ${a.online ? '🟢' : '🔴'}</span>
+      </label>`).join('');
+  } catch {
+    list.innerHTML = '';
+    setMsg('vj-dmx-devices-msg', 'Errore di connessione', 'err');
+  }
+}
+
+async function saveVjDmxDevices() {
+  const devices = Array.from(document.querySelectorAll('#vj-dmx-devices-list input[data-dmx-id]:checked'))
+    .map(el => el.dataset.dmxId);
+  try {
+    const r = await fetch(`${NODERED_API}/gaia/vj/dmx-devices`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({devices})
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'errore sconosciuto');
+    setMsg('vj-dmx-devices-msg', d.devices.length ? `✓ DMX pilotati: ${d.devices.join(', ')}` : '✓ Tutti i DMX online', 'ok');
+  } catch (e) {
+    setMsg('vj-dmx-devices-msg', `✗ Errore nel salvare: ${e.message || e}`, 'err');
+    loadVjDmxDevices();
+  }
+}
+
+// ── Core tab helpers ──────────────────────────────────────────────────────────
+function updateCoreDot(id, active) {
+  const dot = document.getElementById(id + '-dot');
+  const txt = document.getElementById(id + '-txt');
+  if (dot) dot.style.background = active ? 'var(--green)' : 'var(--red)';
+  if (txt) txt.textContent      = active ? 'running' : 'stopped';
+}
+
+let _corePreviewOpen = false;
+function toggleCamPreview() {
+  const img = document.getElementById('core-cam-preview');
+  const btn = document.getElementById('core-cam-preview-btn');
+  _corePreviewOpen = !_corePreviewOpen;
+  if (_corePreviewOpen) {
+    img.src = MJPEG_URL;
+    img.style.display = 'block';
+    btn.textContent = '■ Chiudi preview';
+  } else {
+    img.src = '';
+    img.style.display = 'none';
+    btn.textContent = '▶ Apri preview';
+  }
+}
+
+// ── Herbarium → superfici web (flag su Node-RED, persistito via MQTT retained)
+let _herbWebOn = null;
+
+function _herbWebRender() {
+  const dot = document.getElementById('herbweb-dot');
+  const btn = document.getElementById('herbweb-btn');
+  if (!dot || !btn) return;
+  dot.style.background = _herbWebOn ? 'var(--ok, #3fb950)' : 'var(--border)';
+  btn.textContent = _herbWebOn ? '■ Disattiva' : '▶ Attiva';
+}
+
+async function loadHerbWeb() {
+  try {
+    const d = await (await fetch('/gaia/config/herbweb')).json();
+    _herbWebOn = d.enabled !== false;
+  } catch { _herbWebOn = null; }
+  _herbWebRender();
+}
+
+async function toggleHerbWeb() {
+  try {
+    const d = await (await fetch('/gaia/config/herbweb', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({enabled: !_herbWebOn})
+    })).json();
+    _herbWebOn = d.enabled;
+  } catch {}
+  _herbWebRender();
+}
+
+async function coreServiceCtrl(svc, action) {
+  const msgEl = document.getElementById('core-svc-msg');
+  if (msgEl) { msgEl.textContent = `${action} ${svc}…`; msgEl.className = 'msg info'; }
+  try {
+    const r = await fetch(`${API}/api/core-service/${svc}/${action}`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'
+    });
+    const d = await r.json();
+    if (msgEl) {
+      msgEl.textContent = d.ok ? `✓ ${svc}: ${action}` : `✗ ${d.error || 'errore'}`;
+      msgEl.className   = 'msg ' + (d.ok ? 'ok' : 'err');
+    }
+  } catch {
+    if (msgEl) { msgEl.textContent = '✗ Errore connessione'; msgEl.className = 'msg err'; }
+  }
+  setTimeout(() => { if (msgEl) msgEl.textContent = ''; }, 5000);
+}
+
+// ── Controllo servizi voce ────────────────────────────────────────────────────
+async function controlListener(action) {
+  const labels = {start:'Avvio', stop:'Arresto', restart:'Riavvio'};
+  setMsg('core-svc-msg', `${labels[action]||action} gaia-listener…`, 'info');
+  try {
+    const r = await fetch(`${API}/api/service/listener/${action}`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'
+    });
+    const d = await r.json();
+    setMsg('core-svc-msg',
+      d.ok ? `✓ gaia-listener: ${action}` : `✗ ${d.error || d.output || 'errore (sudo mancante?)'}`,
+      d.ok ? 'ok' : 'err');
+  } catch { setMsg('core-svc-msg', '✗ Errore di connessione', 'err'); }
+  setTimeout(() => setMsg('core-svc-msg', ''), 5000);
+}
+
+// ── Stato Core (miniPC): gaia-listener/gaia-face/gaia-camera nel tab Pi Devices ──
+// Prima viveva dentro updateUI()/poll() (pagina Configurazione, spostata in
+// voce-volti.html il 2026-10-01) - estratto qui come poll leggero a sé, serve
+// solo i tre dot + badge "online/offline" della card "Gaia Core (miniPC)".
+async function coreStatusPoll() {
+  const cs = document.getElementById('conn-status');
+  try {
+    const r = await fetch(`${API}/api/status`, {signal: AbortSignal.timeout(3000)});
+    if (!r.ok) throw new Error();
+    const d = await r.json();
+    const listenerActive = d.listener_active !== false;
+    updateCoreDot('core-listener', listenerActive);
+    updateCoreDot('core-face',     d.services?.['gaia-face']     !== 'inactive');
+    updateCoreDot('core-cam',      d.services?.['gaia-camera']   !== 'inactive');
+    const csBtn = document.getElementById('core-start-btn');
+    const cxBtn = document.getElementById('core-stop-btn');
+    if (csBtn) csBtn.style.display = listenerActive ? 'none' : '';
+    if (cxBtn) cxBtn.style.display = listenerActive ? '' : 'none';
+    document.getElementById('core-status-badge').className   = 'badge ' + (listenerActive ? 'ok' : 'offline');
+    document.getElementById('core-status-badge').textContent = listenerActive ? 'online' : 'offline';
+    if (cs) { cs.textContent = 'connesso'; cs.style.color = 'var(--green)'; }
+  } catch {
+    document.getElementById('core-status-badge').className   = 'badge offline';
+    document.getElementById('core-status-badge').textContent = 'offline';
+    if (cs) { cs.textContent = 'offline – API non raggiungibile'; cs.style.color = 'var(--red)'; }
+  }
+  setTimeout(coreStatusPoll, 2000);
+}
+coreStatusPoll();
+
+loadAutomations();
+loadRegister();
+loadQuietHours();
+loadVjInterval();
+loadVjClips();
+loadVjDmxDevices();
+
+
+// ── Tab switching ─────────────────────────────────────────────────────────────
+function showTab(id, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  btn.classList.add('active');
+  history.replaceState(null, '', '#' + id);   // deep-link condivisibile
+  if (id === 'pi' && !_pmClient) initPiManager();
+  if (id === 'pi') loadProvision();
+  if (id === 'pi') { pmLoadPlants(); pmLoadDanteMatrix(); }
+}
+
+// Deep-link: admin.html#pi apre direttamente il tab (usato dal redirect
+// di pi-manager.html e dai link nelle altre pagine)
+window.addEventListener('DOMContentLoaded', () => {
+  const t = (location.hash || '').replace('#', '');
+  if (t && document.getElementById('tab-' + t)) {
+    const btn = document.querySelector(`.tab-btn[onclick*="'${t}'"]`);
+    if (btn) showTab(t, btn);
+  }
+  loadHerbWeb();
+});
+
+// ── Provisioning — device registrati via /api/provision ─────────────────────
+async function loadProvision() {
+  const listEl  = document.getElementById('prov-list');
+  const emptyEl = document.getElementById('prov-empty');
+  try {
+    const r = await fetch(`${API}/api/provision/devices`);
+    const d = await r.json();
+    const devices = Object.entries(d.devices || {});
+    if (!devices.length) {
+      listEl.style.display = 'none'; emptyEl.style.display = 'block';
+      return;
+    }
+    emptyEl.style.display = 'none'; listEl.style.display = 'block';
+    const fmtTs = ms => ms ? new Date(ms).toLocaleString('it-IT') : '—';
+    let html = `<table style="width:100%;border-collapse:collapse;font-size:.8rem">
+      <tr style="color:var(--muted);text-align:left">
+        <th style="padding:6px 8px">Device</th><th style="padding:6px 8px">HW</th>
+        <th style="padding:6px 8px">IP</th><th style="padding:6px 8px">SW</th>
+        <th style="padding:6px 8px">Stanza</th><th style="padding:6px 8px">Visto</th>
+        <th style="padding:6px 8px"></th>
+      </tr>`;
+    for (const [id, dev] of devices) {
+      const assigned = dev.stanza;
+      const stanzaCell = assigned
+        ? `<span style="color:var(--green,#3fb950)">${assigned}</span>`
+        : (dev.stanza_claim
+            ? `<span style="color:var(--muted)">${dev.stanza_claim} <em>(dichiarata)</em></span>`
+            : `<span style="color:var(--yellow,#d29922)">da assegnare</span>`);
+      html += `<tr style="border-top:1px solid var(--border)">
+        <td style="padding:6px 8px;font-weight:600">${id}</td>
+        <td style="padding:6px 8px;color:var(--muted)">${dev.hw || '—'}</td>
+        <td style="padding:6px 8px">${dev.ip || '—'}</td>
+        <td style="padding:6px 8px">${dev.sw_version || '—'}</td>
+        <td style="padding:6px 8px">${stanzaCell}</td>
+        <td style="padding:6px 8px;color:var(--muted)">${fmtTs(dev.last_seen)}</td>
+        <td style="padding:6px 8px;white-space:nowrap">
+          <input id="prov-in-${id}" placeholder="stanza" value="${assigned || dev.stanza_claim || ''}"
+                 style="width:90px;padding:3px 6px;font-size:.78rem">
+          <button class="small secondary" onclick="suggestRoom('${id}', '${dev.stanza_claim || assigned || ''}')" title="Suggerisci stanza dagli oggetti rilevati dalla camera (non assegna, solo suggerimento)">🔍</button>
+          <button class="small secondary" onclick="assignDevice('${id}')">✓ Assegna</button>
+          <button class="small danger" onclick="forgetDevice('${id}')" title="Rimuovi dal registro">✕</button>
+        </td>
+      </tr>`;
+    }
+    listEl.innerHTML = html + '</table>';
+  } catch (e) {
+    provMsg('✗ Errore caricamento: ' + e.message, false);
+  }
+}
+
+function provMsg(txt, ok) {
+  const el = document.getElementById('prov-msg');
+  el.textContent = txt;
+  el.className = 'msg ' + (ok ? 'ok' : 'err');
+  setTimeout(() => { el.textContent = ''; }, 5000);
+}
+
+async function suggestRoom(id, currentRoomKey) {
+  if (!currentRoomKey) { provMsg('✗ Nessuna stanza attuale nota per questo device — impossibile suggerire', false); return; }
+  try {
+    const r = await fetch(`http://${location.hostname}:1881/gaia/room-guess?room=${encodeURIComponent(currentRoomKey)}`);
+    const d = await r.json();
+    if (!d.ok || !d.best) {
+      provMsg(`ℹ️ Nessun suggerimento (oggetti insufficienti rilevati per "${currentRoomKey}")`, false);
+      return;
+    }
+    document.getElementById(`prov-in-${id}`).value = d.best.room;
+    const objs = (d.best.matched_objects || []).join(', ') || '—';
+    provMsg(`🔍 Suggerito: ${d.best.room} (${d.best.score}% — oggetti: ${objs}). Verifica e premi Assegna.`, true);
+  } catch (e) { provMsg('✗ ' + e.message, false); }
+}
+
+async function assignDevice(id) {
+  const stanza = (document.getElementById(`prov-in-${id}`).value || '').trim();
+  if (!stanza) { provMsg('✗ Inserisci il nome della stanza', false); return; }
+  try {
+    const r = await fetch(`${API}/api/provision/assign`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({device_id: id, stanza})
+    });
+    const d = await r.json();
+    provMsg(d.ok ? `✓ ${id} → ${stanza} (applicata via MQTT se online)` : `✗ ${d.error || 'errore'}`, d.ok);
+    loadProvision();
+  } catch (e) { provMsg('✗ ' + e.message, false); }
+}
+
+async function forgetDevice(id) {
+  if (!confirm(`Rimuovere ${id} dal registro provisioning?`)) return;
+  try {
+    const r = await fetch(`${API}/api/provision/forget`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({device_id: id})
+    });
+    const d = await r.json();
+    provMsg(d.ok ? `✓ ${id} rimosso` : `✗ ${d.error || 'errore'}`, d.ok);
+    loadProvision();
+  } catch (e) { provMsg('✗ ' + e.message, false); }
+}
+
+// ── Pi Manager MQTT ──────────────────────────────────────────────────────────
+let _pmClient = null;
+const _pmDevices = {};
+// PatchDeck/ControllerV7/DMX hanno pagine dedicate (patchdeck.html,
+// mixeraudio.html, dmx.html) -- niente box generico in Pi Devices:
+// PatchDeck ha 78 servizi, ControllerV7 588 parametri e DMX 25 per
+// scenario (register_param, non renderizzati affatto dalla griglia
+// servizi generica), sarebbero muri illeggibili o incompleti -- hanno
+// pagine dedicate (patchdeck/mixeraudio/dmx.html).
+// STORIA (2026-08-25 → 2026-08-30): prima un Set di device_id fissi
+// (rotto ad ogni rename TD, trovato marcio più volte: 2026-08-25 con
+// DMX multi-scenario, 2026-08-30 con l'intera flotta rinominata per la
+// nuova convenzione td-{family}-{macchina}) + una regex `/^td-dmx/i`
+// come pezza. Sostituito con un check STRUTTURALE sul `role` del
+// payload stesso -- ogni device TD lo pubblica sempre, a differenza del
+// device_id che può cambiare in qualunque momento (i device TD si
+// spostano di stanza/vengono rinominati liberamente, letto dal vivo dal
+// payload, mai assunto fisso). Nessuna lista da mantenere mai più.
+function pmIsHiddenFromGrid(d) {
+  return d && d.role === 'touchdesigner';
+}
+const PM_SVC_META = {
+  yolo:      { label: 'YOLO',      icon: '👁️' },
+  mediapipe: { label: 'MediaPipe', icon: '🖐️' },
+  voice:     { label: 'Voice',     icon: '🎤' },
+  camera:    { label: 'Camera',    icon: '📷' },
+  screen:    { label: 'Screen',    icon: '🖥️' },
+  scene:     { label: 'Scene',     icon: '🏞️' },
+  kiosk:     { label: 'Kiosk',     icon: '📺' },
+  mediaplayer: { label: 'Media',   icon: '🎵' },
+  touchdesigner: { label: 'TouchDesigner', icon: '🌉' },
+  herbarium: { label: 'Herbarium', icon: '🌿' },
+  herbsim:   { label: 'Herb. Sim', icon: '🎲' },
+  herbmp:    { label: 'Herb. MP',  icon: '🕺' },
+  livestream:{ label: 'LiveStream',icon: '📡' },
+  mosquitto: { label: 'MQTT Broker', icon: '📡' },
+  qdrant:    { label: 'Qdrant',    icon: '🧠' },
+  ollama:    { label: 'Ollama',    icon: '🤖' },
+  openhab:   { label: 'OpenHAB',   icon: '🏠' },
+};
+
+// Preset del motore musicale herbarium (music_engine.py PRESETS — tenere allineati)
+const HERB_PRESETS = [
+  ['pentatonica_calma', 'Pentatonica calma'],
+  ['accordi_maggiori',  'Accordi maggiori'],
+  ['drone_modale',      'Drone modale'],
+  ['arpeggio_arioso',   'Arpeggio arioso'],
+  ['blues_notturno',    'Blues notturno'],
+  ['cromatico_libero',  'Cromatico libero'],
+  ['ambient_profondo',    'Ambient profondo'],
+  ['ambient_cristallino', 'Ambient cristallino'],
+  ['ambient_notturno',    'Ambient notturno'],
+  ['ambient_respiro',     'Ambient respiro'],
+  ['ambient_alba',        'Ambient alba'],
+  ['melodico_cantabile',  'Melodico cantabile'],
+  ['drone_infinito',      'Drone infinito'],
+  ['arabeggiante',        'Arabeggiante'],
+];
+const _pmHerbPreset = {};   // stanza -> preset attuale (da gaia/herbarium/+/state)
+const _pmHerbVol    = {};   // stanza -> volume batteria attuale (0-100, da gaia/herbarium/+/state)
+const _pmLiveSource    = {};   // stanza -> sorgente attuale ("mic"|"library", da gaia/livestream/+/state)
+const _pmLiveListeners = {};   // stanza -> numero ascoltatori attuale
+const _pmLiveMicDevice  = {};   // stanza -> label mic attuale (solo se il Pi ha più mic USB configurati)
+const _pmLiveMicOptions = {};   // stanza -> [label, ...] mic disponibili
+
+async function pmCleanRooms() {
+  try {
+    const base = `http://${location.hostname}:1881`;
+    const rooms = (await (await fetch(`${base}/gaia/rooms`)).json()).rooms;
+    const orphans = Object.entries(rooms)
+      .filter(([n, v]) => !v.devices.length && !v.in_map).map(([n]) => n);
+    if (!orphans.length) { alert('Nessuna stanza orfana — tutto pulito ✓'); return; }
+    if (!confirm(`Stanze orfane (nessun device, fuori mappa): ${orphans.join(', ')}\nPulisco dati e topic retained?`)) return;
+    for (const room of orphans)
+      await fetch(`${base}/gaia/rooms/clean`, { method: 'POST',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ room }) });
+    alert('Pulite: ' + orphans.join(', '));
+  } catch (e) { alert('Errore pulizia: ' + e.message); }
+}
+
+// Complemento di pmCleanRooms() (2026-08-31, richiesto esplicitamente):
+// quella pulisce solo le STANZE senza device -- un device zombie ancora
+// "assegnato" a una stanza (es. un vecchio nome TD morto da ore) non la
+// rende orfana, la lascia sporca finché il device stesso non viene
+// dimenticato. Stessa soglia di sicurezza già nel backend (DeviceForget
+// rifiuta <10 min senza force) -- filtrato qui PRIMA di mostrare la lista,
+// così quello che si conferma è sempre quello che verrà davvero rimosso,
+// mai un tentativo che il backend rifiuterebbe silenziosamente.
+async function pmCleanOfflineDevices() {
+  try {
+    const base = `http://${location.hostname}:1881`;
+    const devices = (await (await fetch(`${base}/gaia/devices`)).json()).devices || [];
+    const now = Date.now();
+    const stale = devices
+      .filter(d => d.online === false && typeof d.lastSeen === 'number' && (now - d.lastSeen) >= 10 * 60000)
+      .map(d => ({ id: d.id, ageMin: Math.round((now - d.lastSeen) / 60000) }));
+    if (!stale.length) { alert('Nessun device offline da 10+ minuti — tutto pulito ✓'); return; }
+    const list = stale.map(d => `${d.id} (muto da ${d.ageMin} min)`).join('\n');
+    if (!confirm(`Device offline da dimenticare:\n${list}\n\nPulisco registry e topic retained?`)) return;
+    const failed = [];
+    for (const d of stale) {
+      const r = await fetch(`${base}/gaia/device/forget`, { method: 'POST',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ device_id: d.id }) });
+      if (!r.ok) failed.push(d.id);
+    }
+    alert(failed.length
+      ? `Dimenticati: ${stale.map(d=>d.id).filter(id=>!failed.includes(id)).join(', ') || '(nessuno)'}\nFalliti: ${failed.join(', ')}`
+      : 'Dimenticati: ' + stale.map(d => d.id).join(', '));
+  } catch (e) { alert('Errore pulizia device: ' + e.message); }
+}
+
+function initPiManager() {
+  // mosquitto resta su Core anche se Node-RED gira altrove (2026-08-08,
+  // migrazione OPS) -- stesso principio di API/MJPEG_URL sopra, il broker
+  // non segue location.hostname. Prova prima la LAN (piu' diretta quando
+  // disponibile), poi l'IP Tailscale di Core come fallback -- senza
+  // questo, aprire Pi Manager da fuori la LAN di casa (rete mobile, WiFi
+  // diverso) lasciava per sempre "Disconnesso" e la griglia vuota anche
+  // con tutto il backend perfettamente sano (bug reale, trovato dal vivo
+  // 2026-09-02: "API non connesse" da fuori casa mentre ogni controllo
+  // lato server risultava pulito -- stesso identico gap di IP fisso senza
+  // fallback gia' trovato e fissato per l'agent della macchina touring).
+  const LAN_HOST       = '192.168.1.240';
+  const TAILSCALE_HOST = '100.91.251.83';
+// 2026-10-26: broker e pagina sono sulla stessa macchina (OPS): prima l'host della pagina
+const BROKER_HOSTS = [...new Set([location.hostname, LAN_HOST, TAILSCALE_HOST].filter(Boolean))]; let brokerIdx = 0;
+  // TERZO giro (2026-09-09). Il secondo giro (bidirezionale ma con
+  // reconnectPeriod:0 su ogni tentativo) disattivava il riconnect
+  // automatico di mqtt.js anche sullo stesso host -- un blip di rete
+  // normalissimo (prima autorisolto in background) faceva scattare un
+  // cambio LAN<->Tailscale completo ad ogni piccola interruzione,
+  // segnalato dal vivo "non sembra funzionare" su una pagina gemella. Fix
+  // corretto: reconnect automatico LASCIATO ATTIVO, un watchdog ESTERNO
+  // prova l'altro lato solo dopo 10s consecutivi scollegato (non un blip).
+  let switching = false;
+  let offlineSince = null;
+  let currentIsFallback = false;
+
+  function startMqtt(host, isFallback) {
+    currentIsFallback = isFallback;
+    document.getElementById('pm-broker-label').textContent = host;
+    const mqttUrl = `ws://${host}:19001`;
+    _pmClient = mqtt.connect(mqttUrl, { connectTimeout: 4000 });
+    _pmClient.on('connect', () => {
+      offlineSince = null;
+      pmSetConn(true);
+      _pmClient.subscribe('gaia/device/+/status');
+      _pmClient.subscribe('gaia/herbarium/+/state');
+      _pmClient.subscribe('gaia/livestream/+/state');
+      _pmClient.subscribe('gaia/td-bridge/status');
+      _pmClient.subscribe('gaia/mocap-bridge/+/status');
+      _pmClient.subscribe('gaia/voice/stats/+');
+      pmLog('in', `Connesso a ${mqttUrl}`);
+    });
+    _pmClient.on('error',   e  => { pmSetConn(false); pmLog('err', e.message || 'Errore MQTT'); if (offlineSince === null) offlineSince = Date.now(); });
+    _pmClient.on('offline', () => { pmSetConn(false); if (offlineSince === null) offlineSince = Date.now(); });
+    _pmClient.on('reconnect', () => pmLog('err', 'Riconnessione…'));
+    _pmClient.on('message', (topic, raw) => {
+      if (!raw || !raw.length) return;
+      if (topic === 'gaia/td-bridge/status') {
+        try { pmTdRender(JSON.parse(raw.toString()).targets || {}); }
+        catch(e) { pmLog('err', 'Parse td-bridge: ' + e.message); }
+        return;
+      }
+      if (topic.startsWith('gaia/mocap-bridge/') && topic.endsWith('/status')) {
+        const sender = topic.split('/')[2];
+        try { _pmMocapBySender[sender] = JSON.parse(raw.toString()).targets || {}; pmMocapRender(); }
+        catch(e) { pmLog('err', 'Parse mocap-bridge: ' + e.message); }
+        return;
+      }
+      if (topic.startsWith('gaia/herbarium/') && topic.endsWith('/state')) {
+        try {
+          const st = JSON.parse(raw.toString());
+          const stanza = topic.split('/')[2];
+          if (st && st.preset) {
+            _pmHerbPreset[stanza] = st.preset;
+            document.querySelectorAll(`.pm-inp-herbpreset[data-stanza="${stanza}"]`)
+              .forEach(sel => { sel.value = st.preset; });
+          }
+          if (st && st.drum_volume != null) {
+            _pmHerbVol[stanza] = st.drum_volume;
+            document.querySelectorAll(`.pm-inp-herbvol[data-stanza="${stanza}"]`)
+              .forEach(inp => { if (document.activeElement !== inp) {
+                inp.value = st.drum_volume;
+                const lbl = inp.parentElement.querySelector('.pm-herbvol-lbl');
+                if (lbl) lbl.textContent = st.drum_volume + '%';
+              }});
+          }
+        } catch(e) {}
+        return;
+      }
+      if (topic.startsWith('gaia/voice/stats/')) {
+        try {
+          const st = JSON.parse(raw.toString());
+          const stanza = topic.split('/')[3];
+          if (st && st.mic_device_name) {
+            for (const [devId, dev] of Object.entries(_pmDevices)) {
+              if (dev.stanza !== stanza) continue;
+              const el = document.getElementById(`pm-mic-${devId}`);
+              if (el) {
+                el.innerHTML = pmMicBadgeHtml(st.mic_device_name, !!st.mic_is_bluetooth);
+                el.style.display = '';
+              }
+            }
+          }
+        } catch(e) {}
+        return;
+      }
+      if (topic.startsWith('gaia/livestream/') && topic.endsWith('/state')) {
+        try {
+          const st = JSON.parse(raw.toString());
+          const stanza = topic.split('/')[2];
+          if (st && st.source) {
+            _pmLiveSource[stanza] = st.source;
+            document.querySelectorAll(`.pm-inp-livesource[data-stanza="${stanza}"]`)
+              .forEach(sel => { if (document.activeElement !== sel) sel.value = st.source; });
+          }
+          _pmLiveListeners[stanza] = st?.active ? (st.listeners||0) : 0;
+          if (st && st.mic_device_options) {
+            const hadOptions = (_pmLiveMicOptions[stanza]||[]).length > 1;
+            _pmLiveMicOptions[stanza] = st.mic_device_options;
+            _pmLiveMicDevice[stanza]  = st.mic_device;
+            const sels = document.querySelectorAll(`.pm-inp-livemic[data-stanza="${stanza}"]`);
+            if (!hadOptions && st.mic_device_options.length > 1 && !sels.length) {
+              // Le opzioni sono arrivate via MQTT DOPO che la card era già stata
+              // costruita (a differenza del selettore sorgente, sempre presente,
+              // questo blocco è condizionale sui dati) -- il blocco select non
+              // esisteva ancora nel DOM, va ricostruita la card intera una volta
+              // per farlo comparire. Le altre chiamate (cambio valore) restano
+              // un patch leggero, non toccano il resto della card.
+              const entry = Object.entries(_pmDevices).find(([, d]) => d.stanza === stanza);
+              if (entry) {
+                const [devId, devData] = entry;
+                document.getElementById(`pm-card-${devId}`)?.remove();
+                pmBuildCard(devId, devData);
+              }
+            } else {
+              sels.forEach(sel => { if (document.activeElement !== sel && st.mic_device) sel.value = st.mic_device; });
+            }
+          }
+        } catch(e) {}
+        return;
+      }
+      try {
+        const d = JSON.parse(raw.toString());
+        const id = d.device_id;
+        if (!id) return;
+        if (pmIsHiddenFromGrid(d)) {
+          const stale = document.getElementById(`pm-card-${id}`);
+          if (stale) stale.remove();
+          return;
+        }
+        // Usa il ts INCORPORATO nel messaggio, non l'orario di ricezione --
+        // un retained vecchio di ore/giorni arriva "ora" ma non è affatto
+        // fresco (stesso bug già trovato e fissato una volta nel watchdog
+        // Python TDDeviceRegistry, reintrodotto qui — vedi memoria). Senza
+        // questo fix un device morto da giorni sembra online per i primi
+        // 90s dopo ogni apertura della pagina.
+        d._lastSeen = d.ts || Date.now();
+        d._offline  = (Date.now() - d._lastSeen) > pmStaleMs(d.family);
+        _pmDevices[id] = d;
+        pmApplyCardVisibility(id, d);
+        pmLog('in', `[${id}] stanza=${d.stanza||'?'} ip=${d.ip||'?'}${d._offline ? ' (offline, nascosto)' : ''}`);
+        pmWelcomeMenuRender();
+        pmRenderOfflineCount();
+        // Un client TD (role touchdesigner) porta Mocapingest/Opsdevice in
+        // `params` -- la matrice mocap li legge da _pmDevices per il
+        // pallino verde/giallo, va ridisegnata anche quando è QUESTO
+        // status (non solo gaia/mocap-bridge/+/status) a cambiare.
+        if (d.role === 'touchdesigner') pmMocapRender();
+      } catch(e) { pmLog('err', 'Parse: ' + e.message); }
+    });
+  }
+
+  // Watchdog esterno: cambia lato SOLO dopo 10s consecutivi scollegato,
+  // non su ogni blip (mqtt.js ritenta da solo lo stesso host nel frattempo).
+  setInterval(() => {
+    if (offlineSince !== null && !switching && Date.now() - offlineSince > 10000) {
+      switching = true;
+      const wasFallback = currentIsFallback;
+      pmLog('err', `Offline da oltre 10s, provo ${BROKER_HOSTS[(brokerIdx + 1) % BROKER_HOSTS.length]}…`);
+      _pmClient.end(true);
+      setTimeout(() => {
+        switching = false;
+        offlineSince = null;
+        (brokerIdx = (brokerIdx + 1) % BROKER_HOSTS.length, startMqtt(BROKER_HOSTS[brokerIdx], brokerIdx > 0));
+      }, 500);
+    }
+  }, 3000);
+
+  // Fuori da startMqtt apposta: non va duplicato se scatta il fallback
+  // Tailscale (altrimenti due interval identici in corsa).
+  setInterval(() => {
+    const now = Date.now();
+    let changed = false;
+    for (const [id, d] of Object.entries(_pmDevices)) {
+      const was = d._offline;
+      d._offline = (now - d._lastSeen) > pmStaleMs(d.family);
+      if (was !== d._offline) { pmApplyCardVisibility(id, d); changed = true; }
+    }
+    if (changed) { pmWelcomeMenuRender(); pmRenderOfflineCount(); }
+  }, 10000);
+
+  if (typeof mqtt !== 'undefined') {
+    startMqtt(BROKER_HOSTS[0], false);
+  } else {
+    const s = document.createElement('script');
+    s.src = 'vendor/mqtt.min.js';
+    s.onload = () => startMqtt(BROKER_HOSTS[0], false);
+    s.onerror = () => pmLog('err', 'Impossibile caricare mqtt.js');
+    document.head.appendChild(s);
+  }
+}
+
+function pmSetConn(ok) {
+  const dot   = document.getElementById('mqtt-dot');
+  const label = document.getElementById('pm-conn-label');
+  if (dot)   dot.className   = 'mqtt-dot ' + (ok ? 'ok' : 'err');
+  if (label) label.textContent = ok ? 'Connesso' : 'Disconnesso';
+  if (label) label.style.color = ok ? 'var(--green)' : 'var(--red)';
+}
+
+function pmEsc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function pmFmtUp(sec) { if(!sec)return''; const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60); return h?`${h}h ${m}m`:`${m}m`; }
+
+// ── TouchDesigner — pausa/ripresa flussi OSC (gaia/td-bridge/status|command) ──
+// Il feed OSC (canale 1, flatten grezzo -- legenda persone/oggetti, sfera
+// reattiva) ha senso solo per istanze TD che RENDERIZZANO qualcosa di
+// visivo -- ControllerV7/mixeraudio è audio-only per design, non ha nessun
+// oscin1 nel progetto (richiesto esplicitamente 2026-08-31: "non ha senso
+// inviare dati OSC al controller... la UI lo permette, intasiamo la rete
+// per nulla"). Il bridge (osc_bridge.py, live_ips()) ora esclude già
+// mixeraudio dal fanout reale -- qui è solo per non offrire un pulsante
+// pausa/ripresa privo di senso, stesso principio di pmMocapIsRelevant.
+// DMX resta visibile (non lo consuma oggi, ma l'utente ha lasciato la
+// porta aperta per il futuro), a differenza del mocap dove è escluso.
+// I device TD (dmx/patchdeck/mixeraudio) non hanno un heartbeat periodico
+// fisso -- osservato dal vivo 2026-09-11 su td-pd-winnic sia ~6.5min che
+// ~15.5min tra due publish (sembra event-driven, non un timer), non ogni
+// 30s come Pi/OPS -- una soglia unica a 90s li marcava offline anche se
+// attivi (stesso bug fissato in patchdeck.html/dmx.html/mixeraudio.html
+// lo stesso giorno). 1800000ms = 30min per loro (volutamente permissiva
+// finche' non si sa se/come rendere il publish TD-side piu' regolare),
+// 90000ms invariato per tutti gli altri (Pi/OPS/TD-bridge/mocap-bridge).
+const PM_STALE_MS_TD = 1800000;
+function pmStaleMs(family) {
+  return (family === 'dmx' || family === 'patchdeck' || family === 'mixeraudio') ? PM_STALE_MS_TD : 90000;
+}
+
+function pmTdOscIsRelevant(family) { return family !== 'mixeraudio'; }
+
+function pmTdRender(targets) {
+  const wrap  = document.getElementById('pm-td-targets');
+  const empty = document.getElementById('pm-td-no-targets');
+  // Offline tolto dalla vista, non solo affievolito -- stesso principio
+  // gia' applicato alla griglia Pi Manager (segnalato dal vivo 2026-08-25:
+  // qui restavano tracce anche dopo il fix del box principale).
+  const entries = Object.entries(targets || {})
+    .filter(([, t]) => !t.offline && pmTdOscIsRelevant(t.family));
+  if (!entries.length) { empty.style.display = ''; wrap.style.display = 'none'; return; }
+  empty.style.display = 'none';
+  wrap.style.display = '';
+  wrap.innerHTML = entries.map(([id, t]) => `
+    <div class="pi-card" style="display:flex;align-items:center;gap:12px;padding:12px 16px;margin-bottom:8px">
+      <div style="flex:1;min-width:0">
+        <div class="pi-display-name">${pmEsc(t.name || id)}</div>
+        <div class="pi-device-id">${pmEsc(id)} · ${pmEsc(t.ip||'?')}${t.stanza?' · '+pmEsc(t.stanza):''}</div>
+      </div>
+      <span class="pm-badge ${t.paused ? '' : 'cap'}">${t.paused ? '⏸ in pausa' : '▶ attivo'}</span>
+      <button class="pm-btn ${t.paused ? 'green' : 'gray'}" onclick="pmTdToggle('${id}','${t.paused ? 'resume' : 'pause'}')">
+        ${t.paused ? 'Riprendi' : 'Pausa'}
+      </button>
+    </div>
+  `).join('');
+}
+
+function pmTdToggle(deviceId, action) {
+  if (!_pmClient || !_pmClient.connected) { pmLog('err', 'MQTT non connesso'); return; }
+  _pmClient.publish('gaia/td-bridge/command', JSON.stringify({ device_id: deviceId, action }));
+  pmLog('out', `td-bridge ${deviceId}: ${action}`);
+}
+
+// ── Mocap diretto — abilitazione per istanza, opt-in (gaia/mocap-bridge/{sender}/status|command) ──
+const _pmMocapBySender = {};   // sender_device_id -> {td_device_id: {ip,name,stanza,enabled,offline}}
+
+// Il mocap ha senso solo per istanze TD che RENDERIZZANO qualcosa che
+// reagisce al corpo (Gaia TD generica, PatchDeck) -- ControllerV7/
+// mixeraudio (audio) non lo usano mai, per design (confermato dall'utente
+// 2026-08-25). DMX invece sì da 2026-10-01: PTZ teste mobili pilotata dal
+// mocap (GAIA_INTERFACE.md "TD/Win-PD, 9/11") -- tolto dall'esclusione
+// 2026-10-05. Il registry lato mediapipe_node.py li registra comunque
+// (qualunque role=="touchdesigner", nessun filtro per capability oggi) --
+// filtrato qui solo per non offrirli come opt-in inutile/confuso, non
+// cambia cosa viene davvero inviato (di default enabled=false per
+// chiunque non sia sulla stessa macchina, quindi non riceverebbero nulla
+// comunque finché non abilitati a mano).
+// Prima un controllo sul device_id (rotto al primo rename, stesso motivo
+// di pmIsHiddenFromGrid sopra) -- ora legge `family` (aggiunto al target
+// da mediapipe_node.py 2026-08-30), letto dal vivo invece che dedotto dal
+// nome. Fallback sul vecchio pattern finché i Pi/OPS non hanno ricevuto
+// l'aggiornamento e riavviato mediapipe (family manca nei target vecchi).
+function pmMocapIsRelevant(id, family) {
+  if (family) return family !== 'mixeraudio';
+  return id !== 'td-controllerv7-macbook-air-di-mauro';
+}
+
+// Matrice sender × ricevitore (2026-09-30, sostituisce la lista piatta) —
+// richiesta dall'utente: con più sender e più client TD insieme, una lista
+// di coppie già scoperte non rende affatto ovvio "chi ascolta chi ADESSO",
+// soprattutto ora che Opsdevice lato TD è un valore SINGOLO (un client TD
+// ascolta un solo sender alla volta, anche se più sender risultano
+// "enabled" verso di lui dal lato Admin — abilitarne un secondo TOGLIE
+// silenziosamente l'ascolto al primo). La matrice incrocia lo stato del
+// sender (_pmMocapBySender, "sto mandando pacchetti") con lo stato REALE
+// del client TD (_pmDevices[td_id].params, popolato dallo stesso
+// gaia/device/+/status già sottoscritto per le card normali — non serve
+// una subscription nuova) per distinguere "inviato" da "ascoltato per
+// davvero", invece di fidarsi solo del lato sender come faceva la lista.
+function pmMocapRender() {
+  const wrap  = document.getElementById('pm-mocap-targets');
+  const empty = document.getElementById('pm-mocap-no-targets');
+  const senders = Object.keys(_pmMocapBySender).sort();
+  const targetIds = new Set();
+  const targetMeta = {};
+  senders.forEach(sender => {
+    Object.entries(_pmMocapBySender[sender] || {}).forEach(([id, t]) => {
+      if (t.offline || !pmMocapIsRelevant(id, t.family)) return;
+      targetIds.add(id);
+      targetMeta[id] = t;   // name/stanza uguali per qualunque sender li abbia visti
+    });
+  });
+  const targets = [...targetIds].sort();
+  if (!senders.length || !targets.length) { empty.style.display = ''; wrap.style.display = 'none'; return; }
+  empty.style.display = 'none';
+  wrap.style.display = '';
+
+  const head = `<th style="text-align:left;padding:6px 10px;font-size:.75rem;color:var(--muted)">Sender ↓ / Client TD →</th>` +
+    targets.map(id => `<th style="padding:6px 10px;font-size:.75rem;text-align:center;min-width:110px">${pmEsc(targetMeta[id].name||id)}<div style="font-weight:400;color:var(--muted)">${pmEsc(targetMeta[id].stanza||'')}</div></th>`).join('');
+
+  const body = senders.map(sender => {
+    const cells = targets.map(id => {
+      const t = (_pmMocapBySender[sender] || {})[id];
+      if (!t) return `<td style="text-align:center;color:var(--muted)">—</td>`;
+      // DMX (family 'dmx') riceve con un OSC In proprio dentro il progetto
+      // (porta 7010, PTZ teste mobili) -- non passa da oscin_mocap/
+      // Mocapingest del gaia_client, quindi Opsdevice/Mocapingest non sono
+      // un segnale valido lì: l'unico stato che Core conosce è se il
+      // sender ha il target abilitato (GAIA_INTERFACE.md "TD/Win-PD, 11").
+      const isDmx = t.family === 'dmx';
+      const p = _pmDevices[id]?.params || {};
+      const live = isDmx ? t.enabled : (t.enabled && p.Mocapingest === true && p.Opsdevice === sender);
+      const sentNotHeard = !isDmx && t.enabled && !live;
+      const dot = live ? '🟢' : sentNotHeard ? '🟡' : '⚪';
+      const title = isDmx ? (live ? 'sender abilitato — la ricezione (porta 7010) è gestita dentro DMX V8, non da Mocapingest' : 'non abilitato')
+                  : live ? 'attivo — il client sta ascoltando proprio questo sender'
+                  : sentNotHeard ? 'inviato ma il client ascolta un altro sender (Opsdevice non combacia)'
+                  : 'non abilitato';
+      return `<td style="text-align:center;padding:4px">
+        <button class="pm-btn ${t.enabled?'gray':'green'}" style="width:auto;padding:2px 10px;font-size:.75rem"
+          title="${pmEsc(title)}"
+          onclick="pmMocapToggle('${pmEsc(sender)}','${pmEsc(id)}','${t.enabled ? 'disable' : 'enable'}','${pmEsc(t.family||'')}')">
+          ${dot} ${t.enabled ? 'Disabilita' : 'Abilita'}
+        </button>
+      </td>`;
+    }).join('');
+    return `<tr><td style="padding:6px 10px;font-size:.8rem;white-space:nowrap">${pmEsc(sender)}</td>${cells}</tr>`;
+  }).join('');
+
+  wrap.innerHTML = `
+    <div style="overflow-x:auto">
+      <table style="border-collapse:collapse;width:100%">
+        <thead><tr>${head}</tr></thead>
+        <tbody>${body}</tbody>
+      </table>
+    </div>
+    <div style="font-size:.72rem;color:var(--muted);margin-top:8px">
+      🟢 il client ascolta proprio questo sender · 🟡 il sender manda ma il client ascolta un altro (Opsdevice non combacia) · ⚪ non abilitato — un client ascolta un solo sender alla volta, abilitarne un secondo toglie l'ascolto al primo.
+    </div>`;
+}
+
+// Collega il pulsante Admin al client TD (2026-09-30, GAIA_INTERFACE.md):
+// prima "Abilita" toccava SOLO il sender (mandava pacchetti OSC a
+// vuoto se l'operatore non aveva impostato Mocapingest/Opsdevice a
+// mano dentro TD, stessa "trappola" del Opsdevice sbagliato vista da
+// TD/Mac). Ora manda ANCHE i due comandi sul canale 4 del client TD
+// stesso (register_param di gaia_client, forma confermata e verificata
+// dal vivo da TD/Mac) -- un solo click, zero passaggi manuali in TD.
+// Disabilita e' simmetrico: spegne anche Mocapingest lato TD (Opsdevice
+// resta, e' solo un filtro, innocuo con ingest spento).
+//
+// DMX V8 (family 'dmx') è un'eccezione, "solo sender" (GAIA_INTERFACE.md
+// "TD/Win-PD, 11", 2026-10-05): la sua PTZ ha un OSC In proprio sulla
+// stessa porta 7010 di oscin_mocap del gaia_client, non passa da
+// Mocapingest/Opsdevice. Mandarglieli comunque farebbe fallire il bind di
+// test della guardia in mocap_lifecycle.py (falso "PORT 7010 BUSY") e
+// accenderebbe una pipeline (oscin_mocap + 4 Script CHOP) che DMX non usa.
+function pmMocapToggle(sender, deviceId, action, family) {
+  if (!_pmClient || !_pmClient.connected) { pmLog('err', 'MQTT non connesso'); return; }
+  _pmClient.publish(`gaia/mocap-bridge/${sender}/command`, JSON.stringify({ device_id: deviceId, action }));
+  if (family === 'dmx') {
+    pmLog('out', `mocap ${sender}→${deviceId}: ${action} (solo sender — DMX riceve con il proprio OSC In, non tocco Mocapingest/Opsdevice)`);
+    return;
+  }
+  const enabling = action === 'enable';
+  const tdTopic = `gaia/device/${deviceId}/command`;
+  if (enabling) {
+    _pmClient.publish(tdTopic, JSON.stringify({ action: 'set', param: 'Opsdevice', value: sender }));
+  }
+  _pmClient.publish(tdTopic, JSON.stringify({ action: 'set', param: 'Mocapingest', value: enabling }));
+  pmLog('out', `mocap ${sender}→${deviceId}: ${action} (sender + client TD)`);
+}
+
+// ── Piante — luogo (brain.roomGraph, 13 stanze canoniche, non solo le 5 vive) ──
+let _pmRooms = [];
+
+async function pmLoadPlants() {
+  try {
+    const r = await fetch('/gaia/plants');
+    const data = await r.json();
+    _pmRooms = data.rooms || [];
+    pmPlantsRender(data.plants || []);
+  } catch (e) {
+    pmLog('err', 'Caricamento piante: ' + e.message);
+  }
+}
+
+function pmPlantsRender(plants) {
+  const wrap  = document.getElementById('pm-plants-list');
+  const empty = document.getElementById('pm-plants-no-items');
+  if (!plants.length) { empty.textContent = 'Nessuna pianta monitorata.'; empty.style.display = ''; wrap.style.display = 'none'; return; }
+  empty.style.display = 'none';
+  wrap.style.display = '';
+  wrap.innerHTML = plants.map(p => `
+    <div class="pi-card" style="display:flex;align-items:center;gap:12px;padding:12px 16px;margin-bottom:8px">
+      <div style="flex:1;min-width:0">
+        <div class="pi-display-name">🌱 ${pmEsc(p.id)}</div>
+        <div class="pi-device-id">${p.moisture!=null?`umidità ${p.moisture}%`:'nessun dato'}${p.room?' · '+pmEsc(p.room):' · luogo non assegnato'}</div>
+      </div>
+      <select class="pm-inp-stanza" id="pm-plant-room-${pmEsc(p.id)}" style="width:auto;min-width:140px">
+        <option value="">— scegli —</option>
+        ${_pmRooms.map(r => `<option value="${r}" ${r===p.room?'selected':''}>${r}</option>`).join('')}
+      </select>
+      <button class="pm-btn blue" onclick="pmPlantSaveRoom('${pmEsc(p.id)}')">💾 Salva</button>
+    </div>
+  `).join('');
+}
+
+async function pmPlantSaveRoom(id) {
+  const sel = document.getElementById(`pm-plant-room-${id}`);
+  const room = sel.value;
+  if (!room) { pmLog('err', 'Scegli una stanza prima di salvare'); return; }
+  try {
+    const r = await fetch(`/gaia/plants/${encodeURIComponent(id)}/room`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ room })
+    });
+    const data = await r.json();
+    if (!data.ok) { pmLog('err', `Pianta ${id}: ${data.error}`); return; }
+    pmLog('out', `pianta ${id} -> room=${room}`);
+    pmLoadPlants();
+  } catch (e) {
+    pmLog('err', 'Salvataggio luogo pianta: ' + e.message);
+  }
+}
+
+// ── Matrice Dante — schema per zona (solo riferimento, vedi HTML sopra) ──
+async function pmLoadDanteMatrix() {
+  try {
+    const r = await fetch('/gaia/dante-matrix');
+    const data = await r.json();
+    pmDanteMatrixRender(data.zones || {});
+  } catch (e) {
+    pmLog('err', 'Caricamento matrice Dante: ' + e.message);
+  }
+}
+
+function pmDanteMatrixRender(zones) {
+  const wrap  = document.getElementById('pm-dante-list');
+  const empty = document.getElementById('pm-dante-no-items');
+  const entries = Object.entries(zones);
+  if (!entries.length) { empty.textContent = 'Nessuna zona configurata.'; empty.style.display = ''; wrap.style.display = 'none'; return; }
+  empty.style.display = 'none';
+  wrap.style.display = '';
+  wrap.innerHTML = entries.map(([zone, z]) => `
+    <div class="pi-card" style="display:flex;align-items:center;gap:10px;padding:12px 16px;margin-bottom:8px;flex-wrap:wrap">
+      <div style="flex:1;min-width:140px">
+        <div class="pi-display-name">${pmEsc(zone)}</div>
+        <div class="pi-device-id">${z.updated ? new Date(z.updated).toLocaleString('it-IT') : 'mai salvata'}</div>
+      </div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:.8rem;color:var(--muted)">
+        <input type="checkbox" id="pm-dante-enabled-${pmEsc(zone)}" ${z.dante_enabled?'checked':''}> Dante attivo
+      </label>
+      <input class="pm-inp-name" id="pm-dante-mic-${pmEsc(zone)}" placeholder="canale mic (es. tccm(1))"
+        value="${pmEsc(z.mic_channel||'')}" style="width:160px">
+      <input class="pm-inp-name" id="pm-dante-speakers-${pmEsc(zone)}" placeholder="speaker (es. 1,2,3,4)"
+        value="${pmEsc((z.speaker_channels||[]).join(','))}" style="width:140px">
+      <button class="pm-btn blue" onclick="pmDanteMatrixSave('${pmEsc(zone)}')">💾 Salva</button>
+    </div>
+  `).join('');
+}
+
+async function pmDanteMatrixSave(zone) {
+  const enabled  = document.getElementById(`pm-dante-enabled-${zone}`).checked;
+  const mic      = document.getElementById(`pm-dante-mic-${zone}`).value.trim();
+  const speakers = document.getElementById(`pm-dante-speakers-${zone}`).value
+    .split(',').map(s => s.trim()).filter(s => s !== '');
+  try {
+    const r = await fetch(`/gaia/dante-matrix/${encodeURIComponent(zone)}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dante_enabled: enabled, mic_channel: mic, speaker_channels: speakers })
+    });
+    const data = await r.json();
+    if (!data.ok) { pmLog('err', `Matrice Dante ${zone}: ${data.error}`); return; }
+    pmLog('out', `matrice Dante ${zone} -> ${JSON.stringify(data.entry)}`);
+    pmLoadDanteMatrix();
+  } catch (e) {
+    pmLog('err', 'Salvataggio matrice Dante: ' + e.message);
+  }
+}
+
+function pmDanteMatrixAddZone() {
+  const input = document.getElementById('pm-dante-new-zone');
+  const zone = input.value.trim();
+  if (!zone) return;
+  input.value = '';
+  fetch(`/gaia/dante-matrix/${encodeURIComponent(zone)}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dante_enabled: false, mic_channel: '', speaker_channels: [] })
+  }).then(() => pmLoadDanteMatrix()).catch(e => pmLog('err', 'Aggiunta zona Dante: ' + e.message));
+}
+
+function pmSvcKeys(d) {
+  return [...new Set([...Object.keys(d.services||{}), ...Object.keys(d.config||{})])];
+}
+function pmSvcBtnHtml(key, d) {
+  const meta  = PM_SVC_META[key] || {label:key, icon:'⚙️'};
+  const state = (d.services||{})[key] || 'inactive';
+  const cls   = state==='active'?'running':state==='failed'?'failed':'';
+  // camera: servizio base indipendente — attivabile/disattivabile a mano
+  // per servire web/cameras.html anche con yolo/mediapipe spenti. Se yolo/
+  // mediapipe/kiosk vengono accesi, l'agent la avvia da sola come dipendenza
+  // (SERVICE_DEPENDENCIES in agent.py), ma non la ferma mai in automatico.
+  const toggle = `<div class="pm-svc-toggle">
+      <button class="pm-btn green pm-svc-on" data-svc="${key}" title="Avvia">▶</button>
+      <button class="pm-btn red pm-svc-off"  data-svc="${key}" title="Stop">■</button>
+      <button class="pm-btn gray pm-svc-rst" data-svc="${key}" title="Restart">↺</button>
+    </div>`;
+  return `<div class="pm-svc-btn ${cls}" data-svc="${key}">
+    <span class="svc-icon">${meta.icon}</span>
+    <span class="svc-name">${meta.label}</span>
+    <span class="svc-state">${state}</span>
+    ${toggle}
+  </div>`;
+}
+function pmPerfHtml(d) {
+  const parts = [];
+  if (d.fps != null) parts.push(`<span class="pm-perf-fps">${Number(d.fps).toFixed(1)}/${d.target_fps ?? '?'} fps${d.dropped_frames ? ` · ${d.dropped_frames} drop` : ''}</span>`);
+  if (d.last_error) parts.push(`<span class="pm-perf-err">⚠️ ${pmEsc(d.last_error)}</span>`);
+  return parts.join('');
+}
+
+function pmCapBadges(d) {
+  const caps = d.capabilities||{};
+  const b = [caps.camera?`<span class="pm-badge cap">📷 Camera</span>`:'', caps.mic?`<span class="pm-badge cap">🎤 Mic</span>`:''].filter(Boolean).join('');
+  return b?`<div style="display:flex;gap:6px;flex-wrap:wrap">${b}</div>`:'';
+}
+
+// Sorgente mic realmente in uso (2026-09-04, richiesto esplicitamente --
+// "come faccio a sapere se pi è connesso al bt?", nessuna visibilità
+// prima): da gaia/voice/stats/{stanza}, non da gaia/device/+/status (il
+// voice-node è un servizio separato dall'agent macchina, non pubblica lì).
+function pmMicBadgeHtml(label, isBt) {
+  return `<span class="pm-badge cap">${isBt ? '🔵' : '🎙'} ${pmEsc(label)}</span>`;
+}
+
+// Menu rapido: un link Welcome per stanza (cam=IP del device con fotocamera
+// in quella stanza, room=stanza) — così si apre qualunque welcome senza
+// dover ricordare IP/parametri a mano (2026-08-13).
+function pmWelcomeMenuRender() {
+  const menu = document.getElementById('pm-welcome-menu');
+  if (!menu) return;
+  const byStanza = {};
+  for (const d of Object.values(_pmDevices)) {
+    if (!d.stanza || !d.capabilities?.camera || d._offline) continue;
+    byStanza[d.stanza] = d;   // ultimo vince se più device nella stessa stanza
+  }
+  const stanze = Object.keys(byStanza).sort();
+  if (!stanze.length) { menu.style.display = 'none'; menu.innerHTML = ''; return; }
+  menu.style.display = 'flex';
+  menu.innerHTML = stanze.map(s => {
+    const d = byStanza[s];
+    const url = `http://${location.hostname}:1881/welcome.html?cam=${encodeURIComponent(d.ip||'')}&room=${encodeURIComponent(s)}`;
+    return `<button class="pm-btn blue" style="width:auto;padding:4px 12px" onclick="window.open('${url}','_blank')">🖥 ${pmEsc(d.name||s)}</button>`;
+  }).join('');
+}
+
+// Un device offline viene TOLTO dall'interfaccia (non solo affievolito) --
+// riappare da solo appena torna a mandare un heartbeat fresco. Se non
+// resta nessuna card visibile, ripristina il messaggio "nessun Pi connesso".
+function pmApplyCardVisibility(id, d) {
+  const card = document.getElementById(`pm-card-${id}`);
+  if (d._offline) {
+    if (card) card.remove();
+    const grid = document.getElementById('pm-devices-grid');
+    if (grid && !grid.children.length) {
+      grid.style.display = 'none';
+      document.getElementById('pm-no-devices').style.display = '';
+    }
+  } else if (card) {
+    pmPatchCard(id, d);
+  } else {
+    pmBuildCard(id, d);
+  }
+}
+
+function pmRenderOfflineCount() {
+  const el = document.getElementById('pm-offline-count');
+  const n = Object.values(_pmDevices).filter(d => d._offline && !pmIsHiddenFromGrid(d)).length;
+  if (n > 0) {
+    el.style.display = '';
+    el.textContent = `${n} device offline nascosti`;
+  } else {
+    el.style.display = 'none';
+  }
+}
+
+// Raggruppa i tre blocchi di config "si tocca una volta e poi mai più"
+// (spegnimento programmato, watchdog, mocap) dentro un <details> chiuso
+// di default -- prima stavano sempre impiegati nella card, impilati uno
+// sopra l'altro, e con l'aggiunta del mocap (2026-09-30) le card erano
+// diventate troppo lunghe per scorrere la griglia a colpo d'occhio
+// (richiesto dall'utente 2026-10-01: "sta diventando molto lunga e
+// complessa"). <details>/<summary> nativi, zero JS per aprire/chiudere --
+// lo stato dei controlli dentro (checkbox/input) resta identico a prima,
+// pmPatchCard li trova con gli stessi selettori indipendentemente da
+// essere dentro un <details> aperto o chiuso.
+function pmAdvancedHtml(d) {
+  const showShutdown = d.role==='installation'||d.role==='pi'||d.role==='ops';
+  const showWatchdog = d.role==='installation'||d.role==='ops';
+  const showMocap    = (d.role==='pi'||d.role==='core'||d.role==='ops') && pmSvcKeys(d).includes('mediapipe');
+  const showKiosk    = pmSvcKeys(d).includes('kiosk');
+  const showDmxLinks = pmSvcKeys(d).includes('dmx');
+  if (!showShutdown && !showWatchdog && !showMocap && !showKiosk && !showDmxLinks) return '';
+
+  const shutdownBlock = showShutdown ? `<div>
+      <div class="pm-section-label">⏻ Spegnimento programmato</div>
+      <div class="pm-rename-row">
+        <input type="time" class="pm-inp-shutdownat" value="${pmEsc(d.shutdown_at||'')}" style="flex:1">
+        <button class="pm-btn blue pm-btn-shutdownat" style="width:auto;padding:0 14px">💾 Salva</button>
+        ${d.shutdown_at?`<button class="pm-btn gray pm-btn-shutdownat-clear" style="width:auto;padding:0 14px">✕ Disattiva</button>`:''}
+      </div>
+      <div style="font-size:.75rem;color:var(--muted);margin-top:4px">
+        ${d.role==='pi'
+          ? '⚠️ Un Pi spento così NON si riaccende da remoto — solo staccando/riattaccando l\'alimentazione. Orario locale del device, vuoto = disattivato.'
+          : 'Rete di sicurezza software (watchdog interno dell\'agent, non un secondo Task Scheduler) — orario locale della macchina. Vuoto = disattivato.'}
+      </div>
+    </div>` : '';
+
+  const watchdogBlock = showWatchdog ? `<div>
+      <div class="pm-section-label">🐕 Watchdog (riavvio automatico servizi caduti)</div>
+      <div class="pm-rename-row">
+        <label style="display:flex;align-items:center;gap:6px;flex:1;cursor:pointer">
+          <input type="checkbox" class="pm-chk-watchdog" ${d.watchdog?'checked':''}>
+          <span style="font-size:.8rem">${d.watchdog?'Acceso — servizi "attivi" caduti vengono rilanciati da soli':'Spento — nessun riavvio automatico, solo su comando esplicito'}</span>
+        </label>
+      </div>
+      <div style="font-size:.75rem;color:var(--muted);margin-top:4px">
+        Live, nessun redeploy — utile per una macchina che passa da presidiata a non presidiata (es. un portatile di test).
+      </div>
+    </div>` : '';
+
+  const mocapBlock = showMocap ? `<div>
+      <div class="pm-section-label">🕺 Mocap → TouchDesigner (OSC diretto)</div>
+      <div class="pm-rename-row">
+        <label style="display:flex;align-items:center;gap:6px;flex:1;cursor:pointer">
+          <input type="checkbox" class="pm-chk-osclandmarks" ${d.osc_landmarks?'checked':''}>
+          <span style="font-size:.8rem">${d.osc_landmarks?'Acceso — invia viso/mani/pose via OSC a chi si abilita a riceverlo':'Spento — nessun invio mocap da questo device'}</span>
+        </label>
+      </div>
+      <div style="font-size:.75rem;color:var(--muted);margin-top:4px">
+        Riavvia mediapipe se già acceso per applicare subito. La ricezione lato TD resta opt-in per singola istanza (Admin → mocap).
+      </div>
+    </div>` : '';
+
+  // Elenco pagine kiosk: 'welcome' = default del service file, le altre
+  // da KIOSK_PAGES in pi/agent/agent.py (oggi solo 'dmx', pensato per
+  // crescere: un nuovo valore lì basta a farlo comparire anche qui senza
+  // altri cambi, stesso principio additivo del resto di questa pagina).
+  const KIOSK_PAGE_LABELS = { welcome: '🏠 Welcome', dmx: '💡 DMX' };
+  const kioskBlock = showKiosk ? `<div>
+      <div class="pm-section-label">🖥️ Display — pagina kiosk</div>
+      <div class="pm-rename-row">
+        <select class="pm-inp-kiosk" style="flex:1">
+          ${Object.entries(KIOSK_PAGE_LABELS).map(([k,l])=>
+            `<option value="${k}" ${(d.kiosk_page||'welcome')===k?'selected':''}>${l}</option>`
+          ).join('')}
+        </select>
+        <button class="pm-btn blue pm-btn-kiosk" style="width:auto;padding:0 14px">Applica</button>
+      </div>
+      <div style="font-size:.75rem;color:var(--muted);margin-top:4px">
+        Riavvia gaia-kiosk sul display DSI del device con la pagina scelta — nessun accesso SSH necessario.
+      </div>
+    </div>` : '';
+
+  // Link diretti alle pagine del servizio dmx di QUESTO device -- ?room=
+  // precompilato con la sua stanza, cosi' funzionano anche quando in
+  // futuro più Pi avranno gaia-dmx contemporaneamente (ognuno la sua).
+  const dmxLinksBlock = showDmxLinks ? `<div>
+      <div class="pm-section-label">💡 DMX — pagine</div>
+      <div class="pm-rename-row">
+        <a class="pm-btn gray" style="text-align:center;flex:1" target="_blank"
+           href="dmx-touch.html?room=${encodeURIComponent(d.stanza||'')}">📱 Mini menu touch</a>
+        <a class="pm-btn gray" style="text-align:center;flex:1" target="_blank"
+           href="dmx-editor.html?room=${encodeURIComponent(d.stanza||'')}">✏️ Editor preset</a>
+      </div>
+    </div>` : '';
+
+  // Badge rapido nel <summary> cosi' si vede senza aprire se qualcosa di
+  // non-default e' attivo (altrimenti bisognerebbe aprire ogni card per
+  // scoprire se ha uno spegnimento programmato impostato, per esempio).
+  const hints = [];
+  if (d.shutdown_at) hints.push(`⏻ ${pmEsc(d.shutdown_at)}`);
+  if (showWatchdog && d.watchdog) hints.push('🐕 on');
+  if (showMocap && d.osc_landmarks) hints.push('🕺 on');
+  if (showKiosk && d.kiosk_page && d.kiosk_page !== 'welcome') hints.push(`🖥️ ${pmEsc(d.kiosk_page)}`);
+
+  return `<details class="pm-advanced">
+    <summary>⚙️ Avanzate${hints.length?` · ${hints.join(' · ')}`:''}</summary>
+    <div class="pm-advanced-body">${shutdownBlock}${watchdogBlock}${mocapBlock}${kioskBlock}${dmxLinksBlock}</div>
+  </details>`;
+}
+
+function pmBuildCard(id, d) {
+  const grid = document.getElementById('pm-devices-grid');
+  document.getElementById('pm-no-devices').style.display = 'none';
+  grid.style.display = 'grid';
+
+  const card = document.createElement('div');
+  card.id = `pm-card-${id}`;
+  card.className = 'pi-card' + (d._offline?' offline':'');
+
+  const svcKeys = pmSvcKeys(d);
+  const cols = Math.min(Math.max(svcKeys.length, 1), 3);
+
+  card.innerHTML = `
+  <div class="pi-card-header">
+    <div class="pi-status-dot"></div>
+    <div class="pi-name-block">
+      <div class="pi-display-name">${pmEsc(d.name||d.stanza||id)}</div>
+      <div class="pi-device-id">${pmEsc(id)} · <span class="pm-ip-span">${pmEsc(d.ip||'?')}</span></div>
+    </div>
+    <div class="pi-uptime">${pmFmtUp(d.uptime)}</div>
+  </div>
+  <div class="pi-card-body">
+    <div class="pm-td-perf" id="pm-perf-${id}" style="${pmPerfHtml(d)?'':'display:none'}">${pmPerfHtml(d)}</div>
+    ${pmCapBadges(d)}
+    <div id="pm-mic-${id}" style="display:none"></div>
+    <div>
+      <div class="pm-section-label">Stanza / Nome display</div>
+      <div class="pm-rename-row">
+        <div class="pm-rename-inputs">
+          <input class="pm-inp-stanza" placeholder="stanza" value="${pmEsc(d.stanza||'')}">
+          <input class="pm-inp-name"   placeholder="nome display" value="${pmEsc(d.name||'')}">
+        </div>
+        <button class="pm-btn blue pm-btn-rename" style="width:100%">💾 Salva</button>
+      </div>
+    </div>
+    ${svcKeys.length?`<div>
+      <div class="pm-section-label">Servizi</div>
+      <div class="pm-svc-grid" style="grid-template-columns:repeat(${cols},1fr)">${svcKeys.map(k=>pmSvcBtnHtml(k,d)).join('')}</div>
+    </div>`:''}
+    ${svcKeys.includes('herbarium')?`<div>
+      <div class="pm-section-label">🌿 Stile musicale (herbarium)</div>
+      <div class="pm-rename-row">
+        <select class="pm-inp-herbpreset" data-stanza="${pmEsc(d.stanza||'')}" style="flex:1">
+          ${HERB_PRESETS.map(([k,l])=>`<option value="${k}" ${(_pmHerbPreset[d.stanza]||'pentatonica_calma')===k?'selected':''}>${l}</option>`).join('')}
+        </select>
+        <button class="pm-btn blue pm-btn-herbpreset" style="width:auto;padding:0 14px">Applica</button>
+      </div>
+      <div class="pm-rename-row" style="align-items:center;gap:10px;margin-top:6px">
+        <span style="font-size:.8rem;color:var(--muted)">🥁 Volume</span>
+        <input type="range" class="pm-inp-herbvol" data-stanza="${pmEsc(d.stanza||'')}"
+          min="0" max="100" value="${_pmHerbVol[d.stanza]??100}" style="flex:1">
+        <span class="pm-herbvol-lbl" style="font-size:.8rem;color:var(--muted);width:36px;text-align:right">${_pmHerbVol[d.stanza]??100}%</span>
+      </div>
+    </div>`:''}
+    ${svcKeys.includes('livestream')?`<div>
+      <div class="pm-section-label">📡 LiveStream (${_pmLiveListeners[d.stanza]||0} in ascolto)</div>
+      <div class="pm-rename-row">
+        <select class="pm-inp-livesource" data-stanza="${pmEsc(d.stanza||'')}" style="flex:1">
+          <option value="mic" ${(_pmLiveSource[d.stanza]||'mic')==='mic'?'selected':''}>Microfono</option>
+          <option value="library" ${_pmLiveSource[d.stanza]==='library'?'selected':''}>Libreria locale</option>
+        </select>
+        <button class="pm-btn blue pm-btn-livesource" style="width:auto;padding:0 14px">Applica</button>
+      </div>
+      ${(_pmLiveMicOptions[d.stanza]||[]).length>1?`<div class="pm-rename-row" style="margin-top:6px">
+        <select class="pm-inp-livemic" data-stanza="${pmEsc(d.stanza||'')}" style="flex:1">
+          ${_pmLiveMicOptions[d.stanza].map(label=>
+            `<option value="${pmEsc(label)}" ${_pmLiveMicDevice[d.stanza]===label?'selected':''}>${pmEsc(label)}</option>`
+          ).join('')}
+        </select>
+        <button class="pm-btn blue pm-btn-livemic" style="width:auto;padding:0 14px">Applica</button>
+      </div>`:''}
+      <div style="font-size:.75rem;color:var(--muted);margin-top:4px;word-break:break-all">
+        ${d.services?.livestream?.endpoints?.stream||`http://${d.ip}:8000/stream.ogg`}
+      </div>
+    </div>`:''}
+    ${pmAdvancedHtml(d)}
+    <div class="pm-card-actions">
+      ${svcKeys.includes('livestream') ? `<button class="pm-btn blue" onclick="window.open('${d.services?.livestream?.endpoints?.stream||`http://${d.ip}:8000/stream.ogg`}','_blank')">🔊 Ascolta stream</button>` : ''}
+      ${d.capabilities?.camera && d.stanza ? `<button class="pm-btn blue pm-btn-welcome" onclick="window.open('http://${location.hostname}:1881/welcome.html?cam=${encodeURIComponent(d.ip||'')}&room=${encodeURIComponent(d.stanza)}','_blank')">🖥 Apri Welcome</button>` : ''}
+      ${d.role === 'pi' && d.ip && d.ip !== '?' ? `<button class="pm-btn gray" title="Portale di rete/servizi del Pi (gaia-provision, porta 80) -- utile per trovarlo/configurarlo quando l'IP sopra non è quello giusto" onclick="window.open('http://${d.ip}/','_blank')">📶 Rete/Captive</button>` : ''}
+      <button class="pm-btn gray pm-btn-status">Status</button>
+      <button class="pm-btn amber pm-btn-reboot">Reboot</button>
+      <button class="pm-btn red pm-btn-shutdown">⏻ Spegni</button>
+      <button class="pm-btn red pm-btn-remove">✕ Rimuovi</button>
+    </div>
+  </div>`;
+
+  grid.appendChild(card);
+  pmAttachEvents(id, card);
+}
+
+function pmPatchCard(id, d) {
+  const card = document.getElementById(`pm-card-${id}`);
+  if (!card) { pmBuildCard(id, d); return; }
+  card.className = 'pi-card' + (d._offline?' offline':'');
+  const dn = card.querySelector('.pi-display-name');
+  if (dn) dn.textContent = d.name||d.stanza||id;
+  const ip = card.querySelector('.pm-ip-span');
+  if (ip) ip.textContent = d.ip||'?';
+  const ut = card.querySelector('.pi-uptime');
+  if (ut) ut.textContent = pmFmtUp(d.uptime);
+  const perf = card.querySelector('.pm-td-perf');
+  if (perf) {
+    const html = pmPerfHtml(d);
+    perf.innerHTML = html;
+    perf.style.display = html ? '' : 'none';
+  }
+  const presetSel = card.querySelector('.pm-inp-herbpreset');
+  if (presetSel && d.stanza) presetSel.dataset.stanza = d.stanza;
+  const services = d.services||{};
+  card.querySelectorAll('.pm-svc-btn[data-svc]').forEach(btn => {
+    const svc = btn.dataset.svc;
+    const state = services[svc]||'inactive';
+    const stEl = btn.querySelector('.svc-state');
+    if (stEl) stEl.textContent = state;
+    btn.classList.remove('running','failed');
+    if (state==='active')  btn.classList.add('running');
+    if (state==='failed')  btn.classList.add('failed');
+  });
+  const inpS = card.querySelector('.pm-inp-stanza');
+  const inpN = card.querySelector('.pm-inp-name');
+  if (inpS && document.activeElement!==inpS) inpS.value = d.stanza||'';
+  if (inpN && document.activeElement!==inpN) inpN.value = d.name||'';
+  // Spegnimento programmato / watchdog / mocap: pmBuildCard li scrive solo
+  // alla PRIMA card di questo device -- senza sincronizzarli anche qui,
+  // restano congelati al loro valore iniziale per tutta la sessione,
+  // anche dopo un comando confermato dal backend (o cambiato da un'altra
+  // scheda/utente) -- trovato dal vivo 2026-09-29, "non capisco se i
+  // checkbox si attivano" (il testo/stato non si aggiornava mai da solo).
+  const inpShutdownAt = card.querySelector('.pm-inp-shutdownat');
+  if (inpShutdownAt && document.activeElement!==inpShutdownAt) inpShutdownAt.value = d.shutdown_at||'';
+  const watchdogChk = card.querySelector('.pm-chk-watchdog');
+  if (watchdogChk && document.activeElement!==watchdogChk) {
+    watchdogChk.checked = !!d.watchdog;
+    const lbl = watchdogChk.parentElement?.querySelector('span');
+    if (lbl) lbl.textContent = d.watchdog?'Acceso — servizi "attivi" caduti vengono rilanciati da soli':'Spento — nessun riavvio automatico, solo su comando esplicito';
+  }
+  const oscLandmarksChk = card.querySelector('.pm-chk-osclandmarks');
+  if (oscLandmarksChk && document.activeElement!==oscLandmarksChk) {
+    oscLandmarksChk.checked = !!d.osc_landmarks;
+    const lbl = oscLandmarksChk.parentElement?.querySelector('span');
+    if (lbl) lbl.textContent = d.osc_landmarks?'Acceso — invia viso/mani/pose via OSC a chi si abilita a riceverlo':'Spento — nessun invio mocap da questo device';
+  }
+  const kioskSel = card.querySelector('.pm-inp-kiosk');
+  if (kioskSel && document.activeElement!==kioskSel) kioskSel.value = d.kiosk_page||'welcome';
+  // Badge riassuntivo nel <summary> di "⚙️ Avanzate" -- stessa logica di
+  // pmAdvancedHtml, ricalcolata qui per restare fresca senza ricostruire
+  // l'intero <details> (che chiuderebbe un pannello che l'utente ha aperto).
+  const advSummary = card.querySelector('.pm-advanced > summary');
+  if (advSummary) {
+    const hints = [];
+    if (d.shutdown_at) hints.push(`⏻ ${pmEsc(d.shutdown_at)}`);
+    if (watchdogChk && d.watchdog) hints.push('🐕 on');
+    if (oscLandmarksChk && d.osc_landmarks) hints.push('🕺 on');
+    if (kioskSel && d.kiosk_page && d.kiosk_page !== 'welcome') hints.push(`🖥️ ${pmEsc(d.kiosk_page)}`);
+    advSummary.textContent = `⚙️ Avanzate${hints.length?` · ${hints.join(' · ')}`:''}`;
+  }
+}
+
+function pmAttachEvents(id, card) {
+  card.querySelector('.pm-btn-rename').onclick = async function() {
+    const stanza = card.querySelector('.pm-inp-stanza').value.trim().toLowerCase().replace(/\s+/g,'-');
+    const name   = card.querySelector('.pm-inp-name').value.trim() || stanza;
+    if (!stanza) return;
+    const dn = card.querySelector('.pi-display-name');
+    if (dn) dn.textContent = name;
+    const btn = this;
+    btn.disabled = true; btn.textContent = '…';
+    // Via completa (2026-07-20): /api/provision/assign sincronizza
+    // provision_registry.json (letto dall'agent a ogni riavvio — un
+    // mancato aggiornamento qui fa tornare indietro la stanza al prossimo
+    // crash-loop) E il registro Node-RED (pulizia retained stanza vecchia).
+    // Un semplice set_config via MQTT (come prima) aggiornava SOLO l'agent.
+    try {
+      const r = await fetch(`${API}/api/provision/assign`, {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({device_id: id, stanza, name})
+      });
+      const d = await r.json();
+      btn.style.background = d.ok ? '#1a8a50' : '#8a1a1a';
+      btn.textContent = d.ok ? '✓ Salvato' : '✗ Errore';
+    } catch {
+      btn.style.background = '#8a1a1a';
+      btn.textContent = '✗ Errore rete';
+    }
+    btn.disabled = false;
+    setTimeout(() => { btn.style.background=''; btn.textContent='💾 Salva'; }, 1500);
+  };
+  card.querySelectorAll('.pm-svc-on').forEach(b  => b.onclick = () => pmSend(id, {action:'enable',  service:b.dataset.svc}));
+  card.querySelectorAll('.pm-svc-off').forEach(b  => b.onclick = () => pmSend(id, {action:'disable', service:b.dataset.svc}));
+  card.querySelectorAll('.pm-svc-rst').forEach(b  => b.onclick = () => pmSend(id, {action:'restart', service:b.dataset.svc}));
+  const presetBtn = card.querySelector('.pm-btn-herbpreset');
+  if (presetBtn) presetBtn.onclick = () => {
+    const sel = card.querySelector('.pm-inp-herbpreset');
+    const stanza = sel?.dataset.stanza;
+    if (!stanza || !sel.value || !_pmClient) return;
+    _pmClient.publish(`gaia/herbarium/${stanza}/music`, JSON.stringify({preset: sel.value}));
+    pmLog('out', `Herbarium ${stanza}: preset → ${sel.value}`);
+    presetBtn.textContent = '✓'; setTimeout(() => { presetBtn.textContent = 'Applica'; }, 1200);
+  };
+  const volInp = card.querySelector('.pm-inp-herbvol');
+  if (volInp) {
+    volInp.oninput = () => {
+      volInp.parentElement.querySelector('.pm-herbvol-lbl').textContent = volInp.value + '%';
+    };
+    volInp.onchange = () => {
+      const stanza = volInp.dataset.stanza;
+      if (!stanza || !_pmClient) return;
+      _pmClient.publish(`gaia/herbarium/${stanza}/music`, JSON.stringify({drum_volume: +volInp.value}));
+      pmLog('out', `Herbarium ${stanza}: volume batteria → ${volInp.value}%`);
+    };
+  }
+  const liveBtn = card.querySelector('.pm-btn-livesource');
+  if (liveBtn) liveBtn.onclick = () => {
+    const sel = card.querySelector('.pm-inp-livesource');
+    const stanza = sel?.dataset.stanza;
+    if (!stanza || !sel.value || !_pmClient) return;
+    _pmClient.publish(`gaia/livestream/${stanza}/command`, JSON.stringify({source: sel.value}));
+    pmLog('out', `LiveStream ${stanza}: sorgente → ${sel.value}`);
+    liveBtn.textContent = '✓'; setTimeout(() => { liveBtn.textContent = 'Applica'; }, 1200);
+  };
+  const liveMicBtn = card.querySelector('.pm-btn-livemic');
+  if (liveMicBtn) liveMicBtn.onclick = () => {
+    const sel = card.querySelector('.pm-inp-livemic');
+    const stanza = sel?.dataset.stanza;
+    if (!stanza || !sel.value || !_pmClient) return;
+    _pmClient.publish(`gaia/livestream/${stanza}/command`, JSON.stringify({mic_device: sel.value}));
+    pmLog('out', `LiveStream ${stanza}: microfono → ${sel.value}`);
+    liveMicBtn.textContent = '✓'; setTimeout(() => { liveMicBtn.textContent = 'Applica'; }, 1200);
+  };
+  const shutdownAtBtn = card.querySelector('.pm-btn-shutdownat');
+  if (shutdownAtBtn) shutdownAtBtn.onclick = () => {
+    const inp = card.querySelector('.pm-inp-shutdownat');
+    const val = inp?.value || null;
+    pmSend(id, {action:'set_config', shutdown_at: val});
+    pmLog('out', `${id}: spegnimento programmato → ${val || 'disattivato'}`);
+    shutdownAtBtn.textContent = '✓'; setTimeout(() => { shutdownAtBtn.textContent = '💾 Salva'; }, 1200);
+  };
+  const shutdownAtClearBtn = card.querySelector('.pm-btn-shutdownat-clear');
+  if (shutdownAtClearBtn) shutdownAtClearBtn.onclick = () => {
+    card.querySelector('.pm-inp-shutdownat').value = '';
+    pmSend(id, {action:'set_config', shutdown_at: null});
+    pmLog('out', `${id}: spegnimento programmato disattivato`);
+  };
+  const watchdogChk = card.querySelector('.pm-chk-watchdog');
+  if (watchdogChk) watchdogChk.onchange = () => {
+    const val = watchdogChk.checked;
+    pmSend(id, {action:'set_config', watchdog: val});
+    pmLog('out', `${id}: watchdog → ${val ? 'acceso' : 'spento'}`);
+  };
+  const kioskBtn = card.querySelector('.pm-btn-kiosk');
+  if (kioskBtn) kioskBtn.onclick = () => {
+    const sel = card.querySelector('.pm-inp-kiosk');
+    if (!sel?.value) return;
+    pmSend(id, {action:'set_kiosk', page: sel.value});
+    pmLog('out', `${id}: kiosk → ${sel.value}`);
+    kioskBtn.textContent = '✓'; setTimeout(() => { kioskBtn.textContent = 'Applica'; }, 1200);
+  };
+  const oscLandmarksChk = card.querySelector('.pm-chk-osclandmarks');
+  if (oscLandmarksChk) oscLandmarksChk.onchange = () => {
+    const val = oscLandmarksChk.checked;
+    pmSend(id, {action:'set_config', osc_landmarks: val});
+    pmLog('out', `${id}: mocap OSC → ${val ? 'acceso' : 'spento'}`);
+  };
+  card.querySelector('.pm-btn-status').onclick  = () => pmSend(id, {action:'status'});
+  card.querySelector('.pm-btn-reboot').onclick  = () => { if(confirm(`Riavviare ${id}?`)) pmSend(id, {action:'reboot'}); };
+  card.querySelector('.pm-btn-shutdown').onclick = () => { if(confirm(`Spegnere ${id}? Per riaccenderlo servirà staccare/riattaccare l'alimentazione.`)) pmSend(id, {action:'shutdown'}); };
+  card.querySelector('.pm-btn-remove').onclick  = () => {
+    if (!confirm(`Rimuovere "${id}" dalla lista?`)) return;
+    if (_pmClient) _pmClient.publish(`gaia/device/${id}/status`, '', {retain:true, qos:1});
+    delete _pmDevices[id];
+    card.remove();
+    if (!Object.keys(_pmDevices).length) {
+      document.getElementById('pm-no-devices').style.display = '';
+      document.getElementById('pm-devices-grid').style.display = 'none';
+    }
+    pmLog('out', `Rimosso retained: gaia/device/${id}/status`);
+  };
+}
+
+function pmSend(id, payload) {
+  if (!_pmClient) return;
+  const t = `gaia/device/${id}/command`;
+  _pmClient.publish(t, JSON.stringify(payload));
+  pmLog('out', `→ ${t} ${JSON.stringify(payload)}`);
+}
+
+const _pmLogEl = document.getElementById('pm-log-lines');
+function pmLog(type, msg) {
+  const t  = new Date().toTimeString().slice(0,8);
+  const el = document.createElement('div');
+  el.className = `pm-log-entry ${type}`;
+  el.innerHTML = `<span style="color:var(--muted);margin-right:8px">${t}</span>${pmEsc(msg)}`;
+  _pmLogEl.prepend(el);
+  while (_pmLogEl.children.length > 60) _pmLogEl.lastChild.remove();
+}
+</script>
+</body>
+</html>

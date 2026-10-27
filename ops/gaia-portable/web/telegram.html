@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GAIA · Telegram</title>
+<style>
+:root{--bg:#050810;--card:#0e1221;--border:#1e2840;--accent:#00ffcc;--blue:#58a6ff;--yellow:#e3b341;--red:#f85149;--green:#3fb950;--text:#c9d1d9;--muted:#6b7a99}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;padding:16px;min-height:100vh}
+.nav{display:flex;gap:12px;margin-bottom:18px;align-items:center;border-bottom:1px solid var(--border);padding-bottom:12px;flex-wrap:wrap}
+.nav a{color:var(--muted);text-decoration:none;font-size:.8rem;padding:4px 10px;border-radius:6px;transition:all .15s}
+.nav a:hover{color:var(--text);background:var(--card)}
+.nav-title{font-size:1.1rem;font-weight:700;color:var(--accent);margin-right:8px}
+.wrap{max-width:520px;margin:24px auto;text-align:center}
+h1{font-size:1.4rem;margin-bottom:6px}
+.sub{color:var(--muted);font-size:.9rem;margin-bottom:28px}
+.qr-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;display:inline-block}
+.qr-card img{width:220px;height:220px;display:block;background:#fff;border-radius:8px;padding:10px}
+.qr-cap{margin-top:14px;font-size:.85rem;color:var(--muted)}
+.btn{display:inline-block;margin-top:20px;background:var(--accent);color:#000;text-decoration:none;font-weight:700;padding:12px 28px;border-radius:999px;font-size:1rem}
+.btn:hover{opacity:.88}
+.help{text-align:left;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-top:36px}
+.help h2{font-size:.85rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:14px}
+.cmd-row{display:flex;gap:12px;padding:7px 0;border-bottom:1px solid var(--border);font-size:.86rem;align-items:baseline}
+.cmd-row:last-child{border:none}
+.cmd{color:var(--accent);font-family:monospace;flex-shrink:0;min-width:150px}
+.cmd-desc{color:var(--text)}
+.note{margin-top:16px;font-size:.78rem;color:var(--muted);line-height:1.5}
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <div class="nav-title">🤖 Telegram</div>
+  <a href="portal.html">⌂</a>
+  <a href="dashboard.html">Dashboard</a>
+  <a href="admin.html">Admin</a>
+  <a href="livestream.html">LiveStream</a>
+  <a href="welcome.html">Welcome</a>
+  <a href="cameras.html">Camere</a>
+  <a href="game.html">Gioco</a>
+  <a href="musica.html">Musica</a>
+  <a href="gaia-art/index.html">Arte</a>
+  <a href="mattoni.html">Mattoni</a>
+</div>
+
+<div class="wrap">
+  <h1>Parla con GAIA da Telegram</h1>
+  <div class="sub">Inquadra il codice o apri il link — poi scrivi <span style="color:var(--accent)">/aiuto</span> per l'elenco completo</div>
+
+  <div class="qr-card">
+    <img src="qr/telegram-bot.svg" alt="QR verso @ClawMauroBot su Telegram">
+    <div class="qr-cap">@ClawMauroBot</div>
+  </div>
+  <div>
+    <a class="btn" href="https://t.me/ClawMauroBot" target="_blank" rel="noopener">📲 Apri su Telegram</a>
+  </div>
+
+  <div class="help">
+    <h2>Comandi principali</h2>
+    <div class="cmd-row"><span class="cmd">/stato</span><span class="cmd-desc">Report completo della casa — persone, luci, piante, umore</span></div>
+    <div class="cmd-row"><span class="cmd">/servizi</span><span class="cmd-desc">Elenco device e servizi attivi/spenti</span></div>
+    <div class="cmd-row"><span class="cmd">/attiva &lt;servizio&gt;</span><span class="cmd-desc">Accende un servizio (es. mediaplayer, kiosk)</span></div>
+    <div class="cmd-row"><span class="cmd">/musica</span><span class="cmd-desc">Radio/musica per stanza — preset, stop, volume</span></div>
+    <div class="cmd-row"><span class="cmd">/promemoria</span><span class="cmd-desc">Promemoria vocale per stanza e orario</span></div>
+    <div class="cmd-row"><span class="cmd">/dillo &lt;testo&gt;</span><span class="cmd-desc">Fa parlare Gaia in una stanza (o ovunque)</span></div>
+    <div class="cmd-row"><span class="cmd">/sogno</span><span class="cmd-desc">L'ultimo sogno notturno di Gaia</span></div>
+    <div class="cmd-row"><span class="cmd">/aiuto</span><span class="cmd-desc">Tutorial — l'elenco completo di tutti i comandi</span></div>
+    <div class="note">
+      Anche linguaggio naturale: "accendi le luci in cucina", "abbassa la luminosità",
+      "atmosfera relax/focus/sera/notte", colori ("luce calda", "al 40%")…
+      quello che non riconosce diventa conversazione libera con Gaia.
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

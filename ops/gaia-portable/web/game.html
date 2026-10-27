@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GAIA — Il Gioco</title>
+<style>
+/* --card/--border alzati (2026-08-29, su segnalazione: oggetti/stanze
+   troppo neri su sfondo nero, quasi invisibili senza lo stato "alive"/
+   "tech" a dargli un glow) -- stesso --bg, ma card e bordo ora hanno
+   abbastanza contrasto da leggersi anche "a riposo", senza dover
+   accendere nulla per vederli. */
+:root{--bg:#050810;--card:#161d36;--border:#2e3a5e;--accent:#00ffcc;--blue:#58a6ff;
+      --gold:#ffd65a;--red:#ff5555;--green:#33ff88;--magenta:#ff00ff;--cyan:#00ffff;
+      --text:#c9d1d9;--muted:#8493b8}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;
+     padding:16px;min-height:100vh}
+
+.nav{display:flex;gap:12px;margin-bottom:18px;align-items:center;border-bottom:1px solid var(--border);padding-bottom:12px}
+.nav a{color:var(--muted);text-decoration:none;font-size:.8rem;padding:4px 10px;border-radius:6px}
+.nav a:hover{color:var(--text);background:var(--card)}
+.nav a.active{color:var(--gold);background:#1a1505}
+.nav-title{font-size:1.1rem;font-weight:700;color:var(--gold);margin-right:8px;display:flex;align-items:center;gap:8px}
+.ws-dot{width:8px;height:8px;border-radius:50%;background:var(--muted);display:inline-block}
+.ws-dot.ok{background:var(--green);box-shadow:0 0 6px var(--green)}
+.ws-dot.err{background:var(--red)}
+
+/* ── Eroe (Gaia) ── */
+.hero{background:linear-gradient(135deg,#0e1221,#131022);border:1px solid #2a2540;
+      border-radius:14px;padding:18px;margin-bottom:16px;display:flex;gap:18px;
+      align-items:center;flex-wrap:wrap}
+@keyframes heroKickPulse { 0%{box-shadow:0 0 0 #ff880000} 15%{box-shadow:0 0 30px #ff880066} 100%{box-shadow:0 0 0 #ff880000} }
+.hero-kick{animation:heroKickPulse .35s ease-out}
+.hero-level{font-size:2.4rem;font-weight:800;color:var(--gold);line-height:1;
+      text-shadow:0 0 18px #ffd65a44}
+.hero-class{font-size:1rem;font-weight:700}
+.hero-xp{flex:1;min-width:220px}
+.xp-bar{height:10px;border-radius:5px;background:#141a2e;overflow:hidden;border:1px solid #2a2540}
+.xp-fill{height:100%;background:linear-gradient(90deg,#b8860b,#ffd65a);transition:width .6s}
+.xp-label{font-size:.72rem;color:var(--muted);margin-top:4px}
+.runes{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.rune{background:#0c0f1e;border:1px solid #3a3320;border-radius:10px;padding:6px 10px;
+      display:flex;flex-direction:column;align-items:center;gap:2px;min-width:64px}
+.rune canvas{display:block}
+.rune span{font-size:.62rem;color:var(--gold);letter-spacing:.04em}
+.mood-chip{font-size:.72rem;color:var(--muted);border:1px solid var(--border);
+      border-radius:10px;padding:3px 10px}
+
+/* ── Mappa biomi ── */
+h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:18px 0 10px}
+.biomes{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.biome{background:var(--card);border:1px solid var(--border);border-radius:12px;
+       padding:14px;position:relative;transition:border-color .4s,box-shadow .4s;
+       /* glow ambiente anche "a riposo", non solo su alive/tech -- prima un
+          bioma quieto spariva quasi del tutto nello sfondo (2026-08-29). */
+       box-shadow:0 0 10px rgba(88,166,255,.07)}
+.biome.alive{border-color:#3a5a40;box-shadow:0 0 14px #33ff8822}
+/* Console TD (DMX/PatchDeck/MixerAudio/Agent Gaia) -- 2026-08-29, stesso
+   riquadro biome ma tema "sala macchine" invece di natura: bordo/glow
+   ciano freddo, sfondo leggermente più scuro/blu invece del card grigio
+   standard, così si legge a colpo d'occhio come tecnico e non fisico. */
+.biome.tech{border-color:#2a6a72;box-shadow:0 0 14px #00ffcc22;
+      background:linear-gradient(135deg,var(--card),#102a2e)}
+.biome.tech .biome-kind{color:var(--cyan)}
+.biome.tech.alive{border-color:#1a5a5a;box-shadow:0 0 16px #00ffcc33}
+/* Kick audio live dal mixer (2026-08-30) -- pulse breve, si spegne da solo
+   quando audioKick decade lato server (~3s) e la classe sparisce al
+   prossimo render, niente timeout JS lato client da gestire qui. */
+@keyframes biomeKickPulse { 0%{transform:scale(1)} 50%{transform:scale(1.03)} 100%{transform:scale(1)} }
+.biome-kick{animation:biomeKickPulse .3s ease-out}
+.biome-head{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.biome-name{font-weight:700;font-size:.95rem;text-transform:capitalize}
+.biome-kind{font-size:.7rem;color:var(--gold);letter-spacing:.05em}
+.biome-stats{display:flex;flex-wrap:wrap;gap:6px;font-size:.74rem;color:var(--muted)}
+.biome-stats span{background:#1c2540;border:1px solid var(--border);border-radius:8px;padding:2px 8px}
+.biome-herb{margin-top:8px;font-size:.72rem;color:var(--green)}
+.fog{display:flex;flex-wrap:wrap;gap:8px}
+.fog-tile{background:#141a2e;border:1px dashed #2e3a5e;border-radius:10px;padding:6px 12px;
+      font-size:.72rem;color:#7181a8;text-transform:capitalize}
+
+/* ── Archetipi + diario ── */
+.bottom{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-top:4px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px}
+.arch-row{font-size:.78rem;margin-bottom:2px;display:flex;justify-content:space-between}
+.arch-bar{height:7px;border-radius:4px;background:#141a2e;overflow:hidden;margin-bottom:8px}
+.arch-fill{height:100%;transition:width .5s}
+.diary{list-style:none;font-size:.8rem}
+.diary li{padding:5px 0;border-bottom:1px solid #131a2c;display:flex;gap:8px}
+.diary li:last-child{border:none}
+.diary .t{color:#3a4560;font-size:.7rem;white-space:nowrap;padding-top:2px}
+.diary .gold{color:var(--gold)}
+.diary .green{color:var(--green)}
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <div class="nav-title"><div class="ws-dot" id="wsdot"></div>GAIA · Gioco</div>
+  <a href="portal.html">⌂</a>
+  <a href="dashboard.html">Dashboard</a>
+  <a href="admin.html">Admin</a>
+  <a href="livestream.html">LiveStream</a>
+  <a href="telegram.html">🤖 Telegram</a>
+  <a href="welcome.html">Welcome</a>
+  <a href="cameras.html">Camere</a>
+  <a href="game.html" class="active">Gioco</a>
+  <a href="musica.html">Musica</a>
+  <a href="gaia-art/index.html">Arte</a>
+  <a href="mattoni.html">Mattoni</a>
+  <span style="color:var(--muted);font-size:.8rem;margin-left:auto" id="ts-label"></span>
+</div>
+
+<div class="hero" id="hero">in ascolto del mondo…</div>
+
+<h2>La mappa — biomi vivi</h2>
+<div class="biomes" id="biomes"></div>
+<h2>Nella nebbia — terre senza sensi</h2>
+<div class="fog" id="fog"></div>
+
+<div class="bottom">
+  <div class="card"><h2 style="margin-top:0">Le vie dell'anima</h2><div id="arch"></div></div>
+  <div class="card" id="diary-card"><h2 style="margin-top:0">Diario delle imprese</h2><ul class="diary" id="diary"></ul></div>
+</div>
+
+<details class="card" style="margin-top:14px">
+<summary style="cursor:pointer;color:var(--gold);font-size:.85rem;font-weight:600">📖 Come si gioca</summary>
+<div style="font-size:.82rem;line-height:1.55;color:var(--text);margin-top:10px">
+<p><b>Non giochi tu — gioca la casa.</b> Gaia è il personaggio: ogni evento reale le dà
+esperienza. Parlare con lei (25 XP), un suo pensiero (20), una persona conosciuta che entra
+(40), un gesto (15), il movimento (5), le piante che suonano (10), il riassunto notturno dei
+ricordi (150), un rito al Tap (12). Ogni tipo ha un tempo di ricarica: gli eventi a raffica
+non contano doppio.</p>
+<p style="margin-top:8px"><b>Le quattro vie</b> non si scelgono: emergono. Ogni azione
+appartiene a una via, e la via che copre almeno un terzo delle azioni diventa l'archetipo di
+Gaia — <span style="color:var(--cyan)">🪄 Mago</span> (parola e pensiero),
+<span style="color:var(--magenta)">🎭 Bardo</span> (incontri),
+<span style="color:var(--red)">⚔️ Guerriero</span> (corpo e movimento),
+<span style="color:var(--green)">🌿 Druido</span> (natura e memoria). L'archetipo racconta
+com'è davvero la vita in casa, e colora luci, scena 3D e level-up.</p>
+<p style="margin-top:8px"><b>Al level-up</b> (curva 1000·liv<sup>1.35</sup>): Gaia lo
+annuncia a voce, le luci celebrano nel colore della via, una <b>runa</b> nuova si scrive in
+oro sulle superfici, l'impresa entra nel diario. Le rune sono 8, in ordine fisso — le prime
+hanno già effetti nella scena 3D, le altre attendono di essere costruite.</p>
+<p style="margin-top:8px"><b>I biomi</b> sono le stanze viste dai sensori veri: temperatura,
+luce, oscurità, presenze, note delle piante. Le stanze senza sensi restano nella nebbia
+finché non ricevono occhi o orecchie.</p>
+<p style="margin-top:8px"><b>Il Tap Switch</b> è il controller dei riti: 1 = rito della luce
+(scena archetipo 10s), 2 = musica sì/no, 3 = vessillo su Telegram (la scheda del personaggio
+sul telefono), 4 = quiete. Ripremere lo stesso tasto due volte di fila non conta: alterna.</p>
+</div>
+</details>
+
+<script src="asemic.js"></script>
+<script>
+// ── Vocabolario condiviso (stesse mappe di welcome/dashboard/pi-screen) ──────
+const RUNE_WORDS = { base_grid:'fondamenta', ambient_particles_low:'polvere',
+                     shield_dome:'scudo', rune_circle:'cerchio',
+                     glyph_trail:'sentiero', crystal_garden:'giardino',
+                     starfield:'stelle', phoenix_core:'fenice' };
+const NOTE_WORDS = ['do','dodiesis','re','rediesis','mi','fa','fadiesis',
+                    'sol','soldiesis','la','ladiesis','si'];
+const CLASS_COLOR = { Mago:'var(--cyan)', Bardo:'var(--magenta)',
+                      Guerriero:'var(--red)', Druido:'var(--green)', Neutro:'var(--muted)' };
+const ARCH = [['mago','Mago','#00ffff','🪄'],['bardo','Bardo','#ff00ff','🎭'],
+              ['guerriero','Guerriero','#ff5555','⚔️'],['druido','Druido','#33ff88','🌿']];
+
+// Palette DMX -> colore rappresentativo (2026-08-30, richiesto esplicitamente):
+// nomi reali letti dal vivo dalla matrice DMX (dmx_a_palette/dmx_b_palette),
+// non inventati. Copre le principali; una palette non mappata usa il ciano
+// "tech" di default invece di sparire senza colore.
+const DMX_PALETTE_COLORS = {
+  'Fire': '#ff5522', 'Fire Inverted': '#ff8800', 'Sunset': '#ff7744',
+  'Amber': '#ffaa22', 'Warm': '#ffcc66', 'Yellow': '#ffee44', 'Red': '#ff3333',
+  'Ocean': '#2299dd', 'Cool': '#44bbee', 'Blue': '#3366ff',
+  'Plasma': '#cc44ff', 'Deep Purple': '#7722cc', 'Magenta-Cyan': '#ff33cc',
+  'Forest': '#33aa55', 'Neon Party': '#ff22aa', 'Rainbow (Daslight)': '#dd44ff',
+  'Basic': '#00ffcc', 'Basic 2': '#00ddaa',
+};
+function dmxPaletteColor(name) { return DMX_PALETTE_COLORS[name] || null; }
+
+function escHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+// il WS arriva a rate alto: innerHTML solo se cambia (niente flicker dei canvas)
+function setHtml(id, html){
+  const el = document.getElementById(id);
+  if (el && el.innerHTML !== html) el.innerHTML = html;
+}
+
+// ── Mini-renderer glifi (generazione da asemic.js, disegno locale) ──────────
+function drawGlyphOn(cv, word, color, lw){
+  if (!window.AsemicGlyphs || cv.dataset.drawn === word) return;
+  cv.dataset.drawn = word;
+  const g = AsemicGlyphs.glyphFor(word);
+  const ctx = cv.getContext('2d');
+  ctx.clearRect(0,0,cv.width,cv.height);
+  const w = cv.width*0.84, h = cv.height*0.76, ox = cv.width*0.08, oy = cv.height*0.12;
+  ctx.strokeStyle = color; ctx.lineWidth = lw||1.3; ctx.lineCap='round'; ctx.lineJoin='round';
+  for (const st of g.strokes){
+    const pts = st.pts;
+    ctx.beginPath();
+    ctx.moveTo(ox+pts[0][0]*w, oy+pts[0][1]*h);
+    if (pts.length===2) ctx.lineTo(ox+pts[1][0]*w, oy+pts[1][1]*h);
+    else {
+      for (let i=1;i<pts.length-1;i++){
+        const mx=(pts[i][0]+pts[i+1][0])/2*w, my=(pts[i][1]+pts[i+1][1])/2*h;
+        ctx.quadraticCurveTo(ox+pts[i][0]*w, oy+pts[i][1]*h, ox+mx, oy+my);
+      }
+      const l=pts[pts.length-1]; ctx.lineTo(ox+l[0]*w, oy+l[1]*h);
+    }
+    ctx.stroke();
+  }
+  if (g.dot){ ctx.beginPath(); ctx.arc(ox+g.dot.x*w, oy+g.dot.y*h, 1.4, 0, Math.PI*2);
+              ctx.fillStyle=color; ctx.fill(); }
+}
+function drawAll(){
+  document.querySelectorAll('canvas[data-word]').forEach(cv=>
+    drawGlyphOn(cv, cv.dataset.word, cv.dataset.color||'rgba(255,214,90,.9)', +cv.dataset.lw||1.3));
+}
+
+// ── Eroe ───────────────────────────────────────────────────────────────────
+function renderHero(d){
+  const p = d.progression||{}, mood = (d.soul||{}).mood||'neutra';
+  const pct = Math.min(100, Math.round((p.xp||0)/(p.xpNextLevel||1000)*100));
+  const cls = p.activeClass||'Neutro';
+  setHtml('hero', `
+    <div style="text-align:center">
+      <div class="hero-level">Lv.${p.level||1}</div>
+      <div class="hero-class" style="color:${CLASS_COLOR[cls]||'var(--muted)'}">${escHtml(cls)}</div>
+    </div>
+    <div class="hero-xp">
+      <div class="xp-bar"><div class="xp-fill" style="width:${pct}%"></div></div>
+      <div class="xp-label">${p.xp||0} / ${p.xpNextLevel||1000} XP · <span class="mood-chip">umore: ${escHtml(mood)}</span></div>
+    </div>
+    <div class="runes">${(p.unlockedAssets||[]).map(a=>{
+      const w = RUNE_WORDS[a]||a.replace(/_/g,' ');
+      return `<div class="rune" title="${escHtml(a)}"><canvas data-word="${escHtml(w)}" width="44" height="34"></canvas><span>${escHtml(w)}</span></div>`;
+    }).join('')||'<span style="color:var(--muted);font-size:.75rem">nessuna runa rivelata</span>'}</div>`);
+
+  // Pulse sull'eroe sincronizzato col kick reale del mixer (2026-08-30,
+  // richiesto esplicitamente) -- qualunque stanza abbia un kick attivo fa
+  // pulsare l'eroe, non serve sapere quale. Classe su #hero (l'elemento
+  // stesso, non l'HTML rimpiazzato sopra) cosi' l'animazione riparte ad
+  // ogni WS che porta un kick fresco, anche se il contenuto non cambia.
+  const anyKick = (d.rooms||[]).some(r => r.audioKick > 0.5);
+  const heroEl = document.getElementById('hero');
+  if (anyKick) {
+    heroEl.classList.remove('hero-kick');
+    void heroEl.offsetWidth; // forza il reflow, altrimenti il retrigger dell'animazione su kick consecutivi non si vede
+    heroEl.classList.add('hero-kick');
+  }
+}
+
+// ── Biomi ──────────────────────────────────────────────────────────────────
+function biomeKind(r, herbRooms){
+  // Console TD (DMX/PatchDeck/MixerAudio/Agent Gaia) -- resa attiva dal
+  // 2026-08-29 via TD Room Presence lato Node-RED (touchdesignerActive).
+  // Controllata per prima: una "stanza" tecnica non ha senso letta come
+  // giardino/focolare/penombra, è un tipo di bioma a parte.
+  if (r.touchdesignerActive)          return ['🎛️','Sala macchine'];
+  if (herbRooms.has(r.id))            return ['🌿','Giardino sonoro'];
+  if ((r.persons_count||0) > 0)       return ['🔥','Focolare vivo'];
+  if (r.darkness)                     return ['🌑','Penombra'];
+  if (r.temperature != null && r.temperature >= 27) return ['🏜️','Terra calda'];
+  if (r.temperature != null && r.temperature <= 20) return ['🧊','Terra fredda'];
+  return ['🍃','Radura quieta'];
+}
+
+function renderBiomes(d){
+  const rooms = d.rooms||[];
+  const herbRooms = new Set(((d.herbarium||{}).notes||[]).map(n=>n.room));
+  setHtml('biomes', rooms.map(r=>{
+    const [ic, kind] = biomeKind(r, herbRooms);
+    const stats = [];
+    if (r.temperature != null)   stats.push(`🌡 ${r.temperature}°C`);
+    if (r.ambient_light != null) stats.push(`☀ ${Math.round(r.ambient_light)} lx`);
+    if (r.persons_count)         stats.push(`👥 ${r.persons_count}`);
+    if (r.emotion)               stats.push(`✨ ${escHtml(r.emotion)}`);
+    if (r.gesture)               stats.push(`🖐 ${escHtml(r.gesture)}`);
+    if (r.speaking)              stats.push(`🗣 ${escHtml(r.speaking)}`);
+    if (r.dmxPaletteA)           stats.push(`💡 ${escHtml(r.dmxPaletteA)}${r.dmxPaletteB && r.dmxPaletteB!==r.dmxPaletteA?` / ${escHtml(r.dmxPaletteB)}`:''}`);
+    if (r.audioKick > 0.5)       stats.push(`🥁 kick`);
+    const herb = herbRooms.has(r.id)
+      ? `<div class="biome-herb">♪ ${((d.herbarium||{}).notes||[]).filter(n=>n.room===r.id).slice(-6).map(n=>NOTE_WORDS[n.note%12]).join(' ')}</div>` : '';
+    const techCls = r.touchdesignerActive ? ' tech' : '';
+    // Colore DMX come "mood" del bioma (2026-08-30): sovrascrive il ciano
+    // tech di default solo se una palette nota e' attiva -- resta un
+    // riquadro tech "spento" (ciano) quando non c'e' nessuna palette da
+    // mostrare, invece di forzare un colore a caso.
+    const paletteColor = dmxPaletteColor(r.dmxPaletteA);
+    const kickPulse = r.audioKick > 0.5 ? ' biome-kick' : '';
+    const styleOverride = paletteColor
+      ? ` style="border-color:${paletteColor}88;box-shadow:0 0 14px ${paletteColor}33"` : '';
+    return `<div class="biome${(r.persons_count||0)>0?' alive':''}${techCls}${kickPulse}"${styleOverride}>
+      <div class="biome-head">
+        <canvas data-word="${escHtml(r.id)}" data-color="${paletteColor || (r.touchdesignerActive?'rgba(0,255,204,.9)':'rgba(0,255,204,.75)')}" data-lw="1.1" width="34" height="28"></canvas>
+        <div><div class="biome-name">${escHtml(r.name||r.id)}</div>
+        <div class="biome-kind"${paletteColor?` style="color:${paletteColor}"`:''}>${ic} ${kind}</div></div>
+      </div>
+      <div class="biome-stats">${stats.map(s=>`<span>${s}</span>`).join('')||'<span>silenzio</span>'}</div>
+      ${herb}</div>`;
+  }).join('') || '<div style="color:var(--muted);font-size:.85rem">nessun bioma attivo</div>');
+
+  // fog of war: stanze del grafo senza dati vivi
+  const known = new Set(rooms.map(r=>r.id));
+  const fog = Object.keys(d.roomGraph||{}).filter(k=>k!=='_v' && !known.has(k));
+  setHtml('fog',
+    fog.map(k=>`<div class="fog-tile">${escHtml(k)}</div>`).join('') ||
+    '<span style="color:var(--muted);font-size:.75rem">—</span>');
+}
+
+// ── Archetipi ──────────────────────────────────────────────────────────────
+function renderArch(d){
+  const stats = ((d.progression||{}).stats)||{};
+  const tot = Object.values(stats).reduce((s,v)=>s+(v||0),0)||1;
+  setHtml('arch', ARCH.map(([k,n,c,ic])=>{
+    const v = stats[k]||0;
+    return `<div class="arch-row"><span>${ic} ${n}</span><span style="color:${c}">${v}</span></div>
+      <div class="arch-bar"><div class="arch-fill" style="width:${Math.round(v/tot*100)}%;background:${c}"></div></div>`;
+  }).join(''));
+}
+
+// ── Diario delle imprese (eventi → linguaggio di gioco) ────────────────────
+// Toggle da Admin -> Automazioni ("Gioco -- mostra il diario testuale"),
+// stesso pannello generico già usato per il resto (nessuna UI nuova serve
+// lì). feedDiary() continua comunque ad accumulare eventi anche a card
+// nascosta, così riattivandola i dati sono già pronti.
+// Prima letto una sola volta al caricamento: chi cambiava il toggle in
+// Admin e tornava sulla tab Gioco già aperta non vedeva alcuna differenza
+// (segnalato dal vivo 2026-08-30) -- ora si ricontrolla anche al
+// visibilitychange, stesso pattern già usato dalle pagine device (patchdeck/
+// mixeraudio/dmx.html) per lo stesso motivo.
+let _showDiaryText = true;
+async function _syncDiaryToggle() {
+  try {
+    const r = await fetch('/gaia/automations', {signal: AbortSignal.timeout(3000)});
+    const d = await r.json();
+    const a = (d.automations || []).find(x => x.id === 'gameDiaryText');
+    _showDiaryText = a ? a.enabled !== false : true;
+  } catch { _showDiaryText = true; }
+  document.getElementById('diary-card').style.display = _showDiaryText ? '' : 'none';
+}
+_syncDiaryToggle();
+document.addEventListener('visibilitychange', () => { if (!document.hidden) _syncDiaryToggle(); });
+
+const _diary = [];        // {ts, html} — accumulato lato client
+let _lastEvTs = 0, _lastVoiceTs = 0, _lastThought = '';
+
+function tell(ts, html){
+  if (_diary.some(x=>x.ts===ts && x.html===html)) return;
+  _diary.push({ts, html});
+  _diary.sort((a,b)=>b.ts-a.ts);
+  if (_diary.length>40) _diary.length = 40;
+}
+
+function feedDiary(d){
+  for (const e of (d.events||[])){
+    if (e.ts <= _lastEvTs) continue;
+    const room = e.device||'';
+    if (e.category==='levelup')
+      tell(e.ts, `<span class="gold">⭐ Gaia ascende al livello ${escHtml(e.value)}</span>`);
+    else if (e.category==='ritual')
+      tell(e.ts, `<span class="gold">🔔 Rito ${escHtml(e.value)} invocato al Tap</span>`);
+    else if (e.category==='presence' && e.value==='enter')
+      tell(e.ts, `${e.person&&e.person!=='unknown'?escHtml(e.person):'Un viandante'} giunge nel bioma`);
+    else if (e.category==='music')
+      tell(e.ts, `<span class="green">♪ Le piante intonano ${escHtml(NOTE_WORDS[(e.value||0)%12])}</span>`);
+    else if (e.category==='gesture' && e.value)
+      tell(e.ts, `Un segno della mano: ${escHtml(e.value)}`);
+    else if (e.category==='motion' && e.value===true && e.source==='hue')
+      tell(e.ts, `Passi risuonano (${escHtml(room.split('_')[1]||'sentiero')})`);
+    else if (e.category==='clip' && e.value)
+      tell(e.ts, `<span class="gold">🎬 Un nuovo incantesimo si accende sul Deck ${escHtml(e.value.deck)}</span>`);
+  }
+  const evs = d.events||[];
+  if (evs.length) _lastEvTs = Math.max(_lastEvTs, evs[evs.length-1].ts);
+
+  const vc = (d.voiceCommands||[]).slice(-1)[0];
+  if (vc && vc.ts && vc.ts !== _lastVoiceTs){
+    _lastVoiceTs = vc.ts;
+    tell(vc.ts, `🗣 Incantesimo di voce: «${escHtml(vc.text)}»`);
+  }
+  if (d.thought && d.thought !== _lastThought){
+    _lastThought = d.thought;
+    tell(d.ts||Date.now(), `💭 Gaia riflette: «${escHtml(d.thought.slice(0,90))}${d.thought.length>90?'…':''}»`);
+  }
+  setHtml('diary', _diary.slice(0,14).map(x=>
+    `<li><span class="t">${new Date(x.ts).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})}</span><span>${x.html}</span></li>`
+  ).join('') || '<li><span style="color:var(--muted)">il diario è ancora bianco</span></li>');
+}
+
+// ── WS ─────────────────────────────────────────────────────────────────────
+function connect(){
+  const ws = new WebSocket(`ws://${location.hostname}:1880/gaia`);
+  const dot = document.getElementById('wsdot');
+  ws.onopen  = () => dot.className = 'ws-dot ok';
+  ws.onclose = () => { dot.className = 'ws-dot err'; setTimeout(connect, 3000); };
+  ws.onerror = () => ws.close();
+  ws.onmessage = e => {
+    let d; try { d = JSON.parse(e.data); } catch { return; }
+    document.getElementById('ts-label').textContent =
+      d.ts ? new Date(d.ts).toLocaleTimeString() : '';
+    renderHero(d);
+    renderBiomes(d);
+    renderArch(d);
+    feedDiary(d);
+    drawAll();
+  };
+}
+connect();
+</script>
+</body>
+</html>

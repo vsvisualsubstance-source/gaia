@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GAIA DMX — Editor Timeline</title>
+<style>
+:root {
+  --bg:#08090f; --card:#0e1221; --border:#1e2840;
+  --accent:#00ffcc; --blue:#58a6ff; --green:#3fb950; --red:#f85149;
+  --yellow:#e3b341; --muted:#6b7a99; --text:#c9d1d9;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;padding:24px;max-width:860px;margin:0 auto}
+h1{color:var(--accent);font-size:1.3rem;margin-bottom:4px}
+.subtitle{color:var(--muted);font-size:.85rem;margin-bottom:20px}
+.topnav{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--muted)}
+.dot.ok{background:var(--accent);box-shadow:0 0 5px var(--accent)}
+.dot.err{background:var(--red)}
+.layout{display:grid;grid-template-columns:200px 1fr;gap:16px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px}
+h2{font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:12px}
+.preset-row{display:flex;align-items:center;gap:6px;padding:7px 0;border-bottom:1px solid var(--border);font-size:.85rem}
+.preset-row:last-child{border-bottom:none}
+.preset-row span{flex:1;cursor:pointer}
+.preset-row span:hover{color:var(--accent)}
+.preset-row button{background:none;border:none;color:var(--muted);cursor:pointer;font-size:.9rem;padding:2px 6px}
+.preset-row button:hover{color:var(--red)}
+.new-btn{width:100%;margin-top:10px}
+label{display:block;font-size:.8rem;color:var(--muted);margin-bottom:4px;margin-top:12px}
+label:first-of-type{margin-top:0}
+input[type=text]{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 10px;font-size:.9rem}
+.step{display:flex;gap:8px;align-items:center;margin-bottom:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px}
+.step select{flex:2;background:var(--card);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:6px 8px;font-size:.85rem}
+.step input[type=number]{width:70px;background:var(--card);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:6px 8px;font-size:.85rem}
+.step .lbl{font-size:.7rem;color:var(--muted);display:block;margin-bottom:2px}
+.step .rm{background:none;border:none;color:var(--muted);cursor:pointer;font-size:1rem;padding:0 4px;align-self:flex-start}
+.step .rm:hover{color:var(--red)}
+button{background:var(--accent);color:#000;border:none;border-radius:6px;padding:9px 16px;cursor:pointer;font-size:.85rem;font-weight:600}
+button.secondary{background:var(--border);color:var(--text)}
+button.green{background:var(--green);color:#02150a}
+button:disabled{opacity:.4;cursor:default}
+.row{display:flex;gap:8px;align-items:center;margin-top:16px;flex-wrap:wrap}
+.chk{display:flex;align-items:center;gap:6px;font-size:.85rem;color:var(--text);margin-top:12px}
+.msg{font-size:.82rem;margin-top:10px;min-height:1.1em;color:var(--muted)}
+.msg.ok{color:var(--green)}
+.msg.err{color:var(--red)}
+.audio-card{margin-top:16px}
+.audio-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin-top:10px}
+.band-row label{display:flex;justify-content:space-between}
+.band-row label span.val{color:var(--text);font-weight:600}
+.band-row input[type=range]{width:100%;accent-color:var(--accent)}
+.band-meter{height:7px;border-radius:4px;background:var(--bg);overflow:hidden;border:1px solid var(--border);margin-top:6px}
+.band-meter i{display:block;height:100%;background:var(--accent);width:0%;transition:width .08s linear}
+.topnav a{margin-left:auto;color:var(--muted);text-decoration:none;font-size:.8rem;border:1px solid var(--border);border-radius:6px;padding:5px 10px}
+.topnav a:hover{color:var(--accent);border-color:var(--accent)}
+.palette-swatches{display:flex;flex-wrap:wrap;gap:8px}
+.pal-swatch{display:flex;align-items:center;gap:6px;background:var(--bg);border:1px solid var(--border);
+            border-radius:8px;padding:4px 4px 4px 10px;font-size:.8rem}
+.pal-swatch i.dot{width:16px;height:16px;border-radius:4px;border:1px solid var(--border);flex-shrink:0}
+.pal-swatch button{background:none;border:none;color:var(--muted);cursor:pointer;font-size:.9rem;padding:2px 6px}
+.pal-swatch button:hover{color:var(--red)}
+input[type=color]{width:44px;height:38px;border:1px solid var(--border);border-radius:6px;background:var(--bg);padding:2px;cursor:pointer}
+</style>
+</head>
+<body>
+
+<div class="topnav">
+  <span class="dot" id="dot"></span>
+  <h1>GAIA DMX — Editor Timeline</h1>
+  <a id="touch-link" href="#">📱 Pagina touch</a>
+</div>
+<div class="subtitle" id="subtitle">stanza —</div>
+<div class="row" id="fixture-row" style="display:none;margin-top:-10px;margin-bottom:16px">
+  <label style="margin:0;white-space:nowrap">Fixture da provare:</label>
+  <select id="fixture-select" style="background:var(--card);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:5px 8px;font-size:.82rem"></select>
+</div>
+
+<div class="layout">
+  <div class="card">
+    <h2>Preset salvati</h2>
+    <div id="preset-list"></div>
+    <button class="secondary new-btn" onclick="newPreset()">+ Nuovo</button>
+  </div>
+
+  <div class="card">
+    <h2 id="editor-title">Nuovo preset</h2>
+    <label>Nome</label>
+    <input type="text" id="name" placeholder="es. Festa">
+    <label style="margin-top:14px">Step (palette · durata in secondi · dissolvenza in secondi)</label>
+    <div id="steps"></div>
+    <button class="secondary" onclick="addStep()" style="margin-top:4px">+ Aggiungi step</button>
+    <div class="chk">
+      <input type="checkbox" id="loop" checked>
+      <label style="margin:0" for="loop">Ripeti in loop</label>
+    </div>
+    <div class="row">
+      <button onclick="save()">💾 Salva</button>
+      <button class="green" onclick="test()">▶ Prova ora</button>
+    </div>
+    <div class="msg" id="msg"></div>
+  </div>
+</div>
+
+<div class="card audio-card">
+  <h2>🎚️ Audio — gain &amp; bande (taratura/monitoraggio, scheda audio esterna)</h2>
+  <div class="audio-grid">
+    <div class="band-row">
+      <label>Dispositivo</label>
+      <select id="audio-device-select" onchange="onAudioDevice(this.value)" style="width:100%;height:36px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:0 8px"></select>
+    </div>
+    <div class="band-row">
+      <label>Gain <span class="val" id="gain-val">1.0x</span></label>
+      <input type="range" id="gain-slider" min="10" max="300" value="100" oninput="onGain(this.value)">
+    </div>
+    <div class="band-row">
+      <label>Bassi <span class="val" id="low-val">1.0x</span></label>
+      <input type="range" id="low-slider" min="10" max="300" value="100" oninput="onBandGain('low',this.value)">
+      <div class="band-meter"><i id="low-meter"></i></div>
+    </div>
+    <div class="band-row">
+      <label>Medi <span class="val" id="mid-val">1.0x</span></label>
+      <input type="range" id="mid-slider" min="10" max="300" value="100" oninput="onBandGain('mid',this.value)">
+      <div class="band-meter"><i id="mid-meter"></i></div>
+    </div>
+    <div class="band-row">
+      <label>Alti <span class="val" id="high-val">1.0x</span></label>
+      <input type="range" id="high-slider" min="10" max="300" value="100" oninput="onBandGain('high',this.value)">
+      <div class="band-meter"><i id="high-meter"></i></div>
+    </div>
+  </div>
+</div>
+
+
+<div class="card audio-card">
+  <h2>📏 Calibrazione power min/max <span id="power-fixture-label" style="color:var(--muted);font-weight:400;text-transform:none;font-size:.8rem"></span></h2>
+  <div class="audio-grid">
+    <div class="band-row">
+      <label>Power min <span class="val" id="pmin-val">0%</span></label>
+      <input type="range" id="pmin-slider" min="0" max="100" value="0" oninput="onPowerMin(this.value)">
+    </div>
+    <div class="band-row">
+      <label>Power max <span class="val" id="pmax-val">100%</span></label>
+      <input type="range" id="pmax-slider" min="0" max="100" value="100" oninput="onPowerMax(this.value)">
+    </div>
+  </div>
+</div>
+
+<div class="card audio-card">
+  <h2>🎨 Palette personalizzate</h2>
+  <div id="palette-swatches" class="palette-swatches"></div>
+  <div class="row" style="margin-top:16px">
+    <input type="text" id="new-pal-name" placeholder="Nome (es. Compleanno)" style="flex:1;min-width:140px">
+    <input type="color" id="new-pal-color" value="#ff8800">
+    <button onclick="savePalette()">💾 Aggiungi</button>
+  </div>
+  <div class="msg" id="pal-msg"></div>
+</div>
+
+<script>
+// Editor "evoluto" per i preset di gaia-dmx (pi/dmx/main.py) -- la pagina
+// touch (web/dmx-touch.html) resta per l'uso quotidiano dal display del
+// Pi, questa è per costruire/modificare i preset da un browser normale.
+// Stanza da ?room=, default "ingresso" -- stesso principio di
+// dmx-touch.html, nessun nome hardcoded nella logica.
+const params = new URLSearchParams(location.search);
+const ROOM = params.get('room') || 'ingresso';
+let FIXTURE = params.get('fixture') || null;   // null finché non arriva il primo status
+document.getElementById('subtitle').textContent = `stanza: ${ROOM}`;
+document.getElementById('touch-link').href = `dmx-touch.html?room=${encodeURIComponent(ROOM)}`;
+
+let client = null;
+let palettes = [];
+let presets = {};       // nome -> {steps, loop}, dalla status live
+let editingOriginalName = null;   // nome del preset in editing, per sapere se e' una rinomina
+
+function setConn(ok) {
+  document.getElementById('dot').className = 'dot ' + (ok ? 'ok' : 'err');
+}
+function setMsg(text, cls) {
+  const el = document.getElementById('msg');
+  el.textContent = text;
+  el.className = 'msg ' + (cls || '');
+}
+function sendCmd(cmd, shared) {
+  if (!client || !client.connected) { setMsg('Non connesso al broker', 'err'); return; }
+  // "shared" = azione non legata a una fixture (timeline_save/delete sono
+  // condivisi: i preset sono nomi/colori, non stato di una fixture).
+  if (!shared && FIXTURE) cmd = { ...cmd, fixture: FIXTURE };
+  client.publish(`gaia/dmx/${ROOM}/command`, JSON.stringify(cmd));
+}
+
+function renderFixtureSelect(fixtures) {
+  const ids = Object.keys(fixtures).sort();
+  const row = document.getElementById('fixture-row');
+  document.getElementById('power-fixture-label').textContent = ids.length > 1 ? `(${FIXTURE})` : '';
+  if (ids.length <= 1) { row.style.display = 'none'; return; }
+  row.style.display = 'flex';
+  const sel = document.getElementById('fixture-select');
+  sel.innerHTML = ids.map(id => `<option value="${id}">${id.toUpperCase()}</option>`).join('');
+  sel.value = FIXTURE;
+  sel.onchange = () => { FIXTURE = sel.value; applyStatus(lastStatus); };
+}
+
+function stepRow(step) {
+  const row = document.createElement('div');
+  row.className = 'step';
+  const opts = palettes.map(p => `<option value="${p}" ${p === step.palette ? 'selected' : ''}>${p}</option>`).join('');
+  row.innerHTML = `
+    <div style="flex:2"><span class="lbl">Palette</span><select class="s-pal">${opts}</select></div>
+    <div><span class="lbl">Durata (s)</span><input type="number" class="s-dur" min="0.1" step="0.1" value="${step.duration ?? 3}"></div>
+    <div><span class="lbl">Dissolvenza (s)</span><input type="number" class="s-fade" min="0" step="0.1" value="${step.fade ?? 1}"></div>
+    <button class="rm" title="Rimuovi">✕</button>`;
+  row.querySelector('.rm').onclick = () => row.remove();
+  return row;
+}
+
+function addStep(step) {
+  // Bug reale trovato dal vivo 2026-10-09 (vsrasp01): se si clicca "+"
+  // PRIMA che arrivi il primo status MQTT, `palettes` è ancora [] ->
+  // palettes[0] è undefined -> lo <select> generato da stepRow() non ha
+  // NESSUNA <option> -> il suo .value è "" -> lo step salvato ha
+  // palette:"" , irrisolvibile per sempre (_resolve_color ritorna None
+  // ad ogni tick, inonda i log "non risolvibile" senza mai avanzare).
+  // Capita solo per uno step SENZA argomento (il bottone "+ Aggiungi
+  // step"/newPreset) -- un preset esistente già caricato (loadIntoEditor)
+  // passa sempre un oggetto step reale, non tocca questo path.
+  if (!step && !palettes.length) {
+    setMsg('Ancora in attesa delle palette dal device, riprova in un secondo', 'err');
+    return;
+  }
+  document.getElementById('steps').appendChild(stepRow(step || { palette: palettes[0], duration: 3, fade: 1 }));
+}
+
+function renderPresetList() {
+  const wrap = document.getElementById('preset-list');
+  const names = Object.keys(presets).sort();
+  wrap.innerHTML = names.length ? '' : '<div style="color:var(--muted);font-size:.8rem">Nessun preset ancora.</div>';
+  names.forEach(name => {
+    const row = document.createElement('div');
+    row.className = 'preset-row';
+    row.innerHTML = `<span>${name}</span><button title="Elimina">🗑</button>`;
+    row.querySelector('span').onclick = () => loadIntoEditor(name);
+    row.querySelector('button').onclick = () => deletePreset(name);
+    wrap.appendChild(row);
+  });
+}
+
+function loadIntoEditor(name) {
+  const preset = presets[name];
+  editingOriginalName = name;
+  document.getElementById('editor-title').textContent = `Modifica · ${name}`;
+  document.getElementById('name').value = name;
+  document.getElementById('loop').checked = preset?.loop !== false;
+  const stepsWrap = document.getElementById('steps');
+  stepsWrap.innerHTML = '';
+  (preset?.steps || []).forEach(s => addStep(s));
+  if (!preset?.steps?.length) addStep();
+  setMsg('');
+}
+
+function newPreset() {
+  editingOriginalName = null;
+  document.getElementById('editor-title').textContent = 'Nuovo preset';
+  document.getElementById('name').value = '';
+  document.getElementById('loop').checked = true;
+  document.getElementById('steps').innerHTML = '';
+  addStep();
+  setMsg('');
+}
+
+function collectSteps() {
+  return Array.from(document.querySelectorAll('#steps .step')).map(row => ({
+    palette: row.querySelector('.s-pal').value,
+    duration: parseFloat(row.querySelector('.s-dur').value) || 1,
+    fade: parseFloat(row.querySelector('.s-fade').value) || 0,
+  }));
+}
+
+function save() {
+  const name = document.getElementById('name').value.trim();
+  if (!name) { setMsg('Dai un nome al preset prima di salvare', 'err'); return; }
+  const steps = collectSteps();
+  if (!steps.length) { setMsg('Aggiungi almeno uno step', 'err'); return; }
+  const loop = document.getElementById('loop').checked;
+  // Una rinomina (nome cambiato rispetto a quello aperto) lascia il
+  // vecchio nome sul disco -- lo si cancella esplicitamente invece di
+  // lasciare un preset orfano in giro.
+  if (editingOriginalName && editingOriginalName !== name) {
+    sendCmd({ action: 'timeline_delete', name: editingOriginalName }, true);
+  }
+  sendCmd({ action: 'timeline_save', name, steps, loop }, true);
+  editingOriginalName = name;
+  setMsg(`Salvato "${name}"`, 'ok');
+}
+
+function test() {
+  const steps = collectSteps();
+  if (!steps.length) { setMsg('Aggiungi almeno uno step prima di provare', 'err'); return; }
+  const loop = document.getElementById('loop').checked;
+  sendCmd({ action: 'timeline_set', steps, loop });
+  sendCmd({ action: 'timeline_start' });
+  setMsg('In onda sulla fixture…', 'ok');
+}
+
+function deletePreset(name) {
+  if (!confirm(`Eliminare il preset "${name}"?`)) return;
+  sendCmd({ action: 'timeline_delete', name }, true);
+  if (editingOriginalName === name) newPreset();
+}
+
+// Gain + bande (2026-10-05): solo taratura/monitoraggio, azione condivisa
+// (non per fixture) -- vedi nota in pi/dmx/main.py. Stessi comandi/campi
+// di status della pagina touch (web/dmx-touch.html).
+function onGain(v) { sendCmd({ action: 'audio_tune', gain: v / 100 }, true); }
+function onBandGain(band, v) { sendCmd({ action: 'audio_tune', [band]: v / 100 }, true); }
+function onAudioDevice(id) { sendCmd({ action: 'audio_set_device', device: id }, true); }
+
+let lastAudioDeviceList = null;   // evita di ridisegnare il <select> ad ogni status (perderebbe il focus a meta' scelta)
+function renderAudioDevices(devices, current) {
+  const key = JSON.stringify(devices) + '|' + current;
+  if (key === lastAudioDeviceList) return;
+  lastAudioDeviceList = key;
+  const sel = document.getElementById('audio-device-select');
+  sel.innerHTML = devices.map(d =>
+    `<option value="${d.id}"${d.id === current ? ' selected' : ''}>${d.label}</option>`).join('');
+}
+
+function applyAudioTune(d) {
+  renderAudioDevices(d.audio_devices || [{ id: 'default', label: 'Automatico (default)' }], d.audio_device || 'default');
+  const gain = d.audio_gain ?? 1.0;
+  const bg = d.audio_band_gain || {};
+  const bands = d.audio_bands || {};
+  document.getElementById('gain-slider').value = Math.round(gain * 100);
+  document.getElementById('gain-val').textContent = gain.toFixed(1) + 'x';
+  ['low', 'mid', 'high'].forEach(b => {
+    const g = bg[b] ?? 1.0;
+    document.getElementById(`${b}-slider`).value = Math.round(g * 100);
+    document.getElementById(`${b}-val`).textContent = g.toFixed(1) + 'x';
+    document.getElementById(`${b}-meter`).style.width = Math.round((bands[b] ?? 0) * 100) + '%';
+  });
+}
+
+// Palette personalizzate (2026-10-05) -- stesso schema di
+// timeline_save/timeline_delete (vedi save()/deletePreset() sopra), un
+// solo file condiviso nome->[r,g,b] (pi/dmx/palettes.json), nessuna
+// distinzione fra palette "di base" e personalizzate.
+function rgbToHex([r, g, b]) {
+  return '#' + [r, g, b].map(c => Math.max(0, Math.min(255, c)).toString(16).padStart(2, '0')).join('');
+}
+function hexToRgb(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+function renderPaletteSwatches(paletteRgb) {
+  const wrap = document.getElementById('palette-swatches');
+  const names = Object.keys(paletteRgb).sort();
+  wrap.innerHTML = names.map(name => `
+    <div class="pal-swatch">
+      <i class="dot" style="background:${rgbToHex(paletteRgb[name])}"></i>
+      <span>${name}</span>
+      <button title="Elimina" data-del="${name}">✕</button>
+    </div>`).join('');
+  wrap.querySelectorAll('[data-del]').forEach(el => {
+    el.onclick = () => deletePaletteCustom(el.dataset.del);
+  });
+}
+function savePalette() {
+  const name = document.getElementById('new-pal-name').value.trim();
+  const msg = document.getElementById('pal-msg');
+  if (!name) { msg.textContent = 'Dai un nome alla palette'; msg.className = 'msg err'; return; }
+  const rgb = hexToRgb(document.getElementById('new-pal-color').value);
+  sendCmd({ action: 'palette_save', name, rgb }, true);
+  document.getElementById('new-pal-name').value = '';
+  msg.textContent = `Salvata "${name}"`;
+  msg.className = 'msg ok';
+}
+function deletePaletteCustom(name) {
+  if (!confirm(`Eliminare la palette "${name}"?`)) return;
+  sendCmd({ action: 'palette_delete', name }, true);
+}
+
+// Calibrazione power min/max (2026-10-05): PER fixture (FIXTURE corrente),
+// a differenza di gain/bande che sono condivisi -- sendCmd senza "true"
+// inietta "fixture" da solo, stesso meccanismo di save()/test() sopra.
+function onPowerMin(v) { sendCmd({ action: 'set_power_range', min: v / 100 }); }
+function onPowerMax(v) { sendCmd({ action: 'set_power_range', max: v / 100 }); }
+function applyPowerRange(fx) {
+  const pmin = fx?.power_min ?? 0, pmax = fx?.power_max ?? 1;
+  document.getElementById('pmin-slider').value = Math.round(pmin * 100);
+  document.getElementById('pmin-val').textContent = Math.round(pmin * 100) + '%';
+  document.getElementById('pmax-slider').value = Math.round(pmax * 100);
+  document.getElementById('pmax-val').textContent = Math.round(pmax * 100) + '%';
+}
+
+let lastStatus = null;
+function applyStatus(d) {
+  lastStatus = d;
+  palettes = d.palettes || [];
+  presets = d.timeline_presets || {};   // {nome: {steps, loop}}, contenuto completo
+  const fixtures = d.fixtures || {};
+  if (!FIXTURE || !fixtures[FIXTURE]) FIXTURE = d.default_fixture || Object.keys(fixtures).sort()[0];
+  renderFixtureSelect(fixtures);
+  renderPresetList();
+  renderPaletteSwatches(d.palettes_rgb || {});
+  applyAudioTune(d);
+  applyPowerRange(fixtures[FIXTURE]);
+}
+
+function start() {
+  // Broker locale (2026-10-05) se questa pagina è servita dal Pi stesso
+  // (porta 8099, vedi pi/dmx/main.py _start_local_webserver) -- funziona
+  // anche senza rete verso Core (uso "in giro"). Se invece la pagina
+  // arriva da un altro host (es. OPS via Admin), niente broker locale
+  // lì: resta il broker di Core come sempre.
+  const BROKER_HOST = location.port === '8099' ? location.hostname : '192.168.1.142';
+  client = mqtt.connect(`ws://${BROKER_HOST}:9001`, { connectTimeout: 4000 });
+  client.on('connect', () => {
+    setConn(true);
+    client.subscribe(`gaia/dmx/${ROOM}/status`);
+  });
+  client.on('error',   () => setConn(false));
+  client.on('offline', () => setConn(false));
+  client.on('message', (topic, raw) => {
+    if (!raw || !raw.length) return;
+    try { applyStatus(JSON.parse(raw.toString())); } catch (e) {}
+  });
+}
+
+newPreset();
+if (typeof mqtt !== 'undefined') {
+  start();
+} else {
+  const s = document.createElement('script');
+  s.src = 'vendor/mqtt.min.js';
+  s.onload = start;
+  document.head.appendChild(s);
+}
+</script>
+</body>
+</html>
