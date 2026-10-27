@@ -1,7 +1,10 @@
 const DMX_OUTPUT={
   source:'unknown',sourceAt:0,lastAt:0,deviceId:null,seq:null,master:null,blackout:null,strobe:null,scene:null,
-  fixtures:new Map(),rigs:{}
+  fixtures:new Map(),rigs:{},rigsAt:0,v2At:0
 };
+// dmx_output v2 (nota TD 47): struttura in dmx_layout (retained, a ogni cambio), valori
+// in dmx_live (10/s, campi null omessi). Qui si ricompone lo stesso record della v1.
+const DMX_LAYOUT={rev:null,fixtures:null};
 const dmxNumber=value=>value==null||value===''||!Number.isFinite(+value)?null:+value;
 const dmxUnit=value=>{const n=dmxNumber(value);return n==null||n<0?null:Math.max(0,Math.min(1,n))};
 function dmxFixtureRecord(f,receivedAt){
@@ -35,6 +38,7 @@ function dmxRigMeters(raw,prev,receivedAt){
 }
 function dmxOutputApplySnapshot(payload,deviceId,receivedAt=Date.now()){
   if(!payload||typeof payload!=='object'||payload.v!==1||!Array.isArray(payload.fixtures))return false;
+  if(dmxV2Fresh(receivedAt))return false;
   const fixtures=new Map();
   for(const fixture of payload.fixtures){
     const record=dmxFixtureRecord(fixture,receivedAt);
@@ -48,8 +52,37 @@ function dmxOutputApplySnapshot(payload,deviceId,receivedAt=Date.now()){
   DMX_OUTPUT.strobe=typeof payload.strobe==='boolean'?payload.strobe:null;
   DMX_OUTPUT.scene=payload.scene??null;
   DMX_OUTPUT.fixtures=fixtures;
-  DMX_OUTPUT.rigs=dmxRigMeters(payload.rigs,DMX_OUTPUT.rigs,receivedAt);
+  // il meter dei rig arriva a 30 Hz su dmx_rigs: da qui solo se quello tace
+  if(!DMX_OUTPUT.rigsAt||receivedAt-DMX_OUTPUT.rigsAt>1000)DMX_OUTPUT.rigs=dmxRigMeters(payload.rigs,DMX_OUTPUT.rigs,receivedAt);
   return true;
+}
+// v1 ignorato finche' arriva la v2 (stessi dati, non due volte)
+const dmxV2Fresh=at=>DMX_OUTPUT.v2At>0&&at-DMX_OUTPUT.v2At<1500;
+function dmxLayoutApply(payload){
+  if(!payload||payload.v!==2||!Array.isArray(payload.fixtures))return false;
+  DMX_LAYOUT.rev=payload.rev??null;DMX_LAYOUT.fixtures=payload.fixtures;return true;
+}
+function dmxLiveApply(payload,deviceId,receivedAt=Date.now()){
+  if(!payload||payload.v!==2||!payload.fixtures||typeof payload.fixtures!=='object'||!DMX_LAYOUT.fixtures)return false;
+  const fixtures=new Map();
+  for(const lf of DMX_LAYOUT.fixtures){
+    const live=payload.fixtures[lf.uid]??payload.fixtures[String(lf.id)]??{};
+    const record=dmxFixtureRecord({...lf,...live},receivedAt);
+    if(record)fixtures.set(record.key,record);
+  }
+  DMX_OUTPUT.source='mqtt';DMX_OUTPUT.sourceAt=receivedAt;DMX_OUTPUT.lastAt=receivedAt;DMX_OUTPUT.v2At=receivedAt;
+  DMX_OUTPUT.deviceId=String(payload.device_id||deviceId||'');
+  DMX_OUTPUT.seq=dmxNumber(payload.seq);
+  DMX_OUTPUT.master=dmxUnit(payload.master);
+  DMX_OUTPUT.blackout=typeof payload.blackout==='boolean'?payload.blackout:null;
+  DMX_OUTPUT.strobe=typeof payload.strobe==='boolean'?payload.strobe:null;
+  DMX_OUTPUT.scene=payload.scene??null;
+  DMX_OUTPUT.fixtures=fixtures;
+  return true;
+}
+function dmxRigsApply(payload,receivedAt=Date.now()){
+  if(!payload||!payload.rigs||typeof payload.rigs!=='object')return false;
+  DMX_OUTPUT.rigs=dmxRigMeters(payload.rigs,DMX_OUTPUT.rigs,receivedAt);DMX_OUTPUT.rigsAt=receivedAt;return true;
 }
 function dmxOutputApplySource(args,receivedAt=Date.now()){
   const source=args?.[0];
@@ -182,6 +215,6 @@ function tdScenePreview(scene,stepped=new Set()){
 const DMX_QUICK_PATCH=['fixture_count','start_address','output_port','fixture_profile'];
 
 if(typeof module==='object'&&module.exports){
-  module.exports={DMX_OUTPUT,dmxRigMeters,dmxOutputApplySnapshot,dmxOutputApplySource,dmxOutputApplyOsc,dmxOutputFresh,dmxOutputForFixture,dmxOutputSummary,
+  module.exports={DMX_OUTPUT,DMX_LAYOUT,dmxRigMeters,dmxLayoutApply,dmxLiveApply,dmxRigsApply,dmxOutputApplySnapshot,dmxOutputApplySource,dmxOutputApplyOsc,dmxOutputFresh,dmxOutputForFixture,dmxOutputSummary,
     dmxHeadAngles,dmxGroupColor,dmxPaletteGroup,tdSceneList,tdActiveScene,dmxHex,dmxPaletteColors,dmxGradient,tdScenePreview,DMX_QUICK_PATCH};
 }

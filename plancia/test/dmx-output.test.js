@@ -20,7 +20,7 @@ const {
 beforeEach(() => {
   Object.assign(DMX_OUTPUT, {
     source: 'unknown', sourceAt: 0, lastAt: 0, deviceId: null, seq: null,
-    master: null, blackout: null, strobe: null, scene: null, fixtures: new Map()
+    master: null, blackout: null, strobe: null, scene: null, fixtures: new Map(), rigs: {}, rigsAt: 0, v2At: 0
   });
 });
 
@@ -210,4 +210,31 @@ test('rig meters (nota TD 45): level, amount and a kick when the counter changes
   assert.equal(restart.rig_a.kickAt, 1300);
   assert.equal(restart.rig_a.amount, 0.5);
   assert.deepEqual(dmxRigMeters(null, kick, 1400), {});
+});
+
+
+test('dmx_output v2 (nota TD 47): layout + live become the same records as v1; v1 ignored while v2 is fresh', () => {
+  const m = require('../src/49-dmx-output');
+  m.DMX_LAYOUT.rev = null; m.DMX_LAYOUT.fixtures = null;
+  assert.equal(m.dmxLiveApply({ v: 2, fixtures: {} }, 'td', 1000), false); // senza layout si aspetta
+  assert.equal(m.dmxLayoutApply({ v: 2, rev: 'r1', fixtures: [{ uid: 'p-a', id: 3, group: 'rig_a', sent: true, color_source: 'rgb', audio: 'bass', audio_gain: 1.5 }, { uid: 'p-h', id: 9, group: 'heads', sent: true }] }), true);
+  assert.equal(m.dmxLiveApply({ v: 2, seq: 7, layout_rev: 'r1', master: 0.8, scene: { index: 2 }, fixtures: { 'p-a': { intensity: 0.5, rgb_out: [0.5, 0, 0] }, 'p-h': { pan: 90, tilt: 45, color_wheel: 16 } } }, 'td', 1000), true);
+  const a = m.dmxOutputForFixture({ id: 'p-a' }), h = m.dmxOutputForFixture({ id: 'p-h' });
+  assert.deepEqual([a.intensity, a.rgbOut, a.group, a.colorSource, a.audio, a.audioGain, a.pan], [0.5, [0.5, 0, 0], 'rig_a', 'rgb', 'bass', 1.5, null]);
+  assert.deepEqual([h.pan, h.tilt, h.colorWheel, h.intensity], [90, 45, 16, null]); // campi omessi = null
+  assert.equal(m.DMX_OUTPUT.master, 0.8);
+  // un v1 che arriva mentre la v2 e' fresca non sovrascrive
+  assert.equal(m.dmxOutputApplySnapshot({ v: 1, fixtures: [{ uid: 'p-a', sent: true, intensity: 0.1 }] }, 'td', 1500), false);
+  assert.equal(m.dmxOutputForFixture({ id: 'p-a' }).intensity, 0.5);
+  // v2 ferma da oltre 1,5 s: il v1 torna buono
+  assert.equal(m.dmxOutputApplySnapshot({ v: 1, fixtures: [{ uid: 'p-a', sent: true, intensity: 0.1 }] }, 'td', 2600), true);
+});
+
+test('dmx_rigs at 30 Hz wins over dmx_output.rigs while fresh', () => {
+  const m = require('../src/49-dmx-output');
+  assert.equal(m.dmxRigsApply({ rigs: { rig_a: { level: 0.9, kicks: 5, amount: 1 } } }, 1000), true);
+  m.dmxOutputApplySnapshot({ v: 1, fixtures: [], rigs: { rig_a: { level: 0.1, kicks: 5 } } }, 'td', 1200);
+  assert.equal(m.DMX_OUTPUT.rigs.rig_a.level, 0.9);  // dmx_rigs fresco: si tiene quello
+  m.dmxOutputApplySnapshot({ v: 1, fixtures: [], rigs: { rig_a: { level: 0.2, kicks: 5 } } }, 'td', 2500);
+  assert.equal(m.DMX_OUTPUT.rigs.rig_a.level, 0.2);  // dmx_rigs fermo da >1 s: vale dmx_output
 });

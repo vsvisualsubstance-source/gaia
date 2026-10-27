@@ -19,7 +19,7 @@ if(!GC.profiles[GC.profile])GC.profile='casa';
 const net=()=>GC.profiles[GC.profile]||NET_DEFAULT.casa;
 const videoGatewayUrl=()=>{const n=net();return n.video?`http://${n.video}:${n.videoPort||8788}`:null};
 const bridgeCfg=()=>({type:'config',host:C.host,port:+C.port,gaiaHost:net().osc,gaiaPort:+net().oscPort,channels:C.oscChannels});
-const G={client:null,ok:false,host:null,sim:false,nr:null,nrWs:null,nrOk:false,dirty:true,lastPaint:0,devices:{},pdm:{},pdThumb:{},dxm:{},dmx:{},levels:{},canvas:null,brain:null,dream:null,chat:[],chatV:0,lastSent:null,offSince:null,tdAutoSynced:false};
+const G={client:null,ok:false,host:null,sim:false,nr:null,nrWs:null,nrOk:false,dirty:true,lastPaint:0,devices:{},pdm:{},pdThumb:{},tdState:{},dxm:{},dmx:{},levels:{},canvas:null,brain:null,dream:null,chat:[],chatV:0,lastSent:null,offSince:null,tdAutoSynced:false};
 function tdHeadEntries(){
   const params=G.devices['td-dmx-win']?.params||{};
   const listed=Array.isArray(params.heads_list)?params.heads_list:Object.values(params.heads_list||{});
@@ -112,7 +112,8 @@ function gConnect(host){
   let c;try{c=mqtt.connect(`ws://${host}:${net().wsPort}`,{connectTimeout:4000,reconnectPeriod:3000})}catch{G.offSince=G.offSince??Date.now();return}
   G.client=c;
   c.on('connect',()=>{G.ok=true;G.offSince=null;if(G.sim)gSimOff();gStatus();
-    ['gaia/device/+/status','gaia/devices/+/patchdeck_matrix','gaia/devices/+/patch_thumb/+','gaia/devices/+/dmx_matrix','gaia/devices/+/dmx_output','gaia/devices/+/show_timeline','gaia/device/+/audio_levels','gaia/dmx/+/status',
+    ['gaia/device/+/status','gaia/devices/+/patchdeck_matrix','gaia/devices/+/patch_thumb/+',
+     ...TD_STATE_TOPICS.map(n=>'gaia/devices/+/'+n),'gaia/devices/+/dmx_rigs','gaia/devices/+/dmx_layout','gaia/devices/+/dmx_live','gaia/devices/+/dmx_matrix','gaia/devices/+/dmx_output','gaia/devices/+/show_timeline','gaia/device/+/audio_levels','gaia/dmx/+/status',
      'gaia/td/canvas','gaia/brain/state','gaia/brain/dream','gaia/voice/tts/+','gaia/voice/command/+',
      SHOW_CLOCK_STATE,'gaia/show/clock/pong/+'].forEach(t=>c.subscribe(t))});
   const off=()=>{if(G.client!==c)return;G.ok=false;G.offSince=G.offSince??Date.now();gStatus()};
@@ -145,10 +146,19 @@ function gStatus(){
 }
 function gIn(t,p){
   const seg=t.split('/'),obj=p&&typeof p==='object';
-  if(seg[1]==='devices'&&seg[3]==='dmx_output'){
+  if(seg[1]==='devices'&&seg[3]==='dmx_layout'){if(obj)dmxLayoutApply(p)}
+  else if(seg[1]==='devices'&&seg[3]==='dmx_rigs'){if(obj)dmxRigsApply(p)}
+  else if(seg[1]==='devices'&&TD_STATE_TOPICS.includes(seg[3])){
+    // struttura su topic retained con rev (nota TD 47): si fonde nei params del device
+    if(obj&&p.params&&typeof p.params==='object'){const id=p.device_id||seg[2],old=tdParamsBefore(id),st=(G.tdState[id]=G.tdState[id]||{});
+      if(st[seg[3]]?.rev===p.rev&&p.rev!=null)return;
+      st[seg[3]]={rev:p.rev??null,params:p.params,at:Date.now()};
+      if(G.devices[id]){mergeTdState(id);tdParamsChanged(id,old);G.dirty=true}}
+  }
+  else if(seg[1]==='devices'&&(seg[3]==='dmx_output'||seg[3]==='dmx_live')){
     if(obj){
       const previousScene=dmxNumber(DMX_OUTPUT.scene?.index??DMX_OUTPUT.scene);
-      if(dmxOutputApplySnapshot(p,seg[2])){
+      if(seg[3]==='dmx_live'?dmxLiveApply(p,seg[2]):dmxOutputApplySnapshot(p,seg[2])){
         const updates=[['/dmx/master',DMX_OUTPUT.master],['/dmx/blackout',DMX_OUTPUT.blackout?1:0],['/dmx/strobe',DMX_OUTPUT.strobe?1:0]];
         for(const [address,value]of updates)if(value!=null){
           bus(address,[value],'remote');
@@ -184,18 +194,8 @@ function gIn(t,p){
         showClock.rtts.push(rtt);if(showClock.rtts.length>10)showClock.rtts.shift();
         showClock.minRtt=Math.min(...showClock.rtts)}
     }
-  }else if(seg[1]==='device'&&seg[3]==='status'){if(obj){const oldShowCues=JSON.stringify(G.devices[seg[2]]?.params?.show_cues),oldScenes=JSON.stringify(G.devices[seg[2]]?.params?.show_scene_catalog);p._seen=Date.now();G.devices[seg[2]]=p;
-    // reimport automatico della patch di TD all'apertura, ma MAI sopra
-    // fixture della Pianta non ancora mandate (palco AI, fixture nuove):
-    // le cancellerebbe dal layout condiviso al primo tablet che si apre
-    if(seg[2]==='td-dmx-win'&&!G.tdAutoSynced&&Array.isArray(p.params?.dmx_fixtures)){G.tdAutoSynced=true;
-      const pending=(L.fixtures||[]).filter(f=>FIX_TYPES[f.type]?.ch&&!f._synced).length;
-      if(pending)showInfo(`Pianta con ${pending} fixture non ancora mandate a DMX Master: non la reimporto da TD (⇩ TD per farlo a mano).`);else importFromTD(true)}
-    if(seg[2]==='td-dmx-win'){
-      syncHeadSelectors();
-      if(oldShowCues!==JSON.stringify(p.params?.show_cues))refreshShowTimelines();
-      if(oldScenes!==JSON.stringify(p.params?.show_scene_catalog))refreshTdSceneWidgets();
-    }}}
+  }else if(seg[1]==='device'&&seg[3]==='status'){if(obj){const old=tdParamsBefore(seg[2]);p._seen=Date.now();G.devices[seg[2]]=p;
+    mergeTdState(seg[2]);tdParamsChanged(seg[2],old)}}
   else if(t.endsWith('/patchdeck_matrix')){if(obj)G.pdm[p.device_id||seg[2]]=p}
   // miniatura di una patch PatchDeck (retained, una per topic): JPEG base64 -> data URL
   else if(seg[1]==='devices'&&seg[3]==='patch_thumb'){if(obj&&p.data){const n=+(p.patch||seg[4]);(G.pdThumb[seg[2]]=G.pdThumb[seg[2]]||{})[n]={label:p.label||'',url:`data:${p.mime||'image/jpeg'};base64,${p.data}`};G.thumbV=(G.thumbV||0)+1}}
@@ -222,6 +222,29 @@ function gPub(topic,obj){
 }
 const devAge=d=>Date.now()-(d?.ts||d?._seen||0);
 const devDot=d=>!d?'':devAge(d)<180000?'on':devAge(d)<1800000?'idle':'';
+// ---- stato di DMX Master su piu' topic (nota TD 47) ----
+// status "slim" = heartbeat; modelli, patch, scene e teste su topic retained con rev.
+// I loro params si fondono in G.devices[id].params: tutto il resto della Plancia
+// continua a leggere tdParams() come prima. Senza i topic nuovi vale lo status pieno.
+const TD_STATE_TOPICS=['dmx_catalog','dmx_patch','show_scenes','heads_state'];
+function mergeTdState(id){
+  const d=G.devices[id],st=G.tdState[id];if(!d||!st)return;
+  d.params=d.params||{};for(const s of Object.values(st))Object.assign(d.params,s.params);
+}
+const tdParamsBefore=id=>{const q=G.devices[id]?.params;return{cues:JSON.stringify(q?.show_cues),scenes:JSON.stringify(q?.show_scene_catalog)}};
+function tdParamsChanged(id,old){
+  if(id!=='td-dmx-win')return;
+  const p=G.devices[id];
+  // reimport automatico della patch di TD all'apertura, ma MAI sopra
+  // fixture della Pianta non ancora mandate (palco AI, fixture nuove):
+  // le cancellerebbe dal layout condiviso al primo tablet che si apre
+  if(!G.tdAutoSynced&&Array.isArray(p.params?.dmx_fixtures)){G.tdAutoSynced=true;
+    const pending=(L.fixtures||[]).filter(f=>FIX_TYPES[f.type]?.ch&&!f._synced).length;
+    if(pending)showInfo(`Pianta con ${pending} fixture non ancora mandate a DMX Master: non la reimporto da TD (⇩ TD per farlo a mano).`);else importFromTD(true)}
+  syncHeadSelectors();
+  if(old.cues!==JSON.stringify(p.params?.show_cues))refreshShowTimelines();
+  if(old.scenes!==JSON.stringify(p.params?.show_scene_catalog))refreshTdSceneWidgets();
+}
 function gFam(id,d){if(d?.family)return d.family;if(G.pdm[id])return'patchdeck';if(G.dxm[id])return'dmx';if(/controller|mixer/i.test(id+' '+(d?.name||'')))return'mixeraudio';return d?.role||''}
 function devIds(fam){
   const ids=new Set([...Object.keys(G.devices),...(fam==='patchdeck'?Object.keys(G.pdm):[]),...(fam==='dmx'?Object.keys(G.dxm):[])]);
