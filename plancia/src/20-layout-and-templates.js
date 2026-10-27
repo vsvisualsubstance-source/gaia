@@ -25,8 +25,6 @@ const TPL={
     W('fader',12,5,4,2,{label:'Strobo (Hz)',addr:'/dmx/strobe/rate',min:1,max:20,value:.37,color:SWATCH[5]}),
     ...[['Master','master',1,0],['Front','group/front',.85,0],['Back','group/back',.9,4],['Teste','group/mh',1,1],['LED bar','group/ledbar',.8,2],['LED wall','group/ledwall',.9,2],['Haze','group/haze',.55,5],['Blinder','group/blinder',0,5]]
       .map(([n,a,v,c],i)=>W('fader',i*2,7,2,5,{label:n,addr:'/dmx/'+a,value:v,color:SWATCH[c]}))
-  ]),P('DMX V8',[
-    W('tddevice',0,0,16,12,{label:'DMX V8 · controlli live',fam:'dmx',device:''})
   ])]},
   mh:{name:'Teste mobili',desc:'Selezione fixture, pan/tilt, colore, gobo, posizioni preset, dimmer e zoom.',pages:()=>[P('Teste mobili',[
     W('scenes',0,0,8,2,{label:'Selezione teste TD',addr:'/mh/select/heads',mode:'head-select',items:'',headValues:[],selectedHeads:[],value:[],cols:8,color:SWATCH[1]}),

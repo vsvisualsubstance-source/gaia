@@ -161,6 +161,18 @@ function migrateUiConsolePages(){
 // DMX Master) diventa i controlli audio dei gruppi.
 // 2026-10-21 (nota TD 45): il chase per rig non e' in programma: ogni widget
 // Chase (/dmx/chase, solo anteprima locale) diventa i controlli audio compatti.
+// 2026-10-27: le pagine "DMX V8" erano due (template Gaia e template DMX) con lo
+// stesso pannello di DMX Master: resta la prima. Anche quando si apre un progetto.
+function dedupeDmxV8Pages(layout){
+  const v8=layout.pages.filter(p=>p.name==='DMX V8');if(v8.length<2)return false;
+  const onlyPanel=p=>p.widgets.length===1&&p.widgets[0].type==='tddevice'&&(p.widgets[0].fam||'')==='dmx';
+  const drop=v8.slice(1).filter(onlyPanel);if(!drop.length)return false;
+  layout.pages=layout.pages.filter(p=>!drop.includes(p));return true;
+}
+function migrateUiOneDmxV8(){
+  if((L.uiRev||0)>=5)return;
+  dedupeDmxV8Pages(L);pi=Math.min(pi,L.pages.length-1);L.uiRev=5;save();
+}
 function migrateUiNoChase(){
   if((L.uiRev||0)>=4)return;
   for(const p of L.pages)p.widgets.forEach((w,i)=>{if(w.type==='scenes'&&w.addr==='/dmx/chase')p.widgets[i]=W('audiorigs',w.x,w.y,w.w,w.h,{label:'Audio',color:w.color})});
@@ -173,4 +185,4 @@ function migrateUiAudioPage(){
   if(ch)regia.widgets[regia.widgets.indexOf(ch)]=W('audiorigs',ch.x,ch.y,ch.w,ch.h,{label:'Audio',color:ch.color});
   L.uiRev=3;save();
 }
-migrateLegacyHeadSelectors();migrateHeadPresetWidgets();migrateUiShowTimeline();migrateUiConsolePages();migrateUiAudioPage();migrateUiNoChase();render(); initShow(); connect(); gStart(); requestAnimationFrame(loop);
+migrateLegacyHeadSelectors();migrateHeadPresetWidgets();migrateUiShowTimeline();migrateUiConsolePages();migrateUiAudioPage();migrateUiNoChase();migrateUiOneDmxV8();render(); initShow(); connect(); gStart(); requestAnimationFrame(loop);

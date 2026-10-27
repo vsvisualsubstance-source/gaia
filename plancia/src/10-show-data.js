@@ -200,6 +200,7 @@ function projLoad(id){
   L=data;if(!L.fixtures)L.fixtures=defaultFixtures(L.rig);
   ensureStageData(L);
   L._projectId=id;const e=projList().find(x=>x.id===id);L._projectName=e?e.name:'';
+  dedupeDmxV8Pages(L);
   pi=0;selId=null;save();render();initShow();checkProjectModelsSoon();
   return true;
 }
@@ -211,8 +212,8 @@ function projDelete(id){
 function projLoadTemplate(tid){
   const t=PROJECT_TEMPLATES.find(x=>x.tid===tid);if(!t)return;
   const v=t.venue&&VENUES[t.venue];
-  L=v?{pages:TPL.full.pages(),fixtures:v.fixtures(),stage:{...stageDefaults(),...v.stage},groups:v.groups.map(g=>({...g})),models:Object.fromEntries((v.models||[]).map(m=>[m.model,modelPayload(m)])),uiRev:4}
-    :{pages:TPL.full.pages(),fixtures:defaultFixtures(t.rig),stage:stageDefaults(),uiRev:4};
+  L=v?{pages:TPL.full.pages(),fixtures:v.fixtures(),stage:{...stageDefaults(),...v.stage},groups:v.groups.map(g=>({...g})),models:Object.fromEntries((v.models||[]).map(m=>[m.model,modelPayload(m)])),uiRev:5}
+    :{pages:TPL.full.pages(),fixtures:defaultFixtures(t.rig),stage:stageDefaults(),uiRev:5};
   delete L._projectId;delete L._projectName;ensureStageData(L);
   pi=0;selId=null;save();render();initShow();checkProjectModelsSoon();
 }

@@ -7,7 +7,9 @@ function gBind(e,el,w){
     const c=t.closest('.pd-c');if(c){e.preventDefault();devCmd(id,{action:'enable',service:c.dataset.svc});c.classList.add('fl');setTimeout(()=>c.classList.remove('fl'),300);return}
     const b=t.closest('[data-deck]');if(b){e.preventDefault();devCmd(id,{action:b.dataset.state==='1'?'disable':'enable',service:b.dataset.deck})}return}
   if(w.type==='tddevice'){const id=pickDev(w,w.fam||'');
-    const sv=t.closest('.chip[data-svc]');if(sv){e.preventDefault();devCmd(id,{action:sv.classList.contains('on')?'disable':'enable',service:sv.dataset.svc});return}
+    const sv=t.closest('.chip[data-svc]');if(sv){e.preventDefault();const on=sv.classList.contains('on');
+      if(sv.classList.contains('dv-warn')&&!confirm(`${on?'Spegnere':'Accendere'} "${sv.textContent}" (${sv.dataset.svc}) su ${id}? È un interruttore tecnico di DMX Master.`))return;
+      devCmd(id,{action:on?'disable':'enable',service:sv.dataset.svc});return}
     const op=t.closest('.chip[data-opt]');if(op){e.preventDefault();const raw=op.dataset.opt,type=op.dataset.optType;
       const value=type==='number'?Number(raw):type==='boolean'?raw==='true':raw;
       devCmd(id,{action:'set',param:op.dataset.par,value});return}

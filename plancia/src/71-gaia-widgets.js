@@ -53,9 +53,16 @@ function gPaint(el,w){
     if(!id){body._sig='';body.innerHTML=`<p class="dv-empty">${(G.ok||G.sim)?`Nessun device ${esc(FAM_IT[w.fam]||'')} ha ancora pubblicato il proprio stato.`:'Gaia non è collegata. Imposta il broker in ⋯ → Gaia.'}</p>`;return}
     const ps=devParams(id),sv=devServices(id),sig=JSON.stringify([id,sv,ps.map(p=>[p.n,p.options||null,p.labels||null])]);
     if(body._sig!==sig){body._sig=sig;
-      body.innerHTML=(sv.length?`<div class="dv-svc">${sv.map(k=>`<button class="chip" data-svc="${esc(k)}">${esc(k.replace(/_/g,' '))}</button>`).join('')}</div>`:'')+
-        ps.map(p=>p.options?`<div class="dv-p"><span>${esc(p.label)}</span><div class="dv-opts">${p.options.map((o,i)=>`<button class="chip" data-par="${esc(p.n)}" data-opt="${esc(o)}" data-opt-type="${typeof o}">${esc(p.labels?.[i]??o)}</button>`).join('')}</div><span></span></div>`
-          :`<div class="dv-p"><span title="${esc(p.n)}">${esc(p.label)}</span><div class="dv-sl" data-par="${esc(p.n)}" data-min="${p.min}" data-max="${p.max}"><i></i></div><span class="dv-v"></span></div>`).join('')||'<p class="dv-empty">Il device non espone servizi o parametri.</p>'}
+      // sezioni apribili (per rig, teste, PTZ, show...) invece di un elenco unico; i
+      // servizi delicati (patch, simulazione, file audio...) in "Avanzate" con conferma
+      const secs=tdDeviceSections(id,ps,sv),param=p=>p.options?`<div class="dv-p"><span title="${esc(p.n)}">${esc(p.label)}</span><div class="dv-opts">${p.options.map((o,i)=>`<button class="chip" data-par="${esc(p.n)}" data-opt="${esc(o)}" data-opt-type="${typeof o}">${esc(p.labels?.[i]??o)}</button>`).join('')}</div><span></span></div>`
+          :`<div class="dv-p"><span title="${esc(p.n)}">${esc(p.label)}</span><div class="dv-sl" data-par="${esc(p.n)}" data-min="${p.min}" data-max="${p.max}"><i></i></div><span class="dv-v"></span></div>`;
+      body.innerHTML=secs.map((s,i)=>`<details class="dv-sec${s.adv?' dv-adv':''}" data-sec="${esc(s.key)}"${(DV_OPEN.get(w.id+'|'+s.key)??(i===0&&!s.adv))?' open':''}>
+          <summary>${esc(s.title)} <em>${[s.svc.length?s.svc.length+' interruttori':'',s.params.length?s.params.length+' regolazioni':''].filter(Boolean).join(' · ')}</em></summary>
+          ${s.adv?'<p class="hint">Interruttori tecnici: cambiano patch, sorgenti o simulazione di DMX Master. Ognuno chiede conferma.</p>':''}
+          ${s.svc.length?`<div class="dv-svc">${s.svc.map(x=>`<button class="chip${s.adv?' dv-warn':''}" data-svc="${esc(x.k)}" title="${esc(x.k)}">${esc(x.label)}</button>`).join('')}</div>`:''}
+          ${s.params.map(param).join('')}</details>`).join('')||'<p class="dv-empty">Il device non espone servizi o parametri.</p>';
+      body.querySelectorAll('details.dv-sec').forEach(d=>d.ontoggle=()=>DV_OPEN.set(w.id+'|'+d.dataset.sec,d.open))}
     const st=d?.services||{},pv=d?.params||{};
     body.querySelectorAll('.chip[data-svc]').forEach(c=>c.classList.toggle('on',st[c.dataset.svc]==='active'));
     body.querySelectorAll('.chip[data-opt]').forEach(c=>c.classList.toggle('on',String(pv[c.dataset.par])===c.dataset.opt));
