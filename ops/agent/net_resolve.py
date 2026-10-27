@@ -86,8 +86,12 @@ def local_tailscale_ip(timeout: float = 1.5) -> str | None:
     exe = _tailscale_binary()
     if exe:
         try:
+            # CREATE_NO_WINDOW: tailscale.exe e' un programma console; lanciato da
+            # pythonw (agent senza console) apriva una finestra a ogni lettura,
+            # cioe' ogni 90 s (segnalato dal vivo 2026-10-27).
             out = subprocess.run(
                 [exe, "ip", "-4"], capture_output=True, text=True, timeout=timeout,
+                creationflags=subprocess.CREATE_NO_WINDOW if platform.system() == "Windows" else 0,
             )
             if out.returncode == 0:
                 candidate = out.stdout.strip().splitlines()[0].strip() if out.stdout.strip() else ""
