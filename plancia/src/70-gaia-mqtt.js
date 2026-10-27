@@ -19,7 +19,7 @@ if(!GC.profiles[GC.profile])GC.profile='casa';
 const net=()=>GC.profiles[GC.profile]||NET_DEFAULT.casa;
 const videoGatewayUrl=()=>{const n=net();return n.video?`http://${n.video}:${n.videoPort||8788}`:null};
 const bridgeCfg=()=>({type:'config',host:C.host,port:+C.port,gaiaHost:net().osc,gaiaPort:+net().oscPort,channels:C.oscChannels});
-const G={client:null,ok:false,host:null,sim:false,nr:null,nrWs:null,nrOk:false,dirty:true,lastPaint:0,devices:{},pdm:{},dxm:{},dmx:{},levels:{},canvas:null,brain:null,dream:null,chat:[],chatV:0,lastSent:null,offSince:null,tdAutoSynced:false};
+const G={client:null,ok:false,host:null,sim:false,nr:null,nrWs:null,nrOk:false,dirty:true,lastPaint:0,devices:{},pdm:{},pdThumb:{},dxm:{},dmx:{},levels:{},canvas:null,brain:null,dream:null,chat:[],chatV:0,lastSent:null,offSince:null,tdAutoSynced:false};
 function tdHeadEntries(){
   const params=G.devices['td-dmx-win']?.params||{};
   const listed=Array.isArray(params.heads_list)?params.heads_list:Object.values(params.heads_list||{});
@@ -112,7 +112,7 @@ function gConnect(host){
   let c;try{c=mqtt.connect(`ws://${host}:${net().wsPort}`,{connectTimeout:4000,reconnectPeriod:3000})}catch{G.offSince=G.offSince??Date.now();return}
   G.client=c;
   c.on('connect',()=>{G.ok=true;G.offSince=null;if(G.sim)gSimOff();gStatus();
-    ['gaia/device/+/status','gaia/devices/+/patchdeck_matrix','gaia/devices/+/dmx_matrix','gaia/devices/+/dmx_output','gaia/devices/+/show_timeline','gaia/device/+/audio_levels','gaia/dmx/+/status',
+    ['gaia/device/+/status','gaia/devices/+/patchdeck_matrix','gaia/devices/+/patch_thumb/+','gaia/devices/+/dmx_matrix','gaia/devices/+/dmx_output','gaia/devices/+/show_timeline','gaia/device/+/audio_levels','gaia/dmx/+/status',
      'gaia/td/canvas','gaia/brain/state','gaia/brain/dream','gaia/voice/tts/+','gaia/voice/command/+',
      SHOW_CLOCK_STATE,'gaia/show/clock/pong/+'].forEach(t=>c.subscribe(t))});
   const off=()=>{if(G.client!==c)return;G.ok=false;G.offSince=G.offSince??Date.now();gStatus()};
@@ -197,6 +197,8 @@ function gIn(t,p){
       if(oldScenes!==JSON.stringify(p.params?.show_scene_catalog))refreshTdSceneWidgets();
     }}}
   else if(t.endsWith('/patchdeck_matrix')){if(obj)G.pdm[p.device_id||seg[2]]=p}
+  // miniatura di una patch PatchDeck (retained, una per topic): JPEG base64 -> data URL
+  else if(seg[1]==='devices'&&seg[3]==='patch_thumb'){if(obj&&p.data){const n=+(p.patch||seg[4]);(G.pdThumb[seg[2]]=G.pdThumb[seg[2]]||{})[n]={label:p.label||'',url:`data:${p.mime||'image/jpeg'};base64,${p.data}`};G.thumbV=(G.thumbV||0)+1}}
   else if(t.endsWith('/dmx_matrix')){if(obj){G.dxm[p.device_id||seg[2]]=p;syncHeadSelectors()}}
   else if(t.endsWith('/audio_levels'))G.levels[seg[2]]=p;
   else if(seg[1]==='dmx'&&seg[3]==='status'){if(obj)G.dmx[p.stanza||seg[2]]=p}

@@ -12,7 +12,7 @@ const CUES = [
 ];
 
 test('layered state: each field from the last cue that sets it', () => {
-  assert.deepEqual(layeredVideoState(CUES, -1), { patchA: null, patchB: null, showA: null, showB: null, fx: {}, cue: -1 });
+  assert.deepEqual(layeredVideoState(CUES, -1), { patchA: null, patchB: null, showA: null, showB: null, fx: {}, cue: -1, mix: null });
   const s15 = layeredVideoState(CUES, 15);
   assert.deepEqual([s15.patchA, s15.patchB, s15.showA, s15.showB, s15.cue], [10, 5, true, false, 1]);
   assert.deepEqual(s15.fx, { edge: 0.2 });
@@ -49,4 +49,25 @@ test('clock follower: extrapolates while playing, wraps on loop, holds when paus
   assert.equal(clockPosition({ ...c, loop: false, pos: 69 }, 3000), 70);
   assert.equal(clockPosition({ ...c, playing: false }, 9000), 10);
   assert.equal(clockPosition(null, 0), null);
+});
+
+test('crossfade with deck_mix: both decks on during the fade, mix computed from time (seek-safe)', () => {
+  const FADE = [
+    { time: 0, deck: 'A', patch: 1, show: 'A' },
+    { time: 5, deck: 'B', patch: 2 },
+    { time: 10, show: 'B', fade: 4 },          // dissolvenza A -> B in 4 s
+    { time: 20, show: 'A' },                   // stacco netto su A
+  ];
+  const s9 = layeredVideoState(FADE, 9);
+  assert.deepEqual([s9.showA, s9.showB, s9.mix], [true, false, 0]);
+  const s12 = layeredVideoState(FADE, 12);
+  assert.deepEqual([s12.showA, s12.showB, s12.mix], [true, true, 0.5]);  // a meta' fade
+  const s15 = layeredVideoState(FADE, 15);
+  assert.deepEqual([s15.showA, s15.showB, s15.mix], [false, true, 1]);   // finita: solo B
+  assert.equal(layeredVideoState(FADE, 21).mix, 0);
+  // comandi: deck_mix solo se PatchDeck lo pubblica, e solo se cambia
+  assert.deepEqual(videoCommands(s9, s12, { mix: true }), [{ action: 'enable', service: 'deck_b' }, { action: 'set', param: 'deck_mix', value: 0.5 }]);
+  assert.deepEqual(videoCommands(s9, s12), [{ action: 'enable', service: 'deck_b' }]);
+  assert.deepEqual(videoCommands(s12, s15, { mix: true }), [{ action: 'disable', service: 'deck_a' }, { action: 'set', param: 'deck_mix', value: 1 }]);
+  assert.deepEqual(videoCommands(s12, { ...s12, mix: 0.502 }, { mix: true }), []); // sotto la soglia: niente messaggio
 });

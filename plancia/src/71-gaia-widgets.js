@@ -37,9 +37,9 @@ function gPaint(el,w){
     const list=svc?Object.entries(svc).filter(([,s])=>s.kind==='load_patch'&&String(s.deck).toLowerCase()===deck).map(([key,s])=>({key,patch:s.patch})).sort((a,b)=>a.patch-b.patch)
       :Array.from({length:38},(_,i)=>({key:`load_x${i+1}_${deck}`,patch:i+1}));
     const tk=svc?(Object.entries(svc).find(([,s])=>s.kind==='deck_toggle'&&String(s.deck).toLowerCase()===deck)?.[0]||'deck_'+deck):'deck_'+deck;
-    const st=d?.services||{},grid=el.querySelector('.pd-grid'),sig=list.map(x=>x.key).join();
+    const st=d?.services||{},grid=el.querySelector('.pd-grid'),sig=list.map(x=>x.key).join()+'|'+(G.thumbV||0)+'|'+JSON.stringify(G.pdm[id]?.patch_labels||null);
     if(grid._sig!==sig){grid._sig=sig;const n=list.length,c=clamp(Math.round(Math.sqrt(n*w.w/Math.max(1,w.h)*1.25)),1,n);
-      grid.style.gridTemplateColumns=`repeat(${c},minmax(0,1fr))`;grid.innerHTML=list.map(x=>`<div class="pd-c" data-svc="${esc(x.key)}">${x.patch}</div>`).join('')}
+      grid.style.gridTemplateColumns=`repeat(${c},minmax(0,1fr))`;grid.innerHTML=list.map(x=>{const i=pdPatchInfo(x.patch,id);return`<div class="pd-c${i.img?' pd-img':''}" data-svc="${esc(x.key)}" title="${esc(i.label)}"${i.img?` style="background-image:url('${i.img}')"`:''}><b>${x.patch}</b><span>${esc(i.label.replace(/^\d+\s*/,''))}</span></div>`}).join('')}
     grid.querySelectorAll('.pd-c').forEach(c=>c.classList.toggle('on',st[c.dataset.svc]==='active'));
     const b=el.querySelector('[data-deck]'),on=st[tk]==='active';b.dataset.deck=tk;b.dataset.state=on?'1':'0';
     b.textContent=`Deck ${deck.toUpperCase()} · ${on?'ON':'OFF'}`;b.classList.toggle('on',on);

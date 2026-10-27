@@ -513,3 +513,18 @@ button{cursor:pointer}
 .dv-sec[open]>summary{color:var(--fg)}
 .dv-adv{border-color:#7a5a1f}.dv-adv>summary{color:#ffb23e}
 .chip.dv-warn{border-style:dashed}
+
+/* ---------- PatchDeck: miniature e galleria delle patch ---------- */
+.pd-c.pd-img{background-size:cover;background-position:center;position:relative;color:#fff;text-shadow:0 1px 3px #000,0 0 6px #000;display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start;padding:4px 6px}
+.pd-c b{font-size:11px}.pd-c span{font-size:10px;line-height:1.1;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pd-c:not(.pd-img) span{display:none}
+.pd-c.pd-img.on{box-shadow:0 0 0 3px var(--c,#ffb23e) inset}
+.vc-pbtn{display:flex;align-items:center;gap:6px;min-height:36px;padding:3px 6px;border:1px solid var(--line2);border-radius:6px;background:var(--panel2);color:var(--fg);cursor:pointer;text-align:left;width:100%}
+.vc-pbtn img{width:48px;height:27px;object-fit:cover;border-radius:3px;flex:none}
+.vc-gal{border:1px solid #ffb23e;border-radius:8px;padding:8px;margin:4px 0 10px;background:var(--panel)}
+.vc-gal-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.vc-gal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:6px;max-height:340px;overflow:auto}
+.vc-gi{display:grid;gap:3px;padding:4px;border:1px solid var(--line2);border-radius:6px;background:var(--panel2);color:var(--fg);cursor:pointer;font-size:11px;text-align:left}
+.vc-gi img,.vc-gi i{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:3px;background:#0b0d11;display:block}
+.vc-gi span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vc-gi.on{border-color:#ffb23e;box-shadow:0 0 0 1px #ffb23e inset}
