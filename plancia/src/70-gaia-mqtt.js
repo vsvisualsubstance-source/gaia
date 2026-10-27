@@ -225,8 +225,15 @@ const devDot=d=>!d?'':devAge(d)<180000?'on':devAge(d)<1800000?'idle':'';
 function gFam(id,d){if(d?.family)return d.family;if(G.pdm[id])return'patchdeck';if(G.dxm[id])return'dmx';if(/controller|mixer/i.test(id+' '+(d?.name||'')))return'mixeraudio';return d?.role||''}
 function devIds(fam){
   const ids=new Set([...Object.keys(G.devices),...(fam==='patchdeck'?Object.keys(G.pdm):[]),...(fam==='dmx'?Object.keys(G.dxm):[])]);
-  return[...ids].filter(id=>!fam||gFam(id,G.devices[id])===fam).sort((a,b)=>devAge(G.devices[a])-devAge(G.devices[b]));
+  return[...ids].filter(id=>!fam||gFam(id,G.devices[id])===fam).sort(devOrder);
 }
+// Ordine STABILE dei device (2026-10-27): prima ordinava per "status piu' recente",
+// e con due DMX (DMX Master td-dmx-win, status ogni 30 s, e PD_DMX td-pddmx-win
+// sul PC di PatchDeck, ogni 10 s) il "primo" cambiava a ogni status: pannello,
+// palette e comandi saltavano da uno all'altro. Ora: online prima (status < 2 min),
+// poi il piu' completo (piu' rig, piu' parametri), poi per id.
+const devWeight=id=>Object.keys(G.dxm[id]?.rigs||{}).length*1000+Object.keys(G.devices[id]?.params||{}).length;
+const devOrder=(a,b)=>(devAge(G.devices[a])<120000?0:1)-(devAge(G.devices[b])<120000?0:1)||devWeight(b)-devWeight(a)||a.localeCompare(b);
 const pickDev=(w,fam)=>(w.device&&(G.devices[w.device]||G.pdm[w.device]||G.dxm[w.device]))?w.device:(devIds(fam)[0]||null);
 const pickRoom=w=>(w.stanza&&G.dmx[w.stanza])?w.stanza:(Object.keys(G.dmx).sort()[0]||null);
 const devCmd=(id,o)=>id&&gPub(`gaia/device/${id}/command`,o);
