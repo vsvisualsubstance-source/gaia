@@ -14,17 +14,22 @@
 // con show 'A' o 'B' e fade > 0 tiene accesi entrambi i deck per fade secondi e
 // porta deck_mix al deck scelto; il valore si calcola dal tempo, quindi regge seek
 // e loop. Senza fade lo stacco porta subito deck_mix sul deck mostrato.
+// Precarica (nota TD 46): una patch "fredda" riparte da zero e i primi frame
+// possono scattare; se una cue carica una patch su un deck che in quel momento
+// e' NASCOSTO (spento, o con deck_mix a peso 0), la si manda opts.preload
+// secondi prima (default del bridge 2 s). Sul deck visibile resta al tempo esatto.
 
 const FX = ['edge', 'feedback', 'fb_scale', 'fb_blur', 'mirror'];
 const MIX_OF = { A: 0, B: 1, AB: 0.5 };
 
 // stato video al tempo t: {patchA, patchB, showA, showB, fx: {...}, cue, mix}
-function layeredVideoState(cues, t) {
+function layeredVideoState(cues, t, opts = {}) {
   const st = { patchA: null, patchB: null, showA: null, showB: null, fx: {}, cue: -1, mix: null };
   const list = (Array.isArray(cues) ? cues : []).map((c, i) => ({ ...c, i })).filter(c => Number.isFinite(+c.time))
     .sort((a, b) => a.time - b.time || a.i - b.i);
-  for (const c of list) {
-    if (+c.time > t + 1e-6) break;
+  let next = list.length;
+  for (const [k, c] of list.entries()) {
+    if (+c.time > t + 1e-6) { next = k; break; }
     st.cue = c.i;
     const deck = String(c.deck || '').toUpperCase();
     if (Number.isInteger(+c.patch) && +c.patch > 0 && (deck === 'A' || deck === 'B')) st['patch' + deck] = +c.patch;
@@ -41,6 +46,20 @@ function layeredVideoState(cues, t) {
       }
     }
     for (const k of FX) if (c.fx && Number.isFinite(+c.fx[k])) st.fx[k] = Math.max(0, Math.min(1, +c.fx[k]));
+  }
+  const pre = Number.isFinite(+opts.preload) && +opts.preload > 0 ? +opts.preload : 0;
+  if (pre) {
+    // nascosto = spento, oppure acceso ma con peso 0 nel mix (A pesa 1-mix, B pesa mix)
+    const hidden = d => st['show' + d] === false || (st['show' + d] === true && st.mix != null && (d === 'A' ? 1 - st.mix : st.mix) <= 0.001);
+    const done = {};
+    for (const c of list.slice(next)) {
+      if (+c.time > t + pre) break;
+      const d = String(c.deck || '').toUpperCase();
+      if ((d === 'A' || d === 'B') && !done[d] && Number.isInteger(+c.patch) && +c.patch > 0) {
+        done[d] = true; // solo la prima cue del deck nella finestra
+        if (hidden(d)) st['patch' + d] = +c.patch;
+      }
+    }
   }
   return st;
 }
@@ -75,7 +94,7 @@ function clockPosition(clock, now) {
 }
 
 // SHOW_CLOCK_TOPIC / PATCHDECK_ID: solo per le prove (orologio simulato, PatchDeck fittizio)
-function startVideoTimeline({ getDoc, broadcast, url = process.env.PLANCIA_MQTT || 'mqtt://127.0.0.1:11883', deviceId = process.env.PATCHDECK_ID || 'td-pd-pc-win', clockTopic = process.env.SHOW_CLOCK_TOPIC || 'gaia/show/clock/state', log = console.log }) {
+function startVideoTimeline({ preload = +(process.env.VIDEO_PRELOAD_S ?? 2), getDoc, broadcast, url = process.env.PLANCIA_MQTT || 'mqtt://127.0.0.1:11883', deviceId = process.env.PATCHDECK_ID || 'td-pd-pc-win', clockTopic = process.env.SHOW_CLOCK_TOPIC || 'gaia/show/clock/state', log = console.log }) {
   let mqtt;
   try { mqtt = require('mqtt'); } catch { log('Timeline video: pacchetto mqtt mancante (npm install), disattivata'); return null; }
   const client = mqtt.connect(url, { clientId: `plancia-bridge-video-${process.pid}`, reconnectPeriod: 3000, connectTimeout: 5000 });
@@ -98,7 +117,7 @@ function startVideoTimeline({ getDoc, broadcast, url = process.env.PLANCIA_MQTT 
     if (active && t != null) {
       // riaccendendo la timeline si riparte da zero: si rimanda tutto lo stato
       if (!wasActive) sent = empty();
-      st = layeredVideoState(doc.cues, t);
+      st = layeredVideoState(doc.cues, t, { preload });
       cmds = videoCommands(sent, st, { mix: hasMix });
       if (cmds.length && client.connected) {
         cmds.forEach(send);

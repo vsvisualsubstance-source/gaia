@@ -71,3 +71,22 @@ test('crossfade with deck_mix: both decks on during the fade, mix computed from 
   assert.deepEqual(videoCommands(s12, s15, { mix: true }), [{ action: 'disable', service: 'deck_a' }, { action: 'set', param: 'deck_mix', value: 1 }]);
   assert.deepEqual(videoCommands(s12, { ...s12, mix: 0.502 }, { mix: true }), []); // sotto la soglia: niente messaggio
 });
+
+test('preload (nota TD 46): patch loaded 2 s early only on a hidden deck', () => {
+  const CROSS = [
+    { time: 0, deck: 'A', patch: 1, show: 'A' },
+    { time: 10, deck: 'B', patch: 5, show: 'B', fade: 4 },   // carica e sfuma su B
+    { time: 20, deck: 'A', patch: 7 },                       // A e' nascosto (dopo il fade si vede solo B)
+  ];
+  assert.equal(layeredVideoState(CROSS, 7, { preload: 2 }).patchB, null);   // troppo presto
+  const s85 = layeredVideoState(CROSS, 8.5, { preload: 2 });
+  assert.deepEqual([s85.patchA, s85.patchB, s85.showA, s85.showB], [1, 5, true, false]); // B precaricato, si vede ancora A
+  assert.equal(layeredVideoState(CROSS, 8.5).patchB, null);                  // senza opzione: com'era
+  assert.equal(layeredVideoState(CROSS, 18.5, { preload: 2 }).patchA, 7);    // A nascosto: precaricato anche lui
+  // deck visibile: niente anticipo, si carica al tempo esatto
+  const VIS = [{ time: 0, deck: 'A', patch: 1, show: 'A' }, { time: 10, deck: 'A', patch: 3 }];
+  assert.equal(layeredVideoState(VIS, 8.5, { preload: 2 }).patchA, 1);
+  // acceso ma a peso 0 nel mix = nascosto
+  const MIXED = [{ time: 0, deck: 'A', patch: 1, show: 'AB' }, { time: 1, show: 'A', fade: 1 }, { time: 10, deck: 'B', patch: 9 }];
+  assert.equal(layeredVideoState(MIXED, 8.5, { preload: 2 }).patchB, 9);
+});

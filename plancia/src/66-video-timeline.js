@@ -60,7 +60,7 @@ function openVideoCueEditor(w,cues,meta={}){
   </div>`).join('');
   s.innerHTML=`<div class="sheet" role="dialog" aria-label="Timeline video">
     <div class="top"><h3>Timeline video · PatchDeck</h3><button class="btn ghost" id="vcClose">Chiudi</button></div>
-    <p class="hint">Ogni cue, all'istante indicato, carica una <b>patch</b> su un <b>deck</b>, decide cosa si <b>vede</b> (A, B, entrambi) e imposta gli <b>effetti</b>. Come le scene, si sommano: un campo vuoto lascia com'era. Per vedere B senza scatti caricalo prima ("Mostra: invariato") e mostralo con una cue dopo. Con <b>Fade</b> (solo A o solo B) il passaggio è una dissolvenza col mix A/B di PatchDeck; vuoto = stacco netto. Le cue le esegue il bridge su OPS seguendo l'orologio dello show (durata ${formatCueTime(D)}).</p>
+    <p class="hint">Ogni cue, all'istante indicato, carica una <b>patch</b> su un <b>deck</b>, decide cosa si <b>vede</b> (A, B, entrambi) e imposta gli <b>effetti</b>. Come le scene, si sommano: un campo vuoto lascia com'era. Le patch per un deck nascosto partono da sole 2 secondi prima della cue (precarica), così la dissolvenza non scatta. Con <b>Fade</b> (solo A o solo B) il passaggio è una dissolvenza col mix A/B di PatchDeck; vuoto = stacco netto. Le cue le esegue il bridge su OPS seguendo l'orologio dello show (durata ${formatCueTime(D)}).</p>
     <div class="vcue-list">${rows||'<p class="hint">Nessuna cue video.</p>'}</div>
     <div class="row"><button class="btn" id="vcAdd">＋ Aggiungi cue video</button></div>
     <div class="cue-editor-actions"><button class="btn ghost" id="vcCancel">Annulla</button><button class="btn primary" id="vcSave">Salva</button></div>
