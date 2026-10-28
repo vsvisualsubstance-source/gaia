@@ -6,7 +6,7 @@
   "scripts": {
     "build": "node build-app.js",
     "start": "node build-app.js && node bridge.js",
-    "test": "node --test test\\build-app.test.js test\\dmx-output.test.js test\\dmx-groups.test.js test\\dmx-scenes.test.js test\\dmx-models.test.js test\\stage-ai.test.js test\\video-timeline.test.js test\\magicq-import.test.js test\\fixture-lib.test.js test\\project-models.test.js test\\stage-space.test.js"
+    "test": "node --test"
   },
   "dependencies": {
     "mqtt": "^5.16.1",
