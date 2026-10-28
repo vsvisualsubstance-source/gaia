@@ -16,7 +16,18 @@ if(!GC.profiles[GC.profile])GC.profile='casa';
   if(q.get('profilo')&&GC.profiles[q.get('profilo')])GC.profile=q.get('profilo');
   const n=GC.profiles[GC.profile];[['broker','broker'],['nodered','nodered'],['admin','admin'],['osc','osc'],['ws','wsPort']].forEach(([a,b])=>{if(q.get(a))n[b]=b==='wsPort'?+q.get(a):q.get(a)});
   if(q.get('stanza'))GC.stanza=q.get('stanza');store.set(GKEY,GC)}catch{}})();
-const net=()=>GC.profiles[GC.profile]||NET_DEFAULT.casa;
+// Plancia aperta SU OPS (o sulla touring, stesso IP): la macchina non raggiunge se
+// stessa sul proprio IP di LAN (WSL mirrored, porte pubblicate da Docker: broker
+// 19001, Node-RED 1881), quindi la pagina restava in "simulazione" e ogni 10 s
+// chiedeva a DMX Master l'uscita OSC (2026-10-28). Da localhost: localhost.
+const OPS_LAN_IP='192.168.1.240';
+const pageIsLocal=()=>['localhost','127.0.0.1','::1','[::1]'].includes(location.hostname);
+function netLocalize(n,local=pageIsLocal()){
+  if(!local)return n;
+  const o={...n};for(const k of['broker','nodered','admin'])if(o[k]===OPS_LAN_IP)o[k]='localhost';
+  return o;
+}
+const net=()=>netLocalize(GC.profiles[GC.profile]||NET_DEFAULT.casa);
 const videoGatewayUrl=()=>{const n=net();return n.video?`http://${n.video}:${n.videoPort||8788}`:null};
 const bridgeCfg=()=>({type:'config',host:C.host,port:+C.port,gaiaHost:net().osc,gaiaPort:+net().oscPort,channels:C.oscChannels});
 const G={client:null,ok:false,host:null,sim:false,nr:null,nrWs:null,nrOk:false,dirty:true,lastPaint:0,devices:{},pdm:{},pdThumb:{},tdState:{},dxm:{},dmx:{},levels:{},canvas:null,brain:null,dream:null,chat:[],chatV:0,lastSent:null,offSince:null,tdAutoSynced:false};

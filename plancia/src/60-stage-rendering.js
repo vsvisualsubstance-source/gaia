@@ -253,17 +253,20 @@ function drawRender(g,W,H,t,level){
   for(let i=0;i<n;i++){const f=headsF[i],h=SH.heads[i],p=h.T.c,pos=project(f.x,f.y,fixtureZ(f)),x=pos.x,y=pos.y,size=clamp(pos.scale*.7,8,18);heads.push([x,y,h,p,size,feedbackFor(f),f]);
     g.fillStyle='#1c2027';g.strokeStyle='#3a404c';g.lineWidth=1;
     g.beginPath();g.roundRect(x-size,y-size*.35,size*2,size*.7,2);g.fill();g.stroke();
-    g.save();g.translate(x,y);g.rotate(-p[0]*.9);g.beginPath();g.roundRect(-size*.45,-size*.4,size*.9,size*.9,3);g.fill();g.stroke();g.restore()}
+    // corpo della testa: pan reale di DMX Master se c'e', come il fascio (prima ruotava
+    // con la simulazione locale e non coincideva con il fascio)
+    const realPan=dmxHeadAngles(feedbackFor(f),tdModelFor(f))?.[0];
+    g.save();g.translate(x,y);g.rotate(-(realPan??p[0])*.9);g.beginPath();g.roundRect(-size*.45,-size*.4,size*.9,size*.9,3);g.fill();g.stroke();g.restore()}
   g.globalCompositeOperation='lighter';
   // etichette feedback: se le teste sono vicine si sfalsano in altezza (una si', una no)
   const byX=heads.map(hd=>hd[0]).sort((a,b)=>a-b),minGap=byX.slice(1).reduce((m,v,i)=>Math.min(m,v-byX[i]),Infinity);
   for(const [x,y,h,p,size,feedback,f] of heads){
     const k=feedback?outputLevel(feedback):p[5]*SH.g.mh*M*(h.strobe?(((t/1000*13)%1)<.3?1:0):1);
     // con il feedback: colore e livello da rgb_out, posizione da pan/tilt
-    // reali in gradi (nota 33); gobo/zoom non sono nel feedback: fascio
-    // aperto e zoom locale
+    // reali in gradi (nota 33), zoom e focus reali da dmx_live; il gobo arriva
+    // come valore DMX grezzo, non come slot: fascio aperto
     const real=feedback?dmxHeadAngles(feedback,tdModelFor(f)):null;
-    const col=feedback?outputColor(feedback):[p[2],p[3],p[4]],pan=real?real[0]:p[0],tl=real?real[1]:p[1],z=p[6],soft=1-p[7]*.5;
+    const col=feedback?outputColor(feedback):[p[2],p[3],p[4]],pan=real?real[0]:p[0],tl=real?real[1]:p[1],z=feedback?.zoom??p[6],soft=1-(feedback?.focus??p[7])*.5;
     if(k>.01){
       if(feedback&&!real)glow(g,x,y,size,col,.95*k);
       else{

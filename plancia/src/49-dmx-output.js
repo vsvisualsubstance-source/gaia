@@ -19,6 +19,7 @@ function dmxFixtureRecord(f,receivedAt){
     group:f.group==null?null:String(f.group),colorSource:f.color_source??null,
     pan:dmxNumber(f.pan),tilt:dmxNumber(f.tilt),gobo:dmxNumber(f.gobo),
     colorWheel:dmxNumber(f.color_wheel),shutter:dmxNumber(f.shutter),
+    zoom:dmxUnit(f.zoom),focus:dmxUnit(f.focus), // teste, 0..1 (dmx_live)
     // audio della luce (solo rig chase, nota TD 45): full|off|bass|mid|high|kick, guadagno 0..2
     audio:typeof f.audio==='string'?(f.audio||'full'):null,audioGain:dmxNumber(f.audio_gain),receivedAt
   };
@@ -87,7 +88,9 @@ function dmxRigsApply(payload,receivedAt=Date.now()){
 function dmxOutputApplySource(args,receivedAt=Date.now()){
   const source=args?.[0];
   if(source!=='mqtt'&&source!=='osc')return false;
-  if(DMX_OUTPUT.source!==source){DMX_OUTPUT.fixtures=new Map();DMX_OUTPUT.lastAt=0}
+  // cambio di trasporto (MQTT <-> riserva OSC): lo stato reale delle fixture NON si
+  // svuota. In OSC le teste ferme non si ripubblicano: svuotando, il Render perdeva
+  // pan/tilt veri e tornava alla simulazione locale (teste che "saltavano").
   DMX_OUTPUT.source=source;DMX_OUTPUT.sourceAt=receivedAt;
   return true;
 }

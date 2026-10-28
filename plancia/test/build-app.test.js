@@ -37,3 +37,16 @@ test('app bundle preserves module order and parses as one client scope', () => {
 test('missing source modules fail the build explicitly', () => {
   assert.throws(() => buildAppBundle('missing-source-directory'));
 });
+
+test('Plancia opened on OPS itself talks to localhost (no hairpin on its own LAN IP)', () => {
+  const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'src', '70-gaia-mqtt.js'), 'utf8');
+  const fn = src.slice(src.indexOf('function netLocalize'), src.indexOf('const net=()'));
+  const netLocalize = new Function('OPS_LAN_IP', 'pageIsLocal', fn + 'return netLocalize;')('192.168.1.240', () => false);
+  const ops = { broker: '192.168.1.240', nodered: '192.168.1.240', admin: '192.168.1.240', video: '192.168.1.240', osc: '192.168.1.240' };
+  const local = netLocalize(ops, true);
+  assert.equal(local.broker, 'localhost');
+  assert.equal(local.nodered, 'localhost');
+  assert.equal(local.video, '192.168.1.240');   // servizi Windows: l'IP di LAN funziona
+  assert.equal(netLocalize(ops, false).broker, '192.168.1.240');   // tablet in rete: invariato
+  assert.equal(netLocalize({ broker: '192.168.1.142' }, true).broker, '192.168.1.142');
+});

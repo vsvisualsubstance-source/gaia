@@ -238,3 +238,12 @@ test('dmx_rigs at 30 Hz wins over dmx_output.rigs while fresh', () => {
   m.dmxOutputApplySnapshot({ v: 1, fixtures: [], rigs: { rig_a: { level: 0.2, kicks: 5 } } }, 'td', 2500);
   assert.equal(m.DMX_OUTPUT.rigs.rig_a.level, 0.2);  // dmx_rigs fermo da >1 s: vale dmx_output
 });
+
+test('switching MQTT <-> OSC keeps the last real head position (static heads are not re-sent over OSC)', () => {
+  dmxOutputApplyOsc('/dmx/output/source', ['mqtt'], 1000);
+  dmxOutputApplyOsc('/dmx/fixture/p-h/head', [81, 27, 0, 0, 245], 1000);
+  dmxOutputApplyOsc('/dmx/output/source', ['osc'], 2000);
+  const head = dmxOutputForFixture({ uid: 'p-h' });
+  assert.equal(head.pan, 81);
+  assert.equal(head.tilt, 27);
+});
