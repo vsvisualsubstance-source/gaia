@@ -64,6 +64,35 @@ class TestProto(unittest.TestCase):
         self.assertIsNone(P.glf_decode(good[:-1]))
 
 
+class TestTdHelper(unittest.TestCase):
+    """td/gaia_laser_out.py con una SOP finta che imita l'API di TD (nota TD 49:
+    td.Attributes non ha .get, il Trace SOP da' primitive con closed = False)."""
+    def test_send_sop_reads_cd_and_closes(self):
+        sys.path.insert(0, os.path.join(HERE, "td"))
+        import gaia_laser_out as T
+
+        class Pt:
+            def __init__(s, x, y, cd): s.x, s.y, s.Cd = x, y, cd
+        class V:
+            def __init__(s, p): s.point = p
+        class Prim(list):
+            closed = False
+        class A:
+            def __init__(s, n): s.name = n
+        class Sop:
+            pointAttribs = [A("P"), A("Cd")]
+            prims = [Prim([V(Pt(0, 0, (1, 0, 0))), V(Pt(.5, 0, (1, 0, 0))), V(Pt(.5, .5, (1, 0, 0)))])]
+        rx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        rx.bind(("127.0.0.1", 39491)); rx.settimeout(1)
+        T.send_sop(Sop(), "dmx", gateway=("127.0.0.1", 39491), close=True)
+        pts = P.glf_decode(rx.recvfrom(2048)[0])[5]
+        rx.close()
+        self.assertEqual(len(pts), 5)                    # punto nero d'attacco + 3 + chiusura
+        self.assertEqual(pts[0][2:], (0, 0, 0))
+        self.assertEqual(pts[1][2:], (255, 0, 0))        # colore dal Cd
+        self.assertEqual(pts[-1][:2], pts[1][:2])        # richiusa sul primo vertice
+
+
 class TestRender(unittest.TestCase):
     def test_zone_keeps_beam_inside(self):
         cfg = {"zone": [0.0, 0.0, 1.0, 1.0], "max_intensity": 1.0}

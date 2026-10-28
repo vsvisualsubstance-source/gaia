@@ -61,17 +61,22 @@ def send_chop(chop, source, target='*', gateway=None):
     send_points(*(c.numpyArray() for c in ch[:5]), source=source, target=target, gateway=gateway)
 
 
-def send_sop(sop, source, target='*', rgb=None, gateway=None):
+def send_sop(sop, source, target='*', rgb=None, gateway=None, close=False):
     """Ogni primitiva della SOP e' una linea; tra una primitiva e l'altra il
-    raggio si sposta spento. Colore dal Cd dei punti, altrimenti rgb (0..1)."""
+    raggio si sposta spento. Colore dal Cd dei punti, altrimenti rgb (0..1).
+    close=True richiude ogni primitiva: serve col Trace SOP, che da' contorni
+    chiusi con closed = False (nota TD 49). Se il disegno nasce da un TOP,
+    meglio numpyArray(delayed=True) + send_points: il Trace SOP letto a ogni
+    frame ferma la GPU (~10 ms)."""
     xs, ys, rs, gs, bs = [], [], [], [], []
-    has_cd = sop.pointAttribs.get('Cd') is not None if hasattr(sop, 'pointAttribs') else False
+    # td.Attributes non ha .get (TD 2025.33230, nota TD 49): si cerca per nome
+    has_cd = 'Cd' in [a.name for a in sop.pointAttribs]
     base = rgb or (1.0, 1.0, 1.0)
     for prim in sop.prims:
         verts = list(prim)
         if not verts:
             continue
-        if getattr(prim, 'isClosed', False) or getattr(prim, 'closed', False):
+        if close or getattr(prim, 'closed', False):
             verts = verts + [verts[0]]
         p0 = verts[0].point
         xs.append(p0.x); ys.append(p0.y); rs.append(0); gs.append(0); bs.append(0)
