@@ -223,6 +223,8 @@ const broadcast = (msg, except) => {
 // Timeline video di PatchDeck: la esegue il bridge (sempre acceso su OPS),
 // seguendo l'orologio dello show. Documento in layout.videoTimeline.
 const videoTimeline = require('./video-timeline').startVideoTimeline({ getDoc: () => persistedState?.layout?.videoTimeline, broadcast });
+// Timeline laser (ops/laser): stessa idea, verso il laser gateway. Scene in layout.laserScenes.
+const laserTimeline = require('./laser-timeline').startLaserTimeline({ getDoc: () => persistedState?.layout?.laserTimeline, getScenes: () => persistedState?.layout?.laserScenes || [], broadcast });
 
 wss.on('connection', ws => {
   ws.send(hello());

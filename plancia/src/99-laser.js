@@ -5,19 +5,22 @@
 // (sorgente), ARM con conferma, BLACKOUT, master, zona e allineamento, stato.
 // Il contenuto dello Show lo genera TD DMX: i suoi parametri laser_* (nota
 // OPS 33) compaiono da soli nella sezione Contenuto.
-const LZ_MODES=[['off','Spento'],['test','Test'],['dmx','Show'],['patchdeck','PatchDeck'],['yolo','Yolo']];
+const LZ_MODES=[['off','Spento'],['test','Test'],['scene','Scene'],['dmx','Show'],['patchdeck','PatchDeck'],['yolo','Yolo']];
 const LZ_MODE_HINT={
   off:'Nessuna sorgente: il cubo non si può armare.',
   test:'Cerchio di prova generato dal gateway: per puntare e controllare la zona.',
+  scene:'Scena interna del gateway (template o SVG), senza sorgenti esterne: scegli la scena qui sopra o dalla timeline LASER.',
   dmx:'Contenuto da TD DMX guidato dalla Plancia (timeline, palette, effetti); audio dal controller.',
   patchdeck:'Contorni dell\'uscita video di PatchDeck; audio dal controller.',
   yolo:'Grafica proiettata su una superficie, guidata dalle posizioni di Yolo. Mai il fascio sulle persone.',
 };
 const LZ_PENDING=new Map(); // req del comando -> etichetta, per mostrare l'esito del gateway
-// piu' gateway visibili (es. OPS e touring): vince quello con dei cubi, poi il piu' recente
+// piu' gateway visibili (es. OPS e touring): vince quello con cubi che rispondono,
+// poi quello con cubi configurati, poi il piu' recente
 function lzDevId(){
+  const score=d=>{const c=d.laser?.cubes||[];return(c.some(x=>x.online)?2:0)+(c.length?1:0)};
   const e=Object.entries(G.devices||{}).filter(([,d])=>d?.family==='laser'&&!d.offline)
-    .sort(([,a],[,b])=>((b.laser?.cubes?.length?1:0)-(a.laser?.cubes?.length?1:0))||((b._seen||0)-(a._seen||0)))[0];
+    .sort(([,a],[,b])=>(score(b)-score(a))||((b._seen||0)-(a._seen||0)))[0];
   return e?e[0]:'laser-ops';
 }
 const lzDev=()=>{const d=G.devices?.[lzDevId()];return d&&!d.offline&&d.laser?d:null};
@@ -74,7 +77,7 @@ function lzCardHtml(c,d){
     <div class="ar-head"><span class="lz-dot" title="${c.online?'online':'offline'}"></span><b>${esc(c.name||c.id)}</b><span class="lz-id">${esc(c.id)} · ${esc(c.ip||'')}</span></div>
     <p class="hint">${c.online?`${esc(c.model||'LaserCube')} fw ${esc(c.fw||'?')} · ${c.charging?'in carica':c.battery!=null?`batteria ${c.battery}%`:''} · ${c.temp_c??'?'} °C`:'Il gateway non riceve risposta: rete, alimentazione, modalità LAN Client.'}${warn.length?` · <b class="lz-warn">${warn.join(' · ')}</b>`:''}</p>
     <div class="lz-modes">${LZ_MODES.map(([m,l])=>`<button class="${c.mode===m?'on':''}" data-lz="mode" data-lz-v="${m}" data-lz-c="${c.id}">${l}</button>`).join('')}</div>
-    <p class="hint">${esc(LZ_MODE_HINT[c.mode]||'')}${c.mode!=='off'&&c.mode!=='test'?lzSourceHint(d,c.mode):''}</p>
+    <p class="hint">${esc(LZ_MODE_HINT[c.mode]||'')}${c.mode==='scene'?(c.scene?` <b class="lz-ok">Scena: ${esc(c.scene.name)}</b>`:' <b class="lz-warn">Nessuna scena scelta.</b>'):c.mode!=='off'&&c.mode!=='test'?lzSourceHint(d,c.mode):''}</p>
     <button class="lz-arm${c.armed?' on':''}" data-lz="${c.armed?'disarm':'arm'}" data-lz-c="${c.id}"${c.mode==='off'||!c.online?' disabled':''}>${c.armed?'DISARMA':'ARMA'}<i>${live}</i></button>
     ${lzSlider(c.id,'master','Master',c.master??1)}
     ${lzSlider(c.id,'max_intensity','Intensità massima',c.max_intensity??.5)}
@@ -108,7 +111,7 @@ function paintLaser(el,w,force){
   const d=lzDev();lzResults(d);
   if(box.contains(document.activeElement)&&['range','select-one','color'].includes(document.activeElement.type)&&!force)return; // non ridisegnare mentre trascini
   const compact=w.h<=3,content=['dmx','patchdeck','yolo'].map(m=>lzContentParams(m).list.map(x=>[x.k,x.v]));
-  const sig=JSON.stringify([compact,d&&{c:d.laser.cubes,s:Object.entries(d.laser.sources||{}).map(([k,v])=>[k,v.age_ms<1500,v.points]),f:d.laser.found},content]);
+  const sig=JSON.stringify([compact,lzsSig(),d&&{c:d.laser.cubes,s:Object.entries(d.laser.sources||{}).map(([k,v])=>[k,v.age_ms<1500,v.points]),f:d.laser.found},content]);
   if(!force&&box._sig===sig)return;box._sig=sig;
   if(!d){box.innerHTML='<p class="hint">Laser gateway non collegato: in Admin accendi il servizio "laser" di OPS.</p>';return}
   const cubes=d.laser.cubes||[],armed=cubes.some(c=>c.armed);
@@ -118,6 +121,7 @@ function paintLaser(el,w,force){
   const found=(d.laser.found||[]).filter(f=>!f.cube);
   box.innerHTML=`<div class="lz-top">${bo}<span class="hint">Classe 4: beam block regolato, chiave ed E-Stop a portata di mano, nessuno nel fascio.</span>
       <button class="btn sm ghost" data-lz="scan">Cerca cubi</button><button class="btn sm ghost" data-lz="add">+ Cubo</button></div>
+    ${lzScenesHtml(d)}
     ${found.length?`<div class="lz-found">${found.map(f=>`<button class="pal-chip" data-lz="addip" data-lz-v="${esc(f.ip)}">+ ${esc(f.ip)}${f.mac?` · ${esc(f.mac)}`:''}</button>`).join('')}</div>`:''}
     <div class="ar-cards lz-cards">${cubes.map(c=>lzCardHtml(c,d)).join('')||'<p class="hint">Nessun cubo configurato: collega i cubi via cavo in LAN Client (LED verde), poi "Cerca cubi" o "+ Cubo" con l\'IP.</p>'}</div>`;
   box.querySelectorAll('details.lz-sec').forEach(x=>{const k=x.closest('.lz-card')&&x.dataset.sec+':'+(x.querySelector('[data-lz-c]')?.dataset.lzC||'');
@@ -125,6 +129,7 @@ function paintLaser(el,w,force){
 }
 function laserDown(e,el,w){
   if(e.target.closest('input[type=range],select,summary'))return;
+  if(e.target.closest('[data-lzs]'))return lzsDown(e,el,w);
   const b=e.target.closest('[data-lz]');if(!b||b.disabled)return;e.preventDefault();
   const a=b.dataset.lz,cid=b.dataset.lzC,c=cid&&lzCube(cid),v=b.dataset.lzV;
   if(a==='blackout')lzCmd({action:'blackout'});

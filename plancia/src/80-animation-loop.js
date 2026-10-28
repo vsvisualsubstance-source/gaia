@@ -43,7 +43,7 @@ function loop(){
       const lb=el.querySelector('.tl-live');if(lb){const on=tdShowActive(),t=on===null?'—':on?'TIMELINE':'LIVE';
         if(lb.textContent!==t){lb.textContent=t;lb.classList.toggle('is-live',on===false);lb.classList.toggle('is-tl',on===true)}}
       const r=rt(w),D=timelineDuration(w),cues=timelineCues(w);
-      el.querySelector('.tl-ph').style.left=r.t/D*100+'%';paintVideoLane(el,w,D,r.t);el.querySelector('.tl-tc').textContent=tc(r.t);
+      el.querySelector('.tl-ph').style.left=r.t/D*100+'%';paintVideoLane(el,w,D,r.t);paintLaserLane(el,w,D,r.t);el.querySelector('.tl-tc').textContent=tc(r.t);
       const sample=isShowTimeline(w)&&showClock.authority?showClockSample():null;
       const controlled=isShowTimeline(w)&&showClock.authority,locked=controlled&&(!sample||!showClockFresh(sample));
       el.querySelector('[data-act="start"]').disabled=locked;
@@ -75,7 +75,7 @@ function loop(){
     else if(w.type==='fixgrid'){if(gp)paintFixGrid(el,w)}
     else if(w.type==='cuestack'){if(gp)paintCueStack(el,w)}
     else if(w.type==='audiorigs'){if(gp)paintAudioRigs(el,w);updateAudioMeters(el)}
-    else if(w.type==='laser'){if(gp)paintLaser(el,w)}
+    else if(w.type==='laser'){if(gp)paintLaser(el,w);animateLaserThumbs(el)}
     else if(w.type==='scenes'&&w.addr==='/dmx/scene'){const k=SH.fade>0?clamp((n-SH.t0)/(SH.fade*1000)):1;
       el.querySelectorAll('.si').forEach((x,i)=>{const p=x.querySelector('.prog');if(p)p.style.width=(i===SH.scene&&k<1)?k*100+'%':'0'})}
   }

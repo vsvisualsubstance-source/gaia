@@ -20,6 +20,7 @@ os.environ["LASER_NO_GUARD"] = "1"
 import laser_proto as P                      # noqa: E402
 import laser_render as R                     # noqa: E402
 import laser_gateway as G                    # noqa: E402
+import laser_scene as SC                    # noqa: E402
 from cube_emulator import CubeEmulator       # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -93,6 +94,42 @@ class TestTdHelper(unittest.TestCase):
         self.assertEqual(pts[-1][:2], pts[1][:2])        # richiusa sul primo vertice
 
 
+SQUARE = {"id": "q", "name": "Quadrato", "strokes": [{"pts": [[-.5, -.5], [.5, -.5], [.5, .5], [-.5, .5]], "closed": True}],
+          "color": {"mode": "fixed", "rgb": [0, 0, 1]}, "anim": {"scale": 1}}
+
+
+class TestScene(unittest.TestCase):
+    def test_clean_limits_and_rejects(self):
+        with self.assertRaises(ValueError):
+            SC.clean_scene({"strokes": []})
+        s = SC.clean_scene({"strokes": [{"pts": [[5, -9], ["x", 0]]}], "anim": {"rotate": 99999, "scale": 3},
+                            "color": {"mode": "boh"}})
+        self.assertEqual(s["strokes"][0]["pts"][0], [1.0, -1.0])
+        self.assertEqual(s["anim"]["rotate"], 720)
+        self.assertEqual(s["anim"]["scale"], 1)
+        self.assertEqual(s["color"]["mode"], "fixed")
+        big = {"strokes": [{"pts": [[0, 0]] * 1500}, {"pts": [[0, 0]] * 1500}]}
+        self.assertEqual(len(SC.clean_scene(big)["strokes"]), 1)      # oltre MAX_POINTS si scarta
+
+    def test_animate_closed_blue_and_rotation(self):
+        s = SC.clean_scene(SQUARE)
+        pts = SC.animate(s, 0)
+        self.assertEqual(pts[0][2:], (0, 0, 0))                           # attacco al buio
+        self.assertEqual(len(pts), 6)                                     # buio + 4 + chiusura
+        self.assertEqual(pts[1][2:], (0, 0, 255))
+        s["anim"]["rotate"] = 90
+        x, y = SC.animate(s, 1.0)[1][:2]                                  # (-.5,-.5) ruotato di 90 gradi
+        self.assertAlmostEqual(x, 0.5, places=3); self.assertAlmostEqual(y, -0.5, places=3)
+
+    def test_audio_scale_and_draw(self):
+        s = SC.clean_scene({**SQUARE, "audio": {"amount": 1, "to": "scale"}})
+        quiet = max(abs(p[0]) for p in SC.animate(s, 0, level=0))
+        loud = max(abs(p[0]) for p in SC.animate(s, 0, level=1))
+        self.assertGreater(loud, quiet * 1.4)
+        s = SC.clean_scene({**SQUARE, "anim": {"scale": 1, "draw_hz": 1}})
+        self.assertLess(len(SC.animate(s, 0.3)), len(SC.animate(s, 0.9)))  # si scrive pian piano
+
+
 class TestRender(unittest.TestCase):
     def test_zone_keeps_beam_inside(self):
         cfg = {"zone": [0.0, 0.0, 1.0, 1.0], "max_intensity": 1.0}
@@ -139,6 +176,7 @@ class TestGateway(unittest.TestCase):
         cls.emu = CubeEmulator("127.0.0.1", 39456)
         cls.gw = G.Gateway()
         threading.Thread(target=cls.gw._glf_loop, daemon=True).start()
+        threading.Thread(target=cls.gw._internal_loop, daemon=True).start()
         res = cls.gw.handle({"action": "add_cube", "ip": "127.0.0.1", "port_base": 39456, "name": "Prova"})
         assert res["ok"], res
         cls.cube = cls.gw.cubes["c1"]
@@ -249,6 +287,25 @@ class TestGateway(unittest.TestCase):
         self.assertTrue(all(p[0] >= -1 for p in pts))           # la zona vale anche nell'anteprima
         self.assertTrue(all(len(p[2]) == 6 for p in lit_pts))
         self.assertLess(len(json.dumps(self.gw.preview_payload())), 2000)
+
+    def test_9_scene_streams_and_mode_all(self):
+        self.assertTrue(wait(self.cube.online))
+        self.assertFalse(self.gw.handle({"action": "scene", "cube": "c1", "scene": {"strokes": []}})["ok"])
+        self.assertTrue(self.gw.handle({"action": "scene", "cube": "all", "scene": SQUARE})["ok"])
+        self.assertEqual(self.cube.mode, "scene")
+        self.assertEqual(self.cube.summary()["scene"], {"id": "q", "name": "Quadrato"})
+        self.gw.handle({"action": "arm", "cube": "c1"})
+        self.assertTrue(wait(lambda: len(lit(self.emu.played)) > 2000))
+        on = lit(self.emu.take_played())
+        self.assertTrue(all(s[4] > 0 and s[2] == 0 and s[3] == 0 for s in on))     # blu
+        # audio dai rig di DMX: il colpo arriva come cambio del contatore kicks
+        self.gw._on_rigs(json.dumps({"rigs": {"rig_a": {"level": 0.8, "kicks": 1}}}))
+        self.gw._on_rigs(json.dumps({"rigs": {"rig_a": {"level": 0.8, "kicks": 2}}}))
+        level, kick = self.gw.audio_now()
+        self.assertAlmostEqual(level, 0.8); self.assertGreater(kick, 0.5)
+        self.assertTrue(self.gw.handle({"action": "mode", "cube": "all", "value": "off"})["ok"])
+        self.assertFalse(self.cube.armed)
+        self.assertTrue(wait(lambda: not self.emu.output, 1.0))
 
     def test_7_status_payload_is_json(self):
         s = json.loads(json.dumps(self.gw.status_payload()))

@@ -34,6 +34,7 @@ import time
 import paho.mqtt.client as mqtt
 
 import laser_proto as P
+import laser_scene as SC
 from laser_render import DEFAULTS as RENDER_DEFAULTS, circle, render
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -45,7 +46,8 @@ GLF_PORT = int(os.getenv("LASER_GLF_PORT", str(P.GLF_PORT)))
 STALE_S = 0.5          # sorgente zitta da piu' di cosi' -> uscita spenta
 ONLINE_S = 3.5         # nessuna risposta GET_FULL_INFO da piu' di cosi' -> offline
 MQTT_LOSS_S = 5.0
-MODES = ("off", "test", "dmx", "patchdeck", "yolo")
+MODES = ("off", "test", "scene", "dmx", "patchdeck", "yolo")
+INTERNAL_FPS = 30      # test e scene: frame generati dal gateway
 PREVIEW_POINTS = 80    # anteprima per il Render della Plancia: punti per cubo...
 PREVIEW_S = 0.16       # ...e ogni quanto (~6/s, solo mentre un cubo e' in uscita)
 DARK = P.pack_sample(0x800, 0x800, 0, 0, 0) * P.SAMPLES_PER_PACKET   # campioni al buio, al centro
@@ -133,6 +135,7 @@ class Cube:
         self.reply_inflight = 0
         self.reply_time = 0.0
         self.test_ts = 0.0
+        self.scene_t0 = now()
         self.stop_flag = False
         self.thread = threading.Thread(target=self._run, name=f"cube-{cid}", daemon=True)
 
@@ -174,6 +177,7 @@ class Cube:
             "mode": self.mode, "armed": self.armed, "streaming": self.streaming,
             "online": self.online(), "frame_age_ms": int((now() - self.frame_ts) * 1000) if self.frame_ts else None,
             "pps": self.pps, **{k: self.conf.get(k, d) for k, d in RENDER_DEFAULTS.items()},
+            "scene": {"id": self.conf["scene"]["id"], "name": self.conf["scene"]["name"]} if self.conf.get("scene") else None,
             "model": i.get("model"), "fw": i.get("fw"), "mac": i.get("mac"),
             "battery": i.get("battery"), "charging": i.get("charging"), "temp_c": i.get("temp_c"),
             "interlock": i.get("interlock"), "temp_warn": i.get("temp_warn"),
@@ -376,8 +380,14 @@ class Gateway:
         self.last_result = None
         self.mqtt_ok_ts = now()
         self.mqtt_up = False
+        self.audio = {"level": 0.0, "at": 0.0, "kick_at": 0.0, "kicks": {}}
         self.cfg_lock = threading.RLock()
         for cid, conf in self.cfg["cubes"].items():
+            if conf.get("scene"):
+                try:
+                    conf["scene"] = SC.clean_scene(conf["scene"])
+                except ValueError:
+                    conf.pop("scene")
             self._add(cid, conf)
 
     def _add(self, cid, conf):
@@ -403,7 +413,6 @@ class Gateway:
             try:
                 pkt, peer = sock.recvfrom(2048)
             except socket.timeout:
-                self._refresh_test()
                 continue
             except OSError:
                 continue
@@ -423,7 +432,6 @@ class Gateway:
                 if len(self.partial) > 32:      # chunk persi: si butta il vecchio
                     for k in list(self.partial)[:-8]:
                         del self.partial[k]
-            self._refresh_test()
 
     def _on_frame(self, src, tgt, pts, ip):
         s = self.sources.setdefault(src, {"frames": 0})
@@ -439,10 +447,59 @@ class Gateway:
         c.set_frame(render(circle(0.5, 600, (255, 255, 255)), c.conf, c.pps))
         c.test_ts = now()
 
-    def _refresh_test(self):
-        for c in list(self.cubes.values()):
-            if c.mode == "test" and now() - c.test_ts > 0.1:
-                self._test_frame(c)
+    def _internal_loop(self):
+        """Sorgenti generate dal gateway: il cerchio di prova (fermo, 10/s
+        basta) e le scene animate (INTERNAL_FPS)."""
+        period = 1.0 / INTERNAL_FPS
+        while not self.stopping:
+            t0 = now()
+            level, kick = self.audio_now()
+            for c in list(self.cubes.values()):
+                try:
+                    if c.mode == "test" and t0 - c.test_ts > 0.1:
+                        self._test_frame(c)
+                    elif c.mode == "scene" and c.conf.get("scene"):
+                        pts = SC.animate(c.conf["scene"], t0 - c.scene_t0, level, kick)
+                        c.set_frame(render(pts, c.conf, c.pps))
+                except Exception as e:          # una scena rotta non deve fermare gli altri cubi
+                    log.warning("%s: scena non disegnabile (%s)", c.id, e)
+            time.sleep(max(0.0, period - (now() - t0)))
+
+    # -- audio dal controller, attraverso i meter dei rig di DMX Master
+    def _on_rigs(self, payload):
+        try:
+            rigs = json.loads(payload).get("rigs") or {}
+        except (ValueError, AttributeError):
+            return
+        level, t = 0.0, now()
+        for key, r in rigs.items():
+            if not isinstance(r, dict):
+                continue
+            try:
+                level = max(level, float(r.get("level") or 0))
+            except (TypeError, ValueError):
+                pass
+            k = r.get("kicks")
+            if k is not None and self.audio["kicks"].get(key) not in (None, k):
+                self.audio["kick_at"] = t
+            self.audio["kicks"][key] = k
+        self.audio.update(level=max(0.0, min(1.0, level)), at=t)
+
+    def audio_now(self):
+        t = now()
+        level = self.audio["level"] if t - self.audio["at"] < 1.0 else 0.0
+        return level, max(0.0, 1.0 - (t - self.audio["kick_at"]) / 0.25)
+
+    def _set_mode(self, c, v):
+        with self.cfg_lock:
+            c.conf["mode"] = v
+        if v == "off":
+            c.armed = False
+        if v == "test":
+            self._test_frame(c)
+        else:
+            c.drop_frame()
+            c.scene_t0 = now()
 
     # -- MQTT
     def status_payload(self):
@@ -481,6 +538,7 @@ class Gateway:
             self.mqtt_up = True
             self.mqtt_ok_ts = now()
             client.subscribe(f"gaia/device/{DEVICE_ID}/command")
+            client.subscribe("gaia/devices/+/dmx_rigs")
             log.info("MQTT connesso a %s:%d", MQTT_HOST, MQTT_PORT)
             self.status_dirty = True
 
@@ -489,6 +547,9 @@ class Gateway:
         log.warning("MQTT disconnesso (%s)", reason_code)
 
     def _on_message(self, client, userdata, msg):
+        if msg.topic.endswith("/dmx_rigs"):
+            self._on_rigs(msg.payload)
+            return
         try:
             cmd = json.loads(msg.payload.decode("utf-8"))
         except (ValueError, UnicodeDecodeError):
@@ -549,18 +610,31 @@ class Gateway:
                 c.conf[key] = v
             self.save()
             if key == "mode":
-                if v == "off":
-                    c.armed = False
-                if v == "test":
-                    self._test_frame(c)
-                else:
-                    c.drop_frame()
+                self._set_mode(c, v)
             elif key == "ip":
                 c.info = None
                 c.armed = False
             elif c.mode == "test":
                 self._test_frame(c)
             return f"{cid}.{key} = {v}"
+        if action == "mode":
+            v = clean_value("mode", cmd.get("value"))
+            cubes = self._targets(cmd)
+            for c in cubes:
+                self._set_mode(c, v)
+            self.save()
+            return f"modalita' {v} su {', '.join(c.id for c in cubes) or 'nessun cubo'}"
+        if action == "scene":
+            sc = SC.clean_scene(cmd.get("scene"))
+            cubes = self._targets(cmd)
+            for c in cubes:
+                with self.cfg_lock:
+                    c.conf["scene"] = sc
+                c.scene_t0 = now()
+                if cmd.get("mode", True) and c.mode != "scene":
+                    self._set_mode(c, "scene")
+            self.save()
+            return f"scena {sc['name']} su {', '.join(c.id for c in cubes) or 'nessun cubo'}"
         if action == "add_cube":
             ip = clean_value("ip", cmd["ip"])
             cid = cmd.get("cube") or next(f"c{i}" for i in range(1, 100) if f"c{i}" not in self.cubes)
@@ -640,6 +714,7 @@ class Gateway:
         self.client.connect_async(MQTT_HOST, MQTT_PORT, keepalive=10)
         self.client.loop_start()
         threading.Thread(target=self._glf_loop, name="glf", daemon=True).start()
+        threading.Thread(target=self._internal_loop, name="internal", daemon=True).start()
         guard = start_guard()
         next_status = 0.0
         next_preview = 0.0

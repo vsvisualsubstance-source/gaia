@@ -23,11 +23,11 @@ function videoLaneHtml(w,D){
   const cues=[...videoDoc().cues].sort((a,b)=>a.time-b.time);
   const blocks=cues.map((c,i)=>{const e=cues[i+1]?.time??D;
     return`<div class="tl-blk tl-vblk" style="left:${c.time/D*100}%;width:${Math.max(0,e-c.time)/D*100}%;--ic:${c.deck==='B'?SWATCH[4]:SWATCH[1]}"><span>${esc(c.label||'Video')}</span><em>${esc(videoCueText(c))}</em></div>`}).join('');
-  return`<div class="tl-vhead"><span class="k">VIDEO</span>
+  return`<div class="tl-trk"><div class="tl-vhead"><span class="k">VIDEO</span>
     <button class="tl-live tl-vlive" data-act="vlive"${w.readonly?' disabled':''} title="VIDEO · TIMELINE: PatchDeck segue la timeline (la esegue il bridge su OPS). LIVE: comandi tu dal tablet">—</button>
     ${w.readonly?'':'<button class="tl-vcue" data-act="vcue" title="Cue video: deck, patch, cosa mostrare, effetti">CUE VIDEO</button>'}
-    <span class="tl-vst"></span></div>
-    <div class="tl-vlane"><div class="tl-cues">${blocks}</div><div class="tl-ph tl-vph"></div></div>`;
+    </div>
+    <div class="tl-vlane"><div class="tl-cues">${blocks}</div><span class="tl-vst"></span><div class="tl-ph tl-vph"></div></div></div>`;
 }
 function toggleVideoActive(){
   const doc=videoDoc(),on=!!doc.active;
