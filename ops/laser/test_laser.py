@@ -206,6 +206,21 @@ class TestGateway(unittest.TestCase):
         self.assertFalse(self.cube.armed)
         self.assertTrue(wait(lambda: not self.emu.output, 1.0))
 
+    def test_8_preview_is_what_goes_out(self):
+        self.assertIsNone(self.gw.preview_payload())          # niente in uscita, niente anteprima
+        self.assertTrue(wait(self.cube.online))
+        self.gw.handle({"action": "set", "param": "c1_mode", "value": "test"})
+        self.gw.handle({"action": "set", "param": "c1_zone", "value": [0, -1, 1, 1]})
+        self.gw.handle({"action": "arm", "cube": "c1"})
+        self.assertTrue(wait(lambda: self.gw.preview_payload() is not None))
+        pts = self.gw.preview_payload()["cubes"]["c1"]
+        self.assertLessEqual(len(pts), G.PREVIEW_POINTS + 2)
+        lit_pts = [p for p in pts if p[2]]
+        self.assertTrue(lit_pts)
+        self.assertTrue(all(p[0] >= -1 for p in pts))           # la zona vale anche nell'anteprima
+        self.assertTrue(all(len(p[2]) == 6 for p in lit_pts))
+        self.assertLess(len(json.dumps(self.gw.preview_payload())), 2000)
+
     def test_7_status_payload_is_json(self):
         s = json.loads(json.dumps(self.gw.status_payload()))
         self.assertEqual(s["family"], "laser")

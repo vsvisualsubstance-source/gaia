@@ -46,6 +46,8 @@ STALE_S = 0.5          # sorgente zitta da piu' di cosi' -> uscita spenta
 ONLINE_S = 3.5         # nessuna risposta GET_FULL_INFO da piu' di cosi' -> offline
 MQTT_LOSS_S = 5.0
 MODES = ("off", "test", "dmx", "patchdeck", "yolo")
+PREVIEW_POINTS = 80    # anteprima per il Render della Plancia: punti per cubo...
+PREVIEW_S = 0.16       # ...e ogni quanto (~6/s, solo mentre un cubo e' in uscita)
 DARK = P.pack_sample(0x800, 0x800, 0, 0, 0) * P.SAMPLES_PER_PACKET   # campioni al buio, al centro
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -178,6 +180,22 @@ class Cube:
             "temp_fault": i.get("temp_fault"), "conn_mode": i.get("conn_mode"),
             "pkt_errors": self.stats["pkt_errors"],
         }
+
+    def preview(self, n=PREVIEW_POINTS):
+        """Quello che il cubo sta proiettando davvero (dopo zona e intensita'),
+        decimato per il Render della Plancia: [[x, y, colore], ...] con x,y in
+        -100..100 e colore "rrggbb" (0 = spostamento al buio)."""
+        frame = self.frame
+        if not self.streaming or not frame:
+            return None
+        count = len(frame) // 10
+        step = max(1, math.ceil(count / n))
+        out = []
+        for i in range(0, count, step):
+            x, y, r, g, b = P.SAMPLE.unpack_from(frame, i * 10)
+            col = f"{r >> 4:02x}{g >> 4:02x}{b >> 4:02x}" if (r | g | b) else 0
+            out.append([round((x / P.DAC_MAX * 2 - 1) * 100), round((y / P.DAC_MAX * 2 - 1) * 100), col])
+        return out
 
     # -- comandi verso il cubo
     def _cmd(self, payload, repeat=1):
@@ -444,6 +462,15 @@ class Gateway:
             "ts": int(time.time() * 1000),
         }
 
+    def preview_payload(self):
+        cubes = {c.id: p for c in list(self.cubes.values()) if (p := c.preview())}
+        return {"ts": int(time.time() * 1000), "cubes": cubes} if cubes else None
+
+    def publish_preview(self):
+        p = self.preview_payload()
+        if p and self.client and self.mqtt_up:
+            self.client.publish(f"gaia/devices/{DEVICE_ID}/laser_preview", json.dumps(p, separators=(",", ":")))
+
     def publish_status(self):
         if self.client and self.mqtt_up:
             self.client.publish(f"gaia/device/{DEVICE_ID}/status", json.dumps(self.status_payload()), retain=True)
@@ -615,9 +642,13 @@ class Gateway:
         threading.Thread(target=self._glf_loop, name="glf", daemon=True).start()
         guard = start_guard()
         next_status = 0.0
+        next_preview = 0.0
         try:
             while not self.stopping:
                 t = now()
+                if t >= next_preview:
+                    self.publish_preview()
+                    next_preview = t + PREVIEW_S
                 if self.mqtt_up:
                     self.mqtt_ok_ts = t
                 elif t - self.mqtt_ok_ts > MQTT_LOSS_S and any(c.armed for c in self.cubes.values()):
