@@ -14,7 +14,12 @@ const LZ_MODE_HINT={
   yolo:'Grafica proiettata su una superficie, guidata dalle posizioni di Yolo. Mai il fascio sulle persone.',
 };
 const LZ_PENDING=new Map(); // req del comando -> etichetta, per mostrare l'esito del gateway
-function lzDevId(){const e=Object.entries(G.devices||{}).find(([,d])=>d?.family==='laser'&&!d.offline);return e?e[0]:'laser-ops'}
+// piu' gateway visibili (es. OPS e touring): vince quello con dei cubi, poi il piu' recente
+function lzDevId(){
+  const e=Object.entries(G.devices||{}).filter(([,d])=>d?.family==='laser'&&!d.offline)
+    .sort(([,a],[,b])=>((b.laser?.cubes?.length?1:0)-(a.laser?.cubes?.length?1:0))||((b._seen||0)-(a._seen||0)))[0];
+  return e?e[0]:'laser-ops';
+}
 const lzDev=()=>{const d=G.devices?.[lzDevId()];return d&&!d.offline&&d.laser?d:null};
 const lzCube=cid=>lzDev()?.laser.cubes.find(c=>c.id===cid);
 function lzCmd(o,label){
@@ -123,3 +128,56 @@ document.addEventListener('change',e=>{
   if(t.dataset?.lzP){lzSet(t.dataset.lzC,t.dataset.lzP,+t.value);t.blur()}});
 document.addEventListener('input',e=>{const t=e.target;if(!t.dataset||(t.dataset.lzP==null&&t.dataset.lzZ==null&&t.dataset.lzTd==null)||t.type!=='range')return;
   const b=t.parentElement.querySelector('b');if(b)b.textContent=(+t.value).toFixed(+t.step<1?2:0)});
+
+/* ---------- laser nel Palco: fixture collegata a un cubo reale (f.cube) ---------- */
+// Dichiarazioni function, non const: il Render le chiama gia' al primo
+// disegno, prima che questo modulo sia valutato.
+function laserCubeState(cid){
+  const d=G.devices?.[lzDevId()];
+  return d&&!d.offline&&d.laser?(d.laser.cubes||[]).find(c=>c.id===cid)||null:null;
+}
+function laserPreviewPts(cid){
+  const p=G.laserPreview;
+  return p&&Date.now()-p.at<1200?p.cubes?.[cid]||null:null;
+}
+function laserStateText(c){return!c?'gateway assente':!c.online?'offline':c.streaming?'IN USCITA':c.armed?'armato':'disarmato'}
+function laserStateColor(c){return!c||!c.online?'#5d6573':c.streaming?'#ff365c':c.armed?'#ffb23e':'#8a92a0'}
+// raggi veri: dall'uscita del cubo ai punti accesi dell'anteprima, e la figura
+// dove arriva. Orientamento e apertura della fixture dicono solo dove disegnarla.
+function drawRealLaser(g,f,origin,z0,spread,base,distance,project){
+  const c=laserCubeState(f.cube),pts=c?.streaming?laserPreviewPts(f.cube):null,col=laserStateColor(c);
+  if(pts?.length){
+    const tan=Math.tan(spread/2);
+    const tg=pts.map(p=>{const a=base+p[0]/100*spread/2;
+      return project(f.x+Math.sin(a)*distance,f.y+Math.cos(a)*distance,Math.max(0,z0+p[1]/100*distance*tan))});
+    const lit=pts.map((p,i)=>p[2]?i:-1).filter(i=>i>=0),k=Math.max(1,Math.ceil(lit.length/40));
+    g.save();g.globalCompositeOperation='lighter';g.lineWidth=1;g.globalAlpha=.3;
+    lit.forEach((i,j)=>{if(j%k)return;g.strokeStyle='#'+pts[i][2];g.beginPath();g.moveTo(origin.x,origin.y);g.lineTo(tg[i].x,tg[i].y);g.stroke()});
+    g.globalAlpha=.95;g.lineWidth=2;g.shadowBlur=10;
+    for(let i=1;i<pts.length;i++){if(!pts[i][2])continue;
+      g.strokeStyle=g.shadowColor='#'+pts[i][2];g.beginPath();g.moveTo(tg[i-1].x,tg[i-1].y);g.lineTo(tg[i].x,tg[i].y);g.stroke()}
+    g.restore();
+  }
+  g.fillStyle=col;g.beginPath();g.arc(origin.x,origin.y,c?.armed?4:3,0,Math.PI*2);g.fill();
+  if(c?.armed&&!c.streaming){g.strokeStyle=col;g.lineWidth=1;g.beginPath();g.arc(origin.x,origin.y,8,0,Math.PI*2);g.stroke()}
+}
+function bindLaserFixtureEditor(f){
+  const sel=$('#feCube'),cubes=lzDev()?.laser.cubes||[];
+  const opts=[['','— nessuno (disegno di prova) —'],...cubes.map(c=>[c.id,`${c.id} · ${c.name||''}`])];
+  if(f.cube&&!cubes.some(c=>c.id===f.cube))opts.push([f.cube,`${f.cube} · (il gateway non lo vede)`]);
+  sel.innerHTML=opts.map(([v,l])=>`<option value="${esc(v)}">${esc(l)}</option>`).join('');sel.value=f.cube||'';
+  $('#feCubeArm').onclick=()=>{const c=laserCubeState(f.cube);if(!c)return;
+    if(c.armed)lzCmd({action:'disarm',cube:c.id});
+    else if(confirm(`Armare ${c.name||c.id}?\nLaser di Classe 4: beam block e zona di sicurezza controllati, nessuno nel fascio.`))lzCmd({action:'arm',cube:c.id});
+    setTimeout(()=>laserFixtureStatus(f),800)};
+  $('#feCubePage').onclick=()=>{const i=L.pages.findIndex(p=>p.name==='Laser');if(i<0){showError('Nel layout non c\'è la pagina Laser.');return}
+    closeSheet();pi=i;selId=null;render()};
+  laserFixtureStatus(f);
+}
+function laserFixtureStatus(f){
+  const st=$('#feCubeSt'),b=$('#feCubeArm');if(!st)return;
+  const c=f.cube?laserCubeState(f.cube):null;b.hidden=!c;
+  st.textContent=!f.cube?'Nessun cubo collegato: nel Render resta il disegno di prova.':!c?'Il laser gateway non vede questo cubo (gateway spento o cubo tolto).':
+    `${laserStateText(c)} · sorgente ${(LZ_MODES.find(m=>m[0]===c.mode)||[])[1]||c.mode}${c.armed||c.mode==='off'?'':' · si arma qui o nella pagina Laser'}`;
+  if(c){b.textContent=c.armed?'Disarma':'Arma';b.disabled=!c.armed&&(!c.online||c.mode==='off')}
+}

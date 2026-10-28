@@ -50,7 +50,7 @@ const FIX_TYPES={
   wall:   {label:'LED wall',     group:'ledwall', ch:0,  kind:'none'},
   blinder:{label:'Blinder',      group:'blinder', ch:4,  kind:'level', model:'Dimmer 1CH'},
   haze:   {label:'Haze',         group:'haze',    ch:2,  kind:'level', model:'Haze 2CH'},
-  laser:  {label:'Laser (solo render)',group:'',   ch:0},
+  laser:  {label:'Laser',group:'',   ch:0},
   speaker:{label:'Cassa',        group:'',        ch:0,  kind:'none'},
   screen: {label:'Schermo proiezione',group:'',   ch:0,  kind:'none'},
   projector:{label:'Proiettore', group:'',        ch:0,  kind:'none'}

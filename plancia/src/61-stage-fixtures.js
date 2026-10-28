@@ -183,8 +183,10 @@ function openFixEditor(w,f){
     <p class="hint">URL diretto: HTTP(S) a un video MP4/H.264 o WebM compatibile col browser (clic sul Render se l'avvio automatico è bloccato). NDI: nome esatto della sorgente, via il Video Service (<code>ops/video-gateway</code>, NDI&rarr;WebRTC). Pagine web, RTSP e file locali non ancora supportati dal Video Service. Audio sempre disattivato.</p>
     <p id="fePreviewStatus" class="hint preview-status" role="status" aria-live="polite"></p>
     <p class="hint">L'altezza dal piano è separata dall'altezza fisica del pannello.</p>`:''}
-    ${f.type==='laser'?`<div class="two"><label>Orientamento (gradi)<input id="feAngle" type="number" min="-180" max="180" step="1"></label><label>Apertura pattern (gradi)<input id="feSpread" type="number" min="1" max="120" step="1"></label></div>
-    <p class="hint">Visualizzazione locale, senza comandi OSC/DMX. Il trasporto verso TouchDesigner sarà definito separatamente.</p>`:''}
+    ${f.type==='laser'?`<label>LaserCube <em>dal laser gateway (pagina Laser)</em><select id="feCube"></select></label><p class="hint" id="feCubeSt"></p>
+    <div class="row"><button class="btn sm" id="feCubeArm">Arma</button><button class="btn sm ghost" id="feCubePage">Pagina Laser</button></div>
+    <div class="two"><label>Orientamento (gradi)<input id="feAngle" type="number" min="-180" max="180" step="1"></label><label>Apertura pattern (gradi)<input id="feSpread" type="number" min="1" max="120" step="1"></label></div>
+    <p class="hint">Con un cubo collegato il Render mostra i raggi veri: figura e colori che il cubo sta proiettando, attraverso zona e intensità. Orientamento e apertura dicono solo come disegnarli sul palco. Senza cubo resta un disegno di prova.</p>`:''}
     ${FIX_TYPES[f.type].ch?`<label>Gruppo <em>rig di DMX Master · ▦ Gruppi nel Palco</em><select id="feGroup">${groupOptionsHtml(f.group)}</select></label>
     <label>Modello <em>profilo DMX, nota 19</em><span class="md-pick"><select id="feModel"></select><button class="btn sm ghost" id="feModelEdit" title="Canali, colore lampada, ruota colori del modello">✎ Modello</button></span></label>
     <div class="two"><label>Universo<select id="feUni"></select></label><label>Indirizzo<input id="feAddr" type="number" min="1" max="512"></label></div>
@@ -204,6 +206,7 @@ function openFixEditor(w,f){
     $('#feNdiPick').hidden=$('#feSource').value!=='ndi';
   }
   if($('#feAngle')){val2('#feAngle',f.angle);val2('#feSpread',f.spread)}
+  if($('#feCube'))bindLaserFixtureEditor(f);
   if($('#feAud')){
     const go=async fields=>{$('#feAudMsg').textContent='Mando a DMX Master…';
       try{const r=await setFixturesAudio([f],fields);$('#feAudMsg').textContent=r.done?'Confermato da DMX Master.':'Salvato in Plancia: la luce non è ancora su DMX Master.'}
@@ -271,8 +274,9 @@ function openFixEditor(w,f){
       $('#feNdiPick').hidden=f.sourceType!=='ndi';
     }
     if($('#feAngle')){f.angle=clamp(+$('#feAngle').value||0,-180,180);f.spread=clamp(+$('#feSpread').value||28,1,120)}
+    if($('#feCube')){f.cube=$('#feCube').value||undefined;laserFixtureStatus(f)}
     f.enabled=$('#feOn').checked; save(); checkDirty()};
-  ['feName','feZ','feGroup','feAddr','feW','feH','feRot','feSource','feSourceRef','feAngle','feSpread','fePrTarget','fePrThrow'].forEach(id=>{const n=$('#'+id);if(n){n.addEventListener('input',upd);n.addEventListener('change',upd)}});
+  ['feName','feZ','feGroup','feAddr','feW','feH','feRot','feSource','feSourceRef','feAngle','feSpread','feCube','fePrTarget','fePrThrow'].forEach(id=>{const n=$('#'+id);if(n){n.addEventListener('input',upd);n.addEventListener('change',upd)}});
   $('#feOn').addEventListener('change',upd);if($('#feTruss'))$('#feTruss').addEventListener('change',upd);
   if($('#feNdiSearch'))$('#feNdiSearch').onclick=()=>pickNdiSource(f);
   // Universo: cambiarlo da solo non basta, l'indirizzo scelto per

@@ -300,6 +300,8 @@ function drawRender(g,W,H,t,level){
   g.fillRect(fohP.x-fohW/2,fohP.y-fohH/2,fohW,fohH);g.strokeRect(fohP.x-fohW/2,fohP.y-fohH/2,fohW,fohH);
   for(const f of lasers){
     const origin=project(f.x,f.y,fixtureZ(f)),spread=(f.spread||28)*Math.PI/180,base=(f.angle||0)*Math.PI/180;
+    // collegata a un LaserCube: raggi veri (anteprima dal gateway), o solo lo stato
+    if(f.cube){drawRealLaser(g,f,origin,fixtureZ(f),spread,base,depth*1.8,project);continue}
     g.strokeStyle='rgba(255,54,92,.72)';g.lineWidth=1.2;g.shadowColor='#ff365c';g.shadowBlur=8;
     for(let ray=-2;ray<=2;ray++){
       const angle=base+ray*spread/4,distance=depth*1.8;
@@ -422,6 +424,7 @@ function drawPlot(g,W,H,t,w){
     const flat=f.type==='wall'||f.type==='screen',labelR=flat?.18*s:r,fw=f.w||(f.type==='wall'?6:5),fh=f.h||(f.type==='wall'?3.5:2.8);
     txt(flat?`${f.name} · ${fw}×${fh}m`:f.type==='projector'&&projectorInfo(f)?`${f.name} · ${projectorInfo(f).dist.toFixed(1)} m`:f.name,x,y-labelR-6,'#e9ebef');
     if(FIX_TYPES[f.type].ch)txt(f.universe+'.'+String(f.address).padStart(3,'0'),x,y+r+12,'#5d6573');
+    if(f.type==='laser'&&f.cube){const c=laserCubeState(f.cube);txt(`${f.cube} · ${laserStateText(c)}`,x,y+r+12,laserStateColor(c))}
     hits.push({f,x,y,r:flat?Math.max(fw*s/2,s*.4):Math.max(r,s*.4)});
   }
   if(ui)ui.hits=hits;

@@ -113,7 +113,7 @@ function gConnect(host){
   G.client=c;
   c.on('connect',()=>{G.ok=true;G.offSince=null;if(G.sim)gSimOff();gStatus();
     ['gaia/device/+/status','gaia/devices/+/patchdeck_matrix','gaia/devices/+/patch_thumb/+',
-     ...TD_STATE_TOPICS.map(n=>'gaia/devices/+/'+n),'gaia/devices/+/dmx_rigs','gaia/devices/+/dmx_layout','gaia/devices/+/dmx_live','gaia/devices/+/dmx_matrix','gaia/devices/+/dmx_output','gaia/devices/+/show_timeline','gaia/device/+/audio_levels','gaia/dmx/+/status',
+     ...TD_STATE_TOPICS.map(n=>'gaia/devices/+/'+n),'gaia/devices/+/dmx_rigs','gaia/devices/+/dmx_layout','gaia/devices/+/dmx_live','gaia/devices/+/dmx_matrix','gaia/devices/+/dmx_output','gaia/devices/+/show_timeline','gaia/devices/+/laser_preview','gaia/device/+/audio_levels','gaia/dmx/+/status',
      'gaia/td/canvas','gaia/brain/state','gaia/brain/dream','gaia/voice/tts/+','gaia/voice/command/+',
      SHOW_CLOCK_STATE,'gaia/show/clock/pong/+'].forEach(t=>c.subscribe(t))});
   const off=()=>{if(G.client!==c)return;G.ok=false;G.offSince=G.offSince??Date.now();gStatus()};
@@ -174,6 +174,9 @@ function gIn(t,p){
         }
       }
     }
+  }else if(seg[1]==='devices'&&seg[3]==='laser_preview'){
+    // laser gateway: cio' che i cubi proiettano davvero, per il Render (~6/s, solo in uscita)
+    if(obj&&p.cubes)G.laserPreview={at:Date.now(),cubes:p.cubes};
   }else if(seg[1]==='devices'&&seg[3]==='show_timeline'){
     // timeline di DMX Master, retained, ripubblicata a ogni rev nuova
     // (nota TD 31): piu' fresca di show_timeline nello status

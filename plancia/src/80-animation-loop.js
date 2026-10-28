@@ -55,7 +55,10 @@ function loop(){
       const b=el.querySelector('.tl-cue b'),nm=remoteLabel|| (cues[r.cue]?`${r.cue+1} · ${cues[r.cue].name}`:'—');if(b.textContent!==nm)b.textContent=nm;
       const pb=el.querySelector('[data-act="play"]');if(pb._p!==r.playing){pb._p=r.playing;pb.innerHTML=r.playing?ICON.pause:ICON.play;pb.classList.toggle('on',r.playing)}
       el.querySelector('[data-act="loop"]').classList.toggle('on',r.loop);
-      el.querySelectorAll('.tl-blk').forEach(x=>x.classList.toggle('cur',+x.dataset.k===r.cue))}
+      el.querySelectorAll('.tl-blk[data-k]').forEach(x=>{const k=+x.dataset.k;x.classList.toggle('cur',k===r.cue);x.classList.toggle('done',k<r.cue)});
+      // prossima cue e tempo che manca: l'operatore sa cosa sta per succedere
+      const nx=el.querySelector('.tl-next'),nc=cues[r.cue+1],nt=nc?`PROSSIMA ${r.cue+2} · ${nc.name} · tra ${Math.floor(Math.max(0,nc.t-r.t)/60)}:${String(Math.floor(Math.max(0,nc.t-r.t))%60).padStart(2,'0')}`:'';
+      if(nx&&nx.textContent!==nt){nx.textContent=nt;nx.classList.toggle('soon',!!nc&&nc.t-r.t<=10)}}
     else if(w.type==='clock'){const m=el.querySelector('.clk-main'),sb=el.querySelector('.clk-sub'),d=new Date();let a,b,cl='';
       if(w.mode==='show'){
         a=tc(showT);const sample=showClock.authority?showClockSample():null,available=!!sample&&showClockFresh(sample);
