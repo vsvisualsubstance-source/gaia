@@ -18,10 +18,12 @@ Plancia parla con l'ecosistema Gaia nello stesso modo delle pagine web del repo 
 | **PatchDeck** | `gaia/device/+/status`, `gaia/devices/+/patchdeck_matrix` | `gaia/device/<id>/command` `{action:"enable", service:"load_xN_a"}`, toggle deck |
 | **Device TD** | status + `patchdeck_matrix` (`fx_params`) / `dmx_matrix` (piatta o multi-rig) | servizi `enable`/`disable`, parametri `{action:"set", param, value}` |
 | **DMX stanza** | `gaia/dmx/+/status` | `gaia/dmx/<stanza>/command`: `set_palette`, `set_brightness`, `blackout`, `timeline_load`/`start`/`stop`, `audio_reactive_start`/`stop` |
+| **Laser** | status del laser gateway (`gaia/device/laser-ops/status`, family `laser`), `gaia/devices/+/laser_preview` | `gaia/device/laser-ops/command`: `arm`/`disarm`/`blackout`, `set` (`c1_mode`, `c1_zone`, …), `scene`, `mode`, `add_cube`/`remove_cube`/`scan` (vedi sezione Laser) |
 
 - I device non sono scritti nel codice: vengono scoperti da chi pubblica davvero status e matrici retained, come fanno le pagine di Gaia. Dall'ispettore puoi fissare un device o una stanza precisa.
 - **Profili di rete** (`⋯` → Gaia): *Casa* (broker e Admin su Core `.142`, Node-RED su OPS `.240`) e *Portatile (OPS)* (tutto su `.240`). Ogni profilo contiene broker MQTT (porta WebSocket), fallback, Node-RED (HTTP e WS `/gaia`), Gaia Admin e ingresso OSC di Gaia. Si possono modificare, duplicare e verificare con **Verifica connessioni**. Dopo 10 s scollegato si prova il fallback.
 - Avvio diretto da URL, utile per tablet e kiosk: `http://<bridge>:8080/?profilo=ops`, oppure singoli indirizzi con `?broker=…&nodered=…&admin=…&osc=…&stanza=…`.
+- **Aperta sul PC OPS stesso** (o sulla macchina touring) da `http://localhost:8080`: broker, Node-RED e Admin del profilo che puntano a `192.168.1.240` diventano `localhost`, perché la macchina non raggiunge le porte Docker sul proprio IP di LAN (WSL mirrored). Prima la pagina restava in simulazione e, senza MQTT, ogni 10 s chiedeva a DMX Master l'uscita di riserva OSC, che saltava avanti e indietro. I tablet in rete non cambiano.
 - Node-RED (WS `/gaia`, lo stesso flusso della dashboard) fa da fonte di riserva per mood e pensieri se `gaia/td/canvas` non arriva.
 - I tasti mood richiedono il consumer **touchdesignerMood** acceso in Admin → Automazioni.
 - Senza broker raggiungibile i widget Gaia mostrano una simulazione (pallino ambra "Gaia · simulazione").
@@ -58,6 +60,9 @@ bridge; per la sola verifica della build usare `npm test`.
 | `OSC_HOST` / `OSC_PORT` | `192.168.1.73` / `7020` | destinazione OSC predefinita, oggi DMX Master (modificabile anche dall'interfaccia) |
 | `OSC_IN` | `9000` | porta UDP su cui il bridge riceve OSC per aggiornare i controlli |
 | `MIDI_OUT` | prima porta disponibile | nome della porta MIDI in uscita |
+| `PATCHDECK_ID` | `td-pd-pc-win` | PatchDeck comandato dalla traccia VIDEO (`video-timeline.js`) |
+| `LASER_ID` | `laser-ops` | laser gateway comandato dalla traccia LASER (`laser-timeline.js`) |
+| `SHOW_CLOCK_TOPIC` | `gaia/show/clock/state` | orologio dello show seguito dalle tracce VIDEO e LASER (cambiarlo solo per le prove) |
 
 Il MIDI usa il pacchetto opzionale `easymidi`. Su Windows serve una porta virtuale come loopMIDI.
 
@@ -85,6 +90,7 @@ Il MIDI usa il pacchetto opzionale `easymidi`. Su Windows serve una porta virtua
 - Scene: `/indirizzo <indice>` (0, 1, 2…); in selezione multipla un elenco di 0/1
 - Colore: `/indirizzo <r> <g> <b>` (0–1)
 - Timeline: l'editor cue (CUE) importa da DMX Master e invia a DMX Master la timeline (`show_timeline`, con verifica e conferma), vedi GAIA_PLANCIA_INTEGRATION.md 2026-10-20. Richiamo `fade=<s>` per il crossfade in TD.
+- Timeline dello show **a tracce**: LUCI (cue di DMX Master), VIDEO (PatchDeck) e LASER, sulla stessa scala dei tempi, con le intestazioni a sinistra. VIDEO e LASER hanno ognuna un interruttore LIVE/TIMELINE e il proprio editor (CUE VIDEO, CUE LASER); le esegue il **bridge** su OPS seguendo l'orologio dello show, anche a tablet chiusi. Dentro la traccia compare lo stato (cue corrente, orologio o gateway assente…).
 - Timeline `/show`: quando è disponibile lo stato retained `gaia/show/clock/state`, segue l'orologio master di DMX Master, manda i comandi su `gaia/show/clock/command` e mostra le cue pubblicate da TD. Stima la latenza via ping MQTT; se lo stato MQTT tace per 3,5 s congela la posizione. Senza stato MQTT usa il feedback OSC `/show/*` quando arriva; in pausa OSC non ha heartbeat e non consente di rilevare la disconnessione del master. Senza feedback mantiene il funzionamento locale/OSC precedente.
 
 Tutti i numeri partono come float OSC.
@@ -99,6 +105,10 @@ Da `⋯` → Template puoi aggiungere o sostituire pagine pronte:
 | Panoramica show | render del palco, ora, timecode, scene, timeline, master, blackout |
 | Luci DMX | 12 scene con crossfade, chase, blackout, strobo, fade time, 8 fader di gruppo |
 | Teste mobili | selezione delle teste identificate da TD, pan/tilt, colore, gobo, posizioni, dimmer, zoom, focus, follow/release e home |
+| Regia | console luci: scene GO/BACK, palette per gruppo, posizioni teste, strobo e audio dei gruppi in versione compatta |
+| Luci · colori singoli | tutte le luci della patch con il colore reale: palette e audio per luce o per gruppo |
+| Audio · reattività | per gruppo: audio on/off, kick, sorgente A/B, minimo/massimo, soglia, preset |
+| Laser | LaserCube: BLACKOUT, scene laser (template e SVG), modalità e ARM per cubo, zona di sicurezza, allineamento, stato |
 | Timeline e clock | cue list a tempo, timecode 25 fps, countdown a fine show, GO/Back; la timeline `/show` segue DMX Master via MQTT/OSC quando disponibile |
 | Design palco | pianta con patch DMX e quote, render, contenuti LED wall, blinder |
 | Mixer live | fader con CC MIDI, meter, effetti, pad XY |
@@ -131,4 +141,26 @@ Il layout del palco include dimensioni in metri (larghezza, profondità, quota d
 
 Ogni LED wall può usare il contenuto procedurale, un URL diretto HTTP(S) a un video MP4/H.264 o WebM compatibile col browser, oppure una sorgente **NDI** via il Video Service (`ops/video-gateway`, PoC funzionante dal 2026-10-16): scegli "NDI" come sorgente nell'editor, poi "Cerca sorgenti NDI" per trovare e inserire il nome esatto di una sorgente NDI reale sulla rete. L'anteprima è muta e la luminosità segue master/gruppo LED. Se il browser blocca l'avvio automatico (solo per URL), fai clic sul pannello Render per avviare o riprovare la preview; gli errori di formato/codec/connessione sono indicati sul Render. Pagine web, HLS non supportato dal browser, file locali e RTSP non sono ancora supportati dal Video Service. Le preview non devono diventare una dipendenza del controllo show — il servizio è isolato (processo e porta propri, nessun contatto con TD/DMX/laser). Sono supportate più LED wall nel layout, ciascuna con sorgente indipendente.
 
-I laser sono visualizzati localmente e non inviano comandi OSC/DMX.
+## Laser
+
+I LaserCube WiFi (via cavo LAN, modalità LAN Client) sono comandati dal **laser gateway** su OPS (`ops/laser`, servizio `laser` dell'agent, device `laser-ops`): è l'unico mittente verso i cubi e fa tutta la sicurezza (zona, intensità massima, raggio fermo attenuato, buio se la sorgente tace, disarmo su blackout o broker perso, guardiano che spegne i cubi se il gateway muore). Dettagli e protocollo in [`ops/laser/README.md`](../ops/laser/README.md). La Plancia non manda mai punti ai cubi: manda comandi al gateway.
+
+**Pagina Laser** (widget `laser`, aggiunta dopo Audio):
+- **BLACKOUT LASER** sempre in alto: disarma subito tutti i cubi. Nel widget basso (compatto) restano blackout e Arma per cubo.
+- Una scheda per cubo: stato (modello, firmware, batteria, temperatura, interlock), **modalità** e **ARMA** con conferma. Armare è sempre manuale: né le scene né la timeline accendono un cubo disarmato.
+- Modalità: *Spento*, *Test* (cerchio di prova), *Scene* (scene interne del gateway), *PatchDeck* (contorni dell'uscita video) e *Yolo* (grafica proiettata su una superficie, mai il fascio sulle persone). DMX non è una sorgente: lo show laser passa dalle Scene (nota TD 51).
+- **Master** e **Intensità massima**; **Zona di sicurezza** con anteprima (fuori dal rettangolo il fascio si spegne); **Allineamento** (dimensione, sposta, specchia, punti al secondo, nome, IP).
+- **Contenuto**: per PatchDeck (e Yolo quando li pubblicherà) i parametri `laser_*` della sorgente, costruiti dalla sua matrice (`patchdeck_matrix.laser_params`). Un solo set, condiviso dai cubi in quella modalità.
+- **Cerca cubi** (ping in broadcast) e **+ Cubo** con l'IP.
+
+**Scene laser** (in cima alla pagina Laser; libreria `layout.laserScenes`, salvata nel progetto):
+- 13 template animati: cerchio, quadrato, triangolo, stella, spirale, onda, Lissajous, tunnel, raggiera, cuore, infinito, scanner, griglia. **Template** rimette quelli mancanti.
+- **+ Importa SVG**: il browser misura ogni forma (tracciati con archi, cerchi, rettangoli, gruppi trasformati) e la converte in linee normalizzate, con i colori del file. I testi vanno prima convertiti in tracciati.
+- Tocca una scena per mandarla ai cubi scelti (Tutti o un cubo): passano in modalità Scene. **✎** apre l'editor con anteprima animata: colore (fisso, arcobaleno, palette, colori dell'SVG), rotazione, dimensione, pulsazione, orbita, scrittura progressiva e audio dal controller (meter dei gruppi di DMX Master, `dmx_rigs`), che muove dimensione o luminosità.
+- Il gateway anima la scena a 30 fps (`ops/laser/laser_scene.py`); l'anteprima della Plancia usa la stessa matematica.
+
+**Traccia LASER della timeline**: ogni cue sceglie per un cubo (o tutti) la sorgente e la scena, a strati come le scene luci (un campo "invariata" lascia com'era). La esegue il bridge (`laser-timeline.js`) quando la traccia è su TIMELINE.
+
+**Laser nel Palco**: una fixture *Laser* si collega a un cubo (c1, c2…) dal suo editor. Il Render disegna i raggi e la figura **veri** dall'anteprima del gateway (`laser_preview`, circa 6 al secondo, solo mentre il cubo è in uscita); il punto d'uscita mostra lo stato (grigio spento, arancio armato, rosso in uscita) e la Pianta ne riporta cubo e stato. Senza cubo collegato resta un disegno di prova. Dall'editor si può armare o disarmare e aprire la pagina Laser.
+
+Con più gateway visibili (per esempio OPS e touring) la Plancia usa quello i cui cubi rispondono.

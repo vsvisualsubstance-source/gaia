@@ -431,6 +431,10 @@ Modello ML (LogisticRegression su AudioFeatures di openWakeWord) per rilevare il
 
 Autore: Mauro Spagnoli — GAIA, coscienza artificiale per la casa.
 
+## Laser gateway (LaserCube)
+
+`ops/laser/` è l'unico mittente verso i LaserCube WiFi (protocollo UDP LaserOS), con tutta la sicurezza, le modalità per cubo (Test, Scene, PatchDeck, Yolo) e le scene animate. Gira su OPS come servizio `laser` dell'agent (device `laser-ops`); setup idempotente con `ops/setup/setup_laser.ps1`. Si comanda dalla pagina Laser della Plancia (`plancia/README.md`, sezione Laser). Dettagli in [`ops/laser/README.md`](ops/laser/README.md).
+
 ## Plancia Video Service
 
 Plancia's Video Service provides low-latency browser previews of NDI video sources using GStreamer and WebRTC.
