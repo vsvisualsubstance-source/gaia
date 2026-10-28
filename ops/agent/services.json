@@ -136,6 +136,17 @@
       },
       "_nota_gpu": "2026-10-20: Radeon 780M (iGPU, backend Vulkan) scartata di default da Ollama ('dropping integrated GPU') -- OLLAMA_IGPU_ENABLE=1 la abilita, vede ~17 GiB di memoria condivisa. Benchmark (prompt ~200 tok, gen 128 tok) CPU -> GPU+FA: qwen2.5:3b gen 11.4 -> 16.6 tok/s, prompt 186 -> 520; llama3.1:8b gen 4.9 -> 7.0, prompt 76 -> 202; qwen3:14b ora 100% su GPU a 3.6 tok/s. OLLAMA_KV_CACHE_TYPE=q8_0 provato e scartato: gen ~5% piu' lenta, utile solo per contesti molto lunghi. Attenzione: la stessa iGPU fa girare TouchDesigner su questa macchina.",
       "_nota": "Ollama nativo Windows (non Docker), installato 2026-08-07 — gia' nel pool 'backend sano' di Node-RED (health-check ogni 20s). Dal 2026-10-20 gestito come subprocess dall'agent (start/stop via MQTT/Pi Manager): disattivata la 'ollama app.exe' di Windows (collegamento Esecuzione automatica spostato in Programs\\Ollama\\_disabled_autostart), che rilanciava da sola 'ollama serve' e rendeva impossibile spegnerlo da remoto. 'signature' esplicita perche' cmd[-1]='serve' da solo combacerebbe anche con camera_server.py; e' sul cmdline completo cosi' non adotta per errore i processi 'ollama.exe runner' (modelli caricati). kill_tree: lo stop chiude anche i runner figli, altrimenti resterebbero vivi a tenere la VRAM."
+    },
+    "laser": {
+      "cmd": [
+        "C:\\gaia\\venv\\Scripts\\python.exe",
+        "laser_gateway.py"
+      ],
+      "cwd": "C:\\gaia\\ops\\laser",
+      "env_extra": {
+        "PYTHONUNBUFFERED": "1"
+      },
+      "_nota": "2026-10-28: laser gateway, unico mittente verso i LaserCube WiFi (vedi ops/laser/README.md). Pubblica come device 'laser-ops'. MAI kill_tree: il gateway lancia laser_guard.py, che deve sopravvivergli per spegnere i cubi quando terminate() lo chiude senza cleanup."
     }
   },
   "camera_consumers": [
