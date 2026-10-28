@@ -105,8 +105,11 @@ TPL.luci={name:'Luci · colori singoli',desc:'Tutte le luci della patch col colo
 // Audio: reattivita' dei gruppi (rig) di DMX Master, preset e kick.
 TPL.audio={name:'Audio · reattività',desc:'Audio per gruppo: on/off, kick, sorgente A/B, minimo/massimo, soglia, preset.',pages:()=>[P('Audio',[
   W('audiorigs',0,0,16,10,{label:'Audio · reattività dei gruppi',color:SWATCH[4]})])]};
+// Laser: i LaserCube WiFi attraverso il laser gateway di OPS (ops/laser).
+TPL.laser={name:'Laser',desc:'LaserCube: modalità per cubo (Show, PatchDeck, Yolo), ARM, blackout, zona di sicurezza.',pages:()=>[P('Laser',[
+  W('laser',0,0,16,10,{label:'Laser · LaserCube',color:SWATCH[2]})])]};
 TPL.full={name:'Show completo',desc:'Tutte le pagine insieme: Gaia, PatchDeck, DMX V8, panoramica show, DMX, teste mobili, timeline, palco, mix.',
-  pages:()=>['gaia','show','regia','luci','audio','dmx','mh','timeline','palco','mix'].flatMap(k=>TPL[k].pages())};
+  pages:()=>['gaia','show','regia','luci','audio','laser','dmx','mh','timeline','palco','mix'].flatMap(k=>TPL[k].pages())};
 const sample=()=>({pages:TPL.full.pages(),fixtures:defaultFixtures(),stage:stageDefaults()});
 
 let L=store.get(KEY)||sample();

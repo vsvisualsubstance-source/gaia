@@ -178,6 +178,12 @@ function migrateUiNoChase(){
   for(const p of L.pages)p.widgets.forEach((w,i)=>{if(w.type==='scenes'&&w.addr==='/dmx/chase')p.widgets[i]=W('audiorigs',w.x,w.y,w.w,w.h,{label:'Audio',color:w.color})});
   L.uiRev=4;save();
 }
+// 2026-10-28: pagina Laser (LaserCube via laser gateway) dopo Audio.
+function migrateUiLaserPage(){
+  if((L.uiRev||0)>=6)return;
+  if(!L.pages.some(p=>p.name==='Laser')){const at=L.pages.findIndex(p=>p.name==='Audio')+1||L.pages.length;L.pages.splice(at,0,TPL.laser.pages()[0])}
+  L.uiRev=6;save();
+}
 function migrateUiAudioPage(){
   if((L.uiRev||0)>=3)return;
   if(!L.pages.some(p=>p.name==='Audio')){const at=L.pages.findIndex(p=>p.name==='Luci')+1||L.pages.length;L.pages.splice(at,0,TPL.audio.pages()[0])}
@@ -185,4 +191,4 @@ function migrateUiAudioPage(){
   if(ch)regia.widgets[regia.widgets.indexOf(ch)]=W('audiorigs',ch.x,ch.y,ch.w,ch.h,{label:'Audio',color:ch.color});
   L.uiRev=3;save();
 }
-migrateLegacyHeadSelectors();migrateHeadPresetWidgets();migrateUiShowTimeline();migrateUiConsolePages();migrateUiAudioPage();migrateUiNoChase();migrateUiOneDmxV8();render(); initShow(); connect(); gStart(); requestAnimationFrame(loop);
+migrateLegacyHeadSelectors();migrateHeadPresetWidgets();migrateUiShowTimeline();migrateUiConsolePages();migrateUiAudioPage();migrateUiNoChase();migrateUiOneDmxV8();migrateUiLaserPage();render(); initShow(); connect(); gStart(); requestAnimationFrame(loop);

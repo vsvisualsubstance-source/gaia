@@ -35,7 +35,8 @@ const appModules = [
   '95-help-tour.js',
   '96-audio-rigs.js',
   '97-stage-space.js',
-  '98-device-panel.js'
+  '98-device-panel.js',
+  '99-laser.js'
 ];
 
 function buildAppBundle(sourceDir = path.join(__dirname, 'src')) {
