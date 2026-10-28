@@ -5,15 +5,15 @@ Copiare in un Text DAT chiamato `gaia_laser_out` e chiamare da un
 Execute DAT a fine frame, per esempio:
 
     def onFrameEnd(frame):
-        mod('gaia_laser_out').send_sop(op('laser_null'), source='dmx', target='*')
+        mod('gaia_laser_out').send_sop(op('laser_null'), source='yolo', target='*')
 
 Oppure da una CHOP con canali x, y, r, g, b (x,y in -1..1, colori 0..1),
 la stessa che si darebbe a un Laser Device CHOP:
 
         mod('gaia_laser_out').send_chop(op('laser_chop'), source='patchdeck')
 
-source = modalita' del cubo che deve prendere questo frame: 'dmx',
-'patchdeck' o 'yolo'. target = id del cubo ('c1', 'c2', 'c3') oppure '*'
+source = modalita' del cubo che deve prendere questo frame: 'patchdeck'
+o 'yolo' (DMX non e' una sorgente: nota TD 51). target = id del cubo ('c1', 'c2', 'c3') oppure '*'
 per tutti i cubi in quella modalita'. La sicurezza (zona, intensita'
 massima, blanking, raggio fermo) la fa il gateway: qui si manda solo il
 disegno. 30 frame al secondo bastano; tenere i frame sotto ~1000 punti.

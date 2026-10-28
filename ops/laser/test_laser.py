@@ -233,7 +233,8 @@ class TestGateway(unittest.TestCase):
 
     def test_5_source_frames_and_stale_blank(self):
         self.assertTrue(wait(self.cube.online))
-        self.gw.handle({"action": "set", "param": "c1_mode", "value": "dmx"})
+        self.assertFalse(self.gw.handle({"action": "set", "param": "c1_mode", "value": "dmx"})["ok"])   # tolta (nota TD 51)
+        self.gw.handle({"action": "set", "param": "c1_mode", "value": "yolo"})
         self.gw.handle({"action": "arm", "cube": "c1"})
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         tri = [(0, 0.5, 0, 255, 0), (0.5, -0.5, 0, 255, 0), (-0.5, -0.5, 0, 255, 0), (0, 0.5, 0, 255, 0)]
@@ -253,12 +254,12 @@ class TestGateway(unittest.TestCase):
         self.assertFalse(self.cube.streaming)
         stop.set(); t.join()
         stop.clear()
-        t = threading.Thread(target=sender, args=("dmx",), daemon=True)
+        t = threading.Thread(target=sender, args=("yolo",), daemon=True)
         t.start()
         self.assertTrue(wait(lambda: len(lit(self.emu.played)) > 1000))
         on = lit(self.emu.played)
         self.assertTrue(all(s[3] > 0 and s[2] == 0 for s in on))       # verde, come il frame
-        self.assertIn("dmx", self.gw.status_payload()["laser"]["sources"])
+        self.assertIn("yolo", self.gw.status_payload()["laser"]["sources"])
         stop.set(); t.join()
         self.assertTrue(wait(lambda: not self.emu.output, G.STALE_S + 1.0))
         self.assertTrue(self.cube.armed)     # resta armato: riparte quando torna la sorgente

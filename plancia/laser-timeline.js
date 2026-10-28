@@ -4,7 +4,7 @@
 // al laser gateway (ops/laser) la sorgente e la scena di ogni cubo.
 // Documento nel layout condiviso:
 //   layout.laserTimeline = {active, cues: [{time, label, cube: 'all'|'c1'..,
-//                           mode: ''|'off'|'scene'|'dmx'|'patchdeck'|'yolo'|'test',
+//                           mode: ''|'off'|'scene'|'patchdeck'|'yolo'|'test',
 //                           scene: ''|<id di layout.laserScenes>}]}
 //   layout.laserScenes   = [{id, name, strokes, color, anim, audio}] (laser_scene.py)
 // A strati: per ogni cubo vale l'ultima cue <= t che ne imposta modo o scena

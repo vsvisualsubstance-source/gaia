@@ -21,7 +21,7 @@ Protocol Specification* v1.1, firmware 2.2). In quella modalita' il cubo
 |---|---|
 | `off` | niente, il cubo non si puo' armare |
 | `test` | cerchio di prova interno al gateway |
-| `dmx` | frame da TD DMX (show guidato dalla Plancia: timeline, palette, effetti; audio dal controller) |
+| `scene` | scene interne del gateway (template o SVG dalla Plancia), animate a 30 fps; audio dal controller via `dmx_rigs`. Lo show guidato dalla Plancia passa da qui: niente sorgente `dmx` (nota TD 51) |
 | `patchdeck` | frame da TD PatchDeck (contorni dell'uscita video; audio dal controller) |
 | `yolo` | frame da TD Yolo: **grafica proiettata su una superficie** guidata dalle posizioni, mai il fascio sulle persone |
 
@@ -44,7 +44,7 @@ Protocol Specification* v1.1, firmware 2.2). In quella modalita' il cubo
 ## Comandi MQTT (`gaia/device/laser-ops/command`)
 ```json
 {"action": "add_cube", "ip": "192.168.1.61", "name": "Laser SX"}
-{"action": "set", "param": "c1_mode", "value": "dmx"}
+{"action": "set", "param": "c1_mode", "value": "patchdeck"}
 {"action": "set", "param": "c1_zone", "value": [-1, 0, 1, 1]}
 {"action": "arm", "cube": "c1"}
 {"action": "disarm", "cube": "all"}

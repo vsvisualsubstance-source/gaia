@@ -205,7 +205,7 @@ function openLaserSceneEditor(orig){
 
 // ---- timeline LASER (terza riga della timeline dello show, la esegue il bridge)
 function laserCueText(c){
-  const M={'':'',off:'spento',test:'test',scene:'scena',dmx:'DMX',patchdeck:'PatchDeck',yolo:'Yolo'};
+  const M={'':'',off:'spento',test:'test',scene:'scena',patchdeck:'PatchDeck',yolo:'Yolo'};
   const sc=c.scene?laserScenes().find(s=>s.id===c.scene)?.name||'(scena tolta)':'';
   return[c.cube&&c.cube!=='all'?c.cube:'tutti',M[c.mode||'']||'',sc].filter(Boolean).join(' · ');
 }
@@ -238,7 +238,7 @@ function openLaserCueEditor(w,cues,meta={}){
   const D=meta.duration||timelineDuration(w),s=$('#scrim');s.hidden=false;
   cues=cues||laserDoc().cues.map(c=>({...c}));
   const cubeIds=['all',...new Set([...(lzDev()?.laser.cubes||[]).map(c=>c.id),'c1','c2','c3'])];
-  const MODES=[['','invariata'],['scene','Scena'],['dmx','Show (DMX)'],['patchdeck','PatchDeck'],['yolo','Yolo'],['test','Test'],['off','Spento']];
+  const MODES=[['','invariata'],['scene','Scena'],['patchdeck','PatchDeck'],['yolo','Yolo'],['test','Test'],['off','Spento']];
   const opt=(v,cur,t)=>`<option value="${esc(v)}"${String(v)===String(cur??'')?' selected':''}>${esc(t)}</option>`;
   const rows=cues.map((c,i)=>`<div class="vcue-row lcue-row" data-v="${i}">
     <label>Posizione<input class="lc-time" value="${esc(formatCueTime(+c.time||0))}" inputmode="decimal"></label>

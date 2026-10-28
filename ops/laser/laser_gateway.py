@@ -46,7 +46,8 @@ GLF_PORT = int(os.getenv("LASER_GLF_PORT", str(P.GLF_PORT)))
 STALE_S = 0.5          # sorgente zitta da piu' di cosi' -> uscita spenta
 ONLINE_S = 3.5         # nessuna risposta GET_FULL_INFO da piu' di cosi' -> offline
 MQTT_LOSS_S = 5.0
-MODES = ("off", "test", "scene", "dmx", "patchdeck", "yolo")
+# niente sorgente "dmx" (nota TD 51): le scene del gateway fanno gia' lo show
+MODES = ("off", "test", "scene", "patchdeck", "yolo")
 INTERNAL_FPS = 30      # test e scene: frame generati dal gateway
 PREVIEW_POINTS = 80    # anteprima per il Render della Plancia: punti per cubo...
 PREVIEW_S = 0.16       # ...e ogni quanto (~6/s, solo mentre un cubo e' in uscita)
@@ -383,6 +384,8 @@ class Gateway:
         self.audio = {"level": 0.0, "at": 0.0, "kick_at": 0.0, "kicks": {}}
         self.cfg_lock = threading.RLock()
         for cid, conf in self.cfg["cubes"].items():
+            if conf.get("mode") not in MODES:      # es. "dmx" di una config vecchia
+                conf["mode"] = "off"
             if conf.get("scene"):
                 try:
                     conf["scene"] = SC.clean_scene(conf["scene"])

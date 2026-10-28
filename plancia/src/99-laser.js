@@ -5,12 +5,12 @@
 // (sorgente), ARM con conferma, BLACKOUT, master, zona e allineamento, stato.
 // Il contenuto dello Show lo genera TD DMX: i suoi parametri laser_* (nota
 // OPS 33) compaiono da soli nella sezione Contenuto.
-const LZ_MODES=[['off','Spento'],['test','Test'],['scene','Scene'],['dmx','Show'],['patchdeck','PatchDeck'],['yolo','Yolo']];
+// niente sorgente DMX (nota TD 51): lo show passa dalle Scene del gateway
+const LZ_MODES=[['off','Spento'],['test','Test'],['scene','Scene'],['patchdeck','PatchDeck'],['yolo','Yolo']];
 const LZ_MODE_HINT={
   off:'Nessuna sorgente: il cubo non si può armare.',
   test:'Cerchio di prova generato dal gateway: per puntare e controllare la zona.',
   scene:'Scena interna del gateway (template o SVG), senza sorgenti esterne: scegli la scena qui sopra o dalla timeline LASER.',
-  dmx:'Contenuto da TD DMX guidato dalla Plancia (timeline, palette, effetti); audio dal controller.',
   patchdeck:'Contorni dell\'uscita video di PatchDeck; audio dal controller.',
   yolo:'Grafica proiettata su una superficie, guidata dalle posizioni di Yolo. Mai il fascio sulle persone.',
 };
@@ -38,12 +38,11 @@ function lzResults(d){
 }
 // Contenuto di ogni sorgente: i parametri laser_* del suo device TD (nota OPS 33),
 // con tipo/range/opzioni dalla matrice (PatchDeck: patchdeck_matrix.laser_params,
-// nota TD 49; DMX: dmx_matrix). Un solo set per sorgente, condiviso dai cubi in
+// nota TD 49). Un solo set per sorgente, condiviso dai cubi in
 // quella modalita' (PatchDeck sceglie il cubo con laser_target).
-const LZ_SRC_LABEL={dmx:'TD DMX',patchdeck:'PatchDeck',yolo:'TD Yolo'};
+const LZ_SRC_LABEL={patchdeck:'PatchDeck',yolo:'TD Yolo'};
 function lzSourceDev(mode){
   const hasLaser=id=>Object.keys(G.devices?.[id]?.params||{}).some(k=>/^laser_/.test(k));
-  if(mode==='dmx')return TD_DEV;
   if(mode==='patchdeck')return Object.keys(G.pdm||{}).find(id=>G.pdm[id]?.laser_params)||Object.keys(G.pdm||{})[0]||'td-pd-pc-win';
   if(mode==='yolo')return Object.keys(G.devices||{}).find(id=>/yolo/i.test(id)&&hasLaser(id))||null;
   return null;
@@ -72,7 +71,7 @@ function lzZoneHtml(c){
 function lzCardHtml(c,d){
   const warn=[!c.online&&'NON RISPONDE',c.online&&c.interlock===false&&'interlock aperto',c.temp_warn&&'temperatura alta',c.temp_fault&&'SURRISCALDATO'].filter(Boolean);
   const live=c.streaming?'IN USCITA':c.armed?(c.mode==='off'?'armato':'armato · in attesa della sorgente'):'disarmato';
-  const content=['dmx','patchdeck','yolo'].includes(c.mode)?lzContentParams(c.mode):{list:[]},srcName=LZ_SRC_LABEL[c.mode]||'';
+  const content=['patchdeck','yolo'].includes(c.mode)?lzContentParams(c.mode):{list:[]},srcName=LZ_SRC_LABEL[c.mode]||'';
   return`<div class="lz-card${c.armed?' armed':''}${c.streaming?' live':''}${c.online?'':' off'}">
     <div class="ar-head"><span class="lz-dot" title="${c.online?'online':'offline'}"></span><b>${esc(c.name||c.id)}</b><span class="lz-id">${esc(c.id)} · ${esc(c.ip||'')}</span></div>
     <p class="hint">${c.online?`${esc(c.model||'LaserCube')} fw ${esc(c.fw||'?')} · ${c.charging?'in carica':c.battery!=null?`batteria ${c.battery}%`:''} · ${c.temp_c??'?'} °C`:'Il gateway non riceve risposta: rete, alimentazione, modalità LAN Client.'}${warn.length?` · <b class="lz-warn">${warn.join(' · ')}</b>`:''}</p>
@@ -110,7 +109,7 @@ function paintLaser(el,w,force){
   const box=el.querySelector('.lz');if(!box)return;
   const d=lzDev();lzResults(d);
   if(box.contains(document.activeElement)&&['range','select-one','color'].includes(document.activeElement.type)&&!force)return; // non ridisegnare mentre trascini
-  const compact=w.h<=3,content=['dmx','patchdeck','yolo'].map(m=>lzContentParams(m).list.map(x=>[x.k,x.v]));
+  const compact=w.h<=3,content=['patchdeck','yolo'].map(m=>lzContentParams(m).list.map(x=>[x.k,x.v]));
   const sig=JSON.stringify([compact,lzsSig(),d&&{c:d.laser.cubes,s:Object.entries(d.laser.sources||{}).map(([k,v])=>[k,v.age_ms<1500,v.points]),f:d.laser.found},content]);
   if(!force&&box._sig===sig)return;box._sig=sig;
   if(!d){box.innerHTML='<p class="hint">Laser gateway non collegato: in Admin accendi il servizio "laser" di OPS.</p>';return}
