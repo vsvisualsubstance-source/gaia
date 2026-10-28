@@ -33,10 +33,28 @@ function lzResults(d){
   LZ_PENDING.delete(r.req);
   if(!r.ok)showError('Laser: '+r.msg);else if(['arm','add_cube','remove_cube'].includes(r.action))showInfo('Laser: '+r.msg);
 }
-// parametri di contenuto pubblicati da TD DMX (laser_*), con range dalla matrice se c'e'
-function lzContentParams(){
-  const p=tdParams(),spec=G.dxm?.[TD_DEV]?.params||{};
-  return Object.keys(p).filter(k=>/^laser_/.test(k)&&typeof p[k]!=='object').sort().map(k=>({k,v:p[k],s:spec[k]||{}}));
+// Contenuto di ogni sorgente: i parametri laser_* del suo device TD (nota OPS 33),
+// con tipo/range/opzioni dalla matrice (PatchDeck: patchdeck_matrix.laser_params,
+// nota TD 49; DMX: dmx_matrix). Un solo set per sorgente, condiviso dai cubi in
+// quella modalita' (PatchDeck sceglie il cubo con laser_target).
+const LZ_SRC_LABEL={dmx:'TD DMX',patchdeck:'PatchDeck',yolo:'TD Yolo'};
+function lzSourceDev(mode){
+  const hasLaser=id=>Object.keys(G.devices?.[id]?.params||{}).some(k=>/^laser_/.test(k));
+  if(mode==='dmx')return TD_DEV;
+  if(mode==='patchdeck')return Object.keys(G.pdm||{}).find(id=>G.pdm[id]?.laser_params)||Object.keys(G.pdm||{})[0]||'td-pd-pc-win';
+  if(mode==='yolo')return Object.keys(G.devices||{}).find(id=>/yolo/i.test(id)&&hasLaser(id))||null;
+  return null;
+}
+function lzContentParams(mode){
+  const dev=lzSourceDev(mode);if(!dev)return{dev,list:[]};
+  const p=G.devices?.[dev]?.params||{},spec=G.pdm?.[dev]?.laser_params||G.dxm?.[dev]?.laser_params||G.dxm?.[dev]?.params||{};
+  // ordine della matrice (TD lo da' gia' logico), poi i parametri senza matrice
+  const keys=Object.keys(spec),order=k=>{const i=keys.indexOf(k);return i<0?1e3:i};
+  const list=Object.keys(p).filter(k=>/^laser_/.test(k)).sort((a,b)=>order(a)-order(b)||a.localeCompare(b)).map(k=>({dev,k,v:p[k],s:spec[k]||{}}));
+  return{dev,list};
+}
+function lzTdSet(dev,k,value){
+  if(!devCmd(dev,{action:'set',param:k,value}))showError('Laser: non collegato al broker di Gaia.');
 }
 function lzSlider(cid,key,label,v,min=0,max=1,step=.01){
   return`<label class="ar-sl"><span>${label}<b>${(+v).toFixed(step<1?2:0)}</b></span><input type="range" min="${min}" max="${max}" step="${step}" value="${v}" data-lz-p="${key}" data-lz-c="${cid}"></label>`;
@@ -51,7 +69,7 @@ function lzZoneHtml(c){
 function lzCardHtml(c,d){
   const warn=[!c.online&&'NON RISPONDE',c.online&&c.interlock===false&&'interlock aperto',c.temp_warn&&'temperatura alta',c.temp_fault&&'SURRISCALDATO'].filter(Boolean);
   const live=c.streaming?'IN USCITA':c.armed?(c.mode==='off'?'armato':'armato · in attesa della sorgente'):'disarmato';
-  const content=c.mode==='dmx'?lzContentParams():[];
+  const content=['dmx','patchdeck','yolo'].includes(c.mode)?lzContentParams(c.mode):{list:[]},srcName=LZ_SRC_LABEL[c.mode]||'';
   return`<div class="lz-card${c.armed?' armed':''}${c.streaming?' live':''}${c.online?'':' off'}">
     <div class="ar-head"><span class="lz-dot" title="${c.online?'online':'offline'}"></span><b>${esc(c.name||c.id)}</b><span class="lz-id">${esc(c.id)} · ${esc(c.ip||'')}</span></div>
     <p class="hint">${c.online?`${esc(c.model||'LaserCube')} fw ${esc(c.fw||'?')} · ${c.charging?'in carica':c.battery!=null?`batteria ${c.battery}%`:''} · ${c.temp_c??'?'} °C`:'Il gateway non riceve risposta: rete, alimentazione, modalità LAN Client.'}${warn.length?` · <b class="lz-warn">${warn.join(' · ')}</b>`:''}</p>
@@ -60,7 +78,7 @@ function lzCardHtml(c,d){
     <button class="lz-arm${c.armed?' on':''}" data-lz="${c.armed?'disarm':'arm'}" data-lz-c="${c.id}"${c.mode==='off'||!c.online?' disabled':''}>${c.armed?'DISARMA':'ARMA'}<i>${live}</i></button>
     ${lzSlider(c.id,'master','Master',c.master??1)}
     ${lzSlider(c.id,'max_intensity','Intensità massima',c.max_intensity??.5)}
-    ${content.length?`<details class="ar-cal lz-sec" data-sec="content"><summary>Contenuto (TD DMX)</summary>${content.map(x=>lzContentHtml(x)).join('')}</details>`:c.mode==='dmx'?'<p class="hint">TD DMX non pubblica ancora parametri laser_* (nota OPS 33).</p>':''}
+    ${content.list.length?`<details class="ar-cal lz-sec" data-sec="content-${c.mode}"><summary>Contenuto (${srcName})</summary>${content.list.map(x=>lzContentHtml(x)).join('')}<p class="hint">Un solo set per ${srcName}: vale per tutti i cubi in questa modalità.</p></details>`:srcName?`<p class="hint">${srcName} non pubblica ancora parametri laser_* (nota OPS 33).</p>`:''}
     <details class="ar-cal lz-sec" data-sec="zone"><summary>Zona di sicurezza</summary>${lzZoneHtml(c)}</details>
     <details class="ar-cal lz-sec" data-sec="align"><summary>Allineamento e cubo</summary>
       ${lzSlider(c.id,'scale','Dimensione',c.scale??1,.05,1)}${lzSlider(c.id,'offset_x','Sposta X',c.offset_x??0,-1,1)}${lzSlider(c.id,'offset_y','Sposta Y',c.offset_y??0,-1,1)}
@@ -69,12 +87,17 @@ function lzCardHtml(c,d){
       <div class="lz-row"><button class="btn sm ghost" data-lz="rename" data-lz-c="${c.id}">Rinomina</button><button class="btn sm ghost" data-lz="ip" data-lz-c="${c.id}">Cambia IP</button><button class="btn sm ghost" data-lz="remove" data-lz-c="${c.id}">Togli</button></div></details>
   </div>`;
 }
-function lzContentHtml({k,v,s}){
-  const label=esc(k.replace(/^laser_/,'').replace(/_/g,' '));
-  if(Array.isArray(s.options))return`<label class="ar-sl"><span>${label}</span><select data-lz-td="${esc(k)}">${s.options.map(o=>`<option${String(o)===String(v)?' selected':''}>${esc(o)}</option>`).join('')}</select></label>`;
-  if(typeof v==='boolean'||s.type==='bool')return`<button class="ar-tog${v?' on':''}" data-lz="tdtoggle" data-lz-v="${esc(k)}">${label}<i>${v?'ON':'OFF'}</i></button>`;
-  const [min,max]=Array.isArray(s.range)?s.range:[0,1],step=(max-min)>10?1:.01;
-  return`<label class="ar-sl"><span>${label}<b>${(+v).toFixed(step<1?2:0)}</b></span><input type="range" min="${min}" max="${max}" step="${step}" value="${+v}" data-lz-td="${esc(k)}"></label>`;
+const LZ_PARAM_IT={enabled:'Sorgente accesa',target:'Cubo',mode:'Contorni',threshold:'Soglia',min_size:'Forma minima',max_points:'Punti massimi',size:'Dimensione',color:'Colore da',palette:'Colore fisso',audio_amount:'Audio (dal controller)',points:'Punti nell’ultimo frame'};
+function lzContentHtml({dev,k,v,s}){
+  const short=k.replace(/^laser_/,''),label=esc(LZ_PARAM_IT[short]||s.label||short.replace(/_/g,' ')),at=`data-lz-dev="${esc(dev)}" data-lz-k="${esc(k)}"`;
+  if(s.readonly)return`<p class="hint">${label}: <b>${esc(typeof v==='number'?Math.round(v):v)}</b></p>`;
+  if(Array.isArray(s.options)){const lab=s.option_labels||s.options;
+    return`<label class="ar-sl"><span>${label}</span><select ${at} data-lz-type="enum">${s.options.map((o,i)=>`<option value="${esc(o)}"${String(o)===String(v)?' selected':''}>${esc(lab[i]??o)}</option>`).join('')}</select></label>`}
+  if(typeof v==='boolean'||s.type==='bool')return`<button class="ar-tog${v?' on':''}" data-lz="tdtoggle" ${at}>${label}<i>${v?'ON':'OFF'}</i></button>`;
+  if(s.type==='rgb'||Array.isArray(v)){const hex='#'+(Array.isArray(v)?v:[1,1,1]).slice(0,3).map(x=>Math.round(Math.max(0,Math.min(1,+x||0))*255).toString(16).padStart(2,'0')).join('');
+    return`<label class="ar-sl"><span>${label}</span><input type="color" value="${hex}" ${at} data-lz-type="rgb"></label>`}
+  const r=Array.isArray(s.range)?s.range:[s.min??0,s.max??1],min=+r[0],max=+r[1],step=s.type==='int'||(max-min)>10?1:.01;
+  return`<label class="ar-sl"><span>${label}<b>${(+v).toFixed(step<1?2:0)}</b></span><input type="range" min="${min}" max="${max}" step="${step}" value="${+v}" ${at} data-lz-type="${step<1?'float':'int'}"></label>`;
 }
 function lzSourceHint(d,mode){
   const s=d.laser.sources?.[mode];
@@ -83,8 +106,8 @@ function lzSourceHint(d,mode){
 function paintLaser(el,w,force){
   const box=el.querySelector('.lz');if(!box)return;
   const d=lzDev();lzResults(d);
-  if(box.contains(document.activeElement)&&['range','select-one'].includes(document.activeElement.type)&&!force)return; // non ridisegnare mentre trascini
-  const compact=w.h<=3,content=lzContentParams();
+  if(box.contains(document.activeElement)&&['range','select-one','color'].includes(document.activeElement.type)&&!force)return; // non ridisegnare mentre trascini
+  const compact=w.h<=3,content=['dmx','patchdeck','yolo'].map(m=>lzContentParams(m).list.map(x=>[x.k,x.v]));
   const sig=JSON.stringify([compact,d&&{c:d.laser.cubes,s:Object.entries(d.laser.sources||{}).map(([k,v])=>[k,v.age_ms<1500,v.points]),f:d.laser.found},content]);
   if(!force&&box._sig===sig)return;box._sig=sig;
   if(!d){box.innerHTML='<p class="hint">Laser gateway non collegato: in Admin accendi il servizio "laser" di OPS.</p>';return}
@@ -115,18 +138,19 @@ function laserDown(e,el,w){
   else if(a==='rename'){const n=prompt('Nome del cubo:',c?.name||'');if(n)lzSet(cid,'name',n)}
   else if(a==='ip'){const ip=prompt('Nuovo IP del cubo:',c?.ip||'');if(ip)lzSet(cid,'ip',ip.trim())}
   else if(a==='remove'){if(confirm(`Togliere ${c?.name||cid} dal gateway?`))lzCmd({action:'remove_cube',cube:cid})}
-  else if(a==='tdtoggle')setDmxParam(TD_DEV,v,String(!tdParams()[v]));
+  else if(a==='tdtoggle'){const dev=b.dataset.lzDev,k=b.dataset.lzK;lzTdSet(dev,k,!G.devices?.[dev]?.params?.[k])}
   setTimeout(()=>paintLaser(el,w,true),400);
 }
 // cursori e menu: invio al rilascio (change), non a ogni pixel
 document.addEventListener('change',e=>{
   const t=e.target;
-  if(t.dataset?.lzTd){setDmxParam(TD_DEV,t.dataset.lzTd,String(t.value));t.blur();return}
+  if(t.dataset?.lzK){const ty=t.dataset.lzType,v=t.value;
+    lzTdSet(t.dataset.lzDev,t.dataset.lzK,ty==='rgb'?[1,3,5].map(i=>+(parseInt(v.slice(i,i+2),16)/255).toFixed(3)):ty==='enum'?v:ty==='int'?Math.round(+v):+v);t.blur();return}
   if(t.dataset?.lzZ!=null){const card=t.closest('.lz-card'),z=[0,1,2,3].map(i=>+card.querySelector(`[data-lz-z="${i}"]`).value);
     if(z[0]>=z[2]||z[1]>=z[3]){showError('Laser: la zona deve avere sinistra < destra e basso < alto.');return}
     lzSet(t.dataset.lzC,'zone',z);t.blur();return}
   if(t.dataset?.lzP){lzSet(t.dataset.lzC,t.dataset.lzP,+t.value);t.blur()}});
-document.addEventListener('input',e=>{const t=e.target;if(!t.dataset||(t.dataset.lzP==null&&t.dataset.lzZ==null&&t.dataset.lzTd==null)||t.type!=='range')return;
+document.addEventListener('input',e=>{const t=e.target;if(!t.dataset||(t.dataset.lzP==null&&t.dataset.lzZ==null&&t.dataset.lzK==null)||t.type!=='range')return;
   const b=t.parentElement.querySelector('b');if(b)b.textContent=(+t.value).toFixed(+t.step<1?2:0)});
 
 /* ---------- laser nel Palco: fixture collegata a un cubo reale (f.cube) ---------- */
