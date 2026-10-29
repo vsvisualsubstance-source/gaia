@@ -40,6 +40,7 @@ function openSheet(){
       <p class="note" id="oscRouteError" role="alert" hidden></p>
       <p class="note">Per esempio, configura qui DMX, PatchDeck o Controller Audio con host e porta OSC realmente in ascolto nel relativo progetto. La famiglia e l’istanza sono etichette di routing: non trasformano né verificano il contratto degli indirizzi.</p>
     </section>
+    ${midiSettingsSection()}
     <section><h3 style="font-size:14px">Progetti</h3>
       <div class="row"><button class="btn primary" id="pOpen">📁 Apri Progetti</button></div>
       <p class="note">Salva, apri, rinomina, duplica, esporta e importa i progetti, o creane uno da un modello. Anche dal nome del progetto in alto.</p>
@@ -97,6 +98,7 @@ function openSheet(){
     renderOscChannels();
   };
   $('#sJson').value=JSON.stringify(L,null,1);
+  bindMidiSettings(s);
   $('#sClose').onclick=closeSheet; s.onpointerdown=e=>{if(e.target===s)closeSheet()};
   const tmsg=t=>$('#tMsg').textContent=t;
   s.querySelectorAll('[data-tadd]').forEach(b=>b.onclick=()=>{const t=TPL[b.dataset.tadd],ps=t.pages();L.pages.push(...ps);pi=L.pages.length-ps.length;selId=null;save();render();initShow();tmsg(`Aggiunto "${t.name}" (${ps.length} ${ps.length>1?'pagine':'pagina'}).`);$('#sJson').value=JSON.stringify(L,null,1)});

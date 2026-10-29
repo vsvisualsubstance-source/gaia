@@ -15,6 +15,8 @@ function connect(){
   ws.onmessage=ev=>{let m;try{m=JSON.parse(ev.data)}catch{return}
   if(m.type==='laser'){G.laserSt=m.state||null;return} // stato della timeline laser dal bridge
   if(m.type==='video'){VIDEO_ST=m.state||null;return} // stato della timeline video dal bridge
+  if(m.type==='midi_in'){midiFromBridge(m);return}     // MIDI in ingresso (eseguito dal bridge)
+  if(m.type==='midi_ports'){MIDI_PORTS=Array.isArray(m.inputs)?m.inputs:[];return}
     if(m.type==='hello'){
       hello=m;status();
       if(m.sharedState?.layout){

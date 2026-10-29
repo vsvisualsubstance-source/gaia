@@ -154,12 +154,12 @@ function decode(buf, out = []) {
 }
 
 /* ---------- MIDI opzionale ---------- */
-let midiOut = null;
+let midiOut = null, midiOutName = null;
 try {
   const easymidi = require('easymidi');
   const outs = easymidi.getOutputs();
   const name = process.env.MIDI_OUT || outs[0];
-  if (name) midiOut = new easymidi.Output(name);
+  if (name) { midiOut = new easymidi.Output(name); midiOutName = name; }
 } catch { /* easymidi non installato: MIDI disattivato */ }
 
 /* ---------- server ---------- */
@@ -250,8 +250,34 @@ const videoTimeline = require('./video-timeline').startVideoTimeline({ getDoc: (
 // Timeline laser (ops/laser): stessa idea, verso il laser gateway. Scene in layout.laserScenes.
 const laserTimeline = require('./laser-timeline').startLaserTimeline({ getDoc: () => persistedState?.layout?.laserTimeline, getScenes: () => persistedState?.layout?.laserScenes || [], broadcast });
 
+// MIDI in ingresso (midi-in.js): i comandi si eseguono qui, una volta sola,
+// anche senza tablet aperti; le pagine ricevono il ritorno OSC e il messaggio
+// grezzo (per "Impara MIDI")
+const midiIn = require('./midi-in');
+const midiState = {};
+let midiMqtt = null;
+try {
+  midiMqtt = require('mqtt').connect(process.env.PLANCIA_MQTT || 'mqtt://127.0.0.1:11883',
+    { clientId: `plancia-bridge-midi-${process.pid}`, reconnectPeriod: 3000, connectTimeout: 5000 });
+  midiMqtt.on('error', () => { /* riprova da solo */ });
+} catch { /* pacchetto mqtt mancante: PANIC/GO/BACK solo OSC */ }
+function onMidi(m, port) {
+  broadcast({ type: 'midi_in', port, ...m });
+  const r = midiIn.midiActions(m, persistedState?.layout, midiState, { laserId: process.env.LASER_ID || 'laser-ops' });
+  for (const o of r.osc) {
+    const to = routeOf(o.address, o.channel);
+    if (to) udp.send(encode(o.address, o.args), to.port, to.host, () => {});
+    broadcast({ type: 'osc', address: o.address, args: o.args, channel: o.channel, echo: true });
+  }
+  for (const q of r.mqtt) if (midiMqtt) midiMqtt.publish(q.topic, JSON.stringify(q.payload));
+  const acts = r.hits.filter(h => midiIn.ACTIONS.includes(h));
+  if (acts.length) console.log(`MIDI ${acts.join(', ').toUpperCase()} da "${port}"`);
+}
+const midiPorts = midiIn.startMidiIn({ onMessage: onMidi, onPorts: inputs => broadcast({ type: 'midi_ports', inputs }), exclude: [midiOutName] });
+
 wss.on('connection', ws => {
   ws.send(hello());
+  ws.send(JSON.stringify({ type: 'midi_ports', inputs: midiPorts.ports() }));
   ws.on('message', data => {
     let m; try { m = JSON.parse(data); } catch { return; }
     if (m.type === 'shared_state') {
@@ -282,6 +308,10 @@ wss.on('connection', ws => {
       if (Array.isArray(m.channels)) oscChannels = channelsFromConfig(m.channels);
       console.log(`OSC in uscita → ${target.host}:${target.port} · /gaia/... → ${gaiaOsc.host}:${gaiaOsc.port}`);
       for (const c of wss.clients) if (c.readyState === 1) c.send(hello());
+    } else if (m.type === 'midi_fake' && process.env.PLANCIA_MIDI_FAKE === '1') {
+      // solo per i test (test/midi-learn.js): un messaggio come da un controller
+      const n = midiIn.normalize(m.midiType, m.msg || {});
+      if (n) onMidi(n, 'finto');
     } else if (m.type === 'midi' && midiOut) {
       midiOut.send('cc', { controller: m.cc & 127, value: m.value & 127, channel: ((m.ch || 1) - 1) & 15 });
     }
@@ -307,7 +337,8 @@ server.listen(PORT, () => {
   console.log(`  OSC /gaia/... →  ${gaiaOsc.host}:${gaiaOsc.port} (Gaia, osc_bridge)`);
   console.log(`  Stato Plancia:   ${STATE_FILE}`);
   console.log(`  OSC in ingresso: porta UDP ${OSC_IN}`);
-  console.log(`  MIDI:            ${midiOut ? 'attivo' : 'disattivato (npm i easymidi per abilitarlo)'}\n`);
+  console.log(`  MIDI:            ${midiOut ? 'attivo' : 'disattivato (npm i easymidi per abilitarlo)'}`);
+  console.log(`  MIDI in:         ${midiPorts.ports().join(', ') || 'nessuna porta (si aprono da sole quando compaiono)'}\n`);
 });
 
 module.exports = { encode, decode };

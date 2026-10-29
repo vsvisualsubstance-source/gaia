@@ -76,6 +76,7 @@ I test nel browser usano Edge o Chrome senza schermo, un bridge di prova su una 
 | `OSC_HOST` / `OSC_PORT` | `192.168.1.73` / `7020` | destinazione OSC predefinita, oggi DMX Master (modificabile anche dall'interfaccia) |
 | `OSC_IN` | `9000` | porta UDP su cui il bridge riceve OSC per aggiornare i controlli |
 | `MIDI_OUT` | prima porta disponibile | nome della porta MIDI in uscita |
+| `MIDI_IN` | tutte | porte MIDI in ingresso: vuota = tutte tranne quella di `MIDI_OUT`, `off` = nessuna, oppure nomi (anche parziali) separati da virgola |
 | `PATCHDECK_ID` | `td-pd-pc-win` | PatchDeck comandato dalla traccia VIDEO (`video-timeline.js`) |
 | `LASER_ID` | `laser-ops` | laser gateway comandato dalla traccia LASER (`laser-timeline.js`) |
 | `SHOW_CLOCK_TOPIC` | `gaia/show/clock/state` | orologio dello show seguito dalle tracce VIDEO e LASER (cambiarlo solo per le prove) |
@@ -83,6 +84,16 @@ I test nel browser usano Edge o Chrome senza schermo, un bridge di prova su una 
 | `MQTT_WS_HOST` / `MQTT_WS_PORT` | `127.0.0.1` / `19001` | broker MQTT WebSocket raggiunto dal ponte `/mqtt` (pagine aperte da hotspot o Tailscale) |
 
 Il MIDI usa il pacchetto opzionale `easymidi`. Su Windows serve una porta virtuale come loopMIDI.
+
+### MIDI in ingresso e in rete
+
+- **Controller fisici** (fader, pad, pedale) e **MIDI in rete** muovono la Plancia. I comandi li esegue il **bridge** (`midi-in.js`), una volta sola e anche con tutti i tablet chiusi: se ogni pagina aperta li eseguisse, lo stesso fader partirebbe più volte. Le pagine vedono il risultato come da un altro tablet, e il messaggio arrivato compare nella barra **IN**.
+- **Impara MIDI**: in Modifica griglia, nell'ispettore di fader, manopole e pulsanti, **🎹 Impara MIDI** prende il prossimo messaggio. Fader e manopole seguono un **CC** (0–127 nel loro min–max). I pulsanti anche una **nota** (pad, pedale): momentaneo = premuto/rilasciato, interruttore = cambia a ogni pressione. La mappatura è la stessa `w.midi` dell'uscita MIDI CC e sta nel layout condiviso.
+- **Azioni globali** (`⋯` → MIDI in ingresso, `layout.midiActions`): **PANIC** = `/dmx/blackout 1` a DMX Master + blackout del laser gateway; **GO** e **BACK** = `gaia/show/clock/command`, come i pulsanti della timeline. Si attivano alla pressione, una volta per pressione.
+- **Porte**: il bridge apre tutte le porte in ingresso (vedi `MIDI_IN`), e un controller collegato dopo si apre da solo entro 3 s. Le porte aperte sono in `⋯` → MIDI in ingresso e nella stampa d'avvio del bridge.
+- **MIDI in rete (RTP-MIDI)**: su Windows si installa **rtpMIDI** (Tobias Erichsen, gratuito), su macOS è già nel sistema (Configurazione MIDI Audio → Rete). La sessione di rete diventa una porta MIDI normale: in ingresso il bridge la apre da solo, in uscita si mette il suo nome in `MIDI_OUT`.
+- **Test**: `test/midi-in.test.js` (logica) e `test/midi-learn.js` (impara, CC eseguito dal bridge, PANIC; con `PLANCIA_MIDI_FAKE=1` il bridge di prova accetta messaggi MIDI finti).
+- **In arrivo** (nota OPS 38, attende DMX Master): orologio dello show da **Ableton Link** (musica dal vivo: BPM, battuta, fase) o da timecode **MTC/LTC** (musica riprodotta: posizione), scelto con `show_clock_source`; nella Plancia selettore della sorgente e indicatore di battuta.
 
 ## Interfaccia
 

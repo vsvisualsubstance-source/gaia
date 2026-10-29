@@ -72,7 +72,7 @@ function renderInsp(){
     ${hasAddr&&gaiaOscAddress?'<p class="hint">Questo indirizzo usa il canale Gaia dedicato (/gaia/), non un canale OSC personalizzato.</p>':''}
     ${hasRange?`<div class="two"><label>${rangeLabels.min}<input id="fMin" type="number" step="any"></label><label>${rangeLabels.max}<input id="fMax" type="number" step="any"></label></div>`:''}
     ${ins.html?ins.html(w):''}
-    ${hasMidi?`<div class="two"><label>MIDI canale<input id="fCh" type="number" min="1" max="16"></label><label>MIDI CC<input id="fCc" type="number" min="0" max="127" placeholder="off"></label></div>`:''}
+    ${hasMidi?`<div class="two"><label>MIDI canale<input id="fCh" type="number" min="1" max="16"></label><label>MIDI CC<input id="fCc" type="number" min="0" max="127" placeholder="off"></label></div>${midiLearnHtml(w)}`:''}
     <label>Colore</label><div class="sw">${SWATCH.map(c=>`<button class="swb" data-c="${c}" style="--c:${c}" aria-label="Colore ${c}" aria-pressed="${c===w.color}"></button>`).join('')}</div>
     <div class="row"><button class="btn" id="fDup">Duplica</button><button class="btn danger" id="fDel">Elimina</button></div>
     ${ins.footer?ins.footer(w):''}`;
@@ -83,6 +83,7 @@ function renderInsp(){
   if($('#fOscChannel')){val('#fOscChannel',w.oscChannel||'');on('#fOscChannel',v=>w.oscChannel=v,'change')}
   if(hasRange){val('#fMin',w.min);val('#fMax',w.max);on('#fMin',v=>{if(v!==''&&!isNaN(v))w.min=+v});on('#fMax',v=>{if(v!==''&&!isNaN(v))w.max=+v})}
   ins.bind?.(w,{on,val});
+  if(hasMidi)bindMidiLearn(w);
   if(hasMidi){val('#fCh',w.midi.ch);val('#fCc',w.midi.cc);on('#fCh',v=>w.midi.ch=clamp(+v||1,1,16));on('#fCc',v=>w.midi.cc=v===''?'':clamp(Math.round(+v),0,127))}
   insp.querySelectorAll('.swb').forEach(b=>b.onclick=()=>{w.color=b.dataset.c;save();refresh(w);insp.querySelectorAll('.swb').forEach(x=>x.setAttribute('aria-pressed',x===b))});
   $('#fDup').onclick=()=>{const c=JSON.parse(JSON.stringify(w));c.id=uid();[c.x,c.y]=freeSpot(c.w,c.h);page().widgets.push(c);save();stage.appendChild(build(c));select(c.id)};

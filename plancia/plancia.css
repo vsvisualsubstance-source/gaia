@@ -595,3 +595,5 @@ button{cursor:pointer}
 .tl-trk .tl-vst{position:absolute;right:6px;top:50%;transform:translateY(-50%);z-index:2;pointer-events:none;max-width:60%;padding:1px 6px;border-radius:4px;background:#000b;font-size:10px}
 @media (max-width:760px){.tl-trk .tl-vhead{width:auto}.tl-trk .tl-vhead .k{width:auto}}
 .tl-trk .tl-vlane .tl-blk{display:flex;align-items:center;gap:8px;white-space:nowrap}.tl-trk .tl-vlane .tl-blk em{margin:0}
+.midi-act{gap:8px;align-items:center;flex-wrap:wrap}
+.midi-act b{min-width:4.5em}
