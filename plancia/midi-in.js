@@ -88,7 +88,10 @@ function midiActions(m, layout, state, { laserId = 'laser-ops', clockTopic = 'ga
 
 // Parte viva: apre le porte e chiama onMessage(m, porta). Senza easymidi
 // (pacchetto opzionale) non fa niente.
-function startMidiIn({ onMessage, onPorts = () => {}, exclude = [], log = console.log, pollMs = 3000 }) {
+// Senza nessun ingresso la libreria MIDI scrive un avviso a ogni controllo:
+// allora si controlla ogni idleMs invece che ogni pollMs (meno righe nel log;
+// con rtpMIDI attivo c'e' sempre almeno una porta).
+function startMidiIn({ onMessage, onPorts = () => {}, exclude = [], log = console.log, pollMs = 3000, idleMs = 15000 }) {
   let easymidi;
   try { easymidi = require('easymidi'); } catch { return { ports: () => [], stop() {} }; }
   const want = (process.env.MIDI_IN ?? '').trim();
@@ -113,10 +116,12 @@ function startMidiIn({ onMessage, onPorts = () => {}, exclude = [], log = consol
       open.delete(name); changed = true; log(`MIDI in: "${name}" scollegata`);
     }
     if (changed) onPorts([...open.keys()]);
+    return list.length;
   };
-  scan();
-  const timer = setInterval(scan, pollMs);
-  return { ports: () => [...open.keys()], stop() { clearInterval(timer); for (const i of open.values()) try { i.close(); } catch { /* */ } } };
+  let timer = null, seen = 0;
+  const loop = () => { seen = scan(); timer = setTimeout(loop, seen ? pollMs : idleMs); };
+  loop();
+  return { ports: () => [...open.keys()], stop() { clearTimeout(timer); for (const i of open.values()) try { i.close(); } catch { /* */ } } };
 }
 
 module.exports = { ACTIONS, normalize, matches, midiActions, startMidiIn };

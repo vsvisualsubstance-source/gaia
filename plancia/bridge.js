@@ -154,9 +154,10 @@ function decode(buf, out = []) {
 }
 
 /* ---------- MIDI opzionale ---------- */
-let midiOut = null, midiOutName = null;
+let midiOut = null, midiOutName = null, midiLib = false;
 try {
   const easymidi = require('easymidi');
+  midiLib = true;
   const outs = easymidi.getOutputs();
   // mai il sintetizzatore di Windows come predefinito: suonerebbe dagli
   // altoparlanti di OPS (MIDI_OUT="Microsoft GS Wavetable Synth" se lo si vuole)
@@ -342,7 +343,7 @@ server.listen(PORT, () => {
   console.log(`  OSC /gaia/... →  ${gaiaOsc.host}:${gaiaOsc.port} (Gaia, osc_bridge)`);
   console.log(`  Stato Plancia:   ${STATE_FILE}`);
   console.log(`  OSC in ingresso: porta UDP ${OSC_IN}`);
-  console.log(`  MIDI:            ${midiOut ? 'attivo' : 'disattivato (npm i easymidi per abilitarlo)'}`);
+  console.log(`  MIDI out:        ${midiOut ? midiOutName : midiLib ? 'nessuna porta in uscita (MIDI_OUT per sceglierla)' : 'disattivato (npm i easymidi per abilitarlo)'}`);
   console.log(`  MIDI in:         ${midiPorts.ports().join(', ') || 'nessuna porta (si aprono da sole quando compaiono)'}\n`);
 });
 
