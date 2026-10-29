@@ -356,3 +356,69 @@ function openFixEditor(w,f){
   $('#feClose').onclick=closeSheet;
 }
 function val2(sel,v){const n=$(sel);if(n)n.value=v??''}
+
+// c'e' un Render del palco visibile nella pagina? (le anteprime video dei LED wall girano solo allora)
+function stageRenderVisible(){return page().widgets.some(w=>w.type==='stage'&&w.view!=='plot')}
+
+/* ---------- tipo di widget: stage (Palco: Render e Pianta, con la barra degli strumenti) ---------- */
+registerWidget('stage',{oscAddress:false,
+  inspector:{html:w=>`<label>Vista<select id="fView"><option value="render">Render</option><option value="plot">Pianta e patch</option></select></label>
+      <h4>Dimensioni reali (m)</h4><div class="two">
+        <label>Larghezza palco<input id="stWidth" type="number" min="2" max="60" step="0.1"></label>
+        <label>Profondità palco<input id="stDepth" type="number" min="2" max="60" step="0.1"></label>
+        <label>Quota piano palco<input id="stFloor" type="number" min="0" max="20" step="0.1"></label>
+        <label>Altezza truss<input id="stTruss" type="number" min="1" max="30" step="0.1"></label></div>
+      <details><summary>Aree: platea e FOH</summary><div class="two">
+        <label>Platea X (centro)<input id="audX" type="number" step="0.1"></label>
+        <label>Platea Y (inizio)<input id="audY" type="number" step="0.1"></label>
+        <label>Platea larghezza<input id="audW" type="number" min="1" step="0.1"></label>
+        <label>Platea profondità<input id="audD" type="number" min="1" step="0.1"></label>
+        <label>FOH X (centro)<input id="fohX" type="number" step="0.1"></label>
+        <label>FOH Y<input id="fohY" type="number" step="0.1"></label>
+        <label>FOH larghezza<input id="fohW" type="number" min="0.5" step="0.1"></label>
+        <label>FOH profondità<input id="fohD" type="number" min="0.5" step="0.1"></label></div></details>
+      <p class="hint">La Pianta si modifica fuori da “Modifica griglia”: trascina una fixture per spostarla, toccala per le proprietà, tocca uno spazio vuoto per aggiungerne una. Geometria e sorgente LED si salvano automaticamente su OPS. “⇪ TD” è un invio separato e riguarda solo le fixture DMX; LED wall, casse e laser restano gestiti da Plancia.</p>`,
+    bind:(w,{on,val})=>{
+    val('#fView',w.view);on('#fView',v=>w.view=v,'change');
+    const st=L.stage;
+    const stageFields=[
+      ['#stWidth',st,'width',2,60],['#stDepth',st,'depth',2,60],['#stFloor',st,'floorHeight',0,20],['#stTruss',st,'trussHeight',1,30],
+      ['#audX',st.audience,'x',-100,100],['#audY',st.audience,'y',-100,200],['#audW',st.audience,'width',1,200],['#audD',st.audience,'depth',1,200],
+      ['#fohX',st.foh,'x',-100,100],['#fohY',st.foh,'y',-100,200],['#fohW',st.foh,'width',.5,50],['#fohD',st.foh,'depth',.5,50]];
+    for(const [selector,target,key,min,max] of stageFields){
+      val(selector,target[key]);
+      $(selector).addEventListener('change',e=>{
+        const n=Number(e.target.value);
+        if(!Number.isFinite(n)){e.target.value=target[key];return}
+        target[key]=clamp(n,min,max);e.target.value=target[key];save();
+      });
+    }
+  }},
+  size:[8,6],label:'Palco',showsValue:false,showsAddr:false,
+  inner:w=>`<canvas></canvas><div class="seg"><button data-v="render" aria-pressed="${w.view!=='plot'}">Render</button><button data-v="plot" aria-pressed="${w.view==='plot'}">Pianta</button><button data-act="syncall" title="Invia a DMX Master solo le fixture patchabili DMX. È un invio separato dall'autosalvataggio del layout; LED wall escluse.">⇪ TD</button><button data-act="importtd" title="Importa da DMX Master la patch delle sole fixture DMX; le fixture non-DMX restano in Plancia.">⇩ TD</button><button data-act="resolve" title="Pulisce i doppioni DMX in TD e reimporta la patch; le fixture non-DMX restano in Plancia.">🧹 TD</button><button data-act="scenes" title="Scene di DMX Master: cattura dal vivo con categorie, richiama, ricattura, rinomina, elimina">▣ Scene</button><button data-act="stage-ai" title="Palco da descrizione: lo descrivi a parole, Ollama prepara le fixture nella Pianta">✨ AI</button><button data-act="space" title="Misure di palco, platea, regia e sala: ingombro totale dello show">📐 Spazio</button><button data-act="lamps" title="Lampade a scarica delle teste (iSpot...): accendi e spegni da DMX Master">💡 Lampade</button><button data-act="models" title="Modelli di fixture di DMX Master: canali, colore lampada, ruota colori e gobo delle teste">▤ Modelli</button><button data-act="groups" title="Gruppi DMX (rig di DMX Master): front, back, teste, LED bar, haze, blinder e rig nuovi">▦ Gruppi</button><button data-act="types" title="Invia la tassonomia dei tipi di Plancia a DMX Master (sostituisce quella attuale).">📋 TD</button></div><div class="hud"></div>`,
+  mounted:el=>sizeCanvas(el),
+  // barra in alto: vista e strumenti; nella Pianta trascina e tocca le fixture;
+  // nel Render un tocco riprova le anteprime video bloccate dei LED wall
+  onPointer(e,el,w){const b=e.target.closest('[data-v]');if(b){w.view=b.dataset.v;el.querySelectorAll('.seg button').forEach(x=>x.setAttribute('aria-pressed',x===b));save()}
+      else if(e.target.closest('[data-act="syncall"]'))syncAllFixtures();
+      else if(e.target.closest('[data-act="importtd"]'))importFromTD();
+      else if(e.target.closest('[data-act="resolve"]'))resolveDuplicates();
+      else if(e.target.closest('[data-act="types"]'))syncTypesToTD();
+      else if(e.target.closest('[data-act="groups"]'))openGroupEditor();
+      else if(e.target.closest('[data-act="scenes"]'))openSceneEditor();
+      else if(e.target.closest('[data-act="models"]'))openModelEditor();
+      else if(e.target.closest('[data-act="lamps"]'))openLampPanel();
+      else if(e.target.closest('[data-act="space"]'))openSpaceEditor();
+      else if(e.target.closest('[data-act="stage-ai"]'))openStageAI();
+      else if(w.view==='plot')stageDown(e,el,w);
+      else if(e.target.closest('canvas'))(L.fixtures||[]).forEach(f=>{
+        const state=wallVideoPlayers.get(f.id);
+        if(f.type==='wall'&&state&&['blocked','error'].includes(state.status))retryWallVideo(f);
+      });
+},
+  // ogni fotogramma: Render (luci, a tempo con level) o Pianta, e la riga di stato
+  tick(el,w,{now,level}){const c=el.querySelector('canvas'),g=c.getContext('2d');if(!c._d)return;g.setTransform(c._d,0,0,c._d,0,0);
+      const W=c.width/c._d,H=c.height/c._d;if(w.view==='plot')drawPlot(g,W,H,now,w);else drawRender(g,W,H,now,level);
+      const hud=w.view==='plot'?'':`${SH.blackout?'<b>BLACKOUT</b> · ':''}SC ${SH.scene+1} ${esc((tdScenes().length?tdScenes().find(s=>s.index===SH.scene)?.label:dmxOutputFresh()?'':LOOKS[SH.scene]?.n)||'')} · fade ${SH.fade.toFixed(1)}s · chase ${CHASE[SH.chase]||'Off'}${SH.strobe?' · <b>STROBO</b>':''} · ${esc(dmxOutputSummary())}`;
+      const h=el.querySelector('.hud');if(h._v!==hud){h.innerHTML=hud;h._v=hud}},
+  help:w=>['Palco','Render: come escono le luci (colori reali da DMX Master). Pianta: posizioni e patch, tocca una luce per nome, indirizzo, modello e colore. In alto: 📐 Spazio = misure di palco, platea, regia e sala; ⇪/⇩ TD scambiano la patch, ▣ Scene, ▤ Modelli (libreria), ▦ Gruppi, 💡 Lampade, ✨ AI.']});

@@ -10,6 +10,7 @@ const {
   dmxOutputFresh,
   dmxOutputForFixture,
   dmxOutputSummary,
+  fixtureOutput,
   dmxHeadAngles,
   dmxGroupColor,
   dmxPaletteGroup,
@@ -246,4 +247,30 @@ test('switching MQTT <-> OSC keeps the last real head position (static heads are
   const head = dmxOutputForFixture({ uid: 'p-h' });
   assert.equal(head.pan, 81);
   assert.equal(head.tilt, 27);
+});
+
+test('fixtureOutput: real output only while DMX Master is fresh and knows the fixture', () => {
+  const at = 50000;
+  dmxOutputApplySnapshot({ v: 1, fixtures: [
+    { uid: 'par-1', id: 1, sent: true, rgb_out: [0.8, 0.4, 0] },
+    { uid: 'par-2', id: 2, sent: false, rgb_out: [0.8, 0.4, 0] },
+    { uid: 'dim-1', id: 3, sent: true, intensity: 0.35 },
+    { uid: 'dark', id: 4, sent: true, rgb_out: [0, 0, 0] },
+    { uid: 'head-1', id: 5, sent: true, rgb_out: [0, 0, 1], pan: 135, tilt: -45 }
+  ] }, 'td-dmx-win', at);
+
+  const lit = fixtureOutput({ uid: 'par-1' }, { at });
+  assert.deepEqual(lit.color, [1, 0.5, 0]);          // tinta a luminosita' piena
+  assert.equal(lit.level, 0.8);                      // livello = picco di rgb_out
+  assert.equal(lit.record.uid, 'par-1');
+  assert.equal(fixtureOutput({ uid: 'par-2' }, { at }).level, 0);       // non inviata: spenta, ma reale
+  assert.equal(fixtureOutput({ uid: 'dim-1' }, { at }).level, 0.35);    // senza colore: intensity
+  assert.deepEqual(fixtureOutput({ uid: 'dim-1' }, { at }).color, [1, 1, 1]);
+  assert.deepEqual(fixtureOutput({ uid: 'dark' }, { at }), { record: dmxOutputForFixture({ uid: 'dark' }), color: [1, 1, 1], level: 0, angles: null });
+  assert.equal(fixtureOutput({ uid: 'sconosciuta' }, { at }), null);   // DMX Master non la conosce: simulazione
+
+  assert.deepEqual(fixtureOutput({ uid: 'head-1' }, { at, model: { pan_range: 540, tilt_range: 270 } }).angles, [0.5, -1 / 3]);
+  assert.deepEqual(fixtureOutput({ uid: 'head-1' }, { at, model: { pan_range: 270, tilt_range: 90 } }).angles, [1, -1]);
+
+  assert.equal(fixtureOutput({ uid: 'par-1' }, { at: at + 6001 }), null); // heartbeat perso: simulazione
 });

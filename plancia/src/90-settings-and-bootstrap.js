@@ -191,4 +191,7 @@ function migrateUiAudioPage(){
   if(ch)regia.widgets[regia.widgets.indexOf(ch)]=W('audiorigs',ch.x,ch.y,ch.w,ch.h,{label:'Audio',color:ch.color});
   L.uiRev=3;save();
 }
-migrateLegacyHeadSelectors();migrateHeadPresetWidgets();migrateUiShowTimeline();migrateUiConsolePages();migrateUiAudioPage();migrateUiNoChase();migrateUiOneDmxV8();migrateUiLaserPage();migrateUiLaserScenes();render(); initShow(); connect(); gStart(); requestAnimationFrame(loop);
+// Avvio dell'app: lo chiama src/999-start.js, dopo che tutti i moduli sono stati valutati.
+function init(){
+  migrateLegacyHeadSelectors();migrateHeadPresetWidgets();migrateUiShowTimeline();migrateUiConsolePages();migrateUiAudioPage();migrateUiNoChase();migrateUiOneDmxV8();migrateUiLaserPage();migrateUiLaserScenes();render(); initShow(); connect(); gStart(); requestAnimationFrame(loop);
+}

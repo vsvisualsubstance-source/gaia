@@ -31,3 +31,37 @@ function dragSlider(e,el,sl,apply){
   mv(e);sl.onpointermove=mv;sl.onpointerup=sl.onpointercancel=()=>{if(pending)pending();sl.onpointermove=sl.onpointerup=sl.onpointercancel=null;el._drag=null};
 }
 document.addEventListener('submit',e=>{const f=e.target.closest('.ga-in');if(!f)return;e.preventDefault();const i=f.querySelector('input');gSay(i.value);i.value='';G.dirty=true});
+
+/* ---------- tipi di widget della famiglia Gaia (MQTT, nessun indirizzo OSC) ---------- */
+// gaia = mood, pensieri e chat; patchdeck = i due deck; tddevice = pannello di un
+// device TD; gaiadmx = DMX della stanza. Contenuto, disegno e tocco restano le
+// funzioni comuni della famiglia (gInner, gPaint, gBind in 71/72).
+// spec comune della famiglia; il widget gaia ha in piu' un canvas (orbita animata)
+// e un'impaginazione stretta sotto 8 colonne
+const gaiaWidget=(size,label,extra={})=>({size,label,showsValue:false,showsAddr:false,refreshOnResize:true,oscAddress:false,
+  // ispettore: device (o stanza) da seguire, deck del PatchDeck, tipo di device, stanza della chat di Gaia
+  inspector:{html(w){const T=w.type,deviceOptions=T==='tddevice'?devIds(w.fam||''):devIds('');
+      return `${T!=='gaia'?`<label>${T==='gaiadmx'?'Stanza':'Device'}<select id="gDev"><option value="">Automatico</option>${(T==='gaiadmx'?Object.keys(G.dmx).sort():deviceOptions).map(x=>`<option value="${esc(x)}"${x===(T==='gaiadmx'?w.stanza:w.device)?' selected':''}>${esc(x)}</option>`).join('')}</select></label>`:''}
+    ${T==='patchdeck'?`<label>Deck<select id="gDeck"><option value="a">Deck A</option><option value="b">Deck B</option></select></label>`:''}
+    ${T==='tddevice'?`<label>Tipo di device (per la scelta automatica)<select id="gFam"><option value="">Qualsiasi</option><option value="patchdeck">PatchDeck</option><option value="mixeraudio">Controller (mixeraudio)</option><option value="dmx">DMX V8</option></select></label>`:''}
+    ${T==='gaia'?`<label>Stanza della chat<input id="gSt2" class="mono"></label><p class="hint">I messaggi vanno su <code>gaia/voice/command/&lt;stanza&gt;</code> come un comando vocale. I tasti − e + spostano il mood via <code>gaia/touchdesigner/mood</code>: in Admin → Automazioni va acceso "touchdesignerMood".</p>`:''}
+    ${T!=='gaia'?'<p class="hint">Device e stanze compaiono qui quando pubblicano il loro stato sul broker di Gaia.</p>':''}`},
+    bind(w,{on,val}){const T=w.type;
+  if($('#gDev')){val('#gDev',T==='gaiadmx'?(w.stanza||''):(w.device||''));
+    if(T==='tddevice')$('#gDev').addEventListener('change',e=>{w.device=e.target.value;save();refresh(w)});
+    else on('#gDev',v=>{if(T==='gaiadmx')w.stanza=v;else w.device=v},'change')}
+  if(T==='patchdeck'){val('#gDeck',w.deck||'a');on('#gDeck',v=>w.deck=v,'change')}
+  if(T==='tddevice'){val('#gFam',w.fam||'');$('#gFam').addEventListener('change',e=>{
+    w.fam=e.target.value;if(w.device&&!devIds(w.fam).includes(w.device))w.device='';
+    save();refresh(w);renderInsp();
+  })}
+  if(T==='gaia'){val('#gSt2',GC.stanza);on('#gSt2',v=>{GC.stanza=v.trim()||'studio';store.set(GKEY,GC)},'change',false)}}},
+  inner:gInner,paint:gPaint,onPointer:gBind,
+  help:w=>[w.label||NAMES[w.type]||w.type,'Controllo di Gaia / TouchDesigner via MQTT.'],
+  tick:(el,w,{repaint})=>{if(repaint)gPaint(el,w)},...extra});
+registerWidget('gaia',gaiaWidget([10,8],'Gaia',{
+  mounted:(el,w)=>{sizeCanvas(el);el.classList.toggle('narrow',w.w<8)},
+  tick:(el,w,{repaint,now})=>{if(repaint)gPaint(el,w);gOrb(el,now)}}));
+registerWidget('patchdeck',gaiaWidget([8,6],'PatchDeck'));
+registerWidget('tddevice',gaiaWidget([8,4],'Device TD'));
+registerWidget('gaiadmx',gaiaWidget([6,6],'DMX stanza'));

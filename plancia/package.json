@@ -6,7 +6,12 @@
   "scripts": {
     "build": "node build-app.js",
     "start": "node build-app.js && node bridge.js",
-    "test": "node --test"
+    "test": "node --test \"test/*.test.js\"",
+    "dev": "run_dev.bat",
+    "smoke": "node test/ui-smoke.js",
+    "characterize": "node test/characterize.js",
+    "perf": "node test/perf-ticks.js --mqtt",
+    "check": "npm test && node test/characterize.js && node test/ui-smoke.js && node test/laser-widget.js && node test/widget-registry.js && node test/inspector.js"
   },
   "dependencies": {
     "mqtt": "^5.16.1",

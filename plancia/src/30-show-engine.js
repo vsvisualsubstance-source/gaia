@@ -411,6 +411,22 @@ function fireCue(w,i){
 const SHOW_CLOCK_STATE='gaia/show/clock/state',SHOW_CLOCK_COMMAND='gaia/show/clock/command';
 const showClock={id:`plancia-${Math.random().toString(36).slice(2)}`,state:null,receivedAt:0,
   osc:null,authority:false,hasMqtt:false,minRtt:null,rtts:[],pings:new Map(),pingSeq:0};
+onMqtt(SHOW_CLOCK_STATE,(p,seg,obj)=>{
+  if(obj&&p.v===1&&p.master==='td-dmx-win'&&Number.isFinite(+p.pos)&&typeof p.playing==='boolean'){
+    const oldLength=showClock.state?.length;
+    showClock.state={...p,pos:+p.pos,playing:p.playing};showClock.receivedAt=now();showClock.authority=true;showClock.hasMqtt=true;
+    if(oldLength!==p.length)refreshShowTimelines();
+  }
+});
+// risposta ai nostri ping: misura del ritardo verso il broker
+onMqtt('gaia/show/clock/pong/+',(p,seg,obj)=>{
+  if(obj&&p.from===showClock.id){
+    const sent=showClock.pings.get(+p.n);
+    if(sent&&p.t0===sent.t0){const rtt=Math.max(0,now()-sent.at);showClock.pings.delete(+p.n);
+      showClock.rtts.push(rtt);if(showClock.rtts.length>10)showClock.rtts.shift();
+      showClock.minRtt=Math.min(...showClock.rtts)}
+  }
+});
 const showClockAge=sample=>sample?Math.max(0,now()-sample.receivedAt):Infinity;
 const showClockFresh=sample=>!!sample&&((sample.source==='osc'&&!sample.state.playing&&!showClock.hasMqtt)||showClockAge(sample)<=3500);
 function showClockSample(){

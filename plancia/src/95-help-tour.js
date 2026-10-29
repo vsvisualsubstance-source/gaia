@@ -16,43 +16,7 @@ const HELP_PAGES={
   PatchDeck:'PatchDeck: i due deck video, effetti e controller.',
   Mix:'Mixer audio: fader, effetti e pad.',
 };
-function helpForWidget(w){
-  const a=w.addr||'';
-  switch(w.type){
-    case 'cuestack':return['Pila scene (GO/BACK)','Le scene di DMX Master in ordine. ▶ = scena in uscita, NEXT = la prossima. Tocca una riga per prepararla come NEXT, poi GO la manda con il fade impostato. BACK torna alla scena precedente.'];
-    case 'laser':return['Laser',w.h<=3?'BLACKOUT LASER disarma subito tutti i cubi; Arma/Armato per cubo (chiede conferma). Il resto nella pagina Laser.':'In alto le Scene laser: tocca una scena (template o SVG importato) per mandarla ai cubi scelti, ✎ per modificarla. Sotto, una scheda per LaserCube: sorgente (Test = cerchio di prova, Scene = scene del gateway, PatchDeck = contorni del video, Yolo = grafica su superficie, mai sulle persone), ARMA con conferma, Master e Intensità massima. In "Zona di sicurezza" il rettangolo dove il fascio può andare: fuori il gateway spegne il raggio. Se la sorgente si ferma il cubo va al buio da solo. BLACKOUT LASER disarma tutto.'];
-    case 'audiorigs':return['Audio dei gruppi',w.h<=3?'♪ accende o spegne la reattività audio del gruppo (spento = luce ferma), Kick = colpo sui bassi. Regolazioni complete nella pagina Audio.':'Una scheda per gruppo: ♪ Audio ON/OFF (tutte le luci del gruppo seguono la musica o restano ferme), Kick, sorgente A/B, il MODO delle luci (come il gruppo, ferma, solo bassi/medi/alti, solo kick) e il GUADAGNO (0 ferma, 1 normale, 2 doppio). In Taratura minimo, massimo, soglia kick e morbidezza del gruppo. Seleziona i gruppi con ☐ e tocca un preset. Per una luce sola: pagina Luci.'];
-    case 'fixgrid':return['Luci e colori singoli','Ogni tessera è una luce col colore che esce davvero. Toccale per selezionarle (o scegli un gruppo + "Seleziona tutte", pari/dispari), poi tocca una palette: cambia solo il colore, livello e audio restano del rig. "Segue il rig" toglie la palette propria.'];
-    case 'stage':return['Palco','Render: come escono le luci (colori reali da DMX Master). Pianta: posizioni e patch, tocca una luce per nome, indirizzo, modello e colore. In alto: 📐 Spazio = misure di palco, platea, regia e sala; ⇪/⇩ TD scambiano la patch, ▣ Scene, ▤ Modelli (libreria), ▦ Gruppi, 💡 Lampade, ✨ AI.'];
-    case 'timeline':return['Timeline dello show',w.readonly?'Segue l\'orologio dello show di DMX Master. LIVE/TIMELINE dice chi comanda le luci: in TIMELINE vanno da sole con le cue, in LIVE comandi tu.':'Le cue dello show: tocca un blocco per modificarlo, "Cue" per l\'editor (scena e fade di ogni cue). Play/stop/inizio comandano l\'orologio. Sotto, la corsia VIDEO per PatchDeck.'];
-    case 'clock':return[w.mode==='show'?'Orologio dello show':w.mode==='countdown'?'Conto alla rovescia':'Ora','Tempo dello show (timecode 25 fps) che arriva da DMX Master. Se dice OFFLINE l\'orologio è fermo.'];
-    case 'color':return['Colore',a.startsWith('/mh')?'Colore delle teste selezionate (ruota o RGB secondo il modello).':'Colore del LED wall.'];
-    case 'xy':return['Pan / Tilt','Trascina per puntare le teste selezionate.'];
-    case 'scenes':
-      if(w.mode==='dmx-enum')return['Palette del rig','Il colore di tutto il gruppo (rig). Per una luce sola usa la pagina Luci.'];
-      if(w.mode==='head-select')return['Selezione teste','Scegli quali teste comandare con i controlli della pagina.'];
-      if(w.mode==='head-presets')return['Preset teste','Posizioni e stati salvati delle teste: "Gestisci" per crearli.'];
-      if(a==='/dmx/scene')return['Scene di DMX Master','Tocca una scena per richiamarla (con il fade impostato). "＋ Scene…" per catturare lo stato attuale, ricatturare, rinominare o eliminare.'];
-      if(a==='/dmx/chase')return['Chase','Come si muovono i colori nei rig: lento, veloce, a tempo di musica…'];
-      if(a==='/mh/position')return['Posizioni teste','Posizioni pronte per le teste selezionate.'];
-      if(a.startsWith('/mh/gobo'))return['Gobo','Il disegno proiettato dalle teste.'];
-      return['Scelte',`Tocca per scegliere (${a||'nessun indirizzo'}).`];
-    case 'fader':
-      if(a==='/dmx/master')return['Master','Livello generale di tutte le luci.'];
-      if(a==='/dmx/fade')return['Fade','Secondi di dissolvenza quando cambi scena.'];
-      if(a==='/dmx/strobe/rate')return['Velocità strobo','Lampi al secondo dello strobo.'];
-      if(a.startsWith('/dmx/group/'))return[`Gruppo ${w.label}`,'Livello di questo gruppo di luci (rig), sopra al master.'];
-      if(a.startsWith('/mh/'))return[w.label,'Valore per le teste selezionate.'];
-      return[w.label||'Fader',`Trascina su e giù (${a||'nessun indirizzo'}).`];
-    case 'button':
-      if(a==='/dmx/blackout')return['Blackout','Spegne tutto finché non lo ritocchi.'];
-      if(a==='/dmx/strobe')return[w.label,w.mode==='toggle'?'Strobo acceso/spento.':'Strobo solo finché tieni premuto.'];
-      if(a==='/show/go')return['GO','Manda la prossima cue della timeline.'];
-      if(a==='/show/back')return['Back','Torna alla cue precedente della timeline.'];
-      return[w.label||'Pulsante',w.mode==='toggle'?'Acceso/spento a ogni tocco.':'Attivo finché tieni premuto.'];
-    default:return[w.label||NAMES[w.type]||w.type,GAIA_TYPES.has(w.type)?'Controllo di Gaia / TouchDesigner via MQTT.':`Indirizzo ${a||'—'}.`];
-  }
-}
+function helpForWidget(w){const t=widgetType(w.type);return t?.help?t.help(w):[w.label||NAMES[w.type]||w.type,`Indirizzo ${w.addr||'—'}.`]}
 const HELP_BAR=[
   ['#projBtn','Progetto','Il nome del progetto aperto. Il pallino arancione = modifiche non ancora salvate nel progetto (il layout resta comunque autosalvato su OPS). Tocca per salvare, aprire, duplicare, esportare.'],
   ['#gconn','Gaia','Collegamento a Gaia (MQTT): verde = DMX Master e gli altri servizi rispondono.'],

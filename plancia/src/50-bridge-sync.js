@@ -53,21 +53,12 @@ function emit(msg,quiet){
   if(quiet)return;
   log('out',msg); if(msg.type==='osc')bus(msg.address,msg.args,'local');
 }
+// OSC in arrivo (o sparato da un altro widget) sui widget che ascoltano quell'indirizzo
 function applyWidgets(m,except){
-  for(const p of L.pages)for(const w of p.widgets){
-    if(w.id===except||!w.addr||w.addr!==m.address)continue;
+  for(const[p,w]of oscListeners(m.address)){
+    if(w.id===except||w.addr!==m.address)continue;
     if(Object.hasOwn(m,'channel')&&(w.oscChannel||'default')!==m.channel)continue;
-    const n=a=>clamp((+a-w.min)/((w.max-w.min)||1)), a0=m.args[0];
-    if(w.type==='xy'){if(m.args.length>1){w.value=n(a0);w.valueY=n(m.args[1])}}
-    else if(w.type==='button'){w.value=(+a0===w.max||+a0>(w.min+w.max)/2)?1:0}
-    else if(w.type==='scenes'&&w.mode==='head-select'&&w.addr==='/mh/select/heads'){
-      w.selectedHeads=m.args.map(String);w.value=(w.headValues||[]).map(id=>w.selectedHeads.includes(id)?1:0);
-    }
-    else if(w.type==='scenes'){w.value=w.mode==='multi'?m.args.map(x=>+x>.5?1:0):Math.round(+a0)}
-    else if(w.type==='color'){if(m.args.length>2){const [h,s]=rgb2hsv(+m.args[0],+m.args[1],+m.args[2]);w.value={h,s}}}
-    else if(['fader','knob','meter'].includes(w.type)&&m.args.length)w.value=n(a0);
-    else continue;
-    if(p===page())paint(elOf(w.id),w);
+    if(widgetType(w.type).receive(w,m.args)&&p===page())paint(elOf(w.id),w);
   }
 }
 function receive(m){

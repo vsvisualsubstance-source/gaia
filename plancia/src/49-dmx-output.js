@@ -151,6 +151,21 @@ function dmxHeadAngles(record,model){
   const half=(v,d)=>Math.max(1,(Number.isFinite(+v)&&+v>0?+v:d)/2),c=v=>Math.max(-1,Math.min(1,v));
   return[c(record.pan/half(model?.pan_range,540)),c(record.tilt/half(model?.tilt_range,270))];
 }
+// Uscita reale di una fixture, o null se DMX Master non e' fresco o non la
+// conosce: allora vale la simulazione locale. E' l'unico punto in cui Render e
+// widget scelgono tra reale e simulato (REFACTOR.md, passo 5).
+//   color   rgb_out a luminosita' piena ([1,1,1] se buio o assente: e' una tinta)
+//   level   0..1: picco di rgb_out, o intensity senza colore; 0 se non inviata
+//   angles  [pan,tilt] in -1..1 per le teste (con il modello TD), o null
+function fixtureOutput(fixture,{at=Date.now(),model=null}={}){
+  if(!dmxOutputFresh(at))return null;
+  const record=dmxOutputForFixture(fixture);
+  if(!record)return null;
+  const peak=record.rgbOut?Math.max(...record.rgbOut):0;
+  return{record,color:peak>0?record.rgbOut.map(v=>v/peak):[1,1,1],
+    level:record.sent?(record.rgbOut?peak:record.intensity||0):0,
+    angles:dmxHeadAngles(record,model)};
+}
 // Tinta reale di un gruppo TD (rig_a, rig_b, ledbar...): media degli
 // rgb_out delle sue fixture inviate, normalizzata a luminosita' piena (e'
 // un campione di colore, non un livello). null = gruppo buio o sconosciuto.
@@ -219,5 +234,5 @@ const DMX_QUICK_PATCH=['fixture_count','start_address','output_port','fixture_pr
 
 if(typeof module==='object'&&module.exports){
   module.exports={DMX_OUTPUT,DMX_LAYOUT,dmxRigMeters,dmxLayoutApply,dmxLiveApply,dmxRigsApply,dmxOutputApplySnapshot,dmxOutputApplySource,dmxOutputApplyOsc,dmxOutputFresh,dmxOutputForFixture,dmxOutputSummary,
-    dmxHeadAngles,dmxGroupColor,dmxPaletteGroup,tdSceneList,tdActiveScene,dmxHex,dmxPaletteColors,dmxGradient,tdScenePreview,DMX_QUICK_PATCH};
+    fixtureOutput,dmxHeadAngles,dmxGroupColor,dmxPaletteGroup,tdSceneList,tdActiveScene,dmxHex,dmxPaletteColors,dmxGradient,tdScenePreview,DMX_QUICK_PATCH};
 }

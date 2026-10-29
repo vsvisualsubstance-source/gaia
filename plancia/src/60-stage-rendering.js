@@ -155,16 +155,13 @@ function drawVideoCover(g,video,x,y,w,h,alpha){
 function drawRender(g,W,H,t,level){
   const fixtures=(L.fixtures||[]).filter(f=>f.enabled!==false);
   const fixturesOf=type=>fixtures.filter(f=>f.type===type);
-  const hasDmxFeedback=dmxOutputFresh(),feedbackFor=f=>hasDmxFeedback?dmxOutputForFixture(f):null;
-  const outputColor=feedback=>feedback?.rgbOut&&Math.max(...feedback.rgbOut)>0?
-    feedback.rgbOut.map(value=>value/Math.max(...feedback.rgbOut)):[1,1,1];
-  const outputLevel=feedback=>feedback?.sent?
-    feedback.rgbOut?Math.max(...feedback.rgbOut):feedback.intensity||0:0;
+  // uscita reale di DMX Master per fixture (null = simulazione locale)
+  const outputOf=f=>fixtureOutput(f,{model:f.type==='mh'?tdModelFor(f):null});
   const wallFixtures=fixturesOf('wall'), uplights=fixturesOf('par'), bars=fixturesOf('bar');
   const headsF=fixturesOf('mh'), blinderF=fixturesOf('blinder'), speakers=fixturesOf('speaker'), lasers=fixturesOf('laser');
   const geom=L.stage, depth=Math.max(1,geom.depth), halfStage=Math.max(1,geom.width/2);
   // nebbia: con il feedback, l'uscita reale della macchina haze (nota 33)
-  const hazeOut=fixturesOf('haze').map(feedbackFor).find(fb=>fb?.sent&&fb.intensity!=null);
+  const hazeOut=fixturesOf('haze').map(outputOf).find(o=>o?.record.sent&&o.record.intensity!=null)?.record;
   const gate=SH.strobe?(((t/1000*SH.rate)%1)<.22?1:0):1, M=(SH.blackout?0:SH.master)*gate, hz=.3+.9*(hazeOut?hazeOut.intensity:SH.g.haze);
   g.globalCompositeOperation='source-over';
   const bg=g.createLinearGradient(0,0,0,H);bg.addColorStop(0,'#04050a');bg.addColorStop(1,'#090b10');g.fillStyle=bg;g.fillRect(0,0,W,H);
@@ -184,8 +181,8 @@ function drawRender(g,W,H,t,level){
     const wx0=wp.x-wallWidth/2,wx1=wp.x+wallWidth/2,wy1=wp.y,wy0=wy1-wallHeight;
     g.globalCompositeOperation='source-over';g.fillStyle='#07080b';g.fillRect(wx0-4,wy0-4,wx1-wx0+8,wy1-wy0+8);
     const cols=36,rows=Math.max(8,Math.round(cols*(wy1-wy0)/(wx1-wx0))),pw=(wx1-wx0)/cols,ph=(wy1-wy0)/rows;
-    const feedback=feedbackFor(wallF),b=feedback?outputLevel(feedback):SH.led.bright*SH.g.ledwall*(SH.blackout?0:SH.master);
-    const c=feedback?outputColor(feedback):SH.wall.c;
+    const live=outputOf(wallF),b=live?live.level:SH.led.bright*SH.g.ledwall*(SH.blackout?0:SH.master);
+    const c=live?live.color:SH.wall.c;
     let avg=0;
     if(wallF.sourceType==='url'||wallF.sourceType==='ndi'){
       const preview=wallVideoPlayers.get(wallF.id);
@@ -204,7 +201,7 @@ function drawRender(g,W,H,t,level){
       const hsv=rgb2hsv(...c), hue=hsv[0],sat=hsv[1],val=Math.max(...c),timeHue=Math.sin(t*.0006)*.05;
       for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
         let col=c,k=1;
-        if(feedback)k=b;
+        if(live)k=b;
         else switch(SH.led.mode){
           case 1:col=hsv2rgb((hue+x/cols*.18+timeHue+1)%1,sat,val);k=.55+.45*Math.sin(x*.18+t*.0015);break;
           case 2:k=Math.pow(.5+.5*Math.sin(x*.32+y*.22-t*.003),1.6);break;
@@ -237,8 +234,8 @@ function drawRender(g,W,H,t,level){
   // uplight
   for(let i=0;i<uplights.length;i++){
     const f=uplights[i],group=f.group==='back'||f.group==='rig_b'?'back':'front',p=project(f.x,f.y,f.z);
-    const feedback=feedbackFor(f),col=feedback?outputColor(feedback):chaseCol(group==='back'?SH.back.c:SH.wash.c,i,uplights.length,t);
-    const k=feedback?outputLevel(feedback):SH.g[group]*M*chaseK(i,uplights.length,t,level);
+    const live=outputOf(f),col=live?live.color:chaseCol(group==='back'?SH.back.c:SH.wash.c,i,uplights.length,t);
+    const k=live?live.level:SH.g[group]*M*chaseK(i,uplights.length,t,level);
     if(k<.01)continue;
     beam(g,p.x,p.y,Math.PI+(p.x<W/2?-.08:.08),H*.48,H*.07,col,.22*k*hz);glow(g,p.x,p.y,10,col,.9*k);
   }
@@ -250,23 +247,23 @@ function drawRender(g,W,H,t,level){
   for(let x=trussL.x;x<trussR.x;x+=12){g.moveTo(x,trussL.y);g.lineTo(x+6,trussL.y+8);g.lineTo(x+12,trussL.y)}g.stroke();
   // teste mobili
   const n=headsF.length;ensureHeadPool(n);const heads=[];
-  for(let i=0;i<n;i++){const f=headsF[i],h=SH.heads[i],p=h.T.c,pos=project(f.x,f.y,fixtureZ(f)),x=pos.x,y=pos.y,size=clamp(pos.scale*.7,8,18);heads.push([x,y,h,p,size,feedbackFor(f),f]);
+  for(let i=0;i<n;i++){const f=headsF[i],h=SH.heads[i],p=h.T.c,pos=project(f.x,f.y,fixtureZ(f)),x=pos.x,y=pos.y,size=clamp(pos.scale*.7,8,18),live=outputOf(f);heads.push([x,y,h,p,size,live,f]);
     g.fillStyle='#1c2027';g.strokeStyle='#3a404c';g.lineWidth=1;
     g.beginPath();g.roundRect(x-size,y-size*.35,size*2,size*.7,2);g.fill();g.stroke();
     // corpo della testa: pan reale di DMX Master se c'e', come il fascio (prima ruotava
     // con la simulazione locale e non coincideva con il fascio)
-    const realPan=dmxHeadAngles(feedbackFor(f),tdModelFor(f))?.[0];
+    const realPan=live?.angles?.[0];
     g.save();g.translate(x,y);g.rotate(-(realPan??p[0])*.9);g.beginPath();g.roundRect(-size*.45,-size*.4,size*.9,size*.9,3);g.fill();g.stroke();g.restore()}
   g.globalCompositeOperation='lighter';
   // etichette feedback: se le teste sono vicine si sfalsano in altezza (una si', una no)
   const byX=heads.map(hd=>hd[0]).sort((a,b)=>a-b),minGap=byX.slice(1).reduce((m,v,i)=>Math.min(m,v-byX[i]),Infinity);
-  for(const [x,y,h,p,size,feedback,f] of heads){
-    const k=feedback?outputLevel(feedback):p[5]*SH.g.mh*M*(h.strobe?(((t/1000*13)%1)<.3?1:0):1);
+  for(const [x,y,h,p,size,live] of heads){
+    const feedback=live?.record,k=live?live.level:p[5]*SH.g.mh*M*(h.strobe?(((t/1000*13)%1)<.3?1:0):1);
     // con il feedback: colore e livello da rgb_out, posizione da pan/tilt
     // reali in gradi (nota 33), zoom e focus reali da dmx_live; il gobo arriva
     // come valore DMX grezzo, non come slot: fascio aperto
-    const real=feedback?dmxHeadAngles(feedback,tdModelFor(f)):null;
-    const col=feedback?outputColor(feedback):[p[2],p[3],p[4]],pan=real?real[0]:p[0],tl=real?real[1]:p[1],z=feedback?.zoom??p[6],soft=1-(feedback?.focus??p[7])*.5;
+    const real=live?live.angles:null;
+    const col=live?live.color:[p[2],p[3],p[4]],pan=real?real[0]:p[0],tl=real?real[1]:p[1],z=feedback?.zoom??p[6],soft=1-(feedback?.focus??p[7])*.5;
     if(k>.01){
       if(feedback&&!real)glow(g,x,y,size,col,.95*k);
       else{
@@ -317,18 +314,18 @@ function drawRender(g,W,H,t,level){
   g.globalCompositeOperation='lighter';
   if(bars.length){const px=8;
     for(let i=0;i<bars.length;i++){const f=bars[i];
-      const feedback=feedbackFor(f),col=feedback?outputColor(feedback):null,fixtureLevel=feedback?outputLevel(feedback):0;
-      for(let j=0;j<px;j++){const idx=i*px+j,color=col||chaseCol(SH.bar.c,idx,bars.length*px,t),k=feedback?fixtureLevel:SH.g.ledbar*M*chaseK(SH.chase===2?idx:i,SH.chase===2?bars.length*px:bars.length,t,level);
+      const live=outputOf(f),col=live?live.color:null,fixtureLevel=live?live.level:0;
+      for(let j=0;j<px;j++){const idx=i*px+j,color=col||chaseCol(SH.bar.c,idx,bars.length*px,t),k=live?fixtureLevel:SH.g.ledbar*M*chaseK(SH.chase===2?idx:i,SH.chase===2?bars.length*px:bars.length,t,level);
         const span=f.w||1.8,p=project(f.x+(j+.5-px/2)*span/px,f.y,f.z),x=p.x,y=p.y;
         g.fillStyle=k>.02?rgba(color,1,k):'#15171c';g.fillRect(x-p.scale*span/px/2+.5,y-2,Math.max(1,p.scale*span/px-1),4);
         if(k>.02)glow(g,x,y,10,color,.5*k)}}
   }
   // pubblico e blinder
   const bl=SH.g.blinder*(SH.blackout?0:1);
-  if(bl>.01||blinderF.some(f=>feedbackFor(f)?.sent)){
-    for(const f of blinderF){const feedback=feedbackFor(f),actual=feedback?outputLevel(feedback):bl;
+  if(bl>.01||blinderF.some(f=>outputOf(f)?.record.sent)){
+    for(const f of blinderF){const live=outputOf(f),actual=live?live.level:bl;
       if(actual<=.01)continue;
-      const p=project(f.x,f.y,f.z);glow(g,p.x,p.y,Math.max(12,p.scale*1.5),feedback?outputColor(feedback):[1,.85,.6],.55*actual)}
+      const p=project(f.x,f.y,f.z);glow(g,p.x,p.y,Math.max(12,p.scale*1.5),live?live.color:[1,.85,.6],.55*actual)}
     if(!blinderF.length)glow(g,W/2,H*1.05,W*.7,[1,.85,.6],.55*bl);
   }
   g.globalCompositeOperation='source-over';

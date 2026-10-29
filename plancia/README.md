@@ -1,4 +1,6 @@
-# Plancia
+# Plancia-next
+
+> **Fork di sviluppo** della Plancia di Gaia (estratto da `gaia/plancia` con la sua storia). Qui si lavora al refactor senza toccare la Plancia in esercizio: piano e regole in [REFACTOR.md](REFACTOR.md), prova accanto a quella vera con `run_dev.bat` (porta 8092), aggiornamento da gaia con `tools/sync-from-gaia.sh`.
 
 Superficie di controllo OSC/MIDI che gira nel browser di qualsiasi tablet o telefono. Un piccolo bridge Node sul computer serve la pagina e traduce i messaggi in OSC (UDP) e MIDI.
 

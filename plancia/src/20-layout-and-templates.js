@@ -139,7 +139,7 @@ const stage=$('#stage'), insp=$('#insp');
 const page=()=>L.pages[pi];
 const allW=()=>L.pages.flatMap(p=>p.widgets);
 const findW=id=>allW().find(w=>w.id===id)||null;
-const save=()=>store.set(KEY,L);
+const save=()=>{oscIndexStale();store.set(KEY,L)};
 save();
 const out=(w,v)=>w.min+(w.max-w.min)*v;
 const fmt=n=>{const a=Math.abs(n);return a>=100?Math.round(n).toString():a>=10?n.toFixed(1):n.toFixed(2)};

@@ -1,0 +1,3603 @@
+{
+ "widgets": {
+  "fader": {
+   "label": "Fader",
+   "size": [
+    2,
+    5
+   ],
+   "args": [
+    -1
+   ],
+   "probes": [
+    {
+     "set": {
+      "value": 0.25
+     },
+     "args": [
+      -0.5
+     ]
+    }
+   ]
+  },
+  "meter": {
+   "label": "Indicatore",
+   "size": [
+    1,
+    5
+   ],
+   "args": [
+    -1
+   ],
+   "probes": [
+    {
+     "set": {
+      "value": 0.5
+     },
+     "args": [
+      0
+     ]
+    }
+   ]
+  },
+  "knob": {
+   "label": "Manopola",
+   "size": [
+    2,
+    2
+   ],
+   "args": [
+    -1
+   ],
+   "probes": [
+    {
+     "set": {
+      "value": 0.75
+     },
+     "args": [
+      0.5
+     ]
+    }
+   ]
+  },
+  "xy": {
+   "label": "Pad XY",
+   "size": [
+    4,
+    4
+   ],
+   "args": [
+    -1,
+    0
+   ],
+   "probes": [
+    {
+     "set": {
+      "value": 0.25,
+      "valueY": 0.75
+     },
+     "args": [
+      -0.5,
+      0.5
+     ]
+    }
+   ]
+  },
+  "button": {
+   "label": "Pulsante",
+   "size": [
+    2,
+    2
+   ],
+   "args": [
+    -1
+   ],
+   "probes": [
+    {
+     "set": {
+      "value": 1
+     },
+     "args": [
+      1
+     ]
+    },
+    {
+     "set": {
+      "value": 0,
+      "mode": "toggle"
+     },
+     "args": [
+      -1
+     ]
+    }
+   ]
+  },
+  "color": {
+   "label": "Colore",
+   "size": [
+    4,
+    4
+   ],
+   "args": [
+    1,
+    1,
+    1
+   ],
+   "probes": [
+    {
+     "set": {
+      "value": {
+       "h": 0.5,
+       "s": 1
+      }
+     },
+     "args": [
+      0,
+      1,
+      1
+     ]
+    },
+    {
+     "set": {
+      "value": {
+       "h": 0,
+       "s": 0
+      }
+     },
+     "args": [
+      1,
+      1,
+      1
+     ]
+    }
+   ]
+  },
+  "label": {
+   "label": "Testo",
+   "size": [
+    4,
+    1
+   ],
+   "args": [
+    -1
+   ],
+   "probes": [
+    {
+     "set": {},
+     "args": [
+      -1
+     ]
+    }
+   ]
+  },
+  "clock": {
+   "label": "Orologio",
+   "size": [
+    4,
+    2
+   ],
+   "args": [
+    -1
+   ],
+   "probes": [
+    {
+     "set": {},
+     "args": [
+      -1
+     ]
+    }
+   ]
+  },
+  "timeline": {
+   "label": "Timeline",
+   "size": [
+    10,
+    3
+   ],
+   "args": [
+    -1
+   ],
+   "probes": [
+    {
+     "set": {},
+     "args": [
+      -1
+     ]
+    }
+   ]
+  },
+  "scenes": {
+   "label": "Scene",
+   "size": [
+    4,
+    3
+   ],
+   "args": [
+    0
+   ],
+   "probes": [
+    {
+     "set": {
+      "value": 2
+     },
+     "args": [
+      2
+     ]
+    },
+    {
+     "set": {
+      "mode": "multi",
+      "value": [
+       1,
+       0,
+       1
+      ]
+     },
+     "args": [
+      1,
+      0,
+      1
+     ]
+    }
+   ]
+  },
+  "stage": {
+   "label": "Palco",
+   "size": [
+    8,
+    6
+   ],
+   "args": [
+    -1
+   ],
+   "probes": []
+  },
+  "gaia": {
+   "label": "Gaia",
+   "size": [
+    10,
+    8
+   ],
+   "args": [
+    -1
+   ],
+   "probes": []
+  },
+  "patchdeck": {
+   "label": "PatchDeck",
+   "size": [
+    8,
+    6
+   ],
+   "args": [
+    -1
+   ],
+   "probes": []
+  },
+  "tddevice": {
+   "label": "Device TD",
+   "size": [
+    8,
+    4
+   ],
+   "args": [
+    -1
+   ],
+   "probes": []
+  },
+  "gaiadmx": {
+   "label": "DMX stanza",
+   "size": [
+    6,
+    6
+   ],
+   "args": [
+    -1
+   ],
+   "probes": []
+  },
+  "fixgrid": {
+   "label": "Luci",
+   "size": [
+    10,
+    6
+   ],
+   "args": [
+    -1
+   ],
+   "probes": []
+  },
+  "cuestack": {
+   "label": "Scene GO",
+   "size": [
+    4,
+    6
+   ],
+   "args": [
+    -1
+   ],
+   "probes": []
+  },
+  "audiorigs": {
+   "label": "Audio",
+   "size": [
+    8,
+    6
+   ],
+   "args": [
+    -1
+   ],
+   "probes": []
+  },
+  "laser": {
+   "label": "Laser",
+   "size": [
+    8,
+    6
+   ],
+   "args": [
+    -1
+   ],
+   "probes": []
+  }
+ },
+ "messages": [
+  {
+   "type": "osc",
+   "address": "/dmx/master",
+   "args": [
+    127.5
+   ],
+   "channel": "default"
+  },
+  {
+   "type": "midi",
+   "ch": 2,
+   "cc": 7,
+   "value": 64
+  },
+  {
+   "type": "osc",
+   "address": "/dmx/blackout",
+   "args": [
+    1
+   ],
+   "channel": "dmx"
+  },
+  {
+   "type": "osc",
+   "address": "/mh/pantilt",
+   "args": [
+    0.5,
+    -0.5
+   ],
+   "channel": "default"
+  },
+  {
+   "type": "osc",
+   "address": "/dmx/scene",
+   "args": [
+    3
+   ],
+   "channel": "default"
+  },
+  {
+   "type": "osc",
+   "address": "/gaia/td/mood/calm",
+   "args": [
+    1
+   ],
+   "channel": "gaia"
+  }
+ ],
+ "templates": {
+  "show": {
+   "name": "Panoramica show",
+   "pages": [
+    {
+     "name": "Show",
+     "widgets": [
+      [
+       "stage",
+       0,
+       0,
+       11,
+       7,
+       "",
+       "push",
+       "Palco"
+      ],
+      [
+       "clock",
+       11,
+       0,
+       5,
+       2,
+       "",
+       "tod",
+       "Ora"
+      ],
+      [
+       "clock",
+       11,
+       2,
+       5,
+       2,
+       "",
+       "show",
+       "Show"
+      ],
+      [
+       "scenes",
+       11,
+       4,
+       5,
+       3,
+       "/dmx/scene",
+       "push",
+       "Scene"
+      ],
+      [
+       "timeline",
+       0,
+       7,
+       11,
+       3,
+       "/show",
+       "push",
+       "Timeline"
+      ],
+      [
+       "fader",
+       11,
+       7,
+       2,
+       3,
+       "/dmx/master",
+       "push",
+       "Master"
+      ],
+      [
+       "button",
+       13,
+       7,
+       3,
+       2,
+       "/dmx/blackout",
+       "toggle",
+       "Blackout"
+      ],
+      [
+       "button",
+       13,
+       9,
+       3,
+       1,
+       "/dmx/strobe",
+       "push",
+       "Flash strobo"
+      ]
+     ]
+    }
+   ]
+  },
+  "dmx": {
+   "name": "Luci DMX",
+   "pages": [
+    {
+     "name": "DMX",
+     "widgets": [
+      [
+       "scenes",
+       0,
+       0,
+       8,
+       5,
+       "/dmx/scene",
+       "push",
+       "Scene OSC"
+      ],
+      [
+       "scenes",
+       8,
+       0,
+       4,
+       5,
+       "",
+       "dmx-enum",
+       "Palette · Rig A"
+      ],
+      [
+       "scenes",
+       12,
+       0,
+       4,
+       5,
+       "",
+       "dmx-enum",
+       "Palette · Rig B"
+      ],
+      [
+       "audiorigs",
+       0,
+       5,
+       4,
+       2,
+       "",
+       "push",
+       "Audio"
+      ],
+      [
+       "button",
+       4,
+       5,
+       2,
+       2,
+       "/dmx/blackout",
+       "toggle",
+       "Blackout"
+      ],
+      [
+       "button",
+       6,
+       5,
+       2,
+       2,
+       "/dmx/strobe",
+       "toggle",
+       "Strobo"
+      ],
+      [
+       "fader",
+       8,
+       5,
+       4,
+       2,
+       "/dmx/fade",
+       "push",
+       "Fade (s)"
+      ],
+      [
+       "fader",
+       12,
+       5,
+       4,
+       2,
+       "/dmx/strobe/rate",
+       "push",
+       "Strobo (Hz)"
+      ],
+      [
+       "fader",
+       0,
+       7,
+       2,
+       5,
+       "/dmx/master",
+       "push",
+       "Master"
+      ],
+      [
+       "fader",
+       2,
+       7,
+       2,
+       5,
+       "/dmx/group/front",
+       "push",
+       "Front"
+      ],
+      [
+       "fader",
+       4,
+       7,
+       2,
+       5,
+       "/dmx/group/back",
+       "push",
+       "Back"
+      ],
+      [
+       "fader",
+       6,
+       7,
+       2,
+       5,
+       "/dmx/group/mh",
+       "push",
+       "Teste"
+      ],
+      [
+       "fader",
+       8,
+       7,
+       2,
+       5,
+       "/dmx/group/ledbar",
+       "push",
+       "LED bar"
+      ],
+      [
+       "fader",
+       10,
+       7,
+       2,
+       5,
+       "/dmx/group/ledwall",
+       "push",
+       "LED wall"
+      ],
+      [
+       "fader",
+       12,
+       7,
+       2,
+       5,
+       "/dmx/group/haze",
+       "push",
+       "Haze"
+      ],
+      [
+       "fader",
+       14,
+       7,
+       2,
+       5,
+       "/dmx/group/blinder",
+       "push",
+       "Blinder"
+      ]
+     ]
+    }
+   ]
+  },
+  "mh": {
+   "name": "Teste mobili",
+   "pages": [
+    {
+     "name": "Teste mobili",
+     "widgets": [
+      [
+       "scenes",
+       0,
+       0,
+       8,
+       2,
+       "/mh/select/heads",
+       "head-select",
+       "Selezione teste TD"
+      ],
+      [
+       "scenes",
+       8,
+       0,
+       4,
+       2,
+       "/mh/position",
+       "push",
+       "Posizioni"
+      ],
+      [
+       "scenes",
+       12,
+       0,
+       4,
+       2,
+       "",
+       "head-presets",
+       "Preset PTZ"
+      ],
+      [
+       "xy",
+       0,
+       2,
+       6,
+       8,
+       "/mh/pantilt",
+       "push",
+       "Pan / Tilt"
+      ],
+      [
+       "color",
+       6,
+       2,
+       4,
+       5,
+       "/mh/color",
+       "push",
+       "Colore"
+      ],
+      [
+       "scenes",
+       6,
+       7,
+       4,
+       3,
+       "/mh/gobo",
+       "push",
+       "Gobo"
+      ],
+      [
+       "fader",
+       10,
+       2,
+       2,
+       5,
+       "/mh/dimmer",
+       "push",
+       "Dimmer"
+      ],
+      [
+       "fader",
+       12,
+       2,
+       2,
+       5,
+       "/mh/zoom",
+       "push",
+       "Zoom"
+      ],
+      [
+       "fader",
+       14,
+       2,
+       2,
+       5,
+       "/mh/focus",
+       "push",
+       "Focus"
+      ],
+      [
+       "button",
+       10,
+       7,
+       2,
+       3,
+       "/mh/strobe",
+       "toggle",
+       "Strobo"
+      ],
+      [
+       "button",
+       12,
+       7,
+       2,
+       3,
+       "/mh/home",
+       "push",
+       "Home"
+      ],
+      [
+       "button",
+       14,
+       7,
+       2,
+       1,
+       "/mh/follow",
+       "toggle",
+       "Segui"
+      ],
+      [
+       "button",
+       14,
+       8,
+       2,
+       2,
+       "/mh/release",
+       "push",
+       "Rilascia"
+      ]
+     ]
+    }
+   ]
+  },
+  "timeline": {
+   "name": "Timeline (preparazione)",
+   "pages": [
+    {
+     "name": "Timeline",
+     "widgets": [
+      [
+       "timeline",
+       0,
+       0,
+       11,
+       3,
+       "/show",
+       "push",
+       "Timeline show"
+      ],
+      [
+       "scenes",
+       11,
+       0,
+       5,
+       3,
+       "/dmx/scene",
+       "push",
+       "Scene · DMX Master"
+      ],
+      [
+       "scenes",
+       0,
+       3,
+       4,
+       4,
+       "",
+       "dmx-enum",
+       "Palette FRONT · rig A"
+      ],
+      [
+       "scenes",
+       4,
+       3,
+       4,
+       4,
+       "",
+       "dmx-enum",
+       "Palette BACK · rig B"
+      ],
+      [
+       "scenes",
+       8,
+       3,
+       3,
+       4,
+       "",
+       "dmx-enum",
+       "Palette LED bar"
+      ],
+      [
+       "scenes",
+       11,
+       3,
+       3,
+       4,
+       "/mh/position",
+       "push",
+       "Posizioni teste"
+      ],
+      [
+       "scenes",
+       14,
+       3,
+       2,
+       4,
+       "",
+       "head-presets",
+       "Preset PTZ"
+      ],
+      [
+       "scenes",
+       0,
+       7,
+       4,
+       3,
+       "/mh/select/heads",
+       "head-select",
+       "Selezione teste"
+      ],
+      [
+       "color",
+       4,
+       7,
+       3,
+       3,
+       "/mh/color",
+       "push",
+       "Colore teste"
+      ],
+      [
+       "button",
+       7,
+       7,
+       2,
+       3,
+       "/dmx/strobe",
+       "toggle",
+       "Strobo"
+      ],
+      [
+       "fader",
+       9,
+       7,
+       2,
+       3,
+       "/dmx/strobe/rate",
+       "push",
+       "Strobo (Hz)"
+      ],
+      [
+       "button",
+       11,
+       7,
+       3,
+       3,
+       "/show/go",
+       "push",
+       "GO"
+      ],
+      [
+       "button",
+       14,
+       7,
+       2,
+       3,
+       "/show/back",
+       "push",
+       "Back"
+      ]
+     ]
+    }
+   ]
+  },
+  "palco": {
+   "name": "Design palco",
+   "pages": [
+    {
+     "name": "Palco",
+     "widgets": [
+      [
+       "stage",
+       0,
+       0,
+       12,
+       10,
+       "",
+       "push",
+       "Design"
+      ],
+      [
+       "color",
+       12,
+       0,
+       4,
+       4,
+       "/led/color",
+       "push",
+       "LED wall"
+      ],
+      [
+       "scenes",
+       12,
+       4,
+       4,
+       3,
+       "/led/mode",
+       "push",
+       "Contenuto LED"
+      ],
+      [
+       "fader",
+       12,
+       7,
+       2,
+       3,
+       "/led/bright",
+       "push",
+       "LED"
+      ],
+      [
+       "fader",
+       14,
+       7,
+       2,
+       3,
+       "/dmx/group/blinder",
+       "push",
+       "Blinder"
+      ]
+     ]
+    }
+   ]
+  },
+  "mix": {
+   "name": "Mixer live",
+   "pages": [
+    {
+     "name": "Mix",
+     "widgets": [
+      [
+       "fader",
+       0,
+       0,
+       2,
+       6,
+       "/mix/drums",
+       "push",
+       "Drums"
+      ],
+      [
+       "fader",
+       2,
+       0,
+       2,
+       6,
+       "/mix/bass",
+       "push",
+       "Bass"
+      ],
+      [
+       "fader",
+       4,
+       0,
+       2,
+       6,
+       "/mix/piano",
+       "push",
+       "Piano"
+      ],
+      [
+       "fader",
+       6,
+       0,
+       2,
+       6,
+       "/mix/synth",
+       "push",
+       "Synth"
+      ],
+      [
+       "meter",
+       8,
+       0,
+       1,
+       6,
+       "/meter/l",
+       "push",
+       "L"
+      ],
+      [
+       "meter",
+       9,
+       0,
+       1,
+       6,
+       "/meter/r",
+       "push",
+       "R"
+      ],
+      [
+       "knob",
+       10,
+       0,
+       2,
+       3,
+       "/fx/reverb",
+       "push",
+       "Reverb"
+      ],
+      [
+       "knob",
+       12,
+       0,
+       2,
+       3,
+       "/fx/delay",
+       "push",
+       "Delay"
+      ],
+      [
+       "knob",
+       14,
+       0,
+       2,
+       3,
+       "/fx/cutoff",
+       "push",
+       "Cutoff"
+      ],
+      [
+       "xy",
+       10,
+       3,
+       6,
+       5,
+       "/fx/xy",
+       "push",
+       "Filtro XY"
+      ],
+      [
+       "button",
+       0,
+       6,
+       2,
+       2,
+       "/live/clip/1",
+       "push",
+       "Clip 1"
+      ],
+      [
+       "button",
+       2,
+       6,
+       2,
+       2,
+       "/live/clip/2",
+       "push",
+       "Clip 2"
+      ],
+      [
+       "button",
+       4,
+       6,
+       2,
+       2,
+       "/live/clip/3",
+       "push",
+       "Clip 3"
+      ],
+      [
+       "button",
+       6,
+       6,
+       2,
+       2,
+       "/live/clip/4",
+       "push",
+       "Clip 4"
+      ],
+      [
+       "button",
+       8,
+       6,
+       2,
+       2,
+       "/fx/mute",
+       "toggle",
+       "Mute FX"
+      ],
+      [
+       "label",
+       0,
+       8,
+       4,
+       2,
+       "",
+       "push",
+       "Master"
+      ],
+      [
+       "fader",
+       4,
+       8,
+       12,
+       2,
+       "/mix/master",
+       "push",
+       "Volume"
+      ]
+     ]
+    }
+   ]
+  },
+  "gaia": {
+   "name": "Gaia live",
+   "pages": [
+    {
+     "name": "Gaia",
+     "widgets": [
+      [
+       "gaia",
+       0,
+       0,
+       10,
+       10,
+       "",
+       "push",
+       "Gaia"
+      ],
+      [
+       "clock",
+       10,
+       0,
+       6,
+       2,
+       "",
+       "tod",
+       "Ora"
+      ],
+      [
+       "gaiadmx",
+       10,
+       2,
+       6,
+       8,
+       "",
+       "push",
+       "Luci stanza"
+      ]
+     ]
+    },
+    {
+     "name": "PatchDeck",
+     "widgets": [
+      [
+       "patchdeck",
+       0,
+       0,
+       8,
+       6,
+       "",
+       "push",
+       "Deck A"
+      ],
+      [
+       "patchdeck",
+       8,
+       0,
+       8,
+       6,
+       "",
+       "push",
+       "Deck B"
+      ],
+      [
+       "tddevice",
+       0,
+       6,
+       9,
+       4,
+       "",
+       "push",
+       "FX e servizi"
+      ],
+      [
+       "tddevice",
+       9,
+       6,
+       7,
+       4,
+       "",
+       "push",
+       "Controller"
+      ]
+     ]
+    },
+    {
+     "name": "DMX V8",
+     "widgets": [
+      [
+       "tddevice",
+       0,
+       0,
+       10,
+       10,
+       "",
+       "push",
+       "DMX V8"
+      ],
+      [
+       "gaiadmx",
+       10,
+       0,
+       6,
+       10,
+       "",
+       "push",
+       "DMX stanza"
+      ]
+     ]
+    }
+   ]
+  },
+  "regia": {
+   "name": "Regia luci",
+   "pages": [
+    {
+     "name": "Regia",
+     "widgets": [
+      [
+       "cuestack",
+       0,
+       0,
+       4,
+       6,
+       "",
+       "push",
+       "Scene GO"
+      ],
+      [
+       "scenes",
+       4,
+       0,
+       6,
+       4,
+       "/dmx/scene",
+       "push",
+       "Scene · DMX Master"
+      ],
+      [
+       "stage",
+       10,
+       0,
+       6,
+       4,
+       "",
+       "push",
+       "Palco"
+      ],
+      [
+       "audiorigs",
+       4,
+       4,
+       3,
+       2,
+       "",
+       "push",
+       "Audio"
+      ],
+      [
+       "fader",
+       7,
+       4,
+       3,
+       2,
+       "/dmx/fade",
+       "push",
+       "Fade (s)"
+      ],
+      [
+       "fader",
+       10,
+       4,
+       3,
+       2,
+       "/dmx/strobe/rate",
+       "push",
+       "Strobo (Hz)"
+      ],
+      [
+       "clock",
+       13,
+       4,
+       3,
+       2,
+       "",
+       "show",
+       "Show"
+      ],
+      [
+       "fader",
+       0,
+       6,
+       2,
+       4,
+       "/dmx/master",
+       "push",
+       "Master"
+      ],
+      [
+       "fader",
+       2,
+       6,
+       2,
+       4,
+       "/dmx/group/front",
+       "push",
+       "Front"
+      ],
+      [
+       "fader",
+       4,
+       6,
+       2,
+       4,
+       "/dmx/group/back",
+       "push",
+       "Back"
+      ],
+      [
+       "fader",
+       6,
+       6,
+       2,
+       4,
+       "/dmx/group/mh",
+       "push",
+       "Teste"
+      ],
+      [
+       "fader",
+       8,
+       6,
+       2,
+       4,
+       "/dmx/group/ledbar",
+       "push",
+       "LED bar"
+      ],
+      [
+       "fader",
+       10,
+       6,
+       2,
+       4,
+       "/dmx/group/haze",
+       "push",
+       "Haze"
+      ],
+      [
+       "fader",
+       12,
+       6,
+       2,
+       4,
+       "/dmx/group/blinder",
+       "push",
+       "Blinder"
+      ],
+      [
+       "button",
+       14,
+       6,
+       2,
+       2,
+       "/dmx/blackout",
+       "toggle",
+       "Blackout"
+      ],
+      [
+       "button",
+       14,
+       8,
+       2,
+       2,
+       "/dmx/strobe",
+       "push",
+       "Flash strobo"
+      ]
+     ]
+    }
+   ]
+  },
+  "luci": {
+   "name": "Luci · colori singoli",
+   "pages": [
+    {
+     "name": "Luci",
+     "widgets": [
+      [
+       "fixgrid",
+       0,
+       0,
+       16,
+       10,
+       "",
+       "push",
+       "Luci"
+      ]
+     ]
+    }
+   ]
+  },
+  "audio": {
+   "name": "Audio · reattività",
+   "pages": [
+    {
+     "name": "Audio",
+     "widgets": [
+      [
+       "audiorigs",
+       0,
+       0,
+       16,
+       10,
+       "",
+       "push",
+       "Audio · reattività dei gruppi"
+      ]
+     ]
+    }
+   ]
+  },
+  "laser": {
+   "name": "Laser",
+   "pages": [
+    {
+     "name": "Laser",
+     "widgets": [
+      [
+       "laser",
+       0,
+       0,
+       16,
+       10,
+       "",
+       "push",
+       "Laser · LaserCube"
+      ]
+     ]
+    }
+   ]
+  },
+  "full": {
+   "name": "Show completo",
+   "pages": [
+    {
+     "name": "Gaia",
+     "widgets": [
+      [
+       "gaia",
+       0,
+       0,
+       10,
+       10,
+       "",
+       "push",
+       "Gaia"
+      ],
+      [
+       "clock",
+       10,
+       0,
+       6,
+       2,
+       "",
+       "tod",
+       "Ora"
+      ],
+      [
+       "gaiadmx",
+       10,
+       2,
+       6,
+       8,
+       "",
+       "push",
+       "Luci stanza"
+      ]
+     ]
+    },
+    {
+     "name": "PatchDeck",
+     "widgets": [
+      [
+       "patchdeck",
+       0,
+       0,
+       8,
+       6,
+       "",
+       "push",
+       "Deck A"
+      ],
+      [
+       "patchdeck",
+       8,
+       0,
+       8,
+       6,
+       "",
+       "push",
+       "Deck B"
+      ],
+      [
+       "tddevice",
+       0,
+       6,
+       9,
+       4,
+       "",
+       "push",
+       "FX e servizi"
+      ],
+      [
+       "tddevice",
+       9,
+       6,
+       7,
+       4,
+       "",
+       "push",
+       "Controller"
+      ]
+     ]
+    },
+    {
+     "name": "DMX V8",
+     "widgets": [
+      [
+       "tddevice",
+       0,
+       0,
+       10,
+       10,
+       "",
+       "push",
+       "DMX V8"
+      ],
+      [
+       "gaiadmx",
+       10,
+       0,
+       6,
+       10,
+       "",
+       "push",
+       "DMX stanza"
+      ]
+     ]
+    },
+    {
+     "name": "Show",
+     "widgets": [
+      [
+       "stage",
+       0,
+       0,
+       11,
+       7,
+       "",
+       "push",
+       "Palco"
+      ],
+      [
+       "clock",
+       11,
+       0,
+       5,
+       2,
+       "",
+       "tod",
+       "Ora"
+      ],
+      [
+       "clock",
+       11,
+       2,
+       5,
+       2,
+       "",
+       "show",
+       "Show"
+      ],
+      [
+       "scenes",
+       11,
+       4,
+       5,
+       3,
+       "/dmx/scene",
+       "push",
+       "Scene"
+      ],
+      [
+       "timeline",
+       0,
+       7,
+       11,
+       3,
+       "/show",
+       "push",
+       "Timeline"
+      ],
+      [
+       "fader",
+       11,
+       7,
+       2,
+       3,
+       "/dmx/master",
+       "push",
+       "Master"
+      ],
+      [
+       "button",
+       13,
+       7,
+       3,
+       2,
+       "/dmx/blackout",
+       "toggle",
+       "Blackout"
+      ],
+      [
+       "button",
+       13,
+       9,
+       3,
+       1,
+       "/dmx/strobe",
+       "push",
+       "Flash strobo"
+      ]
+     ]
+    },
+    {
+     "name": "Regia",
+     "widgets": [
+      [
+       "cuestack",
+       0,
+       0,
+       4,
+       6,
+       "",
+       "push",
+       "Scene GO"
+      ],
+      [
+       "scenes",
+       4,
+       0,
+       6,
+       4,
+       "/dmx/scene",
+       "push",
+       "Scene · DMX Master"
+      ],
+      [
+       "stage",
+       10,
+       0,
+       6,
+       4,
+       "",
+       "push",
+       "Palco"
+      ],
+      [
+       "audiorigs",
+       4,
+       4,
+       3,
+       2,
+       "",
+       "push",
+       "Audio"
+      ],
+      [
+       "fader",
+       7,
+       4,
+       3,
+       2,
+       "/dmx/fade",
+       "push",
+       "Fade (s)"
+      ],
+      [
+       "fader",
+       10,
+       4,
+       3,
+       2,
+       "/dmx/strobe/rate",
+       "push",
+       "Strobo (Hz)"
+      ],
+      [
+       "clock",
+       13,
+       4,
+       3,
+       2,
+       "",
+       "show",
+       "Show"
+      ],
+      [
+       "fader",
+       0,
+       6,
+       2,
+       4,
+       "/dmx/master",
+       "push",
+       "Master"
+      ],
+      [
+       "fader",
+       2,
+       6,
+       2,
+       4,
+       "/dmx/group/front",
+       "push",
+       "Front"
+      ],
+      [
+       "fader",
+       4,
+       6,
+       2,
+       4,
+       "/dmx/group/back",
+       "push",
+       "Back"
+      ],
+      [
+       "fader",
+       6,
+       6,
+       2,
+       4,
+       "/dmx/group/mh",
+       "push",
+       "Teste"
+      ],
+      [
+       "fader",
+       8,
+       6,
+       2,
+       4,
+       "/dmx/group/ledbar",
+       "push",
+       "LED bar"
+      ],
+      [
+       "fader",
+       10,
+       6,
+       2,
+       4,
+       "/dmx/group/haze",
+       "push",
+       "Haze"
+      ],
+      [
+       "fader",
+       12,
+       6,
+       2,
+       4,
+       "/dmx/group/blinder",
+       "push",
+       "Blinder"
+      ],
+      [
+       "button",
+       14,
+       6,
+       2,
+       2,
+       "/dmx/blackout",
+       "toggle",
+       "Blackout"
+      ],
+      [
+       "button",
+       14,
+       8,
+       2,
+       2,
+       "/dmx/strobe",
+       "push",
+       "Flash strobo"
+      ]
+     ]
+    },
+    {
+     "name": "Luci",
+     "widgets": [
+      [
+       "fixgrid",
+       0,
+       0,
+       16,
+       10,
+       "",
+       "push",
+       "Luci"
+      ]
+     ]
+    },
+    {
+     "name": "Audio",
+     "widgets": [
+      [
+       "audiorigs",
+       0,
+       0,
+       16,
+       10,
+       "",
+       "push",
+       "Audio · reattività dei gruppi"
+      ]
+     ]
+    },
+    {
+     "name": "Laser",
+     "widgets": [
+      [
+       "laser",
+       0,
+       0,
+       16,
+       10,
+       "",
+       "push",
+       "Laser · LaserCube"
+      ]
+     ]
+    },
+    {
+     "name": "DMX",
+     "widgets": [
+      [
+       "scenes",
+       0,
+       0,
+       8,
+       5,
+       "/dmx/scene",
+       "push",
+       "Scene OSC"
+      ],
+      [
+       "scenes",
+       8,
+       0,
+       4,
+       5,
+       "",
+       "dmx-enum",
+       "Palette · Rig A"
+      ],
+      [
+       "scenes",
+       12,
+       0,
+       4,
+       5,
+       "",
+       "dmx-enum",
+       "Palette · Rig B"
+      ],
+      [
+       "audiorigs",
+       0,
+       5,
+       4,
+       2,
+       "",
+       "push",
+       "Audio"
+      ],
+      [
+       "button",
+       4,
+       5,
+       2,
+       2,
+       "/dmx/blackout",
+       "toggle",
+       "Blackout"
+      ],
+      [
+       "button",
+       6,
+       5,
+       2,
+       2,
+       "/dmx/strobe",
+       "toggle",
+       "Strobo"
+      ],
+      [
+       "fader",
+       8,
+       5,
+       4,
+       2,
+       "/dmx/fade",
+       "push",
+       "Fade (s)"
+      ],
+      [
+       "fader",
+       12,
+       5,
+       4,
+       2,
+       "/dmx/strobe/rate",
+       "push",
+       "Strobo (Hz)"
+      ],
+      [
+       "fader",
+       0,
+       7,
+       2,
+       5,
+       "/dmx/master",
+       "push",
+       "Master"
+      ],
+      [
+       "fader",
+       2,
+       7,
+       2,
+       5,
+       "/dmx/group/front",
+       "push",
+       "Front"
+      ],
+      [
+       "fader",
+       4,
+       7,
+       2,
+       5,
+       "/dmx/group/back",
+       "push",
+       "Back"
+      ],
+      [
+       "fader",
+       6,
+       7,
+       2,
+       5,
+       "/dmx/group/mh",
+       "push",
+       "Teste"
+      ],
+      [
+       "fader",
+       8,
+       7,
+       2,
+       5,
+       "/dmx/group/ledbar",
+       "push",
+       "LED bar"
+      ],
+      [
+       "fader",
+       10,
+       7,
+       2,
+       5,
+       "/dmx/group/ledwall",
+       "push",
+       "LED wall"
+      ],
+      [
+       "fader",
+       12,
+       7,
+       2,
+       5,
+       "/dmx/group/haze",
+       "push",
+       "Haze"
+      ],
+      [
+       "fader",
+       14,
+       7,
+       2,
+       5,
+       "/dmx/group/blinder",
+       "push",
+       "Blinder"
+      ]
+     ]
+    },
+    {
+     "name": "Teste mobili",
+     "widgets": [
+      [
+       "scenes",
+       0,
+       0,
+       8,
+       2,
+       "/mh/select/heads",
+       "head-select",
+       "Selezione teste TD"
+      ],
+      [
+       "scenes",
+       8,
+       0,
+       4,
+       2,
+       "/mh/position",
+       "push",
+       "Posizioni"
+      ],
+      [
+       "scenes",
+       12,
+       0,
+       4,
+       2,
+       "",
+       "head-presets",
+       "Preset PTZ"
+      ],
+      [
+       "xy",
+       0,
+       2,
+       6,
+       8,
+       "/mh/pantilt",
+       "push",
+       "Pan / Tilt"
+      ],
+      [
+       "color",
+       6,
+       2,
+       4,
+       5,
+       "/mh/color",
+       "push",
+       "Colore"
+      ],
+      [
+       "scenes",
+       6,
+       7,
+       4,
+       3,
+       "/mh/gobo",
+       "push",
+       "Gobo"
+      ],
+      [
+       "fader",
+       10,
+       2,
+       2,
+       5,
+       "/mh/dimmer",
+       "push",
+       "Dimmer"
+      ],
+      [
+       "fader",
+       12,
+       2,
+       2,
+       5,
+       "/mh/zoom",
+       "push",
+       "Zoom"
+      ],
+      [
+       "fader",
+       14,
+       2,
+       2,
+       5,
+       "/mh/focus",
+       "push",
+       "Focus"
+      ],
+      [
+       "button",
+       10,
+       7,
+       2,
+       3,
+       "/mh/strobe",
+       "toggle",
+       "Strobo"
+      ],
+      [
+       "button",
+       12,
+       7,
+       2,
+       3,
+       "/mh/home",
+       "push",
+       "Home"
+      ],
+      [
+       "button",
+       14,
+       7,
+       2,
+       1,
+       "/mh/follow",
+       "toggle",
+       "Segui"
+      ],
+      [
+       "button",
+       14,
+       8,
+       2,
+       2,
+       "/mh/release",
+       "push",
+       "Rilascia"
+      ]
+     ]
+    },
+    {
+     "name": "Timeline",
+     "widgets": [
+      [
+       "timeline",
+       0,
+       0,
+       11,
+       3,
+       "/show",
+       "push",
+       "Timeline show"
+      ],
+      [
+       "scenes",
+       11,
+       0,
+       5,
+       3,
+       "/dmx/scene",
+       "push",
+       "Scene · DMX Master"
+      ],
+      [
+       "scenes",
+       0,
+       3,
+       4,
+       4,
+       "",
+       "dmx-enum",
+       "Palette FRONT · rig A"
+      ],
+      [
+       "scenes",
+       4,
+       3,
+       4,
+       4,
+       "",
+       "dmx-enum",
+       "Palette BACK · rig B"
+      ],
+      [
+       "scenes",
+       8,
+       3,
+       3,
+       4,
+       "",
+       "dmx-enum",
+       "Palette LED bar"
+      ],
+      [
+       "scenes",
+       11,
+       3,
+       3,
+       4,
+       "/mh/position",
+       "push",
+       "Posizioni teste"
+      ],
+      [
+       "scenes",
+       14,
+       3,
+       2,
+       4,
+       "",
+       "head-presets",
+       "Preset PTZ"
+      ],
+      [
+       "scenes",
+       0,
+       7,
+       4,
+       3,
+       "/mh/select/heads",
+       "head-select",
+       "Selezione teste"
+      ],
+      [
+       "color",
+       4,
+       7,
+       3,
+       3,
+       "/mh/color",
+       "push",
+       "Colore teste"
+      ],
+      [
+       "button",
+       7,
+       7,
+       2,
+       3,
+       "/dmx/strobe",
+       "toggle",
+       "Strobo"
+      ],
+      [
+       "fader",
+       9,
+       7,
+       2,
+       3,
+       "/dmx/strobe/rate",
+       "push",
+       "Strobo (Hz)"
+      ],
+      [
+       "button",
+       11,
+       7,
+       3,
+       3,
+       "/show/go",
+       "push",
+       "GO"
+      ],
+      [
+       "button",
+       14,
+       7,
+       2,
+       3,
+       "/show/back",
+       "push",
+       "Back"
+      ]
+     ]
+    },
+    {
+     "name": "Palco",
+     "widgets": [
+      [
+       "stage",
+       0,
+       0,
+       12,
+       10,
+       "",
+       "push",
+       "Design"
+      ],
+      [
+       "color",
+       12,
+       0,
+       4,
+       4,
+       "/led/color",
+       "push",
+       "LED wall"
+      ],
+      [
+       "scenes",
+       12,
+       4,
+       4,
+       3,
+       "/led/mode",
+       "push",
+       "Contenuto LED"
+      ],
+      [
+       "fader",
+       12,
+       7,
+       2,
+       3,
+       "/led/bright",
+       "push",
+       "LED"
+      ],
+      [
+       "fader",
+       14,
+       7,
+       2,
+       3,
+       "/dmx/group/blinder",
+       "push",
+       "Blinder"
+      ]
+     ]
+    },
+    {
+     "name": "Mix",
+     "widgets": [
+      [
+       "fader",
+       0,
+       0,
+       2,
+       6,
+       "/mix/drums",
+       "push",
+       "Drums"
+      ],
+      [
+       "fader",
+       2,
+       0,
+       2,
+       6,
+       "/mix/bass",
+       "push",
+       "Bass"
+      ],
+      [
+       "fader",
+       4,
+       0,
+       2,
+       6,
+       "/mix/piano",
+       "push",
+       "Piano"
+      ],
+      [
+       "fader",
+       6,
+       0,
+       2,
+       6,
+       "/mix/synth",
+       "push",
+       "Synth"
+      ],
+      [
+       "meter",
+       8,
+       0,
+       1,
+       6,
+       "/meter/l",
+       "push",
+       "L"
+      ],
+      [
+       "meter",
+       9,
+       0,
+       1,
+       6,
+       "/meter/r",
+       "push",
+       "R"
+      ],
+      [
+       "knob",
+       10,
+       0,
+       2,
+       3,
+       "/fx/reverb",
+       "push",
+       "Reverb"
+      ],
+      [
+       "knob",
+       12,
+       0,
+       2,
+       3,
+       "/fx/delay",
+       "push",
+       "Delay"
+      ],
+      [
+       "knob",
+       14,
+       0,
+       2,
+       3,
+       "/fx/cutoff",
+       "push",
+       "Cutoff"
+      ],
+      [
+       "xy",
+       10,
+       3,
+       6,
+       5,
+       "/fx/xy",
+       "push",
+       "Filtro XY"
+      ],
+      [
+       "button",
+       0,
+       6,
+       2,
+       2,
+       "/live/clip/1",
+       "push",
+       "Clip 1"
+      ],
+      [
+       "button",
+       2,
+       6,
+       2,
+       2,
+       "/live/clip/2",
+       "push",
+       "Clip 2"
+      ],
+      [
+       "button",
+       4,
+       6,
+       2,
+       2,
+       "/live/clip/3",
+       "push",
+       "Clip 3"
+      ],
+      [
+       "button",
+       6,
+       6,
+       2,
+       2,
+       "/live/clip/4",
+       "push",
+       "Clip 4"
+      ],
+      [
+       "button",
+       8,
+       6,
+       2,
+       2,
+       "/fx/mute",
+       "toggle",
+       "Mute FX"
+      ],
+      [
+       "label",
+       0,
+       8,
+       4,
+       2,
+       "",
+       "push",
+       "Master"
+      ],
+      [
+       "fader",
+       4,
+       8,
+       12,
+       2,
+       "/mix/master",
+       "push",
+       "Volume"
+      ]
+     ]
+    }
+   ]
+  }
+ },
+ "migrations": {
+  "steps": [
+   [
+    "migrateLegacyHeadSelectors",
+    0
+   ],
+   [
+    "migrateHeadPresetWidgets",
+    0
+   ],
+   [
+    "migrateUiShowTimeline",
+    1
+   ],
+   [
+    "migrateUiConsolePages",
+    2
+   ],
+   [
+    "migrateUiAudioPage",
+    3
+   ],
+   [
+    "migrateUiNoChase",
+    4
+   ],
+   [
+    "migrateUiOneDmxV8",
+    5
+   ],
+   [
+    "migrateUiLaserPage",
+    6
+   ],
+   [
+    "migrateUiLaserScenes",
+    7
+   ]
+  ],
+  "uiRev": 7,
+  "pages": [
+   {
+    "name": "Show",
+    "widgets": [
+     [
+      "timeline",
+      "/show",
+      "push",
+      "Timeline"
+     ]
+    ]
+   },
+   {
+    "name": "Luci",
+    "widgets": [
+     [
+      "fixgrid",
+      "",
+      "push",
+      "Luci"
+     ]
+    ]
+   },
+   {
+    "name": "Audio",
+    "widgets": [
+     [
+      "audiorigs",
+      "",
+      "push",
+      "Audio · reattività dei gruppi"
+     ]
+    ]
+   },
+   {
+    "name": "Laser",
+    "widgets": [
+     [
+      "laser",
+      "",
+      "push",
+      "Laser · LaserCube"
+     ]
+    ]
+   },
+   {
+    "name": "Timeline",
+    "widgets": [
+     [
+      "timeline",
+      "/show",
+      "push",
+      "Timeline show"
+     ],
+     [
+      "scenes",
+      "/dmx/scene",
+      "push",
+      "Scene · DMX Master"
+     ],
+     [
+      "scenes",
+      "",
+      "dmx-enum",
+      "Palette FRONT · rig A"
+     ],
+     [
+      "scenes",
+      "",
+      "dmx-enum",
+      "Palette BACK · rig B"
+     ],
+     [
+      "scenes",
+      "",
+      "dmx-enum",
+      "Palette LED bar"
+     ],
+     [
+      "scenes",
+      "/mh/position",
+      "push",
+      "Posizioni teste"
+     ],
+     [
+      "scenes",
+      "",
+      "head-presets",
+      "Preset PTZ"
+     ],
+     [
+      "scenes",
+      "/mh/select/heads",
+      "head-select",
+      "Selezione teste"
+     ],
+     [
+      "color",
+      "/mh/color",
+      "push",
+      "Colore teste"
+     ],
+     [
+      "button",
+      "/dmx/strobe",
+      "toggle",
+      "Strobo"
+     ],
+     [
+      "fader",
+      "/dmx/strobe/rate",
+      "push",
+      "Strobo (Hz)"
+     ],
+     [
+      "button",
+      "/show/go",
+      "push",
+      "GO"
+     ],
+     [
+      "button",
+      "/show/back",
+      "push",
+      "Back"
+     ]
+    ]
+   },
+   {
+    "name": "Teste mobili",
+    "widgets": [
+     [
+      "scenes",
+      "/mh/select/heads",
+      "head-select",
+      "Scene"
+     ],
+     [
+      "scenes",
+      "/mh/position",
+      "push",
+      "Scene"
+     ],
+     [
+      "scenes",
+      "",
+      "head-presets",
+      "Preset PTZ"
+     ]
+    ]
+   },
+   {
+    "name": "Regia",
+    "widgets": [
+     [
+      "audiorigs",
+      "",
+      "push",
+      "Audio"
+     ]
+    ]
+   },
+   {
+    "name": "DMX V8",
+    "widgets": [
+     [
+      "tddevice",
+      "",
+      "push",
+      "Device TD"
+     ]
+    ]
+   }
+  ],
+  "laserScenes": [
+   "tpl-cerchio",
+   "tpl-quadrato",
+   "tpl-triangolo",
+   "tpl-stella",
+   "tpl-spirale",
+   "tpl-onda",
+   "tpl-lissajous",
+   "tpl-tunnel",
+   "tpl-raggiera",
+   "tpl-cuore",
+   "tpl-infinito",
+   "tpl-scanner",
+   "tpl-griglia"
+  ]
+ },
+ "incoming": {
+  "osc": [
+   [
+    "/in/f",
+    "",
+    [
+     "[0.5,0.5,null]",
+     "[0.5,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]"
+    ]
+   ],
+   [
+    "/in/f",
+    "dmx",
+    [
+     "[0.5,0.5,null]",
+     "[1,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]"
+    ]
+   ],
+   [
+    "/in/k",
+    "",
+    [
+     "[0.5,0.5,null]",
+     "[1,0.5,null]",
+     "[0.75,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]"
+    ]
+   ],
+   [
+    "/in/m",
+    "",
+    [
+     "[0.5,0.5,null]",
+     "[1,0.5,null]",
+     "[0.75,0.5,null]",
+     "[0.25,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]"
+    ]
+   ],
+   [
+    "/in/xy",
+    "",
+    [
+     "[0.5,0.5,null]",
+     "[1,0.5,null]",
+     "[0.75,0.5,null]",
+     "[0.25,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]"
+    ]
+   ],
+   [
+    "/in/xy",
+    "",
+    [
+     "[0.5,0.5,null]",
+     "[1,0.5,null]",
+     "[0.75,0.5,null]",
+     "[0.25,0.5,null]",
+     "[0.75,0.25,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]"
+    ]
+   ],
+   [
+    "/in/b",
+    "",
+    [
+     "[0.5,0.5,null]",
+     "[1,0.5,null]",
+     "[0.75,0.5,null]",
+     "[0.25,0.5,null]",
+     "[0.75,0.25,null]",
+     "[1,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]"
+    ]
+   ],
+   [
+    "/in/bt",
+    "",
+    [
+     "[0.5,0.5,null]",
+     "[1,0.5,null]",
+     "[0.75,0.5,null]",
+     "[0.25,0.5,null]",
+     "[0.75,0.25,null]",
+     "[1,0.5,null]",
+     "[1,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]"
+    ]
+   ],
+   [
+    "/in/s",
+    "",
+    [
+     "[0.5,0.5,null]",
+     "[1,0.5,null]",
+     "[0.75,0.5,null]",
+     "[0.25,0.5,null]",
+     "[0.75,0.25,null]",
+     "[1,0.5,null]",
+     "[1,0.5,null]",
+     "[2,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]"
+    ]
+   ],
+   [
+    "/in/sm",
+    "",
+    [
+     "[0.5,0.5,null]",
+     "[1,0.5,null]",
+     "[0.75,0.5,null]",
+     "[0.25,0.5,null]",
+     "[0.75,0.25,null]",
+     "[1,0.5,null]",
+     "[1,0.5,null]",
+     "[2,0.5,null]",
+     "[[1,0,1],0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]"
+    ]
+   ],
+   [
+    "/mh/select/heads",
+    "",
+    [
+     "[0.5,0.5,null]",
+     "[1,0.5,null]",
+     "[0.75,0.5,null]",
+     "[0.25,0.5,null]",
+     "[0.75,0.25,null]",
+     "[1,0.5,null]",
+     "[1,0.5,null]",
+     "[2,0.5,null]",
+     "[[1,0,1],0.5,null]",
+     "[[0,1,1],0.5,[\"h2\",\"h3\"]]",
+     "[0,0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]"
+    ]
+   ],
+   [
+    "/in/c",
+    "",
+    [
+     "[0.5,0.5,null]",
+     "[1,0.5,null]",
+     "[0.75,0.5,null]",
+     "[0.25,0.5,null]",
+     "[0.75,0.25,null]",
+     "[1,0.5,null]",
+     "[1,0.5,null]",
+     "[2,0.5,null]",
+     "[[1,0,1],0.5,null]",
+     "[[0,1,1],0.5,[\"h2\",\"h3\"]]",
+     "[{\"h\":0,\"s\":1},0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]"
+    ]
+   ],
+   [
+    "/in/c",
+    "",
+    [
+     "[0.5,0.5,null]",
+     "[1,0.5,null]",
+     "[0.75,0.5,null]",
+     "[0.25,0.5,null]",
+     "[0.75,0.25,null]",
+     "[1,0.5,null]",
+     "[1,0.5,null]",
+     "[2,0.5,null]",
+     "[[1,0,1],0.5,null]",
+     "[[0,1,1],0.5,[\"h2\",\"h3\"]]",
+     "[{\"h\":0,\"s\":1},0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]"
+    ]
+   ],
+   [
+    "/in/l",
+    "",
+    [
+     "[0.5,0.5,null]",
+     "[1,0.5,null]",
+     "[0.75,0.5,null]",
+     "[0.25,0.5,null]",
+     "[0.75,0.25,null]",
+     "[1,0.5,null]",
+     "[1,0.5,null]",
+     "[2,0.5,null]",
+     "[[1,0,1],0.5,null]",
+     "[[0,1,1],0.5,[\"h2\",\"h3\"]]",
+     "[{\"h\":0,\"s\":1},0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]"
+    ]
+   ],
+   [
+    "/in/f2",
+    "",
+    [
+     "[0.5,0.5,null]",
+     "[1,0.5,null]",
+     "[0.75,0.5,null]",
+     "[0.25,0.5,null]",
+     "[0.75,0.25,null]",
+     "[1,0.5,null]",
+     "[1,0.5,null]",
+     "[2,0.5,null]",
+     "[[1,0,1],0.5,null]",
+     "[[0,1,1],0.5,[\"h2\",\"h3\"]]",
+     "[{\"h\":0,\"s\":1},0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]"
+    ]
+   ],
+   [
+    "/nessuno",
+    "",
+    [
+     "[0.5,0.5,null]",
+     "[1,0.5,null]",
+     "[0.75,0.5,null]",
+     "[0.25,0.5,null]",
+     "[0.75,0.25,null]",
+     "[1,0.5,null]",
+     "[1,0.5,null]",
+     "[2,0.5,null]",
+     "[[1,0,1],0.5,null]",
+     "[[0,1,1],0.5,[\"h2\",\"h3\"]]",
+     "[{\"h\":0,\"s\":1},0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]"
+    ]
+   ],
+   [
+    "/dmx/master",
+    "",
+    [
+     "[0.5,0.5,null]",
+     "[1,0.5,null]",
+     "[0.75,0.5,null]",
+     "[0.25,0.5,null]",
+     "[0.75,0.25,null]",
+     "[1,0.5,null]",
+     "[1,0.5,null]",
+     "[2,0.5,null]",
+     "[[1,0,1],0.5,null]",
+     "[[0,1,1],0.5,[\"h2\",\"h3\"]]",
+     "[{\"h\":0,\"s\":1},0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]"
+    ]
+   ],
+   [
+    "/dmx/fixture/id3",
+    "",
+    [
+     "[0.5,0.5,null]",
+     "[1,0.5,null]",
+     "[0.75,0.5,null]",
+     "[0.25,0.5,null]",
+     "[0.75,0.25,null]",
+     "[1,0.5,null]",
+     "[1,0.5,null]",
+     "[2,0.5,null]",
+     "[[1,0,1],0.5,null]",
+     "[[0,1,1],0.5,[\"h2\",\"h3\"]]",
+     "[{\"h\":0,\"s\":1},0.5,null]",
+     "[0,0.5,null]",
+     "[0,0.5,null]"
+    ]
+   ]
+  ],
+  "sh": {
+   "master": 0.4
+  },
+  "fixture": null,
+  "mqtt": {
+   "device": {
+    "device_id": "zz-td",
+    "params": {
+     "a": {
+      "v": 1
+     },
+     "b": {
+      "v": 2
+     }
+    }
+   },
+   "tdState": {
+    "dmx_patch": {
+     "rev": 2,
+     "params": {
+      "b": {
+       "v": 2
+      }
+     }
+    }
+   },
+   "pdm": {
+    "device_id": "zz-pd",
+    "patches": [
+     1,
+     2
+    ]
+   },
+   "thumb": {
+    "4": {
+     "label": "P4",
+     "url": "data:image/jpeg;base64,QUJD"
+    }
+   },
+   "dxm": {
+    "device_id": "zz-dx",
+    "heads": []
+   },
+   "levels": {
+    "rms": 0.5
+   },
+   "dmx": {
+    "stanza": "zz-sala",
+    "on": 1
+   },
+   "canvas": {
+    "zz": 1
+   },
+   "brain": {
+    "zz": 2
+   },
+   "dream": "zz sogno",
+   "chat": [
+    [
+     "gaia",
+     "zz ciao",
+     "zz-sala"
+    ],
+    [
+     "voce",
+     "zz luce",
+     "zz-sala"
+    ]
+   ],
+   "laser": {
+    "c1": [
+     [
+      0,
+      0
+     ]
+    ]
+   },
+   "tdTimeline": "ok",
+   "rig": {
+    "level": 0.7,
+    "kicks": 3,
+    "amount": null,
+    "kickEnable": null,
+    "kickAt": 0
+   },
+   "clock": {
+    "pos": 12.5,
+    "playing": true,
+    "authority": true
+   },
+   "topics": [
+    "gaia/brain/dream",
+    "gaia/brain/state",
+    "gaia/device/+/audio_levels",
+    "gaia/device/+/status",
+    "gaia/devices/+/dmx_catalog",
+    "gaia/devices/+/dmx_layout",
+    "gaia/devices/+/dmx_live",
+    "gaia/devices/+/dmx_matrix",
+    "gaia/devices/+/dmx_output",
+    "gaia/devices/+/dmx_patch",
+    "gaia/devices/+/dmx_rigs",
+    "gaia/devices/+/heads_state",
+    "gaia/devices/+/laser_preview",
+    "gaia/devices/+/patch_thumb/+",
+    "gaia/devices/+/patchdeck_matrix",
+    "gaia/devices/+/show_scenes",
+    "gaia/devices/+/show_timeline",
+    "gaia/dmx/+/status",
+    "gaia/show/clock/pong/+",
+    "gaia/show/clock/state",
+    "gaia/td/canvas",
+    "gaia/voice/command/+",
+    "gaia/voice/tts/+"
+   ],
+   "output": {
+    "master": 0.6,
+    "scene": {
+     "index": 1
+    },
+    "device": "zz-dmx",
+    "fx": {
+     "key": "zz-1",
+     "uid": "zz-1",
+     "id": 91,
+     "sent": true,
+     "intensity": 0.5,
+     "rgbOut": null,
+     "group": null,
+     "colorSource": null,
+     "pan": null,
+     "tilt": null,
+     "gobo": null,
+     "colorWheel": null,
+     "shutter": null,
+     "zoom": null,
+     "focus": null,
+     "audio": null,
+     "audioGain": null
+    }
+   }
+  }
+ },
+ "render": {
+  "fixtures": 27,
+  "types": [
+   "bar",
+   "blinder",
+   "haze",
+   "mh",
+   "par",
+   "speaker",
+   "wall"
+  ],
+  "simulated": {
+   "hash": "c2a60330",
+   "mean": [
+    41.09,
+    26.67,
+    32.74
+   ]
+  },
+  "real": {
+   "hash": "21c17a27",
+   "mean": [
+    33.72,
+    30.89,
+    37.62
+   ]
+  },
+  "mixed": {
+   "hash": "d28a50d0",
+   "mean": [
+    36.09,
+    28.9,
+    36.41
+   ]
+  }
+ },
+ "layout": {
+  "idempotentOnReload": true,
+  "pages": 13
+ },
+ "inspector": {
+  "gaia": {
+   "html": "<h3>Gaia</h3> <label>Etichetta<input id=\"fLabel\"></label> <label>Stanza della chat<input id=\"gSt2\" class=\"mono\"></label><p class=\"hint\">I messaggi vanno su <code>gaia/voice/command/&lt;stanza&gt;</code> come un comando vocale. I tasti − e + spostano il mood via <code>gaia/touchdesigner/mood</code>: in Admin → Automazioni va acceso \"touchdesignerMood\".</p> <label>Colore</label><div class=\"sw\"><button class=\"swb\" data-c=\"#ffb23e\" style=\"--c:#ffb23e\" aria-label=\"Colore #ffb23e\" aria-pressed=\"true\"></button><button class=\"swb\" data-c=\"#3ec9ff\" style=\"--c:#3ec9ff\" aria-label=\"Colore #3ec9ff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#ff5fa2\" style=\"--c:#ff5fa2\" aria-label=\"Colore #ff5fa2\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#9be15d\" style=\"--c:#9be15d\" aria-label=\"Colore #9be15d\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#b18cff\" style=\"--c:#b18cff\" aria-label=\"Colore #b18cff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#e9ebef\" style=\"--c:#e9ebef\" aria-label=\"Colore #e9ebef\" aria-pressed=\"false\"></button></div> <div class=\"row\"><button class=\"btn\" id=\"fDup\">Duplica</button><button class=\"btn danger\" id=\"fDel\">Elimina</button></div>",
+   "fields": {
+    "fLabel": "Gaia",
+    "gSt2": "studio",
+    "fDup": "",
+    "fDel": ""
+   }
+  },
+  "clock": {
+   "html": "<h3>Orologio</h3> <label>Etichetta<input id=\"fLabel\"></label> <label>Modalità<select id=\"fCMode\"><option value=\"tod\">Ora del giorno</option><option value=\"show\">Timecode show (25 fps)</option><option value=\"countdown\">Countdown a orario</option></select></label> <label>Orario di fine<input id=\"fTarget\" type=\"time\"></label> <label>Colore</label><div class=\"sw\"><button class=\"swb\" data-c=\"#ffb23e\" style=\"--c:#ffb23e\" aria-label=\"Colore #ffb23e\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#3ec9ff\" style=\"--c:#3ec9ff\" aria-label=\"Colore #3ec9ff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#ff5fa2\" style=\"--c:#ff5fa2\" aria-label=\"Colore #ff5fa2\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#9be15d\" style=\"--c:#9be15d\" aria-label=\"Colore #9be15d\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#b18cff\" style=\"--c:#b18cff\" aria-label=\"Colore #b18cff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#e9ebef\" style=\"--c:#e9ebef\" aria-label=\"Colore #e9ebef\" aria-pressed=\"true\"></button></div> <div class=\"row\"><button class=\"btn\" id=\"fDup\">Duplica</button><button class=\"btn danger\" id=\"fDel\">Elimina</button></div>",
+   "fields": {
+    "fLabel": "Ora",
+    "fCMode": "tod",
+    "fTarget": "23:30",
+    "fDup": "",
+    "fDel": ""
+   }
+  },
+  "gaiadmx": {
+   "html": "<h3>DMX stanza</h3> <label>Etichetta<input id=\"fLabel\"></label> <label>Stanza<select id=\"gDev\"><option value=\"\">Automatico</option><option value=\"ingresso\">ingresso</option></select></label> <p class=\"hint\">Device e stanze compaiono qui quando pubblicano il loro stato sul broker di Gaia.</p> <label>Colore</label><div class=\"sw\"><button class=\"swb\" data-c=\"#ffb23e\" style=\"--c:#ffb23e\" aria-label=\"Colore #ffb23e\" aria-pressed=\"true\"></button><button class=\"swb\" data-c=\"#3ec9ff\" style=\"--c:#3ec9ff\" aria-label=\"Colore #3ec9ff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#ff5fa2\" style=\"--c:#ff5fa2\" aria-label=\"Colore #ff5fa2\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#9be15d\" style=\"--c:#9be15d\" aria-label=\"Colore #9be15d\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#b18cff\" style=\"--c:#b18cff\" aria-label=\"Colore #b18cff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#e9ebef\" style=\"--c:#e9ebef\" aria-label=\"Colore #e9ebef\" aria-pressed=\"false\"></button></div> <div class=\"row\"><button class=\"btn\" id=\"fDup\">Duplica</button><button class=\"btn danger\" id=\"fDel\">Elimina</button></div>",
+   "fields": {
+    "fLabel": "Luci stanza",
+    "gDev": "",
+    "fDup": "",
+    "fDel": ""
+   }
+  },
+  "patchdeck": {
+   "html": "<h3>PatchDeck</h3> <label>Etichetta<input id=\"fLabel\"></label> <label>Device<select id=\"gDev\"><option value=\"\">Automatico</option><option value=\"td-dmx-win\">td-dmx-win</option><option value=\"PatchDeck-Win-MSI\">PatchDeck-Win-MSI</option><option value=\"td-controller-macmauro\">td-controller-macmauro</option></select></label> <label>Deck<select id=\"gDeck\"><option value=\"a\">Deck A</option><option value=\"b\">Deck B</option></select></label> <p class=\"hint\">Device e stanze compaiono qui quando pubblicano il loro stato sul broker di Gaia.</p> <label>Colore</label><div class=\"sw\"><button class=\"swb\" data-c=\"#ffb23e\" style=\"--c:#ffb23e\" aria-label=\"Colore #ffb23e\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#3ec9ff\" style=\"--c:#3ec9ff\" aria-label=\"Colore #3ec9ff\" aria-pressed=\"true\"></button><button class=\"swb\" data-c=\"#ff5fa2\" style=\"--c:#ff5fa2\" aria-label=\"Colore #ff5fa2\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#9be15d\" style=\"--c:#9be15d\" aria-label=\"Colore #9be15d\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#b18cff\" style=\"--c:#b18cff\" aria-label=\"Colore #b18cff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#e9ebef\" style=\"--c:#e9ebef\" aria-label=\"Colore #e9ebef\" aria-pressed=\"false\"></button></div> <div class=\"row\"><button class=\"btn\" id=\"fDup\">Duplica</button><button class=\"btn danger\" id=\"fDel\">Elimina</button></div>",
+   "fields": {
+    "fLabel": "Deck A",
+    "gDev": "",
+    "gDeck": "a",
+    "fDup": "",
+    "fDel": ""
+   }
+  },
+  "tddevice": {
+   "html": "<h3>Device TD</h3> <label>Etichetta<input id=\"fLabel\"></label> <label>Device<select id=\"gDev\"><option value=\"\">Automatico</option><option value=\"PatchDeck-Win-MSI\">PatchDeck-Win-MSI</option></select></label> <label>Tipo di device (per la scelta automatica)<select id=\"gFam\"><option value=\"\">Qualsiasi</option><option value=\"patchdeck\">PatchDeck</option><option value=\"mixeraudio\">Controller (mixeraudio)</option><option value=\"dmx\">DMX V8</option></select></label> <p class=\"hint\">Device e stanze compaiono qui quando pubblicano il loro stato sul broker di Gaia.</p> <label>Colore</label><div class=\"sw\"><button class=\"swb\" data-c=\"#ffb23e\" style=\"--c:#ffb23e\" aria-label=\"Colore #ffb23e\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#3ec9ff\" style=\"--c:#3ec9ff\" aria-label=\"Colore #3ec9ff\" aria-pressed=\"true\"></button><button class=\"swb\" data-c=\"#ff5fa2\" style=\"--c:#ff5fa2\" aria-label=\"Colore #ff5fa2\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#9be15d\" style=\"--c:#9be15d\" aria-label=\"Colore #9be15d\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#b18cff\" style=\"--c:#b18cff\" aria-label=\"Colore #b18cff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#e9ebef\" style=\"--c:#e9ebef\" aria-label=\"Colore #e9ebef\" aria-pressed=\"false\"></button></div> <div class=\"row\"><button class=\"btn\" id=\"fDup\">Duplica</button><button class=\"btn danger\" id=\"fDel\">Elimina</button></div>",
+   "fields": {
+    "fLabel": "FX e servizi",
+    "gDev": "",
+    "gFam": "patchdeck",
+    "fDup": "",
+    "fDel": ""
+   }
+  },
+  "stage": {
+   "html": "<h3>Palco</h3> <label>Etichetta<input id=\"fLabel\"></label> <label>Vista<select id=\"fView\"><option value=\"render\">Render</option><option value=\"plot\">Pianta e patch</option></select></label> <h4>Dimensioni reali (m)</h4><div class=\"two\"> <label>Larghezza palco<input id=\"stWidth\" type=\"number\" min=\"2\" max=\"60\" step=\"0.1\"></label> <label>Profondità palco<input id=\"stDepth\" type=\"number\" min=\"2\" max=\"60\" step=\"0.1\"></label> <label>Quota piano palco<input id=\"stFloor\" type=\"number\" min=\"0\" max=\"20\" step=\"0.1\"></label> <label>Altezza truss<input id=\"stTruss\" type=\"number\" min=\"1\" max=\"30\" step=\"0.1\"></label></div> <details><summary>Aree: platea e FOH</summary><div class=\"two\"> <label>Platea X (centro)<input id=\"audX\" type=\"number\" step=\"0.1\"></label> <label>Platea Y (inizio)<input id=\"audY\" type=\"number\" step=\"0.1\"></label> <label>Platea larghezza<input id=\"audW\" type=\"number\" min=\"1\" step=\"0.1\"></label> <label>Platea profondità<input id=\"audD\" type=\"number\" min=\"1\" step=\"0.1\"></label> <label>FOH X (centro)<input id=\"fohX\" type=\"number\" step=\"0.1\"></label> <label>FOH Y<input id=\"fohY\" type=\"number\" step=\"0.1\"></label> <label>FOH larghezza<input id=\"fohW\" type=\"number\" min=\"0.5\" step=\"0.1\"></label> <label>FOH profondità<input id=\"fohD\" type=\"number\" min=\"0.5\" step=\"0.1\"></label></div></details> <p class=\"hint\">La Pianta si modifica fuori da “Modifica griglia”: trascina una fixture per spostarla, toccala per le proprietà, tocca uno spazio vuoto per aggiungerne una. Geometria e sorgente LED si salvano automaticamente su OPS. “⇪ TD” è un invio separato e riguarda solo le fixture DMX; LED wall, casse e laser restano gestiti da Plancia.</p> <label>Colore</label><div class=\"sw\"><button class=\"swb\" data-c=\"#ffb23e\" style=\"--c:#ffb23e\" aria-label=\"Colore #ffb23e\" aria-pressed=\"true\"></button><button class=\"swb\" data-c=\"#3ec9ff\" style=\"--c:#3ec9ff\" aria-label=\"Colore #3ec9ff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#ff5fa2\" style=\"--c:#ff5fa2\" aria-label=\"Colore #ff5fa2\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#9be15d\" style=\"--c:#9be15d\" aria-label=\"Colore #9be15d\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#b18cff\" style=\"--c:#b18cff\" aria-label=\"Colore #b18cff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#e9ebef\" style=\"--c:#e9ebef\" aria-label=\"Colore #e9ebef\" aria-pressed=\"false\"></button></div> <div class=\"row\"><button class=\"btn\" id=\"fDup\">Duplica</button><button class=\"btn danger\" id=\"fDel\">Elimina</button></div>",
+   "fields": {
+    "fLabel": "Palco",
+    "fView": "render",
+    "stWidth": "12",
+    "stDepth": "8",
+    "stFloor": "0",
+    "stTruss": "7",
+    "audX": "0",
+    "audY": "9",
+    "audW": "12",
+    "audD": "6",
+    "fohX": "-1",
+    "fohY": "11.2",
+    "fohW": "2",
+    "fohD": "1",
+    "fDup": "",
+    "fDel": ""
+   }
+  },
+  "scenes:push": {
+   "html": "<h3>Scene</h3> <label>Etichetta<input id=\"fLabel\"></label> <label>Indirizzo OSC<input id=\"fAddr\" class=\"mono\" spellcheck=\"false\" autocapitalize=\"off\"></label> <label>Canale OSC<select id=\"fOscChannel\"><option value=\"\">Predefinito · 192.168.1.73:7020</option></select></label> <p class=\"hint\">La famiglia e l’istanza identificano la destinazione; indirizzo e argomenti restano quelli definiti dal contratto del progetto TD.</p> <label>Voci (una per riga)<textarea id=\"fItems\"></textarea></label><div class=\"two\"><label>Modalità<select id=\"fSMode\"><option value=\"push\">Una attiva</option><option value=\"multi\">Selezione multipla</option><option value=\"head-select\">Selezione teste TD</option><option value=\"dmx-enum\">Parametro enum DMX V8</option><option value=\"head-presets\">Preset PTZ salvati</option></select></label><label>Colonne<input id=\"fCols\" type=\"number\" min=\"0\" max=\"12\" placeholder=\"auto\"></label></div> <p class=\"hint\">Invia l’indice della voce (0, 1, 2…) oppure, in selezione multipla, un elenco di 0 e 1.</p> <label>Colore</label><div class=\"sw\"><button class=\"swb\" data-c=\"#ffb23e\" style=\"--c:#ffb23e\" aria-label=\"Colore #ffb23e\" aria-pressed=\"true\"></button><button class=\"swb\" data-c=\"#3ec9ff\" style=\"--c:#3ec9ff\" aria-label=\"Colore #3ec9ff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#ff5fa2\" style=\"--c:#ff5fa2\" aria-label=\"Colore #ff5fa2\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#9be15d\" style=\"--c:#9be15d\" aria-label=\"Colore #9be15d\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#b18cff\" style=\"--c:#b18cff\" aria-label=\"Colore #b18cff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#e9ebef\" style=\"--c:#e9ebef\" aria-label=\"Colore #e9ebef\" aria-pressed=\"false\"></button></div> <div class=\"row\"><button class=\"btn\" id=\"fDup\">Duplica</button><button class=\"btn danger\" id=\"fDel\">Elimina</button></div>",
+   "fields": {
+    "fLabel": "Scene",
+    "fAddr": "/dmx/scene",
+    "fOscChannel": "",
+    "fItems": "Walk-in\nIntro\nStrofa\nPre-chorus\nRitornello\nDrop\nBreakdown\nBallata\nSolo\nFinale\nApplausi\nBuio",
+    "fSMode": "push",
+    "fCols": "4",
+    "fDup": "",
+    "fDel": ""
+   }
+  },
+  "timeline": {
+   "html": "<h3>Timeline</h3> <label>Etichetta<input id=\"fLabel\"></label> <label>Indirizzo base OSC<input id=\"fAddr\" class=\"mono\" spellcheck=\"false\" autocapitalize=\"off\"></label> <label>Canale OSC<select id=\"fOscChannel\"><option value=\"\">Predefinito · 192.168.1.73:7020</option></select></label> <p class=\"hint\">La famiglia e l’istanza identificano la destinazione; indirizzo e argomenti restano quelli definiti dal contratto del progetto TD.</p> <div class=\"two\"><label class=\"chk\"><input id=\"fReadonly\" type=\"checkbox\"> Sola lettura: si esegue, le cue si modificano nella pagina Timeline</label><label>Durata (s)<input id=\"fDur\" type=\"number\" min=\"10\"></label><label>BPM<input id=\"fBpm\" type=\"number\" min=\"40\" max=\"240\"></label></div> <label>Cue<textarea id=\"fCues\" spellcheck=\"false\" style=\"min-height:180px\"></textarea></label> <button class=\"btn\" id=\"fCueEditor\">Apri editor cue</button> <label>Device DMX V8 per le cue<select id=\"fTLDmxDevice\"><option value=\"\">Automatico</option><option value=\"td-dmx-win\">td-dmx-win</option></select></label> <p class=\"hint\">Usa l’editor cue per aggiungere, spostare e riordinare le cue locali. Le modifiche si salvano nel layout condiviso OPS; “Aggiorna” in ⋯ → Progetti aggiorna anche lo snapshot nominato. Se DMX Master pubblica un clock attivo, la timeline /show lo segue e invia i comandi al master.</p> <label>Colore</label><div class=\"sw\"><button class=\"swb\" data-c=\"#ffb23e\" style=\"--c:#ffb23e\" aria-label=\"Colore #ffb23e\" aria-pressed=\"true\"></button><button class=\"swb\" data-c=\"#3ec9ff\" style=\"--c:#3ec9ff\" aria-label=\"Colore #3ec9ff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#ff5fa2\" style=\"--c:#ff5fa2\" aria-label=\"Colore #ff5fa2\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#9be15d\" style=\"--c:#9be15d\" aria-label=\"Colore #9be15d\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#b18cff\" style=\"--c:#b18cff\" aria-label=\"Colore #b18cff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#e9ebef\" style=\"--c:#e9ebef\" aria-label=\"Colore #e9ebef\" aria-pressed=\"false\"></button></div> <div class=\"row\"><button class=\"btn\" id=\"fDup\">Duplica</button><button class=\"btn danger\" id=\"fDel\">Elimina</button></div>",
+   "fields": {
+    "fLabel": "Timeline",
+    "fAddr": "/show",
+    "fOscChannel": "",
+    "fReadonly": true,
+    "fDur": "270",
+    "fBpm": "124",
+    "fCues": "0:00 Walk-in > 1\n0:12 Intro > 2\n0:40 Strofa > 3\n1:10 Pre-chorus > 4\n1:24 Ritornello > 5\n1:52 Drop > 6\n2:20 Breakdown > 7\n2:44 Ballata > 8\n3:15 Solo > 9\n3:45 Finale > 10\n4:15 Applausi > 11\n4:28 Buio > 12",
+    "fCueEditor": "",
+    "fTLDmxDevice": "",
+    "fDup": "",
+    "fDel": ""
+   }
+  },
+  "fader": {
+   "html": "<h3>Fader</h3> <label>Etichetta<input id=\"fLabel\"></label> <label>Indirizzo OSC<input id=\"fAddr\" class=\"mono\" spellcheck=\"false\" autocapitalize=\"off\"></label> <label>Canale OSC<select id=\"fOscChannel\"><option value=\"\">Predefinito · 192.168.1.73:7020</option></select></label> <p class=\"hint\">La famiglia e l’istanza identificano la destinazione; indirizzo e argomenti restano quelli definiti dal contratto del progetto TD.</p> <div class=\"two\"><label>Min<input id=\"fMin\" type=\"number\" step=\"any\"></label><label>Max<input id=\"fMax\" type=\"number\" step=\"any\"></label></div> <div class=\"two\"><label>MIDI canale<input id=\"fCh\" type=\"number\" min=\"1\" max=\"16\"></label><label>MIDI CC<input id=\"fCc\" type=\"number\" min=\"0\" max=\"127\" placeholder=\"off\"></label></div> <label>Colore</label><div class=\"sw\"><button class=\"swb\" data-c=\"#ffb23e\" style=\"--c:#ffb23e\" aria-label=\"Colore #ffb23e\" aria-pressed=\"true\"></button><button class=\"swb\" data-c=\"#3ec9ff\" style=\"--c:#3ec9ff\" aria-label=\"Colore #3ec9ff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#ff5fa2\" style=\"--c:#ff5fa2\" aria-label=\"Colore #ff5fa2\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#9be15d\" style=\"--c:#9be15d\" aria-label=\"Colore #9be15d\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#b18cff\" style=\"--c:#b18cff\" aria-label=\"Colore #b18cff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#e9ebef\" style=\"--c:#e9ebef\" aria-label=\"Colore #e9ebef\" aria-pressed=\"false\"></button></div> <div class=\"row\"><button class=\"btn\" id=\"fDup\">Duplica</button><button class=\"btn danger\" id=\"fDel\">Elimina</button></div>",
+   "fields": {
+    "fLabel": "Master",
+    "fAddr": "/dmx/master",
+    "fOscChannel": "",
+    "fMin": "0",
+    "fMax": "1",
+    "fCh": "1",
+    "fCc": "",
+    "fDup": "",
+    "fDel": ""
+   }
+  },
+  "button": {
+   "html": "<h3>Pulsante</h3> <label>Etichetta<input id=\"fLabel\"></label> <label>Indirizzo OSC<input id=\"fAddr\" class=\"mono\" spellcheck=\"false\" autocapitalize=\"off\"></label> <label>Canale OSC<select id=\"fOscChannel\"><option value=\"\">Predefinito · 192.168.1.73:7020</option></select></label> <p class=\"hint\">La famiglia e l’istanza identificano la destinazione; indirizzo e argomenti restano quelli definiti dal contratto del progetto TD.</p> <div class=\"two\"><label>Valore OFF<input id=\"fMin\" type=\"number\" step=\"any\"></label><label>Valore ON<input id=\"fMax\" type=\"number\" step=\"any\"></label></div> <label>Comportamento<select id=\"fMode\"><option value=\"push\">Momentaneo</option><option value=\"toggle\">Interruttore</option></select></label> <div class=\"two\"><label>MIDI canale<input id=\"fCh\" type=\"number\" min=\"1\" max=\"16\"></label><label>MIDI CC<input id=\"fCc\" type=\"number\" min=\"0\" max=\"127\" placeholder=\"off\"></label></div> <label>Colore</label><div class=\"sw\"><button class=\"swb\" data-c=\"#ffb23e\" style=\"--c:#ffb23e\" aria-label=\"Colore #ffb23e\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#3ec9ff\" style=\"--c:#3ec9ff\" aria-label=\"Colore #3ec9ff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#ff5fa2\" style=\"--c:#ff5fa2\" aria-label=\"Colore #ff5fa2\" aria-pressed=\"true\"></button><button class=\"swb\" data-c=\"#9be15d\" style=\"--c:#9be15d\" aria-label=\"Colore #9be15d\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#b18cff\" style=\"--c:#b18cff\" aria-label=\"Colore #b18cff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#e9ebef\" style=\"--c:#e9ebef\" aria-label=\"Colore #e9ebef\" aria-pressed=\"false\"></button></div> <div class=\"row\"><button class=\"btn\" id=\"fDup\">Duplica</button><button class=\"btn danger\" id=\"fDel\">Elimina</button></div>",
+   "fields": {
+    "fLabel": "Blackout",
+    "fAddr": "/dmx/blackout",
+    "fOscChannel": "",
+    "fMin": "0",
+    "fMax": "1",
+    "fMode": "toggle",
+    "fCh": "1",
+    "fCc": "",
+    "fDup": "",
+    "fDel": ""
+   }
+  },
+  "cuestack": {
+   "html": "<h3>Scene GO</h3> <label>Etichetta<input id=\"fLabel\"></label> <label>Indirizzo OSC<input id=\"fAddr\" class=\"mono\" spellcheck=\"false\" autocapitalize=\"off\"></label> <label>Canale OSC<select id=\"fOscChannel\"><option value=\"\">Predefinito · 192.168.1.73:7020</option></select></label> <p class=\"hint\">La famiglia e l’istanza identificano la destinazione; indirizzo e argomenti restano quelli definiti dal contratto del progetto TD.</p> <label>Colore</label><div class=\"sw\"><button class=\"swb\" data-c=\"#ffb23e\" style=\"--c:#ffb23e\" aria-label=\"Colore #ffb23e\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#3ec9ff\" style=\"--c:#3ec9ff\" aria-label=\"Colore #3ec9ff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#ff5fa2\" style=\"--c:#ff5fa2\" aria-label=\"Colore #ff5fa2\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#9be15d\" style=\"--c:#9be15d\" aria-label=\"Colore #9be15d\" aria-pressed=\"true\"></button><button class=\"swb\" data-c=\"#b18cff\" style=\"--c:#b18cff\" aria-label=\"Colore #b18cff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#e9ebef\" style=\"--c:#e9ebef\" aria-label=\"Colore #e9ebef\" aria-pressed=\"false\"></button></div> <div class=\"row\"><button class=\"btn\" id=\"fDup\">Duplica</button><button class=\"btn danger\" id=\"fDel\">Elimina</button></div>",
+   "fields": {
+    "fLabel": "Scene GO",
+    "fAddr": "",
+    "fOscChannel": "",
+    "fDup": "",
+    "fDel": ""
+   }
+  },
+  "audiorigs": {
+   "html": "<h3>Audio</h3> <label>Etichetta<input id=\"fLabel\"></label> <label>Indirizzo OSC<input id=\"fAddr\" class=\"mono\" spellcheck=\"false\" autocapitalize=\"off\"></label> <label>Canale OSC<select id=\"fOscChannel\"><option value=\"\">Predefinito · 192.168.1.73:7020</option></select></label> <p class=\"hint\">La famiglia e l’istanza identificano la destinazione; indirizzo e argomenti restano quelli definiti dal contratto del progetto TD.</p> <label>Colore</label><div class=\"sw\"><button class=\"swb\" data-c=\"#ffb23e\" style=\"--c:#ffb23e\" aria-label=\"Colore #ffb23e\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#3ec9ff\" style=\"--c:#3ec9ff\" aria-label=\"Colore #3ec9ff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#ff5fa2\" style=\"--c:#ff5fa2\" aria-label=\"Colore #ff5fa2\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#9be15d\" style=\"--c:#9be15d\" aria-label=\"Colore #9be15d\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#b18cff\" style=\"--c:#b18cff\" aria-label=\"Colore #b18cff\" aria-pressed=\"true\"></button><button class=\"swb\" data-c=\"#e9ebef\" style=\"--c:#e9ebef\" aria-label=\"Colore #e9ebef\" aria-pressed=\"false\"></button></div> <div class=\"row\"><button class=\"btn\" id=\"fDup\">Duplica</button><button class=\"btn danger\" id=\"fDel\">Elimina</button></div>",
+   "fields": {
+    "fLabel": "Audio",
+    "fAddr": "",
+    "fOscChannel": "",
+    "fDup": "",
+    "fDel": ""
+   }
+  },
+  "xy": {
+   "html": "<h3>Pad XY</h3> <label>Etichetta<input id=\"fLabel\"></label> <label>Indirizzo OSC<input id=\"fAddr\" class=\"mono\" spellcheck=\"false\" autocapitalize=\"off\"></label> <label>Canale OSC<select id=\"fOscChannel\"><option value=\"\">Predefinito · 192.168.1.73:7020</option></select></label> <p class=\"hint\">La famiglia e l’istanza identificano la destinazione; indirizzo e argomenti restano quelli definiti dal contratto del progetto TD.</p> <div class=\"two\"><label>Min<input id=\"fMin\" type=\"number\" step=\"any\"></label><label>Max<input id=\"fMax\" type=\"number\" step=\"any\"></label></div> <label>Colore</label><div class=\"sw\"><button class=\"swb\" data-c=\"#ffb23e\" style=\"--c:#ffb23e\" aria-label=\"Colore #ffb23e\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#3ec9ff\" style=\"--c:#3ec9ff\" aria-label=\"Colore #3ec9ff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#ff5fa2\" style=\"--c:#ff5fa2\" aria-label=\"Colore #ff5fa2\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#9be15d\" style=\"--c:#9be15d\" aria-label=\"Colore #9be15d\" aria-pressed=\"true\"></button><button class=\"swb\" data-c=\"#b18cff\" style=\"--c:#b18cff\" aria-label=\"Colore #b18cff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#e9ebef\" style=\"--c:#e9ebef\" aria-label=\"Colore #e9ebef\" aria-pressed=\"false\"></button></div> <div class=\"row\"><button class=\"btn\" id=\"fDup\">Duplica</button><button class=\"btn danger\" id=\"fDel\">Elimina</button></div>",
+   "fields": {
+    "fLabel": "Pan / Tilt",
+    "fAddr": "/mh/pantilt",
+    "fOscChannel": "",
+    "fMin": "0",
+    "fMax": "1",
+    "fDup": "",
+    "fDel": ""
+   }
+  },
+  "fixgrid": {
+   "html": "<h3>Luci</h3> <label>Etichetta<input id=\"fLabel\"></label> <label>Indirizzo OSC<input id=\"fAddr\" class=\"mono\" spellcheck=\"false\" autocapitalize=\"off\"></label> <label>Canale OSC<select id=\"fOscChannel\"><option value=\"\">Predefinito · 192.168.1.73:7020</option></select></label> <p class=\"hint\">La famiglia e l’istanza identificano la destinazione; indirizzo e argomenti restano quelli definiti dal contratto del progetto TD.</p> <label>Colore</label><div class=\"sw\"><button class=\"swb\" data-c=\"#ffb23e\" style=\"--c:#ffb23e\" aria-label=\"Colore #ffb23e\" aria-pressed=\"true\"></button><button class=\"swb\" data-c=\"#3ec9ff\" style=\"--c:#3ec9ff\" aria-label=\"Colore #3ec9ff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#ff5fa2\" style=\"--c:#ff5fa2\" aria-label=\"Colore #ff5fa2\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#9be15d\" style=\"--c:#9be15d\" aria-label=\"Colore #9be15d\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#b18cff\" style=\"--c:#b18cff\" aria-label=\"Colore #b18cff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#e9ebef\" style=\"--c:#e9ebef\" aria-label=\"Colore #e9ebef\" aria-pressed=\"false\"></button></div> <div class=\"row\"><button class=\"btn\" id=\"fDup\">Duplica</button><button class=\"btn danger\" id=\"fDel\">Elimina</button></div>",
+   "fields": {
+    "fLabel": "Luci",
+    "fAddr": "",
+    "fOscChannel": "",
+    "fDup": "",
+    "fDel": ""
+   }
+  },
+  "laser": {
+   "html": "<h3>Laser</h3> <label>Etichetta<input id=\"fLabel\"></label> <label>Indirizzo OSC<input id=\"fAddr\" class=\"mono\" spellcheck=\"false\" autocapitalize=\"off\"></label> <label>Canale OSC<select id=\"fOscChannel\"><option value=\"\">Predefinito · 192.168.1.73:7020</option></select></label> <p class=\"hint\">La famiglia e l’istanza identificano la destinazione; indirizzo e argomenti restano quelli definiti dal contratto del progetto TD.</p> <label>Colore</label><div class=\"sw\"><button class=\"swb\" data-c=\"#ffb23e\" style=\"--c:#ffb23e\" aria-label=\"Colore #ffb23e\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#3ec9ff\" style=\"--c:#3ec9ff\" aria-label=\"Colore #3ec9ff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#ff5fa2\" style=\"--c:#ff5fa2\" aria-label=\"Colore #ff5fa2\" aria-pressed=\"true\"></button><button class=\"swb\" data-c=\"#9be15d\" style=\"--c:#9be15d\" aria-label=\"Colore #9be15d\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#b18cff\" style=\"--c:#b18cff\" aria-label=\"Colore #b18cff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#e9ebef\" style=\"--c:#e9ebef\" aria-label=\"Colore #e9ebef\" aria-pressed=\"false\"></button></div> <div class=\"row\"><button class=\"btn\" id=\"fDup\">Duplica</button><button class=\"btn danger\" id=\"fDel\">Elimina</button></div>",
+   "fields": {
+    "fLabel": "Laser · LaserCube",
+    "fAddr": "",
+    "fOscChannel": "",
+    "fDup": "",
+    "fDel": ""
+   }
+  },
+  "scenes:dmx-enum": {
+   "html": "<h3>Scene</h3> <label>Etichetta<input id=\"fLabel\"></label> <div class=\"two\"><label>Modalità<select id=\"fSMode\"><option value=\"push\">Una attiva</option><option value=\"multi\">Selezione multipla</option><option value=\"head-select\">Selezione teste TD</option><option value=\"dmx-enum\">Parametro enum DMX V8</option><option value=\"head-presets\">Preset PTZ salvati</option></select></label><label>Colonne<input id=\"fCols\" type=\"number\" min=\"0\" max=\"12\" placeholder=\"auto\"></label></div> <label>Device DMX V8<select id=\"fTdDevice\"><option value=\"\">Automatico</option><option value=\"td-dmx-win\">td-dmx-win</option></select></label> <label>Parametro enum<select id=\"fTdParam\"><option value=\"\">Automatico · palette preferita</option><optgroup label=\"Palette dei rig\"><option value=\"dmx_a_palette\" selected=\"\">a palette · dmx_a_palette</option><option value=\"dmx_b_palette\">b palette · dmx_b_palette</option></optgroup><optgroup label=\"Altri parametri\"><option value=\"audio_a_type\">audio a type · audio_a_type</option></optgroup></select></label> <p class=\"hint\">Le voci arrivano dalla matrice <code>dmx_matrix</code>; il click invia al device il valore originale dell'enum via MQTT. Nessuna opzione o stato viene inventato.</p> <label>Colore</label><div class=\"sw\"><button class=\"swb\" data-c=\"#ffb23e\" style=\"--c:#ffb23e\" aria-label=\"Colore #ffb23e\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#3ec9ff\" style=\"--c:#3ec9ff\" aria-label=\"Colore #3ec9ff\" aria-pressed=\"true\"></button><button class=\"swb\" data-c=\"#ff5fa2\" style=\"--c:#ff5fa2\" aria-label=\"Colore #ff5fa2\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#9be15d\" style=\"--c:#9be15d\" aria-label=\"Colore #9be15d\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#b18cff\" style=\"--c:#b18cff\" aria-label=\"Colore #b18cff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#e9ebef\" style=\"--c:#e9ebef\" aria-label=\"Colore #e9ebef\" aria-pressed=\"false\"></button></div> <div class=\"row\"><button class=\"btn\" id=\"fDup\">Duplica</button><button class=\"btn danger\" id=\"fDel\">Elimina</button></div>",
+   "fields": {
+    "fLabel": "Palette · Rig A",
+    "fSMode": "dmx-enum",
+    "fCols": "4",
+    "fTdDevice": "",
+    "fTdParam": "dmx_a_palette",
+    "fDup": "",
+    "fDel": ""
+   }
+  },
+  "scenes:head-select": {
+   "html": "<h3>Scene</h3> <label>Etichetta<input id=\"fLabel\"></label> <label>Indirizzo OSC<input id=\"fAddr\" class=\"mono\" spellcheck=\"false\" autocapitalize=\"off\"></label> <label>Canale OSC<select id=\"fOscChannel\"><option value=\"\">Predefinito · 192.168.1.73:7020</option></select></label> <p class=\"hint\">La famiglia e l’istanza identificano la destinazione; indirizzo e argomenti restano quelli definiti dal contratto del progetto TD.</p> <label>Voci (una per riga)<textarea id=\"fItems\" disabled=\"\"></textarea></label><div class=\"two\"><label>Modalità<select id=\"fSMode\"><option value=\"push\">Una attiva</option><option value=\"multi\">Selezione multipla</option><option value=\"head-select\">Selezione teste TD</option><option value=\"dmx-enum\">Parametro enum DMX V8</option><option value=\"head-presets\">Preset PTZ salvati</option></select></label><label>Colonne<input id=\"fCols\" type=\"number\" min=\"0\" max=\"12\" placeholder=\"auto\"></label></div> <p class=\"hint\">Invia l’indice della voce (0, 1, 2…) oppure, in selezione multipla, un elenco di 0 e 1.</p> <label>Colore</label><div class=\"sw\"><button class=\"swb\" data-c=\"#ffb23e\" style=\"--c:#ffb23e\" aria-label=\"Colore #ffb23e\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#3ec9ff\" style=\"--c:#3ec9ff\" aria-label=\"Colore #3ec9ff\" aria-pressed=\"true\"></button><button class=\"swb\" data-c=\"#ff5fa2\" style=\"--c:#ff5fa2\" aria-label=\"Colore #ff5fa2\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#9be15d\" style=\"--c:#9be15d\" aria-label=\"Colore #9be15d\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#b18cff\" style=\"--c:#b18cff\" aria-label=\"Colore #b18cff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#e9ebef\" style=\"--c:#e9ebef\" aria-label=\"Colore #e9ebef\" aria-pressed=\"false\"></button></div> <div class=\"row\"><button class=\"btn\" id=\"fDup\">Duplica</button><button class=\"btn danger\" id=\"fDel\">Elimina</button></div>",
+   "fields": {
+    "fLabel": "Selezione teste TD",
+    "fAddr": "/mh/select/heads",
+    "fOscChannel": "",
+    "fItems": "MH2\nMH3\nMH4\nMH5\nMH6",
+    "fSMode": "head-select",
+    "fCols": "8",
+    "fDup": "",
+    "fDel": ""
+   }
+  },
+  "scenes:head-presets": {
+   "html": "<h3>Scene</h3> <label>Etichetta<input id=\"fLabel\"></label> <div class=\"two\"><label>Modalità<select id=\"fSMode\"><option value=\"push\">Una attiva</option><option value=\"multi\">Selezione multipla</option><option value=\"head-select\">Selezione teste TD</option><option value=\"dmx-enum\">Parametro enum DMX V8</option><option value=\"head-presets\">Preset PTZ salvati</option></select></label><label>Colonne<input id=\"fCols\" type=\"number\" min=\"0\" max=\"12\" placeholder=\"auto\"></label></div> <p class=\"hint\">I preset PTZ si gestiscono dal widget in modalità normale. Sono snapshot locali condivisi nel layout; non sono preset interni al motore TD.</p> <label>Colore</label><div class=\"sw\"><button class=\"swb\" data-c=\"#ffb23e\" style=\"--c:#ffb23e\" aria-label=\"Colore #ffb23e\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#3ec9ff\" style=\"--c:#3ec9ff\" aria-label=\"Colore #3ec9ff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#ff5fa2\" style=\"--c:#ff5fa2\" aria-label=\"Colore #ff5fa2\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#9be15d\" style=\"--c:#9be15d\" aria-label=\"Colore #9be15d\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#b18cff\" style=\"--c:#b18cff\" aria-label=\"Colore #b18cff\" aria-pressed=\"true\"></button><button class=\"swb\" data-c=\"#e9ebef\" style=\"--c:#e9ebef\" aria-label=\"Colore #e9ebef\" aria-pressed=\"false\"></button></div> <div class=\"row\"><button class=\"btn\" id=\"fDup\">Duplica</button><button class=\"btn danger\" id=\"fDel\">Elimina</button></div>",
+   "fields": {
+    "fLabel": "Preset PTZ",
+    "fSMode": "head-presets",
+    "fCols": "",
+    "fDup": "",
+    "fDel": ""
+   }
+  },
+  "color": {
+   "html": "<h3>Colore</h3> <label>Etichetta<input id=\"fLabel\"></label> <label>Indirizzo OSC<input id=\"fAddr\" class=\"mono\" spellcheck=\"false\" autocapitalize=\"off\"></label> <label>Canale OSC<select id=\"fOscChannel\"><option value=\"\">Predefinito · 192.168.1.73:7020</option></select></label> <p class=\"hint\">La famiglia e l’istanza identificano la destinazione; indirizzo e argomenti restano quelli definiti dal contratto del progetto TD.</p> <label>Colore</label><div class=\"sw\"><button class=\"swb\" data-c=\"#ffb23e\" style=\"--c:#ffb23e\" aria-label=\"Colore #ffb23e\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#3ec9ff\" style=\"--c:#3ec9ff\" aria-label=\"Colore #3ec9ff\" aria-pressed=\"true\"></button><button class=\"swb\" data-c=\"#ff5fa2\" style=\"--c:#ff5fa2\" aria-label=\"Colore #ff5fa2\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#9be15d\" style=\"--c:#9be15d\" aria-label=\"Colore #9be15d\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#b18cff\" style=\"--c:#b18cff\" aria-label=\"Colore #b18cff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#e9ebef\" style=\"--c:#e9ebef\" aria-label=\"Colore #e9ebef\" aria-pressed=\"false\"></button></div> <div class=\"row\"><button class=\"btn\" id=\"fDup\">Duplica</button><button class=\"btn danger\" id=\"fDel\">Elimina</button></div>",
+   "fields": {
+    "fLabel": "Colore",
+    "fAddr": "/mh/color",
+    "fOscChannel": "",
+    "fDup": "",
+    "fDel": ""
+   }
+  },
+  "meter": {
+   "html": "<h3>Indicatore</h3> <label>Etichetta<input id=\"fLabel\"></label> <label>Indirizzo OSC<input id=\"fAddr\" class=\"mono\" spellcheck=\"false\" autocapitalize=\"off\"></label> <label>Canale OSC<select id=\"fOscChannel\"><option value=\"\">Predefinito · 192.168.1.73:7020</option></select></label> <p class=\"hint\">La famiglia e l’istanza identificano la destinazione; indirizzo e argomenti restano quelli definiti dal contratto del progetto TD.</p> <div class=\"two\"><label>Min<input id=\"fMin\" type=\"number\" step=\"any\"></label><label>Max<input id=\"fMax\" type=\"number\" step=\"any\"></label></div> <label>Colore</label><div class=\"sw\"><button class=\"swb\" data-c=\"#ffb23e\" style=\"--c:#ffb23e\" aria-label=\"Colore #ffb23e\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#3ec9ff\" style=\"--c:#3ec9ff\" aria-label=\"Colore #3ec9ff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#ff5fa2\" style=\"--c:#ff5fa2\" aria-label=\"Colore #ff5fa2\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#9be15d\" style=\"--c:#9be15d\" aria-label=\"Colore #9be15d\" aria-pressed=\"true\"></button><button class=\"swb\" data-c=\"#b18cff\" style=\"--c:#b18cff\" aria-label=\"Colore #b18cff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#e9ebef\" style=\"--c:#e9ebef\" aria-label=\"Colore #e9ebef\" aria-pressed=\"false\"></button></div> <div class=\"row\"><button class=\"btn\" id=\"fDup\">Duplica</button><button class=\"btn danger\" id=\"fDel\">Elimina</button></div> <p class=\"hint\">L'indicatore riceve soltanto: si muove quando arriva OSC su questo indirizzo.</p>",
+   "fields": {
+    "fLabel": "L",
+    "fAddr": "/meter/l",
+    "fOscChannel": "",
+    "fMin": "0",
+    "fMax": "1",
+    "fDup": "",
+    "fDel": ""
+   }
+  },
+  "knob": {
+   "html": "<h3>Manopola</h3> <label>Etichetta<input id=\"fLabel\"></label> <label>Indirizzo OSC<input id=\"fAddr\" class=\"mono\" spellcheck=\"false\" autocapitalize=\"off\"></label> <label>Canale OSC<select id=\"fOscChannel\"><option value=\"\">Predefinito · 192.168.1.73:7020</option></select></label> <p class=\"hint\">La famiglia e l’istanza identificano la destinazione; indirizzo e argomenti restano quelli definiti dal contratto del progetto TD.</p> <div class=\"two\"><label>Min<input id=\"fMin\" type=\"number\" step=\"any\"></label><label>Max<input id=\"fMax\" type=\"number\" step=\"any\"></label></div> <div class=\"two\"><label>MIDI canale<input id=\"fCh\" type=\"number\" min=\"1\" max=\"16\"></label><label>MIDI CC<input id=\"fCc\" type=\"number\" min=\"0\" max=\"127\" placeholder=\"off\"></label></div> <label>Colore</label><div class=\"sw\"><button class=\"swb\" data-c=\"#ffb23e\" style=\"--c:#ffb23e\" aria-label=\"Colore #ffb23e\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#3ec9ff\" style=\"--c:#3ec9ff\" aria-label=\"Colore #3ec9ff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#ff5fa2\" style=\"--c:#ff5fa2\" aria-label=\"Colore #ff5fa2\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#9be15d\" style=\"--c:#9be15d\" aria-label=\"Colore #9be15d\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#b18cff\" style=\"--c:#b18cff\" aria-label=\"Colore #b18cff\" aria-pressed=\"true\"></button><button class=\"swb\" data-c=\"#e9ebef\" style=\"--c:#e9ebef\" aria-label=\"Colore #e9ebef\" aria-pressed=\"false\"></button></div> <div class=\"row\"><button class=\"btn\" id=\"fDup\">Duplica</button><button class=\"btn danger\" id=\"fDel\">Elimina</button></div>",
+   "fields": {
+    "fLabel": "Reverb",
+    "fAddr": "/fx/reverb",
+    "fOscChannel": "",
+    "fMin": "0",
+    "fMax": "1",
+    "fCh": "1",
+    "fCc": "",
+    "fDup": "",
+    "fDel": ""
+   }
+  },
+  "label": {
+   "html": "<h3>Testo</h3> <label>Etichetta<input id=\"fLabel\"></label> <label>Colore</label><div class=\"sw\"><button class=\"swb\" data-c=\"#ffb23e\" style=\"--c:#ffb23e\" aria-label=\"Colore #ffb23e\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#3ec9ff\" style=\"--c:#3ec9ff\" aria-label=\"Colore #3ec9ff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#ff5fa2\" style=\"--c:#ff5fa2\" aria-label=\"Colore #ff5fa2\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#9be15d\" style=\"--c:#9be15d\" aria-label=\"Colore #9be15d\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#b18cff\" style=\"--c:#b18cff\" aria-label=\"Colore #b18cff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#e9ebef\" style=\"--c:#e9ebef\" aria-label=\"Colore #e9ebef\" aria-pressed=\"true\"></button></div> <div class=\"row\"><button class=\"btn\" id=\"fDup\">Duplica</button><button class=\"btn danger\" id=\"fDel\">Elimina</button></div>",
+   "fields": {
+    "fLabel": "Master",
+    "fDup": "",
+    "fDel": ""
+   }
+  }
+ }
+}

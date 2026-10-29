@@ -107,7 +107,6 @@ const MOOD_INKS={neutra:[0,255,204],calm:[80,230,190],stress:[255,115,85],social
 const MOOD_ALIAS={serena:'calm',sofferente:'stress',instabile:'stress',viva:'social',stabile:'neutra',neutrale:'neutra'};
 const MOOD_IT={neutra:'Neutra',calm:'Calma',stress:'Stress',social:'Sociale',curiosity:'Curiosità'};
 const DIMS=[['stress','Stress',1],['calm','Calma',1],['social','Socialità',1],['curiosity','Curiosità',1],['energy','Energia',100]];
-const GAIA_TYPES=new Set(['gaia','patchdeck','tddevice','gaiadmx']);
 const FAM_IT={patchdeck:'PatchDeck',mixeraudio:'Controller',dmx:'DMX V8',laser:'Laser'};
 
 function gLoadLib(cb){
@@ -123,10 +122,7 @@ function gConnect(host){
   let c;try{c=mqtt.connect(`ws://${host}:${net().wsPort}`,{connectTimeout:4000,reconnectPeriod:3000})}catch{G.offSince=G.offSince??Date.now();return}
   G.client=c;
   c.on('connect',()=>{G.ok=true;G.offSince=null;if(G.sim)gSimOff();gStatus();
-    ['gaia/device/+/status','gaia/devices/+/patchdeck_matrix','gaia/devices/+/patch_thumb/+',
-     ...TD_STATE_TOPICS.map(n=>'gaia/devices/+/'+n),'gaia/devices/+/dmx_rigs','gaia/devices/+/dmx_layout','gaia/devices/+/dmx_live','gaia/devices/+/dmx_matrix','gaia/devices/+/dmx_output','gaia/devices/+/show_timeline','gaia/devices/+/laser_preview','gaia/device/+/audio_levels','gaia/dmx/+/status',
-     'gaia/td/canvas','gaia/brain/state','gaia/brain/dream','gaia/voice/tts/+','gaia/voice/command/+',
-     SHOW_CLOCK_STATE,'gaia/show/clock/pong/+'].forEach(t=>c.subscribe(t))});
+    mqttTopics().forEach(t=>c.subscribe(t))});   // i topic dichiarati con onMqtt (06-message-bus.js)
   const off=()=>{if(G.client!==c)return;G.ok=false;G.offSince=G.offSince??Date.now();gStatus()};
   c.on('offline',off);c.on('error',off);c.on('close',off);
   c.on('message',(t,raw)=>{if(!raw||!raw.length)return;let p;const s=raw.toString();try{p=JSON.parse(s)}catch{p=s}gIn(t,p)});
@@ -154,74 +150,6 @@ function gStatus(){
   const p=$('#gconn');if(!p)return;p.classList.toggle('on',G.ok);p.classList.toggle('sim',!G.ok&&G.sim);
   const full=G.ok?`Gaia · ${net().name} · ${G.host}`:G.sim?'Gaia · simulazione':GC.on?'Gaia · offline':'Gaia · spenta';
   $('#gconnTxt').textContent=G.ok?'Gaia':full;p.title=full;
-}
-function gIn(t,p){
-  const seg=t.split('/'),obj=p&&typeof p==='object';
-  if(seg[1]==='devices'&&seg[3]==='dmx_layout'){if(obj)dmxLayoutApply(p)}
-  else if(seg[1]==='devices'&&seg[3]==='dmx_rigs'){if(obj)dmxRigsApply(p)}
-  else if(seg[1]==='devices'&&TD_STATE_TOPICS.includes(seg[3])){
-    // struttura su topic retained con rev (nota TD 47): si fonde nei params del device
-    if(obj&&p.params&&typeof p.params==='object'){const id=p.device_id||seg[2],old=tdParamsBefore(id),st=(G.tdState[id]=G.tdState[id]||{});
-      if(st[seg[3]]?.rev===p.rev&&p.rev!=null)return;
-      st[seg[3]]={rev:p.rev??null,params:p.params,at:Date.now()};
-      if(G.devices[id]){mergeTdState(id);tdParamsChanged(id,old);G.dirty=true}}
-  }
-  else if(seg[1]==='devices'&&(seg[3]==='dmx_output'||seg[3]==='dmx_live')){
-    if(obj){
-      const previousScene=dmxNumber(DMX_OUTPUT.scene?.index??DMX_OUTPUT.scene);
-      if(seg[3]==='dmx_live'?dmxLiveApply(p,seg[2]):dmxOutputApplySnapshot(p,seg[2])){
-        const updates=[['/dmx/master',DMX_OUTPUT.master],['/dmx/blackout',DMX_OUTPUT.blackout?1:0],['/dmx/strobe',DMX_OUTPUT.strobe?1:0]];
-        for(const [address,value]of updates)if(value!=null){
-          bus(address,[value],'remote');
-          applyWidgets({address,args:[value]},null);
-        }
-        const scene=dmxNumber(DMX_OUTPUT.scene?.index??DMX_OUTPUT.scene);
-        // Solo evidenziare il pulsante: la scena e' gia' applicata in TD e
-        // il Render la vede da rgb_out. bus() -> goScene() lancerebbe il
-        // look LOCALE con lo stesso indice (TestScene1 -> "Walk-in", nota 33).
-        if(scene!=null&&scene>=0&&scene!==previousScene){
-          SH.scene=scene;
-          applyWidgets({address:'/dmx/scene',args:[scene]},null);
-        }
-      }
-    }
-  }else if(seg[1]==='devices'&&seg[3]==='laser_preview'){
-    // laser gateway: cio' che i cubi proiettano davvero, per il Render (~6/s, solo in uscita)
-    if(obj&&p.cubes)G.laserPreview={at:Date.now(),cubes:p.cubes};
-  }else if(seg[1]==='devices'&&seg[3]==='show_timeline'){
-    // timeline di DMX Master, retained, ripubblicata a ogni rev nuova
-    // (nota TD 31): piu' fresca di show_timeline nello status
-    if(obj&&Array.isArray(p.cues)&&seg[2]==='td-dmx-win'){
-      const old=G.tdTimeline?.rev;G.tdTimeline=p;
-      if(old!==p.rev)onTdTimelineRev(p);
-    }
-  }else if(t===SHOW_CLOCK_STATE){
-    if(obj&&p.v===1&&p.master==='td-dmx-win'&&Number.isFinite(+p.pos)&&typeof p.playing==='boolean'){
-      const oldLength=showClock.state?.length;
-      showClock.state={...p,pos:+p.pos,playing:p.playing};showClock.receivedAt=now();showClock.authority=true;showClock.hasMqtt=true;
-      if(oldLength!==p.length)refreshShowTimelines();
-    }
-  }else if(seg[1]==='show'&&seg[2]==='clock'&&seg[3]==='pong'){
-    if(obj&&p.from===showClock.id){
-      const sent=showClock.pings.get(+p.n);
-      if(sent&&p.t0===sent.t0){const rtt=Math.max(0,now()-sent.at);showClock.pings.delete(+p.n);
-        showClock.rtts.push(rtt);if(showClock.rtts.length>10)showClock.rtts.shift();
-        showClock.minRtt=Math.min(...showClock.rtts)}
-    }
-  }else if(seg[1]==='device'&&seg[3]==='status'){if(obj){const old=tdParamsBefore(seg[2]);p._seen=Date.now();G.devices[seg[2]]=p;
-    mergeTdState(seg[2]);tdParamsChanged(seg[2],old)}}
-  else if(t.endsWith('/patchdeck_matrix')){if(obj)G.pdm[p.device_id||seg[2]]=p}
-  // miniatura di una patch PatchDeck (retained, una per topic): JPEG base64 -> data URL
-  else if(seg[1]==='devices'&&seg[3]==='patch_thumb'){if(obj&&p.data){const n=+(p.patch||seg[4]);(G.pdThumb[seg[2]]=G.pdThumb[seg[2]]||{})[n]={label:p.label||'',url:`data:${p.mime||'image/jpeg'};base64,${p.data}`};G.thumbV=(G.thumbV||0)+1}}
-  else if(t.endsWith('/dmx_matrix')){if(obj){G.dxm[p.device_id||seg[2]]=p;syncHeadSelectors()}}
-  else if(t.endsWith('/audio_levels'))G.levels[seg[2]]=p;
-  else if(seg[1]==='dmx'&&seg[3]==='status'){if(obj)G.dmx[p.stanza||seg[2]]=p}
-  else if(t==='gaia/td/canvas'){if(obj)G.canvas=p}
-  else if(t==='gaia/brain/state'){if(obj)G.brain=p}
-  else if(t==='gaia/brain/dream')G.dream=p;
-  else if(t.startsWith('gaia/voice/tts/'))gChat('gaia',typeof p==='string'?p:(p?.text||p?.message||''),seg[3]);
-  else if(t.startsWith('gaia/voice/command/'))gChat('voce',typeof p==='string'?p:p?.text,(obj&&p.stanza)||seg[3]);
-  G.dirty=true;
 }
 function gChat(who,text,room){
   text=String(text||'').trim();if(!text)return;
@@ -359,3 +287,56 @@ function paintTdEnum(el,w){
   });
   const addr=el.querySelector('.addr');if(addr)addr.textContent=info.meta?`${info.id} · ${info.meta.n}`:'DMX V8 · parametro non disponibile';
 }
+
+/* ---------- topic MQTT ascoltati da Gaia, dai device TD e da DMX Master ---------- */
+onMqtt('gaia/device/+/status',(p,seg,obj)=>{if(obj){const old=tdParamsBefore(seg[2]);p._seen=Date.now();G.devices[seg[2]]=p;
+  mergeTdState(seg[2]);tdParamsChanged(seg[2],old)}});
+// struttura su topic retained con rev (nota TD 47): si fonde nei params del device
+for(const name of TD_STATE_TOPICS)onMqtt('gaia/devices/+/'+name,(p,seg,obj)=>{
+  if(obj&&p.params&&typeof p.params==='object'){const id=p.device_id||seg[2],old=tdParamsBefore(id),st=(G.tdState[id]=G.tdState[id]||{});
+    if(st[seg[3]]?.rev===p.rev&&p.rev!=null)return false;
+    st[seg[3]]={rev:p.rev??null,params:p.params,at:Date.now()};
+    if(G.devices[id]){mergeTdState(id);tdParamsChanged(id,old);G.dirty=true}}
+});
+onMqtt('gaia/devices/+/patchdeck_matrix',(p,seg,obj)=>{if(obj)G.pdm[p.device_id||seg[2]]=p});
+// miniatura di una patch PatchDeck (retained, una per topic): JPEG base64 -> data URL
+onMqtt('gaia/devices/+/patch_thumb/+',(p,seg,obj)=>{if(obj&&p.data){const n=+(p.patch||seg[4]);(G.pdThumb[seg[2]]=G.pdThumb[seg[2]]||{})[n]={label:p.label||'',url:`data:${p.mime||'image/jpeg'};base64,${p.data}`};G.thumbV=(G.thumbV||0)+1}});
+onMqtt('gaia/devices/+/dmx_layout',(p,seg,obj)=>{if(obj)dmxLayoutApply(p)});
+onMqtt('gaia/devices/+/dmx_rigs',(p,seg,obj)=>{if(obj)dmxRigsApply(p)});
+// uscita vera di DMX Master: master/blackout/strobe ai widget, scena attiva evidenziata
+const dmxOutputIn=(p,seg,obj)=>{
+  if(!obj)return;
+  const previousScene=dmxNumber(DMX_OUTPUT.scene?.index??DMX_OUTPUT.scene);
+  if(!(seg[3]==='dmx_live'?dmxLiveApply(p,seg[2]):dmxOutputApplySnapshot(p,seg[2])))return;
+  const updates=[['/dmx/master',DMX_OUTPUT.master],['/dmx/blackout',DMX_OUTPUT.blackout?1:0],['/dmx/strobe',DMX_OUTPUT.strobe?1:0]];
+  for(const [address,value]of updates)if(value!=null){
+    bus(address,[value],'remote');
+    applyWidgets({address,args:[value]},null);
+  }
+  const scene=dmxNumber(DMX_OUTPUT.scene?.index??DMX_OUTPUT.scene);
+  // Solo evidenziare il pulsante: la scena e' gia' applicata in TD e
+  // il Render la vede da rgb_out. bus() -> goScene() lancerebbe il
+  // look LOCALE con lo stesso indice (TestScene1 -> "Walk-in", nota 33).
+  if(scene!=null&&scene>=0&&scene!==previousScene){
+    SH.scene=scene;
+    applyWidgets({address:'/dmx/scene',args:[scene]},null);
+  }
+};
+onMqtt('gaia/devices/+/dmx_live',dmxOutputIn);
+onMqtt('gaia/devices/+/dmx_output',dmxOutputIn);
+onMqtt('gaia/devices/+/dmx_matrix',(p,seg,obj)=>{if(obj){G.dxm[p.device_id||seg[2]]=p;syncHeadSelectors()}});
+// timeline di DMX Master, retained, ripubblicata a ogni rev nuova
+// (nota TD 31): piu' fresca di show_timeline nello status
+onMqtt('gaia/devices/+/show_timeline',(p,seg,obj)=>{
+  if(obj&&Array.isArray(p.cues)&&seg[2]==='td-dmx-win'){
+    const old=G.tdTimeline?.rev;G.tdTimeline=p;
+    if(old!==p.rev)onTdTimelineRev(p);
+  }
+});
+onMqtt('gaia/device/+/audio_levels',(p,seg)=>{G.levels[seg[2]]=p});
+onMqtt('gaia/dmx/+/status',(p,seg,obj)=>{if(obj)G.dmx[p.stanza||seg[2]]=p});
+onMqtt('gaia/td/canvas',(p,seg,obj)=>{if(obj)G.canvas=p});
+onMqtt('gaia/brain/state',(p,seg,obj)=>{if(obj)G.brain=p});
+onMqtt('gaia/brain/dream',p=>{G.dream=p});
+onMqtt('gaia/voice/tts/+',(p,seg)=>gChat('gaia',typeof p==='string'?p:(p?.text||p?.message||''),seg[3]));
+onMqtt('gaia/voice/command/+',(p,seg,obj)=>gChat('voce',typeof p==='string'?p:p?.text,(obj&&p.stanza)||seg[3]));

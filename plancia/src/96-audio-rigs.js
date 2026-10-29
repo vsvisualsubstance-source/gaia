@@ -131,3 +131,11 @@ document.addEventListener('change',async e=>{
   if(n==='max_dimmer'&&+s.value<=(arVal(k,'min_dimmer')??0))s.value=(arVal(k,'min_dimmer')??0)+1;
   arSet(k,n,s.value);s.blur()});
 document.addEventListener('input',e=>{const s=e.target.closest?.('[data-ar-p]');if(!s)return;const b=s.parentElement.querySelector('b');if(b)b.textContent=(+s.value).toFixed(+s.step<1?2:0)});
+
+/* ---------- tipo di widget: audiorigs (audio dei gruppi) ---------- */
+registerWidget('audiorigs',{size:[8,6],label:'Audio',showsValue:false,showsAddr:false,
+  inner:()=>'<div class="ar"></div>',
+  onPointer:audioRigsDown,
+  // barre di livello e kick a ogni fotogramma, le schede solo quando cambiano i dati
+  tick:(el,w,{repaint})=>{if(repaint)paintAudioRigs(el,w);updateAudioMeters(el)},
+  help:w=>['Audio dei gruppi',w.h<=3?'♪ accende o spegne la reattività audio del gruppo (spento = luce ferma), Kick = colpo sui bassi. Regolazioni complete nella pagina Audio.':'Una scheda per gruppo: ♪ Audio ON/OFF (tutte le luci del gruppo seguono la musica o restano ferme), Kick, sorgente A/B, il MODO delle luci (come il gruppo, ferma, solo bassi/medi/alti, solo kick) e il GUADAGNO (0 ferma, 1 normale, 2 doppio). In Taratura minimo, massimo, soglia kick e morbidezza del gruppo. Seleziona i gruppi con ☐ e tocca un preset. Per una luce sola: pagina Luci.']});

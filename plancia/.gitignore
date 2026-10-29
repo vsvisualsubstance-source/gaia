@@ -3,3 +3,5 @@ node_modules/
 backup/
 data/
 *.bak-*
+app.js
+test-output/
