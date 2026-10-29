@@ -1,12 +1,15 @@
-# Plancia-next: piano di refactor
+# Refactor della Plancia (2026-10-28/29): storia
 
-Fork di sviluppo della Plancia, estratto dalla cartella `plancia/` del repo
-`gaia` con tutta la storia (`git subtree split`, 67 commit fino a
-`4a2d663`, 2026-10-28). La Plancia in esercizio resta in `gaia/plancia` e
-non viene toccata da qui. Le correzioni che nel frattempo si fanno là si
-portano qui con `tools/sync-from-gaia.sh`.
+> **Concluso e in esercizio.** Il lavoro è stato fatto nel fork
+> `plancia-next` (GitHub `vsvisualsubstance-source/plancia-next`, storia
+> commit per commit), provato dal vivo dall'operatore e riportato in
+> `gaia/plancia` il 2026-10-29 (`32bf0b0`). Da allora la Plancia si sviluppa
+> solo qui; il fork non si aggiorna più. Questo file resta come storia delle
+> scelte e delle misure. Come è fatto oggi il codice: README, "Struttura del
+> codice".
 
-Si passa alla versione nuova solo quando dà vantaggi veri e regge uno show.
+Il fork era estratto dalla cartella `plancia/` del repo `gaia` con tutta la
+storia (`git subtree split`, 67 commit fino a `4a2d663`, 2026-10-28).
 
 ## Regole
 

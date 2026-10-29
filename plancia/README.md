@@ -1,6 +1,4 @@
-# Plancia-next
-
-> **Fork di sviluppo** della Plancia di Gaia (estratto da `gaia/plancia` con la sua storia). Qui si lavora al refactor senza toccare la Plancia in esercizio: piano e regole in [REFACTOR.md](REFACTOR.md), prova accanto a quella vera con `run_dev.bat` (porta 8092), aggiornamento da gaia con `tools/sync-from-gaia.sh`.
+# Plancia
 
 Superficie di controllo OSC/MIDI che gira nel browser di qualsiasi tablet o telefono. Un piccolo bridge Node sul computer serve la pagina e traduce i messaggi in OSC (UDP) e MIDI.
 
@@ -26,6 +24,7 @@ Plancia parla con l'ecosistema Gaia nello stesso modo delle pagine web del repo 
 - **Profili di rete** (`⋯` → Gaia): *Casa* (broker e Admin su Core `.142`, Node-RED su OPS `.240`) e *Portatile (OPS)* (tutto su `.240`). Ogni profilo contiene broker MQTT (porta WebSocket), fallback, Node-RED (HTTP e WS `/gaia`), Gaia Admin e ingresso OSC di Gaia. Si possono modificare, duplicare e verificare con **Verifica connessioni**. Dopo 10 s scollegato si prova il fallback.
 - Avvio diretto da URL, utile per tablet e kiosk: `http://<bridge>:8080/?profilo=ops`, oppure singoli indirizzi con `?broker=…&nodered=…&admin=…&osc=…&stanza=…`.
 - **Aperta sul PC OPS stesso** (o sulla macchina touring) da `http://localhost:8080`: broker, Node-RED e Admin del profilo che puntano a `192.168.1.240` diventano `localhost`, perché la macchina non raggiunge le porte Docker sul proprio IP di LAN (WSL mirrored). Prima la pagina restava in simulazione e, senza MQTT, ogni 10 s chiedeva a DMX Master l'uscita di riserva OSC, che saltava avanti e indietro. I tablet in rete non cambiano.
+- **Aperta da un altro indirizzo di OPS**: hotspot di Windows (`http://192.168.137.1:8080`) o Tailscale (`http://100.91.251.83:8080`). Da lì le porte Docker non si vedono, quindi il broker passa **dal bridge stesso**: `ws://<indirizzo della pagina>:8080/mqtt`, inoltrato da `bridge.js` al broker su `127.0.0.1:19001` (`MQTT_WS_HOST`/`MQTT_WS_PORT`). Node-RED, Admin e Video Service seguono lo stesso indirizzo. In Connessioni si lascia il profilo OPS con `192.168.1.240`: la traduzione è automatica (`netLocalize` in `src/70-gaia-mqtt.js`). Scrivere a mano `192.168.137.1` come broker non funziona, perché cercherebbe la porta 19001. Dall'hotspot Node-RED e Admin (in Docker) non sono ancora raggiungibili; per la Plancia Node-RED è solo una riserva.
 - Node-RED (WS `/gaia`, lo stesso flusso della dashboard) fa da fonte di riserva per mood e pensieri se `gaia/td/canvas` non arriva.
 - I tasti mood richiedono il consumer **touchdesignerMood** acceso in Admin → Automazioni.
 - Senza broker raggiungibile i widget Gaia mostrano una simulazione (pallino ambra "Gaia · simulazione").
@@ -39,22 +38,37 @@ npm install
 npm start
 ```
 
-Il bridge stampa l'indirizzo da aprire sul tablet (es. `http://192.168.1.20:8080`). Tablet e computer devono essere sulla stessa rete.
+Il bridge stampa l'indirizzo da aprire sul tablet (es. `http://192.168.1.20:8080`). Tablet e computer devono essere sulla stessa rete. Su OPS la Plancia in esercizio parte dall'attività pianificata `GAIA-OPS-Plancia` (`run_plancia_hidden.vbs` → `run_plancia.bat`), che ricompila `app.js` a ogni avvio: dopo un aggiornamento basta riavviarla e ricaricare le pagine aperte.
 
-### Struttura UI
+### Struttura del codice
 
-- `index.html`: struttura della pagina.
-- `plancia.css`: stili dell'interfaccia.
-- `src/*.js`: logica client-side divisa per responsabilità (stato/layout,
-  show, widget, bridge, palco, Gaia e impostazioni).
-- `build-app.js`: assembla i moduli nell'unico bundle `app.js` servito al
-  browser; i moduli condividono lo scope per mantenere invariati stato e
-  comportamento.
-- `bridge.js`: server HTTP/WebSocket, relay OSC e persistenza condivisa.
+- `index.html`, `plancia.css`: pagina e stili.
+- `src/*.js`: la logica del browser, in moduli numerati. `build-app.js` li concatena nell'ordine dell'elenco `appModules` in un unico `app.js` (scope condiviso, niente framework, niente compilatore: funziona offline in club).
+- `bridge.js`: server HTTP/WebSocket, relay OSC/MIDI, layout condiviso, ponte `/mqtt` verso il broker, esecuzione delle tracce VIDEO (`video-timeline.js`) e LASER (`laser-timeline.js`).
 
-Il bridge serve `app.js` e `plancia.css` come asset locali, senza dipendenze da CDN per la UI.
-`npm start` e `run_plancia.bat` rigenerano il bundle prima di avviare il
-bridge; per la sola verifica della build usare `npm test`.
+Le parti che contano quando si cambia qualcosa (refactor del 2026-10-29, storia in [REFACTOR.md](REFACTOR.md)):
+
+- **Avvio esplicito**: i moduli contengono solo dichiarazioni, listener e timer; l'app parte da `init()` (in `90-settings-and-bootstrap.js`), chiamata da `999-start.js`, l'ultimo modulo. Un test impedisce di tornare indietro.
+- **Registro dei widget** (`05-widget-registry.js`): ogni tipo dichiara in un posto solo dimensioni e nome, contenuto (`inner`), disegno del valore (`paint`), argomenti OSC (`args`), tocco (`onPointer`), aggiornamento a ogni fotogramma (`tick`), ricezione OSC (`receive`), aiuto della visita guidata (`help`) e campi propri dell'ispettore (`inspector`). I tipi stanno in `42-control-widgets.js` (fader, manopola, pad XY, pulsante, indicatore, colore, testo, orologio), `43-timeline-widget.js`, `44-scene-widgets.js`, `61-stage-fixtures.js` (Palco), `72-gaia-interactions.js` (famiglia Gaia), `94-console-widgets.js`, `96-audio-rigs.js`, `99-laser.js`. **Un widget nuovo** = un `registerWidget('tipo',{…})` nel suo modulo; nessuno switch da toccare altrove.
+- **OSC in arrivo**: va solo ai widget di quell'indirizzo (indice in `05`), ognuno col proprio `receive`.
+- **MQTT in arrivo** (`06-message-bus.js`): ogni modulo dichiara i topic che ascolta con `onMqtt('gaia/devices/+/laser_preview', fn)`, accanto al codice che li usa; le iscrizioni al broker sono proprio quei pattern. **Un topic nuovo** = una riga `onMqtt`.
+- **Reale o simulato** (`fixtureOutput(f)` in `49-dmx-output.js`): l'uscita vera di una fixture se DMX Master è fresco e la conosce, altrimenti `null` e vale la simulazione locale. È l'unico punto in cui Render e griglia Luci scelgono.
+
+### Test
+
+| Comando | Cosa controlla |
+|---|---|
+| `npm test` | test unitari (Node, niente browser) |
+| `npm run check` | tutto, da lanciare prima di ogni commit: unitari, caratterizzazione, smoke di tutte le pagine, widget, ispettore, scene palette, rimbalzo del layout |
+| `npm run characterize` | confronta il comportamento con `test/snapshots/characterization.json`: argomenti OSC di ogni widget, messaggi spediti, template, migrazioni `uiRev`, OSC e MQTT in arrivo, ispettore, **Render del palco al pixel** (simulato, reale, misto). Un cambio voluto si registra con `-- --update` |
+| `npm run smoke` | apre ogni pagina, raccoglie eccezioni ed errori, salva uno screenshot per pagina in `test-output/smoke/` |
+| `npm run perf` | tempo del ciclo di disegno per pagina, con traffico MQTT come dal vivo |
+
+I test nel browser usano Edge o Chrome senza schermo, un bridge di prova su una porta libera e un **layout fisso** (`test/fixtures/state.json`), non `data/`. `PLANCIA_STATE=<file>` prova un altro layout, per esempio quello vero: `PLANCIA_STATE=data/state.json npm run smoke`. `test/fixtures/td-dmx-win.json` sono status, matrice, scene e teste veri di DMX Master (senza IP), per i test che simulano TD.
+
+### Istanza di prova
+
+`run_dev.bat` avvia una seconda Plancia sulla **8092** accanto a quella vera: dati suoi (`data/` della copia), OSC in ingresso sulla 9010, tracce VIDEO e LASER verso device inesistenti. Attenzione: il broker MQTT è quello vero (i comandi MQTT dei widget arrivano davvero), e appena una pagina si collega il bridge prende il bersaglio OSC dalle sue Connessioni. Per una prova isolata si apre con `?broker=0.0.0.0`. Durante uno show va chiusa. Da PowerShell le variabili si impostano con `$env:OSC_HOST="…"` (`set` non basta).
 
 | Variabile | Default | A cosa serve |
 |---|---|---|
@@ -65,6 +79,8 @@ bridge; per la sola verifica della build usare `npm test`.
 | `PATCHDECK_ID` | `td-pd-pc-win` | PatchDeck comandato dalla traccia VIDEO (`video-timeline.js`) |
 | `LASER_ID` | `laser-ops` | laser gateway comandato dalla traccia LASER (`laser-timeline.js`) |
 | `SHOW_CLOCK_TOPIC` | `gaia/show/clock/state` | orologio dello show seguito dalle tracce VIDEO e LASER (cambiarlo solo per le prove) |
+| `PLANCIA_STATE_FILE` | `data/state.json` | dove il bridge salva layout e progetti condivisi |
+| `MQTT_WS_HOST` / `MQTT_WS_PORT` | `127.0.0.1` / `19001` | broker MQTT WebSocket raggiunto dal ponte `/mqtt` (pagine aperte da hotspot o Tailscale) |
 
 Il MIDI usa il pacchetto opzionale `easymidi`. Su Windows serve una porta virtuale come loopMIDI.
 
@@ -81,6 +97,7 @@ Il MIDI usa il pacchetto opzionale `easymidi`. Su Windows serve una porta virtua
 - **Bidirezionale**: l'OSC che arriva sulla porta 9000 con lo stesso indirizzo muove il controllo. Se l’IP sorgente identifica un solo canale configurato, aggiorna i widget di quel canale; altrimenti il feedback resta globale. Per feedback senza ambiguità, assegna IP sorgenti distinti ai canali o indirizzi OSC distinti.
 - Layout corrente e progetti salvati sono condivisi dal server Plancia su OPS e aggiornati sugli altri browser connessi. Il bridge li persiste in `plancia/data/state.json` (sovrascrivibile con `PLANCIA_STATE_FILE`); l’indicatore in alto mostra se il salvataggio del layout è arrivato al server. In caso di disconnessione resta una copia locale in attesa di sincronizzazione.
 - Il progetto nominato è uno snapshot separato: l'autosalvataggio aggiorna il layout corrente, ma non lo snapshot. In `⋯` → Progetti, usare "Aggiorna" per sostituire lo snapshot del progetto corrente con il layout attuale, oppure "Salva come nuovo" per crearne uno distinto.
+- Una pagina che riceve il layout dal server lo applica e non lo risalva. I dati che vengono da DMX Master (per esempio l'elenco delle teste nei selettori) li scrive nel layout solo una pagina collegata a MQTT, quando arrivano dati nuovi. Prima due pagine con elenchi diversi si rimbalzavano il layout una volta al secondo e tutte le pagine si ricostruivano: lampeggio di timeline e Render (2026-10-29, `test/shared-loop.js`).
 - Se più device modificano lo stesso layout, prevale l’ultimo salvataggio ricevuto dal server e gli altri browser vengono aggiornati. Apri la Plancia tramite lo stesso bridge OPS (`http://192.168.1.240:8080`): `localhost`, l’IP LAN e ciascun browser sono origini/archivi locali distinti, ma tutti i client collegati allo stesso bridge condividono l’archivio OPS.
 - Le preferenze di connessione e i canali OSC (host/porte) restano locali al browser; il layout condiviso conserva gli ID stabili delle assegnazioni widget. Configura gli stessi canali su ciascun device che deve inviare OSC. Da `⋯` puoi ancora copiare o incollare il JSON del layout.
 
@@ -96,6 +113,14 @@ Il MIDI usa il pacchetto opzionale `easymidi`. Su Windows serve una porta virtua
 - Timeline `/show`: quando è disponibile lo stato retained `gaia/show/clock/state`, segue l'orologio master di DMX Master, manda i comandi su `gaia/show/clock/command` e mostra le cue pubblicate da TD. Stima la latenza via ping MQTT; se lo stato MQTT tace per 3,5 s congela la posizione. Senza stato MQTT usa il feedback OSC `/show/*` quando arriva; in pausa OSC non ha heartbeat e non consente di rilevare la disconnessione del master. Senza feedback mantiene il funzionamento locale/OSC precedente.
 
 Tutti i numeri partono come float OSC.
+
+### Scene, palette e cue
+
+- **Palette** (Warm, Cool, Fire, Ocean…): un parametro dal vivo di ogni rig (`dmx_<rig>_palette`). Cambia subito il colore, ma **non va nella timeline**: nei riquadri palette c'è l'etichetta **DAL VIVO**.
+- **Scena** di DMX Master: una fotografia dello stato dal vivo, per categorie (Look dei rig, Teste mobili, Accensioni gruppi, Sorgente audio, Strobo generale, Palette). Le cue richiamano solo scene, e le scene si sommano a strati: una cue colore e una cue teste convivono.
+- Nel menu della cue le scene sono **raggruppate per tipo**, ricavato dalle categorie: Complete, Colore (palette e/o look dei rig), Teste, Strobo, Accensioni, Audio, Miste. Il tipo compare anche sui blocchi della traccia LUCI.
+- **Scene dalle palette** (`＋ Scene…`): per ogni palette scelta crea una scena colore `pal_<nome>` (Warm → `pal_warm`) con la sola categoria **Palette** (nota TD 52): imposta la palette sui rig scelti, cattura, rimette le palette di prima; se la timeline di DMX Master è attiva la spegne durante la composizione e poi la riaccende. Una scena `pal_*` già esistente viene portata alla sola categoria Palette (`show_scene_update`) e ricatturata, senza cancellarla, quindi vale anche se una cue la usa. **Le luci cambiano dal vivo** per qualche secondo per ogni palette: non durante lo show.
+- I parametri "Avanzate" di una cue (es. `dmx_a_palette=Warm`) valgono solo per la timeline locale della Plancia: non vanno a DMX Master. Per una palette in timeline si usa una scena palette.
 
 ## Template
 
