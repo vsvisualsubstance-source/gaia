@@ -103,6 +103,11 @@ async function buildPaletteScenes(palettes,rigParams,onStep=()=>{}){
     }
     for(let i=0;i<palettes.length;i++){
       const pal=palettes[i],id=paletteSceneId(pal);onStep(i,pal);
+      // la cattura su una scena esistente lascia le categorie com'erano (nota
+      // TD 52): una pal_* fatta con rigs va prima portata alle categorie giuste
+      const old=tdSceneById(id),same=(a,b)=>JSON.stringify([...(a||[])].sort())===JSON.stringify([...b].sort());
+      if(old&&!same(old.categories,categories))
+        await tdSceneCommand('show_scene_update',{name:id,label:old.label||pal,categories},()=>same(tdSceneById(id)?.categories,categories));
       await set(Object.fromEntries(rigParams.map(p=>[p,pal])));
       const pub=()=>`${G.devices['td-dmx-win']?.ts}|${JSON.stringify(tdSceneById(id))}`,b=pub();
       await tdSceneCommand('show_scene_capture',{name:id,label:pal,categories},()=>!!tdSceneById(id)&&pub()!==b);
@@ -207,7 +212,7 @@ function paletteScenesSection(scenes){
   const have=new Set(scenes.map(x=>x.id)),onlyPalette=sceneCategoriesFrom(G.dxm['td-dmx-win']).some(c=>c.id==='palette');
   return`<div class="scn-new scn-pal">
       <h4>Scene dalle palette</h4>
-      <p class="hint">Una scena <b>colore</b> per ogni palette scelta (es. Warm → <span class="mono">pal_warm</span>), da mettere nelle cue come le altre: nel menu stanno nel gruppo <b>Colore</b>. Le palette dal vivo non vanno in timeline, le scene sì. ${onlyPalette?'Salvano solo le palette dei rig.':'Per ora salvano tutto il <b>look dei rig</b> (anche dimmer, kick e audio di adesso): prepara prima quelli.'} Una ✓ = esiste già, viene ricatturata.</p>
+      <p class="hint">Una scena <b>colore</b> per ogni palette scelta (es. Warm → <span class="mono">pal_warm</span>), da mettere nelle cue come le altre: nel menu stanno nel gruppo <b>Colore</b>. Le palette dal vivo non vanno in timeline, le scene sì. ${onlyPalette?'Salvano solo le palette dei rig.':'Per ora salvano tutto il <b>look dei rig</b> (anche dimmer, kick e audio di adesso): prepara prima quelli.'} Una ✓ = esiste già, viene ricatturata${onlyPalette?' (e portata alla sola categoria Palette se era fatta con il look dei rig)':''}.</p>
       <div class="scn-cats sp-pals">${pals.map(p=>`<label class="chk"><input type="checkbox" class="sp-pal" value="${esc(p)}"> ${esc(p)}${have.has(paletteSceneId(p))?' ✓':''}</label>`).join('')}</div>
       <p class="hint">Rig da colorare:</p>
       <div class="scn-cats">${rigs.map(p=>`<label class="chk"><input type="checkbox" class="sp-rig" value="${esc(p.n)}" checked> ${esc(p.label||p.n)}</label>`).join('')}</div>

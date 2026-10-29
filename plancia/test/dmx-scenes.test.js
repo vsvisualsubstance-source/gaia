@@ -33,6 +33,7 @@ test('scene kind from categories: colour, heads, strobe, complete, mixed', () =>
   assert.equal(k(['palette']), 'color');          // categoria solo palette, se TD la aggiunge
   assert.equal(k(['heads']), 'heads');
   assert.equal(k(['strobe']), 'strobe');
+  assert.equal(k(['rigs', 'palette']), 'color');   // il vecchio look completo dei rig (nota TD 52)
   assert.equal(k(['rigs', 'heads']), 'full');
   assert.equal(k(['rigs', 'heads', 'groups', 'audio', 'strobe']), 'full');
   assert.equal(k(['groups', 'strobe']), 'mixed');

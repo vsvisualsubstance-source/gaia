@@ -17,11 +17,17 @@ const TD = require('./fixtures/td-dmx-win.json');
       for(const[t,m]of Object.entries(td))T.gIn(t,JSON.parse(JSON.stringify(m)));
       const d=T.G.devices['td-dmx-win'];d.ts=Date.now();d.services={...(d.services||{}),show_active:'active'};
       for(const k of Object.keys(d.params))if(/^dmx_.+_palette$/.test(k))d.params[k]='Neon Party';
-      // cattura: TD aggiunge (o riscrive) la scena nel catalogo e ripubblica
-      setInterval(()=>{const q=d.params.show_scene_capture;if(!q)return;delete d.params.show_scene_capture;
-        const cat=d.params.show_scene_catalog=(d.params.show_scene_catalog||[]).filter(s=>s.id!==q.name);
-        cat.push({id:q.name,index:cat.length,label:q.label||q.name,categories:q.categories,cues:[],
-          palettes:Object.fromEntries(Object.entries(d.params).filter(([k])=>/_palette$/.test(k)))});d.ts=Date.now()},100);
+      // una pal_warm vecchia, fatta con il look dei rig e usata in una cue
+      d.params.show_scene_catalog=[...(d.params.show_scene_catalog||[]).filter(s=>s.id!=='pal_warm'),
+        {id:'pal_warm',index:99,label:'Warm',categories:['rigs','palette'],cues:[2]}];
+      // come TD (nota 52): la cattura riscrive i valori ma su una scena che
+      // esiste lascia le categorie; show_scene_update le cambia
+      setInterval(()=>{const cat=d.params.show_scene_catalog;
+        const u=d.params.show_scene_update;if(u){delete d.params.show_scene_update;const s=cat.find(x=>x.id===u.name);if(s)s.categories=u.categories;d.ts=Date.now()}
+        const q=d.params.show_scene_capture;if(!q)return;delete d.params.show_scene_capture;
+        const old=cat.find(s=>s.id===q.name),pal=Object.fromEntries(Object.entries(d.params).filter(([k])=>/_palette$/.test(k)));
+        if(old)Object.assign(old,{palettes:pal});else cat.push({id:q.name,index:cat.length,label:q.label||q.name,categories:q.categories,cues:[],palettes:pal});
+        d.ts=Date.now()},100);
       window.confirm=()=>true;return T.G.sim})()`);
     const rigs = await p.ev(`Object.keys(window.__planciaTest.G.devices['td-dmx-win'].params).filter(k=>/^dmx_.+_palette$/.test(k))`);
     assert.ok(rigs.length >= 2, 'nessuna palette dei rig nei dati di DMX Master');
@@ -40,11 +46,12 @@ const TD = require('./fixtures/td-dmx-win.json');
       return{cat:d.params.show_scene_catalog.filter(s=>/^pal_/.test(s.id)),pal:Object.fromEntries(Object.entries(d.params).filter(([k])=>/^dmx_.+_palette$/.test(k))),active:d.services.show_active}})()`);
     const warm = r.cat.find(s => s.id === 'pal_warm'), fire = r.cat.find(s => s.id === 'pal_fire');
     assert.ok(warm && fire, 'scene palette non create: ' + JSON.stringify(r.cat.map(s => s.id)));
-    assert.deepEqual(warm.categories, ['rigs']);
+    assert.deepEqual(warm.categories, ['palette'], 'pal_warm vecchia non portata alla sola categoria palette');
+    assert.deepEqual(fire.categories, ['palette']);
     assert.ok(rigs.every(k => warm.palettes[k] === 'Warm' && fire.palettes[k] === 'Fire'), 'la scena non ha fotografato la sua palette su tutti i rig');
     assert.ok(Object.values(r.pal).every(v => v === 'Neon Party'), 'palette di prima non rimesse: ' + JSON.stringify(r.pal));
     assert.equal(r.active, 'active', 'timeline non riaccesa');
-    console.log('ok     pal_warm e pal_fire catturate con la loro palette, palette e timeline rimesse come prima');
+    console.log('ok     pal_warm (vecchia, con rigs) e pal_fire catturate solo palette, palette e timeline rimesse come prima');
 
     // menu della cue: gruppi per tipo, le palette in "Colore"
     const groups = await p.ev(`(()=>{const d=document.createElement('div');d.innerHTML=window.__planciaTest.cueSceneFields('@pal_warm',0);
