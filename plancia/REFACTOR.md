@@ -79,7 +79,7 @@ Problemi concreti visti lavorandoci:
    anche `const`. Restano a livello di modulo solo dichiarazioni, listener e
    timer (verificato modulo per modulo). Un test impedisce di tornare indietro.
    Caratterizzazione identica, smoke 13/0.
-2. **Registro dei widget** — IN CORSO. `src/05-widget-registry.js`:
+2. **Registro dei widget** — FATTO. `src/05-widget-registry.js`:
    `registerWidget(type, {size, label, showsValue, showsAddr, inner,
    onPointer, tick, help})`; i cinque punti di smistamento (DEF/NAMES,
    interno/valore/indirizzo, tocco, loop, aiuto) consultano prima il registro,
@@ -186,3 +186,115 @@ Problemi concreti visti lavorandoci:
 Per tornare in `gaia`: quando un passo e' stabile e provato dal vivo con
 `run_dev.bat`, si riporta in `gaia/plancia` (stesso albero di file) con un
 commit normale, e si prova sulla Plancia in esercizio fuori dagli show.
+
+---
+
+# Fase 2: sincronizzazione del layout (dopo BASE, dal 2026-11-01)
+
+Da una revisione del 2026-10-29, dopo il lampeggio di timeline e Render dello
+stesso giorno. Il refactor della fase 1 ha sistemato la struttura del codice;
+la fragilita' che resta e' **come i client si scambiano il layout**.
+
+## Il problema, misurato
+
+- Ogni fine gesto chiama `save()` (`startDrag` in `42-control-widgets.js`;
+  `save()` e' chiamato in circa 90 punti). `save()` -> `store.set` ->
+  `sharedStateChanged()` (`00-core-state.js`) manda **tutto** lo stato
+  condiviso (layout + progetti + `projectData`, circa 740 KB in
+  `data/state.json`) dopo 200 ms.
+- `bridge.js` (`saveSharedState`) lo salva e lo rimanda intero a tutti i
+  client (`shared_update`); `acceptSharedState()` (`00`) fa `render()`
+  completo: tutti i widget ricostruiti, canvas del Render e timeline compresi.
+- Conseguenze:
+  1. ogni fader rilasciato su un tablet ricostruisce tutte le pagine degli
+     altri; un tocco in corso altrove si puo' interrompere;
+  2. l'ultimo salvataggio vince sul documento intero: due operatori su
+     pagine diverse si sovrascrivono;
+  3. dati derivati da TD salvati nel layout (`headValues`/`items` dei
+     selettori teste) fanno rimbalzare il layout tra due pagine che non sono
+     d'accordo (lampeggio del 2026-10-29: una pagina con 5 teste, TD ne
+     pubblicava 6). Caso chiuso da `7deb040` (un layout ricevuto non si
+     risalva; solo una pagina collegata a MQTT scrive le teste), la classe
+     di problemi no.
+- Fino alla fase 2, regola d'uso: **una sola pagina da cui si tocca**; le
+  altre solo per guardare; dopo ogni aggiornamento ricaricare tutte le
+  pagine; durante lo show nessuna istanza di prova (8092) aperta.
+
+## Regole (come la fase 1)
+
+Passi piccoli, `npm run check` verde a ogni commit, protocolli OSC/MQTT,
+`show_timeline`, catena `uiRev` e formato di `data/state.json` invariati (o
+con migrazione). Ogni passo provato prima con `run_dev.bat` e **due tablet
+veri**, mai messo in esercizio nei giorni di show.
+
+## Passi
+
+1. **Niente ricostruzione completa per un layout ricevuto** (1-2 giorni).
+   In `acceptSharedState()` confrontare la struttura nuova con quella in uso:
+   pagine, e per ogni widget `id`, `type`, `x/y/w/h`, `addr`, `mode`,
+   `oscChannel`, `label`, piu' `fixtures` e `stage`. Se e' uguale e cambiano
+   solo i valori (`value`, `valueY`, `selectedHeads`…): copiarli sugli
+   oggetti esistenti e chiamare `paint` dal registro (`widgetType(t).paint`),
+   niente `render()`. `render()` solo se cambia la struttura.
+   - Test: estendere `test/shared-loop.js` con un secondo client che cambia
+     il valore di un fader; un `MutationObserver` su `#stage` deve contare
+     zero widget ricostruiti e il fader deve mostrare il valore nuovo. Un
+     secondo caso cambia la posizione di un widget: li' il render serve.
+   - Sonda per verificare dal vivo: lo script del 2026-10-29 che apre la
+     Plancia vera in Edge senza schermo e conta i widget ricostruiti per
+     secondo (`MutationObserver` sui figli di `#stage`); da mettere in
+     `test/` come `npm run probe`.
+2. **Il bridge segnala le tempeste di scritture.** In `saveSharedState`:
+   contare i salvataggi per client; oltre ~3/s per 5 s, o contenuto che
+   alterna tra due versioni, scrivere nel log IP del client e revisioni.
+   Nessun rifiuto all'inizio, solo diagnosi (oggi per trovarlo e' servito
+   uno script).
+3. **Salute e sorveglianza.** `GET /health` nel bridge: revisione, client
+   collegati (IP), ultimo OSC in ingresso, ponte `/mqtt` aperti, stato delle
+   tracce VIDEO/LASER. Poi la Plancia gestita dall'agent come servizio
+   (riavvio se cade) invece della sola attivita' pianificata all'accesso
+   (`GAIA-OPS-Plancia`); attenzione a non usare kill per nome di processo.
+4. **Dati derivati da TD fuori dal layout.** I selettori delle teste
+   (`syncHeadSelectors` in `70-gaia-mqtt.js`) ricavano l'elenco da
+   `tdHeadEntries()` al disegno; nel layout resta solo la scelta
+   dell'utente (`selectedHeads`). Migrazione `uiRev` 8 che toglie
+   `headValues`/`items` salvati. Cercare altri casi simili (dati di TD
+   copiati nei widget e salvati).
+5. **Valori separati dalla struttura nel protocollo** (settimane). Nuovo
+   messaggio WebSocket `{type:'values', changes:[{id, value, valueY,
+   selectedHeads}]}`: piccolo, frequente, applicato dal bridge allo stato
+   persistito e rimandato agli altri; `shared_state` resta per la
+   struttura e diventa raro. Il bridge serve il codice a tutte le pagine,
+   quindi niente versioni miste (ricaricare comunque tutto dopo
+   l'aggiornamento). Toglie il punto 1 della lista del problema e riduce
+   molto il 2.
+6. **Rete ammessa, configurabile.** Elenco di reti (LAN, hotspot
+   `192.168.137.0/24`, Tailscale `100.64.0.0/10`) per WebSocket, `/mqtt` e
+   `shared_state`; facoltativo un token nell'URL per i tablet. Spento di
+   default.
+7. **Bridge in moduli testati in Node**: archivio dello stato condiviso
+   (revisioni, tempeste), relay OSC, ponte MQTT, salute; test di
+   concorrenza dei salvataggi, oggi assenti.
+8. **`// @ts-check` + JSDoc** su `00`, `05`, `06`, `49`, `63`, controllati
+   con `tsc --noEmit` solo in sviluppo (niente compilazione a runtime).
+9. **Comportamenti per indirizzo dentro il registro**: i 14 controlli sul
+   tipo rimasti (regole speciali di `scenes` per `/dmx/scene`,
+   `/mh/position`, `/led/*`, in `30`, `61`, `70`, `90`) diventano modi
+   espliciti, con migrazione `uiRev`.
+
+Solo se servira': revisione per pagina (chi modifica una pagina non
+sovrascrive le altre); moduli ES per cartella; decidere se la timeline
+locale della Plancia resta "solo prova senza TD" o si toglie.
+
+## Da non fare
+
+- Riscritture (Rust, Tauri, framework): i client sono tablet con un
+  browser e i rischi sono di protocollo e di modello dello stato, non di
+  linguaggio.
+- Cambiare contratti OSC/MQTT, `show_timeline`, la catena `uiRev` (si
+  aggiunge, non si toglie) o il formato di `data/state.json` senza
+  migrazione.
+- TypeScript compilato, bundler, CDN: la Plancia deve funzionare offline e
+  partire con `node build-app.js && node bridge.js`.
+- Spostare l'esecuzione della timeline dello show fuori da TD; togliere la
+  simulazione (serve a prove e test).
