@@ -20,11 +20,17 @@ if(!GC.profiles[GC.profile])GC.profile='casa';
 // stessa sul proprio IP di LAN (WSL mirrored, porte pubblicate da Docker: broker
 // 19001, Node-RED 1881), quindi la pagina restava in "simulazione" e ogni 10 s
 // chiedeva a DMX Master l'uscita OSC (2026-10-28). Da localhost: localhost.
+// Plancia aperta da un ALTRO indirizzo di OPS (hotspot di Windows 192.168.137.1,
+// Tailscale): da li' l'IP di LAN puo' non essere raggiungibile, quindi i servizi
+// di OPS si cercano allo stesso indirizzo da cui e' arrivata la pagina (il bridge
+// della Plancia gira solo su OPS). Dalla LAN (.240) tutto invariato.
 const OPS_LAN_IP='192.168.1.240';
-const pageIsLocal=()=>['localhost','127.0.0.1','::1','[::1]'].includes(location.hostname);
-function netLocalize(n,local=pageIsLocal()){
-  if(!local)return n;
-  const o={...n};for(const k of['broker','nodered','admin'])if(o[k]===OPS_LAN_IP)o[k]='localhost';
+const LOCAL_HOSTS=['localhost','127.0.0.1','::1','[::1]'];
+function netLocalize(n,host=location.hostname){
+  if(!host||host===OPS_LAN_IP)return n;
+  const local=LOCAL_HOSTS.includes(host),o={...n};
+  for(const k of local?['broker','nodered','admin']:['broker','nodered','admin','osc','video'])
+    if(o[k]===OPS_LAN_IP)o[k]=local?'localhost':host;
   return o;
 }
 const net=()=>netLocalize(GC.profiles[GC.profile]||NET_DEFAULT.casa);

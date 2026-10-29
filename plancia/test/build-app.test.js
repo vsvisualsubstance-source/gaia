@@ -43,14 +43,29 @@ test('missing source modules fail the build explicitly', () => {
 test('Plancia opened on OPS itself talks to localhost (no hairpin on its own LAN IP)', () => {
   const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'src', '70-gaia-mqtt.js'), 'utf8');
   const fn = src.slice(src.indexOf('function netLocalize'), src.indexOf('const net=()'));
-  const netLocalize = new Function('OPS_LAN_IP', 'pageIsLocal', fn + 'return netLocalize;')('192.168.1.240', () => false);
-  const ops = { broker: '192.168.1.240', nodered: '192.168.1.240', admin: '192.168.1.240', video: '192.168.1.240', osc: '192.168.1.240' };
-  const local = netLocalize(ops, true);
+  const netLocalize = new Function('OPS_LAN_IP', 'LOCAL_HOSTS', 'location', fn + 'return netLocalize;')(
+    '192.168.1.240', ['localhost', '127.0.0.1', '::1', '[::1]'], { hostname: '192.168.1.240' });
+  const ops = { broker: '192.168.1.240', wsPort: 19001, nodered: '192.168.1.240', admin: '192.168.1.240', video: '192.168.1.240', osc: '192.168.1.240' };
+  const local = netLocalize(ops, 'localhost');
   assert.equal(local.broker, 'localhost');
   assert.equal(local.nodered, 'localhost');
   assert.equal(local.video, '192.168.1.240');   // servizi Windows: l'IP di LAN funziona
-  assert.equal(netLocalize(ops, false).broker, '192.168.1.240');   // tablet in rete: invariato
-  assert.equal(netLocalize({ broker: '192.168.1.142' }, true).broker, '192.168.1.142');
+  assert.deepEqual(netLocalize(ops, '192.168.1.240'), ops);   // tablet in rete: invariato
+  assert.deepEqual(netLocalize(ops), ops);                    // default: l'indirizzo della pagina
+  assert.equal(netLocalize({ broker: '192.168.1.142' }, 'localhost').broker, '192.168.1.142');
+});
+
+test('Plancia opened from another OPS address (Windows hotspot, Tailscale) finds the services there', () => {
+  const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'src', '70-gaia-mqtt.js'), 'utf8');
+  const fn = src.slice(src.indexOf('function netLocalize'), src.indexOf('const net=()'));
+  const netLocalize = new Function('OPS_LAN_IP', 'LOCAL_HOSTS', 'location', fn + 'return netLocalize;')(
+    '192.168.1.240', ['localhost', '127.0.0.1', '::1', '[::1]'], { hostname: '192.168.1.240' });
+  const ops = { broker: '192.168.1.240', wsPort: 19001, nodered: '192.168.1.240', admin: '192.168.1.240', video: '192.168.1.240', osc: '192.168.1.240' };
+  assert.deepEqual(netLocalize(ops, '192.168.137.1'),
+    { broker: '192.168.137.1', wsPort: 19001, nodered: '192.168.137.1', admin: '192.168.137.1', video: '192.168.137.1', osc: '192.168.137.1' });
+  assert.equal(netLocalize(ops, '100.91.251.83').broker, '100.91.251.83');
+  // profilo Casa: il broker non e' OPS e resta quello scritto
+  assert.equal(netLocalize({ broker: '192.168.1.142', nodered: '192.168.1.240' }, '192.168.137.1').broker, '192.168.1.142');
 });
 
 test('the app starts only from the last module, after every module has been evaluated', () => {
