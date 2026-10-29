@@ -60,7 +60,15 @@ function tdHeadEntries(){
     return entries.find(h=>h.aliases.includes(token)||h.id===token);
   }).filter(Boolean);
 }
-function syncHeadSelectors(){
+// Selettori delle teste <- elenco delle teste di DMX Master. Il risultato sta nel
+// layout CONDIVISO: lo scrive solo una pagina collegata a MQTT (in simulazione o
+// scollegata avrebbe dati vecchi), e solo quando arrivano dati da TD (persist).
+// Dal render() dopo un layout ricevuto dal server si aggiorna e basta: se due
+// pagine non erano d'accordo, salvando ogni volta si rimbalzavano il layout
+// all'infinito e ogni pagina si ricostruiva una volta al secondo (lampeggio di
+// timeline e Render, 2026-10-29).
+function syncHeadSelectors({persist=true}={}){
+  if(!G.ok)return;
   const entries=tdHeadEntries();if(!entries.length)return;
   for(const w of allW()){
     if(w.type!=='scenes'||w.mode!=='head-select'||w.addr!=='/mh/select/heads')continue;
@@ -76,7 +84,7 @@ function syncHeadSelectors(){
     w.selectedHeads=w.headValues.filter(id=>selected.has(id));
     w.value=w.headValues.map(id=>selected.has(id)?1:0);
     if(before!==JSON.stringify([w.headValues,w.items,w.value,w.selectedHeads])){
-      save();
+      if(persist)save();
       if(page().widgets.includes(w))refresh(w);
     }
   }

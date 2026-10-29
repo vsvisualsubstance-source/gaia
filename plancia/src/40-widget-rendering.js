@@ -56,7 +56,7 @@ function render(){oscIndexStale();document.body.classList.toggle('editing',editi
   $('#editBtn').textContent=editing?'Fine griglia':'Modifica griglia';
   $('#editBtn').title=editing?'Termina la modifica della griglia dei widget. Le fixture del palco si modificano direttamente nella Pianta.':'Modifica solo la griglia dei widget; per spostare o aggiungere luci usa direttamente la Pianta.';
   $('#editBtn').classList.toggle('primary',editing);
-  renderTabs();renderStage();renderInsp();syncHeadSelectors()}
+  renderTabs();renderStage();renderInsp();syncHeadSelectors({persist:false})}
 
 /* ---------- invio OSC ---------- */
 // argomenti OSC: quelli dichiarati dal tipo (registro), altrimenti il valore nel suo range
