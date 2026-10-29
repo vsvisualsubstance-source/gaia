@@ -158,7 +158,9 @@ let midiOut = null, midiOutName = null;
 try {
   const easymidi = require('easymidi');
   const outs = easymidi.getOutputs();
-  const name = process.env.MIDI_OUT || outs[0];
+  // mai il sintetizzatore di Windows come predefinito: suonerebbe dagli
+  // altoparlanti di OPS (MIDI_OUT="Microsoft GS Wavetable Synth" se lo si vuole)
+  const name = process.env.MIDI_OUT || outs.find(n => !/GS Wavetable/i.test(n));
   if (name) { midiOut = new easymidi.Output(name); midiOutName = name; }
 } catch { /* easymidi non installato: MIDI disattivato */ }
 
@@ -273,7 +275,10 @@ function onMidi(m, port) {
   const acts = r.hits.filter(h => midiIn.ACTIONS.includes(h));
   if (acts.length) console.log(`MIDI ${acts.join(', ').toUpperCase()} da "${port}"`);
 }
-const midiPorts = midiIn.startMidiIn({ onMessage: onMidi, onPorts: inputs => broadcast({ type: 'midi_ports', inputs }), exclude: [midiOutName] });
+// nessuna esclusione automatica: un controller (es. APC40) ha lo stesso nome in
+// ingresso e in uscita, e la Plancia non rimanda in MIDI cio' che arriva dal MIDI
+// (niente anelli). Con una porta virtuale di loopback limitare con MIDI_IN.
+const midiPorts = midiIn.startMidiIn({ onMessage: onMidi, onPorts: inputs => broadcast({ type: 'midi_ports', inputs }) });
 
 wss.on('connection', ws => {
   ws.send(hello());

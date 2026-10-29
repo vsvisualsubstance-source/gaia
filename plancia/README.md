@@ -75,8 +75,8 @@ I test nel browser usano Edge o Chrome senza schermo, un bridge di prova su una 
 | `PORT` | `8080` | porta della pagina e del WebSocket |
 | `OSC_HOST` / `OSC_PORT` | `192.168.1.73` / `7020` | destinazione OSC predefinita, oggi DMX Master (modificabile anche dall'interfaccia) |
 | `OSC_IN` | `9000` | porta UDP su cui il bridge riceve OSC per aggiornare i controlli |
-| `MIDI_OUT` | prima porta disponibile | nome della porta MIDI in uscita |
-| `MIDI_IN` | tutte | porte MIDI in ingresso: vuota = tutte tranne quella di `MIDI_OUT`, `off` = nessuna, oppure nomi (anche parziali) separati da virgola |
+| `MIDI_OUT` | prima porta che non sia il sintetizzatore GS di Windows | nome della porta MIDI in uscita (CC dei widget); il sintetizzatore di Windows suonerebbe dagli altoparlanti |
+| `MIDI_IN` | tutte | porte MIDI in ingresso: vuota = tutte, `off` = nessuna, oppure nomi (anche parziali) separati da virgola. Con una porta virtuale di loopback usata anche come `MIDI_OUT`, limitarla qui |
 | `PATCHDECK_ID` | `td-pd-pc-win` | PatchDeck comandato dalla traccia VIDEO (`video-timeline.js`) |
 | `LASER_ID` | `laser-ops` | laser gateway comandato dalla traccia LASER (`laser-timeline.js`) |
 | `SHOW_CLOCK_TOPIC` | `gaia/show/clock/state` | orologio dello show seguito dalle tracce VIDEO e LASER (cambiarlo solo per le prove) |

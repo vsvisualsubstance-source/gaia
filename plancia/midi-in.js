@@ -14,9 +14,9 @@
 //     panic = /dmx/blackout 1 a DMX Master + blackout del laser gateway
 //     go/back = gaia/show/clock/command (come i pulsanti della timeline)
 //
-// Porte: MIDI_IN non impostata = tutte (tranne la porta di MIDI_OUT, per non
-// rientrare da soli); "off" = nessuna; altrimenti nomi (anche parziali)
-// separati da virgola. Le porte collegate dopo si aprono da sole (controllo
+// Porte: MIDI_IN non impostata = tutte; "off" = nessuna; altrimenti nomi
+// (anche parziali) separati da virgola. Con una porta virtuale di loopback
+// (loopMIDI usata anche come MIDI_OUT) limitare MIDI_IN per non rientrare. Le porte collegate dopo si aprono da sole (controllo
 // ogni 3 s), quelle scollegate si chiudono.
 
 const ACTIONS = ['panic', 'go', 'back'];
