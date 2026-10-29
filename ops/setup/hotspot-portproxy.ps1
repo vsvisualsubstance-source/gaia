@@ -30,12 +30,13 @@ if ($Remove) { 'Inoltri e regola tolti.'; netsh interface portproxy show v4tov4;
 if (-not (Get-NetIPAddress -IPAddress $HotspotIp -ErrorAction SilentlyContinue)) {
   Write-Warning "$HotspotIp non c'e': accendi l'hotspot di Windows e rilancia lo script."
 }
-Set-Service iphlpsvc -StartupType Automatic   # il servizio che fa gli inoltri
+# il servizio che fa gli inoltri; netsh li applica subito. Niente Restart-Service:
+# altri servizi dipendono da iphlpsvc e forzarlo li fermerebbe tutti.
+Set-Service iphlpsvc -StartupType Automatic
 Start-Service iphlpsvc
 foreach ($p in $Ports) {
   netsh interface portproxy add v4tov4 listenaddress=$HotspotIp listenport=$p connectaddress=127.0.0.1 connectport=$p | Out-Null
 }
-Restart-Service iphlpsvc   # rilegge gli inoltri (serve se l'hotspot e' nato dopo il servizio)
 New-NetFirewallRule -DisplayName $RuleName -Direction Inbound -Protocol TCP -LocalPort $Ports `
   -LocalAddress $HotspotIp -RemoteAddress 192.168.137.0/24 -Action Allow -Profile Any | Out-Null
 
