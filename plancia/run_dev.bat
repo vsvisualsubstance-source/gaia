@@ -4,8 +4,7 @@ rem Porte e dati separati; timeline video/laser verso device inesistenti.
 rem OSC: all'avvio verso nessuno (127.0.0.1:7029), MA appena una pagina si collega il
 rem bridge prende il bersaglio dalle sue Connessioni: con DMX Master impostato li',
 rem la 8092 comanda TD davvero come la Plancia vera.
-rem Variabili da PowerShell: $env:OSC_HOST="192.168.1.73"; .
-un_dev.bat  (set non basta)
+rem Variabili da PowerShell: $env:OSC_HOST="192.168.1.73"; .\run_dev.bat  (set non basta)
 rem ATTENZIONE: il broker MQTT e' quello vero: i comandi Gaia/DMX/laser dai widget MQTT arrivano davvero.
 rem Per una prova del tutto isolata apri la pagina con ?broker=0.0.0.0 (resta in simulazione).
 cd /d "%~dp0"
