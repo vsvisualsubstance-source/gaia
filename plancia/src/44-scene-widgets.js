@@ -35,7 +35,7 @@ registerWidget('scenes',{oscAddress:w=>!['dmx-enum','head-presets'].includes(w.m
   }},
   size:[4,3],label:'Scene',showsValue:false,refreshOnResize:true,
   showsAddr:w=>w.mode!=='dmx-enum',
-  inner(w){      if(w.mode==='dmx-enum')return '<div class="sc"></div>';
+  inner(w){      if(w.mode==='dmx-enum')return '<div class="sc"></div><span class="simtag livetag" title="Palette dal vivo: cambia subito il colore del rig ma non va nella timeline. Per metterla in una cue: ＋ Scene… → Scene dalle palette.">DAL VIVO</span>';
       if(w.mode==='head-presets')return `<div class="hp">${(w.headPresets||[]).map((p,i)=>`<button data-head-preset="${i}" title="${esc(p.name)}">${esc(p.name)}</button>`).join('')}<button data-act="manage-presets">＋ Gestisci</button></div>`;
       // /dmx/scene con DMX Master: le scene vere di TD (catalogo), senza i
       // colori dei LOOKS locali, che con TD non corrispondono a niente

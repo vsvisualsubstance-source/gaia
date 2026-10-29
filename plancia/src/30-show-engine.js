@@ -101,8 +101,11 @@ function cueSceneFields(targets,i){
   let{scene,fade}=cueSplitTargets(targets);const td=tdScenes();
   // vecchia cue per numero: con TD si converte al nome della scena
   if(td.length&&/^\d+$/.test(scene)){const sc=td.find(x=>x.index===+scene-1);if(sc)scene='@'+sc.id}
-  const list=td.length?td.map(x=>({v:'@'+x.id,t:`${String(x.index+1).padStart(2,'0')} · ${x.label||x.id}`})):LOOKS.map((l,k)=>({v:String(k+1),t:`${String(k+1).padStart(2,'0')} · ${l.n} (simulazione)`}));
-  const opts=['<option value="">— marker, nessuna scena —</option>',...list.map(o=>`<option value="${esc(o.v)}"${o.v===scene?' selected':''}>${esc(o.t)}</option>`)];
+  const list=td.length?td.map(x=>({v:'@'+x.id,t:`${String(x.index+1).padStart(2,'0')} · ${x.label||x.id}`,k:sceneKind(x.categories).id})):LOOKS.map((l,k)=>({v:String(k+1),t:`${String(k+1).padStart(2,'0')} · ${l.n} (simulazione)`}));
+  const opt=o=>`<option value="${esc(o.v)}"${o.v===scene?' selected':''}>${esc(o.t)}</option>`;
+  // con DMX Master: gruppi per tipo di scena (le scene si sommano a strati)
+  const opts=['<option value="">— marker, nessuna scena —</option>',...(td.length?SCENE_KINDS.map(k=>{const g=list.filter(o=>o.k===k.id);
+    return g.length?`<optgroup label="${esc(k.group)}">${g.map(opt).join('')}</optgroup>`:''}):list.map(opt))];
   if(scene&&!list.some(o=>o.v===scene))opts.push(`<option value="${esc(scene)}" selected>scena ${esc(scene.replace(/^@/,''))} (non esiste)</option>`);
   return`<label>Scena<span class="cue-scene-wrap"><span class="cue-sw" style="background:${cueSceneSwatch(scene)}"></span><select class="cue-scene" aria-label="Scena cue ${i+1}">${opts.join('')}</select></span></label>
     <label>Fade (s)<input class="cue-fade" type="number" min="0" step="0.1" inputmode="decimal" value="${esc(fade)}" placeholder="2" aria-label="Fade cue ${i+1}"></label>`;
@@ -119,7 +122,7 @@ function renderCueEditor(w,cues,meta={}){
     <label>Nome<input class="cue-name" value="${esc(c.name)}" aria-label="Nome cue ${i+1}"></label>
     ${cueSceneFields(c.targets,i)}
     <div class="row"><button class="btn sm" data-cue-move="-1" aria-label="Sposta cue ${i+1} su"${i===0?' disabled':''}>↑</button><button class="btn sm" data-cue-move="1" aria-label="Sposta cue ${i+1} giù"${i===cues.length-1?' disabled':''}>↓</button><button class="btn sm danger" data-cue-delete="${i}" aria-label="Elimina cue ${i+1}">×</button></div>
-    <details class="cue-adv"${cueSplitTargets(c.targets).extra?' open':''}><summary>Avanzate · parametri DMX V8 (solo Plancia)</summary><input class="cue-extra mono" value="${esc(cueSplitTargets(c.targets).extra)}" placeholder="dmx_a_palette=Warm; dmx_b_palette=Cool" aria-label="Parametri DMX cue ${i+1}"></details>
+    <details class="cue-adv"${cueSplitTargets(c.targets).extra?' open':''}><summary>Avanzate · parametri DMX V8 (solo timeline locale: non vanno a DMX Master)</summary><input class="cue-extra mono" value="${esc(cueSplitTargets(c.targets).extra)}" placeholder="dmx_a_palette=Warm; dmx_b_palette=Cool" aria-label="Parametri DMX cue ${i+1}"></details>
   </div>`).join('');
   s.innerHTML=`<div class="sheet" role="dialog" aria-label="Editor timeline">
     <div class="top"><h3>Timeline · ${esc(w.label)}</h3><button class="btn ghost" id="cueClose">Chiudi</button></div>

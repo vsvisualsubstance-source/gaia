@@ -401,6 +401,8 @@ button{cursor:pointer}
 .scn-new h4{margin:0;font-family:var(--display);letter-spacing:.08em;text-transform:uppercase;font-size:13px}
 .si.si-manage{border-style:dashed;color:var(--accent);background:transparent}
 .simtag{position:absolute;top:6px;right:8px;font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--accent);border:1px solid var(--accent);border-radius:4px;padding:1px 5px;z-index:3}
+.livetag{color:var(--dim);border-color:currentColor}
+.sp-pals .chk{min-width:9em}
 .tl-live{height:28px;padding:0 10px;border-radius:5px;border:1px solid var(--line2);background:var(--panel2);font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--dim)}
 /* classi di stato is-*: .tl e' gia' il contenitore della timeline (absolute, inset 0) */
 .tl-live.is-tl{border-color:var(--ok);color:var(--ok)}

@@ -20,7 +20,8 @@ registerWidget('timeline',{addrLabel:'Indirizzo base OSC',
       const step=[5,10,15,30,60,120,300].find(s=>D/s<=12)||600; let ticks='';
       for(let t=0;t<D;t+=step)ticks+=`<span style="left:${t/D*100}%">${Math.floor(t/60)}:${String(t%60).padStart(2,'0')}</span>`;
       const blocks=cues.map((c,i)=>{const e=(cues[i+1]?.t??D);const col=c.sceneId?tdSceneLook(tdScenes().find(s=>s.id===c.sceneId)).ic||w.color:c.scene!=null&&LOOKS[c.scene]?lookHex(c.scene):w.color;
-        const target=[c.sceneId?c.sceneId:c.scene!=null?'SC '+(c.scene+1):'',c.params?.length?'DMX '+c.params.length:''].filter(Boolean).join(' · ');
+        const sc=c.sceneId?tdScenes().find(s=>s.id===c.sceneId):null;
+        const target=[sc?sceneKind(sc.categories).label:'',c.sceneId?c.sceneId:c.scene!=null?'SC '+(c.scene+1):'',c.params?.length?'DMX '+c.params.length:''].filter(Boolean).join(' · ');
         return `<div class="tl-blk" data-k="${i}" style="left:${c.t/D*100}%;width:${(e-c.t)/D*100}%;--ic:${col}"><span><i>${i+1}</i>${esc(c.name)}</span><em>${target}</em></div>`}).join('');
       return `<div class="tl${isShowTimeline(w)?' tl-tracks':''}" data-duration="${D}"><div class="tl-head"><span class="tl-name">${esc(w.label)}</span>
         <div class="tl-tr"><button data-act="start" aria-label="Inizio"${locked?' disabled':''}>${ICON.start}</button><button data-act="play" aria-label="Play/pausa"${locked?' disabled':''}>${ICON.play}</button><button data-act="stop" aria-label="Stop"${locked?' disabled':''}>${ICON.stop}</button><button data-act="loop" aria-label="Loop"${controlled?' disabled':''}>${ICON.loop}</button>${w.readonly?'':'<button data-act="edit-cues" aria-label="Modifica cue">CUE</button>'}</div>

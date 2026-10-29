@@ -23,6 +23,30 @@ function validateSceneName(name,existing=[],self=null){
 }
 // riassunto per la riga dell'editor: etichette delle categorie attive
 const sceneCategoryText=(cats,list=SCENE_CATEGORIES)=>(cats||[]).map(id=>list.find(c=>c.id===id)?.label||id).join(' · ')||'nessuna categoria';
+// Tipo di una scena dalle sue categorie, per raggrupparle nel menu delle cue
+// e marcarle sulla traccia LUCI: le scene si sommano a strati, quindi conta
+// sapere se una cue cambia il colore, le teste o lo strobo.
+const SCENE_KINDS=[
+  {id:'full',label:'Completa',group:'Complete (tutto il look)'},
+  {id:'color',label:'Colore',group:'Colore (palette e look dei rig)'},
+  {id:'heads',label:'Teste',group:'Teste mobili'},
+  {id:'strobe',label:'Strobo',group:'Strobo'},
+  {id:'groups',label:'Accensioni',group:'Accensioni gruppi'},
+  {id:'audio',label:'Audio',group:'Sorgente audio'},
+  {id:'mixed',label:'Mista',group:'Miste'}];
+function sceneKind(categories){
+  const c=[...new Set(categories||[])],one={rigs:'color',palette:'color',heads:'heads',strobe:'strobe',groups:'groups',audio:'audio'};
+  let id='mixed';
+  if(c.length>=3||(c.includes('heads')&&c.some(x=>x==='rigs'||x==='palette')))id='full';
+  else if(c.length&&c.every(x=>x==='rigs'||x==='palette'))id='color';
+  else if(c.length===1&&one[c[0]])id=one[c[0]];
+  return SCENE_KINDS.find(k=>k.id===id);
+}
+// Scena "template" di una palette (Warm -> pal_warm): stesso nome per tutti i rig
+function paletteSceneId(palette){
+  const s=String(palette||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
+  return('pal_'+(s||'x')).slice(0,32);
+}
 
 // Comando di scena verso TD e attesa dell'esito: done() vero sul nuovo
 // stato pubblicato, oppure un last_error nuovo = rifiutato.
@@ -42,6 +66,53 @@ function tdSceneCommand(param,value,done,timeoutMs=6000){
   });
 }
 const tdSceneById=id=>tdScenes().find(s=>s.id===id)||null;
+// palette dei rig pubblicate da DMX Master: [{n:'dmx_a_palette',label,options}]
+const tdPaletteParams=()=>enumParams('td-dmx-win').filter(p=>/^dmx_.+_palette$/.test(p.n));
+// Attesa su TD come tdSceneCommand, per piu' comandi gia' inviati
+function tdWait(done,timeoutMs=8000){
+  const dev=()=>G.devices['td-dmx-win']||{},err0=dev().last_error,t0=Date.now();
+  return new Promise((resolve,reject)=>{
+    const check=()=>{
+      const err=dev().last_error;
+      if(err&&err!==err0)return reject(new Error(err));
+      if(done())return resolve();
+      if(Date.now()-t0>timeoutMs)return reject(new Error('Nessuna conferma da DMX Master entro '+Math.round(timeoutMs/1000)+' s.'));
+      setTimeout(check,300);
+    };
+    check();
+  });
+}
+// Una scena "colore" per ogni palette: imposta la palette sui rig scelti,
+// cattura pal_<nome>, e alla fine rimette le palette di prima. Con la
+// timeline attiva (show_active) la spegne durante la composizione, come si
+// fa per catturare a mano, e poi la riaccende. Le luci cambiano dal vivo.
+async function buildPaletteScenes(palettes,rigParams,onStep=()=>{}){
+  const set=async values=>{
+    for(const[p,v]of Object.entries(values))
+      if(v!=null&&tdParams()[p]!==v&&!devCmd('td-dmx-win',{action:'set',param:p,value:v}))throw new Error('Non collegata a Gaia: apri ⋯ → Gaia e collegati prima.');
+    await tdWait(()=>Object.entries(values).every(([p,v])=>v==null||tdParams()[p]===v));
+  };
+  const before=Object.fromEntries(rigParams.map(p=>[p,tdParams()[p]]));
+  const wasActive=tdShowActive()===true;
+  // categoria solo palette se TD la offre, altrimenti tutto il look dei rig
+  const categories=sceneCategoriesFrom(G.dxm['td-dmx-win']).some(c=>c.id==='palette')?['palette']:['rigs'];
+  try{
+    if(wasActive){
+      if(!devCmd('td-dmx-win',{action:'disable',service:'show_active'}))throw new Error('Non collegata a Gaia.');
+      await tdWait(()=>tdShowActive()===false);
+    }
+    for(let i=0;i<palettes.length;i++){
+      const pal=palettes[i],id=paletteSceneId(pal);onStep(i,pal);
+      await set(Object.fromEntries(rigParams.map(p=>[p,pal])));
+      const pub=()=>`${G.devices['td-dmx-win']?.ts}|${JSON.stringify(tdSceneById(id))}`,b=pub();
+      await tdSceneCommand('show_scene_capture',{name:id,label:pal,categories},()=>!!tdSceneById(id)&&pub()!==b);
+    }
+  }finally{
+    try{await set(before)}catch{}
+    if(wasActive)devCmd('td-dmx-win',{action:'enable',service:'show_active'});
+  }
+  return categories;
+}
 
 function openSceneEditor(){
   const cats=sceneCategoriesFrom(G.dxm['td-dmx-win']),scenes=tdScenes(),active=tdActiveScene(tdParams())?.index;
@@ -74,6 +145,7 @@ function openSceneEditor(){
       <div class="scn-cats">${checks(cats.map(c=>c.id),'sn-cat')}</div>
       <div class="row"><button class="btn primary" id="snCapture">📷 Cattura scena</button></div>
     </div>
+    ${paletteScenesSection(scenes)}
   </div>`;
   const ids=scenes.map(x=>x.id);
   const fail=e=>showError('Scene: '+e.message);
@@ -86,6 +158,17 @@ function openSceneEditor(){
     if(!categories.length){showError('Nuova scena: scegli almeno una categoria.');return}
     try{await tdSceneCommand('show_scene_capture',{name,...(label?{label}:{}),categories},()=>!!tdSceneById(name));
       reopen();showInfo(`Scena "${name}" catturata (${sceneCategoryText(categories,cats)}).`)}catch(e){fail(e)}
+  };
+  const spBuild=s.querySelector('#spBuild');
+  if(spBuild)spBuild.onclick=async()=>{
+    const pals=[...s.querySelectorAll('.sp-pal:checked')].map(x=>x.value),rigs=[...s.querySelectorAll('.sp-rig:checked')].map(x=>x.value);
+    if(!pals.length){showError('Scene dalle palette: scegli almeno una palette.');return}
+    if(!rigs.length){showError('Scene dalle palette: scegli almeno un rig.');return}
+    if(!confirm(`Creare ${pals.length} scen${pals.length>1?'e':'a'} colore (${pals.map(paletteSceneId).join(', ')})?\nLe luci cambiano dal vivo per qualche secondo per ogni palette: non farlo durante lo show.`))return;
+    const prog=s.querySelector('#spProg');spBuild.disabled=true;
+    try{const cats=await buildPaletteScenes(pals,rigs,(i,p)=>{if(prog)prog.textContent=`${i+1}/${pals.length} · ${p}…`});
+      reopen();showInfo(`${pals.length} scen${pals.length>1?'e':'a'} palette pronte (${sceneCategoryText(cats,SCENE_CATEGORIES)}): sceglile nelle cue, gruppo Colore.`)}
+    catch(e){spBuild.disabled=false;if(prog)prog.textContent='';fail(e)}
   };
   s.querySelectorAll('.scn-row').forEach(row=>{
     const id=row.dataset.scene,sc=tdSceneById(id);
@@ -117,6 +200,21 @@ function openSceneEditor(){
   });
 }
 
+// sezione "Scene dalle palette" dell'editor scene
+function paletteScenesSection(scenes){
+  const rigs=tdPaletteParams();if(!rigs.length)return'';
+  const pals=[...new Set(rigs.flatMap(p=>p.options.map(String)))].filter(p=>!/^custom$/i.test(p));
+  const have=new Set(scenes.map(x=>x.id)),onlyPalette=sceneCategoriesFrom(G.dxm['td-dmx-win']).some(c=>c.id==='palette');
+  return`<div class="scn-new scn-pal">
+      <h4>Scene dalle palette</h4>
+      <p class="hint">Una scena <b>colore</b> per ogni palette scelta (es. Warm → <span class="mono">pal_warm</span>), da mettere nelle cue come le altre: nel menu stanno nel gruppo <b>Colore</b>. Le palette dal vivo non vanno in timeline, le scene sì. ${onlyPalette?'Salvano solo le palette dei rig.':'Per ora salvano tutto il <b>look dei rig</b> (anche dimmer, kick e audio di adesso): prepara prima quelli.'} Una ✓ = esiste già, viene ricatturata.</p>
+      <div class="scn-cats sp-pals">${pals.map(p=>`<label class="chk"><input type="checkbox" class="sp-pal" value="${esc(p)}"> ${esc(p)}${have.has(paletteSceneId(p))?' ✓':''}</label>`).join('')}</div>
+      <p class="hint">Rig da colorare:</p>
+      <div class="scn-cats">${rigs.map(p=>`<label class="chk"><input type="checkbox" class="sp-rig" value="${esc(p.n)}" checked> ${esc(p.label||p.n)}</label>`).join('')}</div>
+      <div class="row"><button class="btn primary" id="spBuild">🎨 Crea scene palette</button><span class="hint" id="spProg"></span></div>
+    </div>`;
+}
+
 if(typeof module==='object'&&module.exports){
-  module.exports={SCENE_CATEGORIES,sceneCategoriesFrom,validateSceneName,sceneCategoryText};
+  module.exports={SCENE_CATEGORIES,sceneCategoriesFrom,validateSceneName,sceneCategoryText,SCENE_KINDS,sceneKind,paletteSceneId};
 }
