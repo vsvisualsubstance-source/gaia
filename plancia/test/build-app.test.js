@@ -61,9 +61,11 @@ test('Plancia opened from another OPS address (Windows hotspot, Tailscale) finds
   const netLocalize = new Function('OPS_LAN_IP', 'LOCAL_HOSTS', 'location', fn + 'return netLocalize;')(
     '192.168.1.240', ['localhost', '127.0.0.1', '::1', '[::1]'], { hostname: '192.168.1.240' });
   const ops = { broker: '192.168.1.240', wsPort: 19001, nodered: '192.168.1.240', admin: '192.168.1.240', video: '192.168.1.240', osc: '192.168.1.240' };
-  assert.deepEqual(netLocalize(ops, '192.168.137.1'),
-    { broker: '192.168.137.1', wsPort: 19001, nodered: '192.168.137.1', admin: '192.168.137.1', video: '192.168.137.1', osc: '192.168.137.1' });
-  assert.equal(netLocalize(ops, '100.91.251.83').broker, '100.91.251.83');
+  // broker attraverso il bridge della Plancia (stessa porta della pagina, /mqtt)
+  assert.deepEqual(netLocalize(ops, '192.168.137.1', '8080'),
+    { broker: '192.168.137.1', wsPort: 8080, wsPath: '/mqtt', nodered: '192.168.137.1', admin: '192.168.137.1', video: '192.168.137.1', osc: '192.168.137.1' });
+  assert.equal(netLocalize(ops, '100.91.251.83', '8092').wsPort, 8092);
+  assert.equal(netLocalize(ops, 'localhost', '8080').wsPort, 19001);   // su OPS: broker diretto
   // profilo Casa: il broker non e' OPS e resta quello scritto
   assert.equal(netLocalize({ broker: '192.168.1.142', nodered: '192.168.1.240' }, '192.168.137.1').broker, '192.168.1.142');
 });

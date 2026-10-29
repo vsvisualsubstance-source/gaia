@@ -26,9 +26,12 @@ if(!GC.profiles[GC.profile])GC.profile='casa';
 // della Plancia gira solo su OPS). Dalla LAN (.240) tutto invariato.
 const OPS_LAN_IP='192.168.1.240';
 const LOCAL_HOSTS=['localhost','127.0.0.1','::1','[::1]'];
-function netLocalize(n,host=location.hostname){
+// Il broker in Docker pero' non si vede da li': passa dal bridge della Plancia,
+// stessa porta della pagina, percorso /mqtt (bridge.js, proxyMqtt).
+function netLocalize(n,host=location.hostname,port=location.port){
   if(!host||host===OPS_LAN_IP)return n;
   const local=LOCAL_HOSTS.includes(host),o={...n};
+  if(!local&&o.broker===OPS_LAN_IP){o.wsPort=+port||80;o.wsPath='/mqtt'}
   for(const k of local?['broker','nodered','admin']:['broker','nodered','admin','osc','video'])
     if(o[k]===OPS_LAN_IP)o[k]=local?'localhost':host;
   return o;
@@ -125,7 +128,7 @@ function gConnect(host){
   try{G.client&&G.client.end(true)}catch{}
   G.client=null;G.host=host;G.ok=false;gStatus();
   if(!GC.on||!window.mqtt)return;
-  let c;try{c=mqtt.connect(`ws://${host}:${net().wsPort}`,{connectTimeout:4000,reconnectPeriod:3000})}catch{G.offSince=G.offSince??Date.now();return}
+  let c;try{c=mqtt.connect(`ws://${host}:${net().wsPort}${host===net().broker?net().wsPath||'':''}`,{connectTimeout:4000,reconnectPeriod:3000})}catch{G.offSince=G.offSince??Date.now();return}
   G.client=c;
   c.on('connect',()=>{G.ok=true;G.offSince=null;if(G.sim)gSimOff();gStatus();
     mqttTopics().forEach(t=>c.subscribe(t))});   // i topic dichiarati con onMqtt (06-message-bus.js)

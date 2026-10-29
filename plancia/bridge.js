@@ -13,6 +13,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const dgram = require('dgram');
+const net = require('net');
 const { WebSocketServer } = require('ws');
 const stageAI = require('./stage-ai');
 const { createLibrary } = require('./fixture-lib');
@@ -212,7 +213,30 @@ const server = http.createServer((req, res) => {
     fs.createReadStream(path.join(__dirname, 'vendor', 'mqtt.min.js')).pipe(res);
   } else { res.writeHead(404); res.end(); }
 });
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({ noServer: true });
+// /mqtt: ponte verso il broker MQTT WebSocket di OPS (Docker, 127.0.0.1:19001).
+// Serve alle pagine aperte da un indirizzo di OPS dove le porte di Docker non si
+// vedono (hotspot di Windows 192.168.137.1, Tailscale): la 8080 si', quindi
+// passano da qui (70-gaia-mqtt.js, netLocalize). Si inoltra la richiesta cosi'
+// com'e' e poi i byte nei due sensi.
+const MQTT_WS = { host: process.env.MQTT_WS_HOST || '127.0.0.1', port: +process.env.MQTT_WS_PORT || 19001 };
+const CRLF = '\r\n';
+function proxyMqtt(req, sock, head) {
+  const up = net.connect(MQTT_WS.port, MQTT_WS.host);
+  const end = () => { sock.destroy(); up.destroy(); };
+  up.on('error', end); sock.on('error', end); up.on('close', end); sock.on('close', end);
+  up.on('connect', () => {
+    const lines = [`${req.method} / HTTP/1.1`];
+    for (let i = 0; i < req.rawHeaders.length; i += 2) lines.push(`${req.rawHeaders[i]}: ${req.rawHeaders[i + 1]}`);
+    up.write(lines.join(CRLF) + CRLF + CRLF);
+    if (head && head.length) up.write(head);
+    sock.pipe(up).pipe(sock);
+  });
+}
+server.on('upgrade', (req, sock, head) => {
+  if (req.url === '/mqtt' || req.url.startsWith('/mqtt?')) return proxyMqtt(req, sock, head);
+  wss.handleUpgrade(req, sock, head, ws => wss.emit('connection', ws, req));
+});
 const udp = dgram.createSocket({ type: 'udp4', reuseAddr: true });
 
 const hello = () => JSON.stringify({ type: 'hello', target, gaia: gaiaOsc, channels: [...oscChannels].map(([id, endpoint]) => ({ id, ...endpoint })), listen: OSC_IN, midi: midiOut ? midiOut.name || true : false, sharedState: persistedState, sharedRevision: persistedRevision });
