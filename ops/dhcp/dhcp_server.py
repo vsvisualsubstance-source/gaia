@@ -177,6 +177,7 @@ def parse_packet(data):
         "flags": data[10:12],
         "chaddr": data[28:28 + hlen],
         "hlen": hlen,
+        "ciaddr": data[12:16],
         "giaddr": data[24:28],
         "options": options,
     }
@@ -234,6 +235,34 @@ def _pick_dynamic_ip(mac, reservations, leases):
         ip = str(ipaddress.ip_address(n))
         if ip not in taken:
             return ip
+    return None
+
+
+def answer(msg_type, req, mac, reservations, leases):
+    """Cosa rispondere: (MSG_OFFER|MSG_ACK|MSG_NAK, ip) o None.
+
+    REQUEST per un IP diverso da quello che gli spetta (rinnovo del vecchio
+    lease, o la prenotazione e' cambiata) -> NAK, come vuole la RFC 2131: il
+    client ricomincia da DISCOVER e prende quello giusto. Prima si
+    rispondeva ACK con l'IP nuovo e Windows lo scartava restando sul vecchio
+    (touring 2026-10-30: clone di .73 rimasto su .50 dopo la prenotazione)."""
+    if mac in reservations:
+        ip = reservations[mac]
+    elif msg_type in (MSG_DISCOVER, MSG_REQUEST):
+        ip = _pick_dynamic_ip(mac, reservations, leases)
+        if not ip:
+            return None
+    else:
+        return None
+    if msg_type == MSG_DISCOVER:
+        return MSG_OFFER, ip
+    if msg_type == MSG_REQUEST:
+        wanted = req["options"].get(50)
+        if not wanted and req.get("ciaddr", b"\x00" * 4) != b"\x00" * 4:
+            wanted = req["ciaddr"]
+        if wanted and len(wanted) == 4 and socket.inet_ntoa(wanted) != ip:
+            return MSG_NAK, socket.inet_ntoa(wanted)
+        return MSG_ACK, ip
     return None
 
 
@@ -343,25 +372,29 @@ def main():
                 sock.close()
                 raise ForeignServerDetected(socket.inet_ntoa(server_id))
 
-        if mac in reservations:
-            ip = reservations[mac]
-        elif msg_type in (MSG_DISCOVER, MSG_REQUEST):
-            ip = _pick_dynamic_ip(mac, reservations, leases)
-            if not ip:
+        res = answer(msg_type, req, mac, reservations, leases)
+        if not res:
+            if msg_type in (MSG_DISCOVER, MSG_REQUEST):
                 _log(f"pool DHCP esaurito, nessun IP per {mac}")
-                continue
-        else:
             continue
+        kind, ip = res
 
-        if msg_type == MSG_DISCOVER:
+        if kind == MSG_OFFER:
             reply = build_reply(req, MSG_OFFER, ip, _standard_options())
             sock.sendto(reply, ("255.255.255.255", DHCP_CLIENT_PORT))
             _log(f"OFFER {ip} -> {mac}")
-        elif msg_type == MSG_REQUEST:
+        elif kind == MSG_NAK:
+            reply = build_reply(req, MSG_NAK, "0.0.0.0", [])
+            sock.sendto(reply, ("255.255.255.255", DHCP_CLIENT_PORT))
+            _log(f"NAK {ip} -> {mac} (non e' il suo indirizzo: ricomincia)")
+        elif kind == MSG_ACK:
             reply = build_reply(req, MSG_ACK, ip, _standard_options())
             sock.sendto(reply, ("255.255.255.255", DHCP_CLIENT_PORT))
             _log(f"ACK {ip} -> {mac}")
-            if mac not in reservations:
+            if mac in reservations:
+                if leases.pop(mac, None):   # vecchio lease dinamico: il pool torna libero
+                    _save_leases(leases)
+            else:
                 leases[mac] = {"ip": ip, "expiry": time.time() + LEASE_SECONDS}
                 _save_leases(leases)
 
