@@ -34,7 +34,8 @@ $sid = (New-Object Security.Principal.NTAccount($User)).Translate([Security.Prin
 $lan = 'GAIA-OPS-DHCP', 'GAIA-OPS-LAN-Activate'
 foreach ($f in Get-ChildItem (Join-Path $PSScriptRoot 'tasks') -Filter '*.xml') {
   $name = $f.BaseName
-  $xml = (Get-Content $f.FullName -Raw -Encoding UTF8).Replace('{USER_SID}', $sid)
+  # senza la dichiarazione encoding="UTF-8": a Register-ScheduledTask arriva una stringa UTF-16
+  $xml = (Get-Content $f.FullName -Raw -Encoding UTF8).Replace('{USER_SID}', $sid) -replace '^<\?xml[^>]*\?>\s*', ''
   Register-ScheduledTask -TaskName $name -Xml $xml -Force | Out-Null
   if ($SenzaLan -and $name -in $lan) {
     Disable-ScheduledTask -TaskName $name | Out-Null
@@ -62,6 +63,17 @@ foreach ($exe in 'python.exe', 'pythonw.exe') {
     Get-NetFirewallRule -DisplayName $name -ErrorAction SilentlyContinue | Remove-NetFirewallRule
     New-NetFirewallRule -DisplayName $name -Direction Inbound -Action Allow -Program $path -Profile Any | Out-Null
     "Firewall: $name"
+  }
+}
+
+# Senza schermo la richiesta "Consenti accesso" di Windows al primo avvio di
+# node/python non compare e Windows crea da solo regole di BLOCCO, che
+# vincono sulle regole qui sopra (touring 2026-10-30: Plancia irraggiungibile).
+foreach ($r in Get-NetFirewallRule -Direction Inbound -Action Block -ErrorAction SilentlyContinue) {
+  $prog = ($r | Get-NetFirewallApplicationFilter).Program
+  if ($prog -match '\\(node|python|pythonw)\.exe$') {
+    $r | Remove-NetFirewallRule
+    "Firewall: tolta regola di blocco '$($r.DisplayName)' ($prog)"
   }
 }
 
