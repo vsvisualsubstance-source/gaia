@@ -58,6 +58,7 @@ minipc/local_agent_config.json
 ops/agent/agent.lock
 ops/agent/agent_config.json
 ops/agent/agent.log
+ops/agent/services.local.json
 
 # ── Shared ────────────────────────────────────────────────────────────────────
 # Configurazioni locali con IP/credenziali

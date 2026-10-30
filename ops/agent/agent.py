@@ -135,6 +135,25 @@ MANIFEST_FILE = os.path.join(_DIR, "services.json")
 with open(MANIFEST_FILE, encoding="utf-8") as f:
     _manifest = json.load(f)
 
+# services.local.json (facoltativo, fuori da git, 2026-10-30): differenze di
+# QUESTA macchina rispetto al manifest versionato -- percorsi utente diversi
+# (touring: C:\Users\nicol invece di vsvis), .toe in altre cartelle, servizi
+# in piu'. Stesso formato di services.json: chiavi in cima sostituite, ogni
+# servizio fuso campo per campo ("cmd" si riscrive intero), null rimuove il
+# servizio. Senza il file non cambia nulla.
+MANIFEST_LOCAL_FILE = os.path.join(_DIR, "services.local.json")
+if os.path.exists(MANIFEST_LOCAL_FILE):
+    with open(MANIFEST_LOCAL_FILE, encoding="utf-8") as f:
+        _local = json.load(f)
+    for _k, _v in _local.items():
+        if _k != "services":
+            _manifest[_k] = _v
+    for _svc, _patch in _local.get("services", {}).items():
+        if _patch is None:
+            _manifest["services"].pop(_svc, None)
+        else:
+            _manifest["services"].setdefault(_svc, {}).update(_patch)
+
 MACHINE_ROLE     = _manifest.get("machine_role", "ops")
 _SERVICE_DEFS    = _manifest["services"]
 CAMERA_CONSUMERS = tuple(_manifest.get("camera_consumers", []))
