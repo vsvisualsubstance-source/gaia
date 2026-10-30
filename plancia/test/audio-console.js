@@ -76,6 +76,11 @@ async function main() {
       const back = await p.ev(`(()=>{const A=window.__planciaTest.AU.decks.A;return{cue:A.cue,pos:A.pos,hot:A.hot[1]}})()`);
       check(Math.abs(back.cue - cue) < 1e-3 && Math.abs(back.hot - 90.25) < 1e-3 && Math.abs(back.pos - back.cue) < 1e-6,
         `punti salvati con la traccia: ricaricata riparte dal cue ${back.cue.toFixed(3)}, hot cue 2 a ${back.hot?.toFixed(3)}`);
+      const jumps = await p.ev(`(()=>{const t=window.__planciaTest,A=t.AU.decks.A,r=[];
+        t.auCmd({cmd:'deck.jump',deck:'A',dir:1});r.push(A.pos);t.auCmd({cmd:'deck.jump',deck:'A',dir:-1});r.push(A.pos);
+        t.auCmd({cmd:'deck.jump',deck:'A',dir:-1});r.push(A.pos);return r})()`);
+      check(Math.abs(jumps[0] - 90.25) < 1e-3 && Math.abs(jumps[1] - back.cue) < 1e-3 && jumps[2] === 0,
+        `⏭ ⏮: cue -> hot cue ${jumps[0].toFixed(2)} -> cue ${jumps[1].toFixed(2)} -> inizio ${jumps[2]}`);
     }
     const shot = arg('--shot');
     if (shot) { await p.shot(path.resolve(shot)); console.log('screenshot: ' + path.resolve(shot)); }

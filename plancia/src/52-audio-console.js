@@ -95,6 +95,11 @@ function auCmd(c){
     case'deck.cue_up':if(d.preview){d.preview=false;d.playing=false;d.pos=d.cue}break;
     case'deck.scrub':if(d.track){d.scrub=!!c.active;d.pos=Math.max(0,Math.min(d.track.seconds,c.pos));if(!c.active&&d.playing&&d.sync)auSyncPhase(c.deck)}break;
     case'deck.zoom':d.zoom=c.value;break;
+    case'deck.jump':{if(!d.track)return;
+      // punto precedente/successivo: inizio traccia, cue, hot cue (a meno di 0,3 s indietro si salta a quello prima)
+      const pts=[0,d.cue,...d.hot.filter(t=>t!=null)].sort((a,b)=>a-b);
+      const t=c.dir<0?[...pts].reverse().find(t=>t<d.pos-.3)??0:pts.find(t=>t>d.pos+.05);
+      if(t!=null){d.pos=t;if(d.playing&&d.sync)auSyncPhase(c.deck)}break}
     case'deck.snap':d.snap=!d.snap;break;
     case'deck.seek':if(d.track)d.pos=Math.max(0,Math.min(d.track.seconds,c.pos));if(d.playing&&d.sync)auSyncPhase(c.deck);break;
     case'deck.hotcue':if(!d.track)return;
@@ -158,6 +163,7 @@ function auDeckHtml(w){
     <div class="au-bpm"><b></b><i></i></div></div>
   <canvas class="au-wave" data-au="wave" title="Trascina per spostare la traccia sotto la testina; rotella: scorri, Ctrl+rotella: zoom"></canvas><canvas class="au-over" data-au="seek"></canvas>
   <div class="au-time"><span class="el"></span><span class="st"></span>
+    <button class="au-btn sm" data-au="jump" data-v="-1" title="Punto precedente: hot cue, cue o inizio traccia">⏮</button><button class="au-btn sm" data-au="jump" data-v="1" title="Punto successivo: cue o hot cue">⏭</button>
     <button class="au-btn sm" data-au="snap" title="Acceso: cue e hot cue sul battito. Spento: dove metti la testina">SNAP</button>
     <button class="au-btn sm" data-au="zoom" data-v="-1" title="Zoom: piu' traccia">−</button><span class="zm"></span><button class="au-btn sm" data-au="zoom" data-v="1" title="Zoom: piu' preciso">+</button>
     <span class="rem"></span></div>
@@ -271,6 +277,7 @@ function auDown(e,el,w){
       up:()=>auCmd({cmd:'deck.scrub',deck:k,active:false,pos:AU.decks[k].pos})}}
   else if(a==='zoom'){const d=AU.decks[k],i=AU_ZOOMS.indexOf(d.zoom);auCmd({cmd:'deck.zoom',deck:k,value:AU_ZOOMS[Math.max(0,Math.min(AU_ZOOMS.length-1,(i<0?2:i)-(+b.dataset.v)))]})}
   else if(a==='snap')auCmd({cmd:'deck.snap',deck:k});
+  else if(a==='jump')auCmd({cmd:'deck.jump',deck:k,dir:+b.dataset.v});
   else if(a==='seek'){const d=AU.decks[k],r=b.getBoundingClientRect();if(d.track)auCmd({cmd:'deck.seek',deck:k,pos:(e.clientX-r.left)/r.width*d.track.seconds})}
   else if(a==='chcue'){const ch=b.dataset.ch;auCmd({cmd:'mix.set',ch,values:{cue:!AU.mix[ch].cue}})}
   else if(a==='load')auLoad(b.dataset.deck,b.dataset.id);
@@ -306,7 +313,7 @@ registerWidget('audiodeck',{size:[6,6],label:'Deck',showsValue:false,showsAddr:f
   inner:auDeckHtml,onPointer:auDown,tick:auTick(auPaintDeck),refreshOnResize:true,
   inspector:{html:()=>`<label>Deck<select id="auDeckSel"><option>A</option><option>B</option></select></label>`,
     bind:(w,{on,val})=>{val('#auDeckSel',w.deck||'A');on('#auDeckSel',v=>{w.deck=v},'change')}},
-  help:()=>['Deck','Forma d\'onda della traccia (basse blu, medie ambra, alte bianche) con la griglia dei battiti: linee forti = inizio battuta, rosse = griglia incerta. Trascina la forma d\'onda per portare il punto preciso sotto la testina (− + per lo zoom, rotella per scorrere), poi CUE o un hot cue lo salvano: con SNAP acceso sul battito, spento esattamente lì. La panoramica sotto: tocca per saltare. CUE: da fermo salva il punto (sul battito), tenuto lo fa sentire; in onda torna al cue. SYNC segue il tempo e la fase del MASTER. Il fader del tempo cambia il BPM (±8/16/50%), ‹‹ ›› tenuti spingono o frenano per rimettere a tempo a orecchio. Hot cue 1-4: tocca per salvare o saltare, tieni premuto per cancellare.']});
+  help:()=>['Deck','Forma d\'onda della traccia (basse blu, medie ambra, alte bianche) con la griglia dei battiti: linee forti = inizio battuta, rosse = griglia incerta. Trascina la forma d\'onda per portare il punto preciso sotto la testina (− + per lo zoom, rotella per scorrere), poi CUE o un hot cue lo salvano: con SNAP acceso sul battito, spento esattamente lì. ⏮ ⏭ portano al punto precedente o successivo (inizio traccia, cue, hot cue). La panoramica sotto: tocca per saltare. CUE: da fermo salva il punto (sul battito), tenuto lo fa sentire; in onda torna al cue. SYNC segue il tempo e la fase del MASTER. Il fader del tempo cambia il BPM (±8/16/50%), ‹‹ ›› tenuti spingono o frenano per rimettere a tempo a orecchio. Hot cue 1-4: tocca per salvare o saltare, tieni premuto per cancellare.']});
 registerWidget('audiomixer',{size:[4,6],label:'Mixer',showsValue:false,showsAddr:false,oscAddress:false,
   inner:auMixerHtml,onPointer:auDown,tick:auTick(auPaintMixer),
   help:()=>['Mixer','Per canale: gain, EQ alti/medi/bassi (tutto a sinistra = taglio), filtro (sinistra passa basso, destra passa alto), 🎧 preascolto in cuffia, fader di volume. Al centro master e mix della cuffia (cue ↔ master). Sotto il crossfader. Doppio tocco su un controllo: torna al centro.']});
