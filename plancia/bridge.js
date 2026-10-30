@@ -22,6 +22,7 @@ const PORT = +process.env.PORT || 8080;
 const OSC_IN = +process.env.OSC_IN || 9000;
 const STATE_FILE = process.env.PLANCIA_STATE_FILE || path.join(__dirname, 'data', 'state.json');
 const fixtureLib = createLibrary({ dir: path.join(path.dirname(STATE_FILE), 'fixture-lib') });
+const audioLib = require('./audio-lib');
 const STATIC_ASSETS = {
   '/app.js': { file: 'app.js', contentType: 'text/javascript; charset=utf-8' },
   '/plancia.css': { file: 'plancia.css', contentType: 'text/css; charset=utf-8' }
@@ -210,6 +211,12 @@ const server = http.createServer((req, res) => {
     const reply = (code, obj) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(obj)); };
     const job = u.pathname === '/api/fixture-lib' ? fixtureLib.search(q.get('q') || '', q.get('refresh') === '1') : fixtureLib.fixture(q.get('src') || '', q.get('id') || '').then(models => ({ models }));
     job.then(out => reply(200, { ok: true, ...out }), err => reply(502, { ok: false, error: err.message }));
+  } else if (req.url.split('?')[0] === '/api/audio/library' || req.url.split('?')[0] === '/api/audio/track') {
+    // Console Audio: tracce analizzate da gaia-audio (audio-lib.js)
+    const u = new URL(req.url, 'http://plancia'), q = u.searchParams;
+    const reply = (code, obj) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(obj)); };
+    const job = u.pathname === '/api/audio/library' ? audioLib.library(q.get('refresh') === '1').then(tracks => ({ tracks })) : audioLib.track(q.get('id') || '').then(track => ({ track }));
+    job.then(out => reply(200, { ok: true, ...out }), err => reply(404, { ok: false, error: err.message }));
   } else if (req.url.split('?')[0] === '/vendor/mqtt.min.js') {
     // stesso mqtt.js che usano le pagine web di Gaia: niente CDN, funziona anche senza internet
     res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'max-age=86400' });

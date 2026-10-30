@@ -241,6 +241,39 @@
     }
    ]
   },
+  "audiodeck": {
+   "label": "Deck",
+   "size": [
+    6,
+    6
+   ],
+   "args": [
+    -1
+   ],
+   "probes": []
+  },
+  "audiomixer": {
+   "label": "Mixer",
+   "size": [
+    4,
+    6
+   ],
+   "args": [
+    -1
+   ],
+   "probes": []
+  },
+  "audiolib": {
+   "label": "Libreria",
+   "size": [
+    16,
+    4
+   ],
+   "args": [
+    -1
+   ],
+   "probes": []
+  },
   "stage": {
    "label": "Palco",
    "size": [
@@ -2576,6 +2609,56 @@
        "/mix/master",
        "push",
        "Volume"
+      ]
+     ]
+    }
+   ]
+  },
+  "consoleaudio": {
+   "name": "Console Audio",
+   "pages": [
+    {
+     "name": "Console Audio",
+     "widgets": [
+      [
+       "audiodeck",
+       0,
+       0,
+       6,
+       6,
+       "",
+       "push",
+       "Deck A"
+      ],
+      [
+       "audiomixer",
+       6,
+       0,
+       4,
+       6,
+       "",
+       "push",
+       "Mixer"
+      ],
+      [
+       "audiodeck",
+       10,
+       0,
+       6,
+       6,
+       "",
+       "push",
+       "Deck B"
+      ],
+      [
+       "audiolib",
+       0,
+       6,
+       16,
+       4,
+       "",
+       "push",
+       "Libreria"
       ]
      ]
     }

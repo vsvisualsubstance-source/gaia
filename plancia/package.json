@@ -11,7 +11,7 @@
     "smoke": "node test/ui-smoke.js",
     "characterize": "node test/characterize.js",
     "perf": "node test/perf-ticks.js --mqtt",
-    "check": "npm test && node test/characterize.js && node test/ui-smoke.js && node test/laser-widget.js && node test/widget-registry.js && node test/inspector.js && node test/palette-scenes.js && node test/shared-loop.js && node test/midi-learn.js"
+    "check": "npm test && node test/characterize.js && node test/ui-smoke.js && node test/laser-widget.js && node test/widget-registry.js && node test/inspector.js && node test/palette-scenes.js && node test/shared-loop.js && node test/midi-learn.js && node test/audio-console.js"
   },
   "dependencies": {
     "mqtt": "^5.16.1",
