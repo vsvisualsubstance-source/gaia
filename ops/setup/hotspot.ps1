@@ -68,7 +68,9 @@ function Show {
   "nome: $($c.Ssid)  banda: $($c.Band)  password: $($c.Passphrase.Length) caratteri  condivide: $($conn.ProfileName)"
 }
 
-# mai spento da solo quando non ci sono client (registro di icssvc, come OPS)
+# mai spento da solo quando non ci sono client (registro di icssvc, come OPS).
+# icssvc lo legge solo quando parte: senza riavviarlo l'hotspot si spegneva
+# comunque dopo 5 minuti senza client (touring 2026-10-30).
 $key = 'HKLM:\SYSTEM\CurrentControlSet\Services\icssvc\Settings'
 if (-not (Test-Path $key)) { New-Item $key -Force | Out-Null }
 if ((Get-ItemProperty $key -ErrorAction SilentlyContinue).PeerlessTimeoutEnabled -ne 0) {
@@ -80,6 +82,11 @@ switch ($Azione) {
   'stato' { Show }
   'accendi' {
     if ($mgr.TetheringOperationalState -ne 'On') {
+      # hotspot spento: riavviare icssvc non toglie niente e gli fa rileggere il registro
+      if ((Get-Service icssvc).Status -eq 'Running') {
+        Restart-Service icssvc -Force
+        $mgr = [Windows.Networking.NetworkOperators.NetworkOperatorTetheringManager]::CreateFromConnectionProfile($conn)
+      }
       $r = Await ($mgr.StartTetheringAsync()) ([Windows.Networking.NetworkOperators.NetworkOperatorTetheringOperationResult])
       if ($r.Status -ne 'Success') { throw "Hotspot non acceso: $($r.Status) $($r.AdditionalErrorMessage)" }
     }
