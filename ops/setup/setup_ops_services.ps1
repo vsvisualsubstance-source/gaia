@@ -56,10 +56,14 @@ Rule 'Gaia Plancia TCP 8080'              TCP 8080  'Private,Public'
 Rule 'GAIA-VideoGateway-8788'             TCP 8788  Any
 Rule 'GAIA DHCP Server (UDP 67 in)'       UDP 67    Any
 # Python di sistema (OSC bridge, agent, video gateway: il venv avvia questo interprete)
-foreach ($exe in 'python.exe', 'pythonw.exe') {
-  $path = Join-Path ${env:ProgramFiles} "Python311\$exe"
+# e Node (Plancia). Una regola di permesso per il programma evita che Windows
+# chieda "Consenti accesso" su ogni rete nuova: senza schermo nessuno risponde
+# e Windows crea da solo regole di BLOCCO (touring 2026-10-30, due volte).
+foreach ($exe in 'Python311\python.exe', 'Python311\pythonw.exe', 'nodejs\node.exe') {
+  $path = Join-Path ${env:ProgramFiles} $exe
+  $exe = Split-Path $exe -Leaf
   if (Test-Path $path) {
-    $name = "GAIA Python ($exe)"
+    $name = "GAIA $exe"
     Get-NetFirewallRule -DisplayName $name -ErrorAction SilentlyContinue | Remove-NetFirewallRule
     New-NetFirewallRule -DisplayName $name -Direction Inbound -Action Allow -Program $path -Profile Any | Out-Null
     "Firewall: $name"
