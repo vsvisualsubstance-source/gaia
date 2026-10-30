@@ -7,8 +7,8 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const CACHE = process.env.AUDIO_CACHE || path.join(__dirname, '..', '..', 'audio-engine', 'cache');
-process.env.AUDIO_CACHE = CACHE;   // il bridge della prova gira in una copia della cartella
 const { startPlancia, sleep } = require('./browser-harness');
 
 const arg = (name, def) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : def; };
@@ -18,6 +18,10 @@ async function main() {
     console.log(`console audio: saltato (nessuna analisi in ${CACHE})`);
     return;
   }
+  // copia della cache: la prova salva cue e hot cue, mai sulle tracce vere
+  const tmpCache = fs.mkdtempSync(path.join(os.tmpdir(), 'plancia-audio-'));
+  for (const n of fs.readdirSync(CACHE)) if (n.endsWith('.json') && !n.endsWith('.cues.json')) fs.copyFileSync(path.join(CACHE, n), path.join(tmpCache, n));
+  process.env.AUDIO_CACHE = tmpCache;   // letto dal bridge della prova
   const p = await startPlancia({ hooks: true });
   const fail = [];
   const check = (ok, msg) => { console.log(`${ok ? 'ok    ' : 'ERRORE'} ${msg}`); if (!ok) fail.push(msg); };
@@ -65,11 +69,18 @@ async function main() {
       await p.ev(`(()=>{const t=window.__planciaTest;t.auCmd({cmd:'deck.cue_down',deck:'A'});t.auCmd({cmd:'deck.cue_up',deck:'A'});return 1})()`);
       const cue = await p.ev('window.__planciaTest.AU.decks.A.cue');
       check(Math.abs(cue - after) < 1e-6, `CUE con SNAP spento salvato esattamente li' (${cue.toFixed(3)} s)`);
+      // salvati con la traccia: hot cue 2 piu' avanti, poi si ricarica la traccia
+      await p.ev(`(()=>{const t=window.__planciaTest;t.auCmd({cmd:'deck.scrub',deck:'A',active:false,pos:90.25});t.auCmd({cmd:'deck.hotcue',deck:'A',n:1,op:'go'});return 1})()`);
+      await sleep(600);
+      await p.ev(`window.__planciaTest.auLoad('A','${pick[0]}').then(()=>1)`);
+      const back = await p.ev(`(()=>{const A=window.__planciaTest.AU.decks.A;return{cue:A.cue,pos:A.pos,hot:A.hot[1]}})()`);
+      check(Math.abs(back.cue - cue) < 1e-3 && Math.abs(back.hot - 90.25) < 1e-3 && Math.abs(back.pos - back.cue) < 1e-6,
+        `punti salvati con la traccia: ricaricata riparte dal cue ${back.cue.toFixed(3)}, hot cue 2 a ${back.hot?.toFixed(3)}`);
     }
     const shot = arg('--shot');
     if (shot) { await p.shot(path.resolve(shot)); console.log('screenshot: ' + path.resolve(shot)); }
     check(!p.problems.length, `nessun errore nella pagina${p.problems.length ? ': ' + p.problems.join('; ') : ''}`);
-  } finally { p.close(); }
+  } finally { p.close(); fs.rmSync(tmpCache, { recursive: true, force: true }); }
   process.exitCode = fail.length ? 1 : 0;
 }
 main().catch(e => { console.error('console audio: prova fallita:', e.message); process.exitCode = 2; });

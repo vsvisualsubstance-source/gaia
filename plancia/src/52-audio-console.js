@@ -8,9 +8,10 @@
 // Nessun suono nella pagina: l'audio esce solo dal motore, sull'impianto.
 const AU_WAVE_RATE=50;                 // punti/s della forma d'onda di dettaglio
 const AU_RANGES=[.08,.16,.5];          // escursione del fader del tempo
-const AU_HOT=4;                        // hot cue per deck
+const AU_HOT=4;                        // hot cue mostrati per deck
+const AU_HOT_SAVED=8;                  // hot cue salvati con la traccia (audio-lib.js)
 const auDeck=()=>({track:null,wave:null,overImg:null,pos:0,playing:false,tempo:0,range:.08,keylock:true,sync:false,
-  cue:0,hot:Array(AU_HOT).fill(null),nudge:0,preview:false,loading:false,zoom:8,snap:true,scrub:false});
+  cue:0,hot:Array(AU_HOT_SAVED).fill(null),nudge:0,preview:false,loading:false,zoom:8,snap:true,scrub:false});
 const AU_ZOOMS=[2,4,8,16,32];           // secondi visibili nella forma d'onda del deck
 const auCh=()=>({gain:1,hi:0,mid:0,lo:0,filter:0,fader:1,cue:false,meter:0});
 const AU={tracks:[],libState:'',live:false,last:0,master:'A',
@@ -30,10 +31,18 @@ async function auLoad(deck,id){
   d.loading=true;
   try{const r=await(await fetch('/api/audio/track?id='+encodeURIComponent(id))).json();if(!r.ok)throw new Error(r.error);
     const t=r.track;Object.assign(d,{track:t,wave:{detail:auB64(t.wave.detail_b64),overview:t.wave.overview},overImg:null,
-      pos:t.first_beat||0,cue:t.first_beat||0,hot:Array(AU_HOT).fill(null),playing:false,preview:false,nudge:0})}
+      pos:0,cue:t.first_beat||0,hot:Array(AU_HOT_SAVED).fill(null),playing:false,preview:false,nudge:0});
+    // punti salvati con la traccia: si riparte dal cue
+    if(t.cues){d.cue=t.cues.cue??d.cue;d.hot=Array.from({length:AU_HOT_SAVED},(_,i)=>t.cues.hot?.[i]??null)}
+    d.pos=d.cue}
   catch(e){showError('Console Audio: traccia non caricata ('+e.message+').')}
   d.loading=false;
 }
+
+// cue e hot cue salvati con la traccia (bridge -> <id>.cues.json): li ritrova chi la ricarica
+function auSaveCues(k){const d=AU.decks[k];if(!d.track)return;
+  fetch('/api/audio/cues?id='+encodeURIComponent(d.track.id),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({cue:d.cue,hot:d.hot})})
+    .then(r=>r.json()).then(r=>{if(!r.ok)throw new Error(r.error)}).catch(e=>showError('Console Audio: punti non salvati ('+e.message+').'))}
 
 /* ----- tempo, griglia, sync ----- */
 const auRate=d=>1+d.tempo*d.range+d.nudge;                     // velocita' di riproduzione
@@ -81,7 +90,7 @@ function auCmd(c){
       const cur=AU.decks[AU.master];if(d.playing&&!(AU.master!==c.deck&&cur.playing&&cur.track))AU.master=c.deck;break}
     case'deck.cue_down':if(!d.track)return;
       if(d.playing){d.playing=false;d.pos=d.cue}
-      else if(Math.abs(d.pos-d.cue)>.02)d.cue=auSnap(d,d.pos);
+      else if(Math.abs(d.pos-d.cue)>.02){d.cue=auSnap(d,d.pos);auSaveCues(c.deck)}
       else{d.preview=true;d.playing=true}break;
     case'deck.cue_up':if(d.preview){d.preview=false;d.playing=false;d.pos=d.cue}break;
     case'deck.scrub':if(d.track){d.scrub=!!c.active;d.pos=Math.max(0,Math.min(d.track.seconds,c.pos));if(!c.active&&d.playing&&d.sync)auSyncPhase(c.deck)}break;
@@ -89,8 +98,8 @@ function auCmd(c){
     case'deck.snap':d.snap=!d.snap;break;
     case'deck.seek':if(d.track)d.pos=Math.max(0,Math.min(d.track.seconds,c.pos));if(d.playing&&d.sync)auSyncPhase(c.deck);break;
     case'deck.hotcue':if(!d.track)return;
-      if(c.op==='clear')d.hot[c.n]=null;
-      else if(d.hot[c.n]==null)d.hot[c.n]=auSnap(d,d.pos);
+      if(c.op==='clear'){d.hot[c.n]=null;auSaveCues(c.deck)}
+      else if(d.hot[c.n]==null){d.hot[c.n]=auSnap(d,d.pos);auSaveCues(c.deck)}
       else{d.pos=d.hot[c.n];if(d.playing&&d.sync)auSyncPhase(c.deck)}break;
     case'deck.tempo':{d.tempo=Math.max(-1,Math.min(1,c.value));
       // deck in sync: il fader muove il master (come Traktor), il deck lo segue

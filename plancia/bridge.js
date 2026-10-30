@@ -211,6 +211,17 @@ const server = http.createServer((req, res) => {
     const reply = (code, obj) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(obj)); };
     const job = u.pathname === '/api/fixture-lib' ? fixtureLib.search(q.get('q') || '', q.get('refresh') === '1') : fixtureLib.fixture(q.get('src') || '', q.get('id') || '').then(models => ({ models }));
     job.then(out => reply(200, { ok: true, ...out }), err => reply(502, { ok: false, error: err.message }));
+  } else if (req.url.split('?')[0] === '/api/audio/cues' && req.method === 'POST') {
+    // Console Audio: cue e hot cue salvati con la traccia
+    const id = new URL(req.url, 'http://plancia').searchParams.get('id') || '';
+    let body = '';
+    req.on('data', c => { body += c; if (body.length > 4096) req.destroy(); });
+    req.on('end', () => {
+      const reply = (code, obj) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(obj)); };
+      let c = null;
+      try { c = JSON.parse(body); } catch { return reply(400, { ok: false, error: 'JSON non valido' }); }
+      audioLib.saveCues(id, c).then(cues => reply(200, { ok: true, cues }), err => reply(404, { ok: false, error: err.message }));
+    });
   } else if (req.url.split('?')[0] === '/api/audio/library' || req.url.split('?')[0] === '/api/audio/track') {
     // Console Audio: tracce analizzate da gaia-audio (audio-lib.js)
     const u = new URL(req.url, 'http://plancia'), q = u.searchParams;

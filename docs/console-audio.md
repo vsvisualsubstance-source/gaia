@@ -126,6 +126,11 @@ sulle altre uscite e lo segnala nello stato.
   punti/s con 3 bande per i colori), durata, guadagno per normalizzare.
   Cache in `audio-engine/cache/`.
 - Preferiti: restano in Node-RED (`/gaia/music/favorites`).
+- **Punti della traccia** (come la collezione di Traktor): cue e 8 hot cue
+  in `audio-engine/cache/<id>.cues.json` (`{cue, hot:[s|null ×8], updated}`),
+  separati dall'analisi cosi' una rianalisi non li tocca. Oggi li scrive il
+  bridge (`POST /api/audio/cues?id=`), il motore li leggera' dallo stesso
+  file. Una traccia caricata riparte dal suo cue.
 
 ### Analisi, sync e regolazioni a mano (come Traktor)
 

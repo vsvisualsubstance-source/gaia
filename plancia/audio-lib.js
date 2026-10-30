@@ -57,10 +57,30 @@ async function library(force) {
   return list;
 }
 
+const validId = id => { if (!/^[0-9a-f]{16}$/.test(id)) throw new Error('id non valido'); return id; };
+
 async function track(id) {
-  if (!/^[0-9a-f]{16}$/.test(id)) throw new Error('id non valido');
+  validId(id);
   const t = JSON.parse(await fs.promises.readFile(path.join(CACHE, id + '.json'), 'utf8'));
-  return { ...summary(t, id), wave: t.wave, wave_rate: 50 };
+  return { ...summary(t, id), wave: t.wave, wave_rate: 50, cues: await cues(id) };
 }
 
-module.exports = { CACHE, library, track, fromFilename };
+// Punti salvati con la traccia (come la collezione di Traktor): cue e hot cue
+// in <id>.cues.json accanto all'analisi, cosi' una nuova analisi non li tocca
+// e li legge anche il motore.
+const HOT = 8;
+async function cues(id) {
+  try { return JSON.parse(await fs.promises.readFile(path.join(CACHE, validId(id) + '.cues.json'), 'utf8')); } catch { return null; }
+}
+async function saveCues(id, c) {
+  validId(id);
+  await fs.promises.access(path.join(CACHE, id + '.json'));   // solo tracce analizzate
+  const num = v => (Number.isFinite(+v) && +v >= 0 ? Math.round(+v * 10000) / 10000 : null);
+  const clean = { cue: num(c?.cue) ?? 0, hot: Array.from({ length: HOT }, (_, i) => num(c?.hot?.[i])), updated: new Date().toISOString() };
+  const p = path.join(CACHE, id + '.cues.json');
+  await fs.promises.writeFile(p + '.tmp', JSON.stringify(clean));
+  await fs.promises.rename(p + '.tmp', p);
+  return clean;
+}
+
+module.exports = { CACHE, library, track, cues, saveCues, fromFilename };
