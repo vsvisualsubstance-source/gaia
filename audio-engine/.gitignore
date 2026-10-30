@@ -1,3 +1,4 @@
 # build di cargo (il binario si copia sulla touring, non va nel repo)
 /target
 /cache
+/cache-analyze.log

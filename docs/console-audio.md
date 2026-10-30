@@ -127,6 +127,37 @@ sulle altre uscite e lo segnala nello stato.
   Cache in `audio-engine/cache/`.
 - Preferiti: restano in Node-RED (`/gaia/music/favorites`).
 
+### Analisi, sync e regolazioni a mano (come Traktor)
+
+**Analisi** (fatta: `audio-engine/src/analysis.rs`, `library.rs`):
+- per traccia: BPM, griglia (BPM costante + ancora sul primo battito),
+  confidenza 0..1, forma d'onda (panoramica + 3 bande a 50 punti/s),
+  livello RMS e di picco;
+- su una traccia, su una o piu' cartelle, o su tutta la musica; in
+  parallelo, ~0,2 s a traccia; si rianalizza solo cio' che e' cambiato;
+- intervallo dei BPM come Traktor (default 88-175, `--range`): un brano
+  trovato a 64 diventa 128;
+- metodo: flusso spettrale con peso sulle basse, autocorrelazione con
+  armoniche, poi BPM fine e fase "piegando" l'inviluppo sul periodo; BPM
+  intero se ci si e' a meno di 0,03. Provato su click sintetici: BPM
+  esatto, fase entro 1 ms.
+
+**Sync** (fase 2 del motore):
+- ogni deck ha un **tempo master**: l'altro deck, il clock interno o
+  Ableton Link; un deck in sync segue il tempo del master (*tempo sync*) e
+  si allinea alla sua fase usando le griglie (*beat sync*);
+- il fader del tempo di un deck in sync muove il master (come Traktor);
+- senza griglia (confidenza bassa) il sync e' solo di tempo e la pagina
+  lo segnala.
+
+**Regolazioni a mano**:
+- deck: fader del tempo (±8/16/50%), nudge (spinta/freno finche' tenuto),
+  keylock;
+- griglia: BPM esatto, ×2 / ÷2, sposta ancora (ms), "il battito e' qui",
+  tap; ogni correzione **blocca** la griglia: un'analisi nuova non la
+  sovrascrive (`locked`). Da riga di comando:
+  `gaia-audio grid FILE --bpm 126 | --move 12 | --double | --anchor 0.42 | --unlock`.
+
 ## Protocollo pagina ↔ bridge ↔ motore
 
 JSON su WebSocket. La pagina manda `{"type":"audio", ...comando}` al
