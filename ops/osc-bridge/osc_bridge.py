@@ -269,7 +269,7 @@ class TDDeviceRegistry:
         self._mqtt.on_connect = self._on_connect
         self._mqtt.on_message = self._on_message
         self._mqtt.reconnect_delay_set(min_delay=2, max_delay=30)
-        self._mqtt.connect(config.MQTT_HOST, config.MQTT_PORT, keepalive=60)
+        self._mqtt.connect_async(config.MQTT_HOST, config.MQTT_PORT, keepalive=60)
         self._mqtt.loop_start()
         # Watchdog SEPARATO dal cook di TD apposta (2026-08-06, su richiesta
         # dopo che l'agent dentro TD si è bloccato due volte in produzione —
@@ -639,7 +639,7 @@ class GaiaCanvasToTouchDesigner:
         self._mqtt.on_connect = self._on_connect
         self._mqtt.on_message = self._on_message
         self._mqtt.reconnect_delay_set(min_delay=2, max_delay=30)
-        self._mqtt.connect(config.MQTT_HOST, config.MQTT_PORT, keepalive=60)
+        self._mqtt.connect_async(config.MQTT_HOST, config.MQTT_PORT, keepalive=60)
         self._mqtt.loop_start()
 
     def _on_connect(self, client, userdata, flags, rc, properties=None):
@@ -676,7 +676,7 @@ class TouchDesignerToGaia:
 
     def __init__(self):
         self._mqtt = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
-        self._mqtt.connect(config.MQTT_HOST, config.MQTT_PORT, keepalive=60)
+        self._mqtt.connect_async(config.MQTT_HOST, config.MQTT_PORT, keepalive=60)
         self._mqtt.loop_start()
 
     def _default_handler(self, address, *args):
