@@ -644,3 +644,6 @@ button{cursor:pointer}
 .au-load{display:flex;gap:4px}.au-load .au-btn{min-width:30px;min-height:28px;padding:2px 6px}
 .au-gr{font-size:11px;padding:1px 6px;border-radius:9px;border:1px solid}
 .au-gr.ok{color:var(--ok);border-color:#4fd18b55}.au-gr.bad{color:var(--bad);border-color:#ff5d5d55}
+.au-time{align-items:center;gap:6px}.au-time .st{flex:1;text-align:center}.au-time .zm{min-width:3em;text-align:center}
+.au-btn.sm{min-width:30px;min-height:26px;padding:1px 6px;font-size:12px}
+.au-wave{cursor:grab;touch-action:none}.au-wave:active{cursor:grabbing}

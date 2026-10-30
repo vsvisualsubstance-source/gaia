@@ -10,7 +10,8 @@ const AU_WAVE_RATE=50;                 // punti/s della forma d'onda di dettagli
 const AU_RANGES=[.08,.16,.5];          // escursione del fader del tempo
 const AU_HOT=4;                        // hot cue per deck
 const auDeck=()=>({track:null,wave:null,overImg:null,pos:0,playing:false,tempo:0,range:.08,keylock:true,sync:false,
-  cue:0,hot:Array(AU_HOT).fill(null),nudge:0,preview:false,loading:false});
+  cue:0,hot:Array(AU_HOT).fill(null),nudge:0,preview:false,loading:false,zoom:8,snap:true,scrub:false});
+const AU_ZOOMS=[2,4,8,16,32];           // secondi visibili nella forma d'onda del deck
 const auCh=()=>({gain:1,hi:0,mid:0,lo:0,filter:0,fader:1,cue:false,meter:0});
 const AU={tracks:[],libState:'',live:false,last:0,master:'A',
   decks:{A:auDeck(),B:auDeck()},mix:{A:auCh(),B:auCh(),xfader:0,master:.9,cue_mix:.5},
@@ -40,7 +41,7 @@ const auBpm=d=>(d.track?.bpm||0)*(1+d.tempo*d.range);           // BPM in uscita
 const auPeriod=d=>d.track?.bpm?60/d.track.bpm:0;                 // secondi di traccia per battito
 const auGridOk=d=>!!d.track?.bpm&&(d.track.locked||d.track.confidence>=.4);
 function auPhase(d){const p=auPeriod(d);return p?(((d.pos-d.track.first_beat)/p)%1+1)%1:0}
-function auSnap(d,t){const p=auPeriod(d);if(!p||!auGridOk(d))return t;const fb=d.track.first_beat;return fb+Math.round((t-fb)/p)*p}
+function auSnap(d,t){const p=auPeriod(d);if(!d.snap||!p||!auGridOk(d))return t;const fb=d.track.first_beat;return fb+Math.round((t-fb)/p)*p}
 function auOther(k){return k==='A'?'B':'A'}
 // il master del tempo: il deck scelto se suona, altrimenti l'altro che suona
 function auMasterOf(k){const m=AU.decks[AU.master];return AU.master!==k&&m.track&&m.playing?m:null}
@@ -62,7 +63,7 @@ function auStep(now){
   const dt=Math.min(.1,(now-(AU.last||now))/1000);AU.last=now;
   for(const k of['A','B']){const d=AU.decks[k],ch=AU.mix[k];
     if(d.sync)auSyncTempo(k);
-    if(d.playing&&d.track){d.pos+=dt*auRate(d);if(d.pos>=d.track.seconds){d.pos=d.track.seconds;d.playing=false}}
+    if(d.playing&&d.track&&!d.scrub){d.pos+=dt*auRate(d);if(d.pos>=d.track.seconds){d.pos=d.track.seconds;d.playing=false}}
     // livello dal dettaglio della forma d'onda, per i meter
     let lv=0;if(d.playing&&d.wave){const i=Math.floor(d.pos*AU_WAVE_RATE)*3,w=d.wave.detail;lv=Math.max(w[i]||0,w[i+1]||0,w[i+2]||0)/255}
     ch.meter=Math.max(lv*ch.gain*auXGain(k)*ch.fader,ch.meter*.86)}
@@ -83,6 +84,9 @@ function auCmd(c){
       else if(Math.abs(d.pos-d.cue)>.02)d.cue=auSnap(d,d.pos);
       else{d.preview=true;d.playing=true}break;
     case'deck.cue_up':if(d.preview){d.preview=false;d.playing=false;d.pos=d.cue}break;
+    case'deck.scrub':if(d.track){d.scrub=!!c.active;d.pos=Math.max(0,Math.min(d.track.seconds,c.pos));if(!c.active&&d.playing&&d.sync)auSyncPhase(c.deck)}break;
+    case'deck.zoom':d.zoom=c.value;break;
+    case'deck.snap':d.snap=!d.snap;break;
     case'deck.seek':if(d.track)d.pos=Math.max(0,Math.min(d.track.seconds,c.pos));if(d.playing&&d.sync)auSyncPhase(c.deck);break;
     case'deck.hotcue':if(!d.track)return;
       if(c.op==='clear')d.hot[c.n]=null;
@@ -103,6 +107,7 @@ function auCmd(c){
 }
 
 /* ----- disegno ----- */
+const auFmtFine=s=>{s=Math.max(0,s||0);return`${Math.floor(s/60)}:${(s%60).toFixed(2).padStart(5,'0')}`};
 const auFmt=s=>{s=Math.max(0,s||0);return`${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`};
 function auCanvas(cv){const r=cv.getBoundingClientRect(),dpr=devicePixelRatio||1,w=Math.round(r.width*dpr),h=Math.round(r.height*dpr);
   if(w&&h&&(cv.width!==w||cv.height!==h)){cv.width=w;cv.height=h}return cv.getContext('2d')}
@@ -110,7 +115,7 @@ function auCanvas(cv){const r=cv.getBoundingClientRect(),dpr=devicePixelRatio||1
 function auDrawWave(cv,d,col){
   const g=auCanvas(cv),W=cv.width,H=cv.height;if(!W)return;g.clearRect(0,0,W,H);
   if(!d.track||!d.wave){g.fillStyle='#868e9b';g.font=`${12*(devicePixelRatio||1)}px sans-serif`;g.fillText(d.loading?'carico…':'nessuna traccia',8,H/2);return}
-  const span=8,pps=W/span,t0=d.pos-span/2,det=d.wave.detail,mid=H/2;
+  const span=d.zoom,pps=W/span,t0=d.pos-span/2,det=d.wave.detail,mid=H/2;
   for(let x=0;x<W;x++){const i=Math.floor((t0+x/pps)*AU_WAVE_RATE);if(i<0||i*3>=det.length)continue;
     const l=det[i*3]/255,m=det[i*3+1]/255,h=det[i*3+2]/255,played=x<W/2;
     g.fillStyle=played?'#1d4f8a':'#2f7fdc';g.fillRect(x,mid-l*mid*.95,1,l*mid*1.9);
@@ -142,8 +147,11 @@ function auDeckHtml(w){
   return`<div class="au au-deck" data-deck="${k}">
   <div class="au-head"><b class="au-letter">${k}</b><div class="au-title"><span class="t"></span><span class="a"></span></div>
     <div class="au-bpm"><b></b><i></i></div></div>
-  <canvas class="au-wave"></canvas><canvas class="au-over" data-au="seek"></canvas>
-  <div class="au-time"><span class="el"></span><span class="st"></span><span class="rem"></span></div>
+  <canvas class="au-wave" data-au="wave" title="Trascina per spostare la traccia sotto la testina; rotella: scorri, Ctrl+rotella: zoom"></canvas><canvas class="au-over" data-au="seek"></canvas>
+  <div class="au-time"><span class="el"></span><span class="st"></span>
+    <button class="au-btn sm" data-au="snap" title="Acceso: cue e hot cue sul battito. Spento: dove metti la testina">SNAP</button>
+    <button class="au-btn sm" data-au="zoom" data-v="-1" title="Zoom: piu' traccia">−</button><span class="zm"></span><button class="au-btn sm" data-au="zoom" data-v="1" title="Zoom: piu' preciso">+</button>
+    <span class="rem"></span></div>
   <div class="au-ctl">
     <button class="au-btn cue" data-au="cue">CUE</button><button class="au-btn play" data-au="play">▶</button>
     <button class="au-btn" data-au="sync">SYNC</button><button class="au-btn" data-au="master">MASTER</button><button class="au-btn" data-au="keylock">KEY</button>
@@ -162,7 +170,8 @@ function auPaintDeck(el,w){
   set('.au-title .a',d.track?d.track.artist:'');
   set('.au-bpm b',d.track?.bpm?auBpm(d).toFixed(2):'—');
   set('.au-bpm i',`${d.tempo*d.range>=0?'+':''}${(d.tempo*d.range*100).toFixed(1)}%`);
-  set('.au-time .el',auFmt(d.pos));set('.au-time .rem','-'+auFmt((d.track?.seconds||0)-d.pos));
+  set('.au-time .el',d.playing?auFmt(d.pos):auFmtFine(d.pos));set('.au-time .zm',d.zoom+' s');
+  box.querySelector('[data-au=snap]')?.classList.toggle('on',d.snap);set('.au-time .rem','-'+auFmt((d.track?.seconds||0)-d.pos));
   set('.au-time .st',!d.track?'':!auGridOk(d)?'griglia incerta: sync solo tempo':d.sync&&!auMasterOf(k)?'sync: nessun master in onda':AU.live?'':'simulazione');
   const on=(sel,v)=>box.querySelector(sel)?.classList.toggle('on',!!v);
   on('[data-au=play]',d.playing);on('[data-au=sync]',d.sync);on('[data-au=master]',AU.master===k&&d.playing);on('[data-au=keylock]',d.keylock);
@@ -245,6 +254,14 @@ function auDown(e,el,w){
   else if(a==='nudge'){auCmd({cmd:'deck.nudge',deck:k,value:.04*+b.dataset.v});auHold={up:()=>auCmd({cmd:'deck.nudge',deck:k,value:0})}}
   else if(a==='hot'){const n=+b.dataset.n,t=setTimeout(()=>{auCmd({cmd:'deck.hotcue',deck:k,n,op:'clear'});auHold=null},600);
     auHold={up:()=>{clearTimeout(t);auCmd({cmd:'deck.hotcue',deck:k,n,op:'go'})}}}
+  else if(a==='wave'){const d=AU.decks[k];if(!d.track)return;
+    // trascinare la forma d'onda sposta la traccia sotto la testina (a sinistra = avanti)
+    const r=b.getBoundingClientRect(),x0=e.clientX,p0=d.pos;
+    auCmd({cmd:'deck.scrub',deck:k,active:true,pos:p0});
+    auHold={move:ev=>auCmd({cmd:'deck.scrub',deck:k,active:true,pos:p0-(ev.clientX-x0)/r.width*d.zoom}),
+      up:()=>auCmd({cmd:'deck.scrub',deck:k,active:false,pos:AU.decks[k].pos})}}
+  else if(a==='zoom'){const d=AU.decks[k],i=AU_ZOOMS.indexOf(d.zoom);auCmd({cmd:'deck.zoom',deck:k,value:AU_ZOOMS[Math.max(0,Math.min(AU_ZOOMS.length-1,(i<0?2:i)-(+b.dataset.v)))]})}
+  else if(a==='snap')auCmd({cmd:'deck.snap',deck:k});
   else if(a==='seek'){const d=AU.decks[k],r=b.getBoundingClientRect();if(d.track)auCmd({cmd:'deck.seek',deck:k,pos:(e.clientX-r.left)/r.width*d.track.seconds})}
   else if(a==='chcue'){const ch=b.dataset.ch;auCmd({cmd:'mix.set',ch,values:{cue:!AU.mix[ch].cue}})}
   else if(a==='load')auLoad(b.dataset.deck,b.dataset.id);
@@ -252,6 +269,13 @@ function auDown(e,el,w){
   else if(a==='libreload')auLoadLibrary(true);
 }
 document.addEventListener('pointerup',()=>{const h=auHold;auHold=null;h?.up?.()});
+document.addEventListener('pointermove',e=>auHold?.move?.(e));
+// rotella sulla forma d'onda del deck: scorre la traccia (fermo); Ctrl+rotella: zoom
+document.addEventListener('wheel',e=>{const cv=e.target.closest?.('.au-wave');if(!cv)return;
+  const k=cv.closest('[data-deck]').dataset.deck,d=AU.decks[k];if(!d.track)return;e.preventDefault();
+  if(e.ctrlKey){const i=AU_ZOOMS.indexOf(d.zoom);auCmd({cmd:'deck.zoom',deck:k,value:AU_ZOOMS[Math.max(0,Math.min(AU_ZOOMS.length-1,(i<0?2:i)+Math.sign(e.deltaY)))]});return}
+  if(d.playing)return;
+  auCmd({cmd:'deck.scrub',deck:k,active:false,pos:d.pos+Math.sign(e.deltaY)*d.zoom/80})},{passive:false});
 document.addEventListener('pointercancel',()=>{const h=auHold;auHold=null;h?.up?.()});
 document.addEventListener('input',e=>{const t=e.target;if(!t.dataset)return;
   if(t.dataset.auR==='tempo')auCmd({cmd:'deck.tempo',deck:t.dataset.deck,value:+t.value});
@@ -273,7 +297,7 @@ registerWidget('audiodeck',{size:[6,6],label:'Deck',showsValue:false,showsAddr:f
   inner:auDeckHtml,onPointer:auDown,tick:auTick(auPaintDeck),refreshOnResize:true,
   inspector:{html:()=>`<label>Deck<select id="auDeckSel"><option>A</option><option>B</option></select></label>`,
     bind:(w,{on,val})=>{val('#auDeckSel',w.deck||'A');on('#auDeckSel',v=>{w.deck=v},'change')}},
-  help:()=>['Deck','Forma d\'onda della traccia (basse blu, medie ambra, alte bianche) con la griglia dei battiti: linee forti = inizio battuta, rosse = griglia incerta. Sotto la panoramica: tocca per saltare. CUE: da fermo salva il punto (sul battito), tenuto lo fa sentire; in onda torna al cue. SYNC segue il tempo e la fase del MASTER. Il fader del tempo cambia il BPM (±8/16/50%), ‹‹ ›› tenuti spingono o frenano per rimettere a tempo a orecchio. Hot cue 1-4: tocca per salvare o saltare, tieni premuto per cancellare.']});
+  help:()=>['Deck','Forma d\'onda della traccia (basse blu, medie ambra, alte bianche) con la griglia dei battiti: linee forti = inizio battuta, rosse = griglia incerta. Trascina la forma d\'onda per portare il punto preciso sotto la testina (− + per lo zoom, rotella per scorrere), poi CUE o un hot cue lo salvano: con SNAP acceso sul battito, spento esattamente lì. La panoramica sotto: tocca per saltare. CUE: da fermo salva il punto (sul battito), tenuto lo fa sentire; in onda torna al cue. SYNC segue il tempo e la fase del MASTER. Il fader del tempo cambia il BPM (±8/16/50%), ‹‹ ›› tenuti spingono o frenano per rimettere a tempo a orecchio. Hot cue 1-4: tocca per salvare o saltare, tieni premuto per cancellare.']});
 registerWidget('audiomixer',{size:[4,6],label:'Mixer',showsValue:false,showsAddr:false,oscAddress:false,
   inner:auMixerHtml,onPointer:auDown,tick:auTick(auPaintMixer),
   help:()=>['Mixer','Per canale: gain, EQ alti/medi/bassi (tutto a sinistra = taglio), filtro (sinistra passa basso, destra passa alto), 🎧 preascolto in cuffia, fader di volume. Al centro master e mix della cuffia (cue ↔ master). Sotto il crossfader. Doppio tocco su un controllo: torna al centro.']});

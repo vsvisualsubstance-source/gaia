@@ -47,6 +47,25 @@ async function main() {
       let dp = Math.abs(s.pa - s.pb); dp = Math.min(dp, 1 - dp);
       check(dp < 0.01, `SYNC: B in fase con A (scarto ${(dp * 100).toFixed(2)}% di battito)`);
     }
+    if (pick) {
+      // trascinare la forma d'onda del deck A (fermo, zoom 4 s): 120 px a sinistra = traccia avanti
+      await p.ev(`(()=>{const t=window.__planciaTest;const A=t.AU.decks.A;if(A.playing)t.auCmd({cmd:'deck.play',deck:'A'});
+        t.auCmd({cmd:'deck.zoom',deck:'A',value:4});A.snap=true;t.auCmd({cmd:'deck.snap',deck:'A'});return 1})()`);
+      await sleep(300);
+      const g = await p.ev(`(()=>{const c=document.querySelector('.au-deck[data-deck=A] .au-wave').getBoundingClientRect();
+        return{x:c.left+c.width/2,y:c.top+c.height/2,w:c.width,pos:window.__planciaTest.AU.decks.A.pos}})()`);
+      const mouse = (type, x) => p.send('Input.dispatchMouseEvent', { type, x, y: g.y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1 });
+      await mouse('mousePressed', g.x);
+      for (let i = 1; i <= 6; i++) { await mouse('mouseMoved', g.x - 20 * i); await sleep(30); }
+      await mouse('mouseReleased', g.x - 120);
+      await sleep(200);
+      const after = await p.ev('window.__planciaTest.AU.decks.A.pos');
+      const want = g.pos + 120 / g.w * 4;
+      check(Math.abs(after - want) < 0.01, `trascinamento della forma d'onda: ${g.pos.toFixed(3)} -> ${after.toFixed(3)} s (atteso ${want.toFixed(3)})`);
+      await p.ev(`(()=>{const t=window.__planciaTest;t.auCmd({cmd:'deck.cue_down',deck:'A'});t.auCmd({cmd:'deck.cue_up',deck:'A'});return 1})()`);
+      const cue = await p.ev('window.__planciaTest.AU.decks.A.cue');
+      check(Math.abs(cue - after) < 1e-6, `CUE con SNAP spento salvato esattamente li' (${cue.toFixed(3)} s)`);
+    }
     const shot = arg('--shot');
     if (shot) { await p.shot(path.resolve(shot)); console.log('screenshot: ' + path.resolve(shot)); }
     check(!p.problems.length, `nessun errore nella pagina${p.problems.length ? ': ' + p.problems.join('; ') : ''}`);
