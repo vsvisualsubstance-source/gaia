@@ -170,9 +170,9 @@ function paintHeadMotionLane(el,w,D,t){
   const s=el.querySelector('.tl-mst'),msg=hmStatusText();if(s&&s.textContent!==msg)s.textContent=msg;
   const ph=el.querySelector('.tl-mph');if(ph&&D>0)ph.style.left=Math.max(0,Math.min(1,t/D))*100+'%';
 }
-function toggleHeadMotionActive(){
+async function toggleHeadMotionActive(){
   const doc=hmDoc(),on=!!doc.active;
-  if(!on&&!confirm('Il MOVIMENTO delle teste segue la timeline?\nIl motore su OPS muove subito le teste secondo il tempo corrente.'))return;
+  if(!on&&!await uiConfirm('Il MOVIMENTO delle teste segue la timeline?\nIl motore su OPS muove subito le teste secondo il tempo corrente.',{ok:'TIMELINE'}))return;
   L.headTimeline={...doc,active:!on,bpm:hmBpm()};save();refreshShowTimelines();
   showInfo(on?'MOVIMENTO LIVE: solo prove dal tablet.':'MOVIMENTO TIMELINE: il motore su OPS segue la timeline.');
 }

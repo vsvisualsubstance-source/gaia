@@ -29,9 +29,9 @@ function videoLaneHtml(w,D){
     </div>
     <div class="tl-vlane"><div class="tl-cues">${blocks}</div><span class="tl-vst tl-vvst"></span><div class="tl-ph tl-vph"></div></div></div>`;
 }
-function toggleVideoActive(){
+async function toggleVideoActive(){
   const doc=videoDoc(),on=!!doc.active;
-  if(!on&&!confirm('Il VIDEO segue la timeline?\nIl bridge manda subito a PatchDeck patch, deck ed effetti del tempo corrente.'))return;
+  if(!on&&!await uiConfirm('Il VIDEO segue la timeline?\nIl bridge manda subito a PatchDeck patch, deck ed effetti del tempo corrente.',{ok:'TIMELINE'}))return;
   L.videoTimeline={...doc,active:!on};save();refreshShowTimelines();
   showInfo(on?'VIDEO LIVE: PatchDeck si comanda dal tablet.':'VIDEO TIMELINE: il bridge comanda PatchDeck secondo la timeline.');
 }

@@ -516,10 +516,10 @@ function tdShowActive(){
   if(st==='active'||st==='inactive')return st==='active';
   const a=showClock.state?.active;return typeof a==='boolean'?a:null;
 }
-function toggleShowActive(){
+async function toggleShowActive(){
   const on=tdShowActive();
   if(on===null){showError('Stato della timeline di DMX Master non disponibile (Gaia collegata?).');return}
-  if(!on&&!confirm('Tornare alla TIMELINE?\nDMX Master riapplica subito, senza fade, la scena del tempo corrente: il look composto qui viene sostituito.'))return;
+  if(!on&&!await uiConfirm('Tornare alla TIMELINE?\nDMX Master riapplica subito, senza fade, la scena del tempo corrente: il look composto qui viene sostituito.',{ok:'TIMELINE'}))return;
   if(!devCmd('td-dmx-win',{action:on?'disable':'enable',service:'show_active'})){showError('Non collegata a Gaia: apri ⋯ → Gaia.');return}
   showInfo(on?'LIVE: la timeline non comanda più le luci. Componi e cattura le scene.':'TIMELINE: le luci seguono di nuovo la timeline.');
 }

@@ -669,3 +669,8 @@ button{cursor:pointer}
 .ch-step{grid-template-columns:auto 1fr 110px auto;align-items:end}.ch-n{font-family:var(--mono);font-weight:700;padding:0 4px 10px}
 .tl-tap b{font-family:var(--mono);margin-left:4px}
 .tl-tap{white-space:nowrap}
+/* conferma dentro la pagina (uiConfirm, 50-bridge-sync.js) */
+.ui-confirm{position:fixed;inset:0;z-index:60;display:grid;place-items:center;background:#000a;padding:16px}
+.ui-confirm-card{max-width:min(92vw,480px);padding:18px;border:1px solid var(--line);border-radius:10px;background:var(--panel);box-shadow:0 10px 40px #000c}
+.ui-confirm-card p{margin:0 0 14px;white-space:pre-line;line-height:1.45}
+.ui-confirm-card .row{justify-content:flex-end;gap:8px}

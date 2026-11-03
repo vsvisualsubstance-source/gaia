@@ -228,9 +228,9 @@ function paintLaserLane(el,w,D,t){
   const s=el.querySelector('.tl-lst');if(s&&s.textContent!==msg)s.textContent=msg;
   const ph=el.querySelector('.tl-lph');if(ph&&D>0)ph.style.left=Math.max(0,Math.min(1,t/D))*100+'%';
 }
-function toggleLaserActive(){
+async function toggleLaserActive(){
   const doc=laserDoc(),on=!!doc.active;
-  if(!on&&!confirm('Il LASER segue la timeline?\nIl bridge sceglie subito sorgente e scena di ogni cubo secondo il tempo corrente. Armare resta manuale.'))return;
+  if(!on&&!await uiConfirm('Il LASER segue la timeline?\nIl bridge sceglie subito sorgente e scena di ogni cubo secondo il tempo corrente. Armare resta manuale.',{ok:'TIMELINE'}))return;
   L.laserTimeline={...doc,active:!on};save();refreshShowTimelines();
   showInfo(on?'LASER LIVE: sorgenti e scene dal tablet.':'LASER TIMELINE: il bridge segue la timeline.');
 }

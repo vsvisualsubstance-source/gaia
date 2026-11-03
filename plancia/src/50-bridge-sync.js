@@ -52,6 +52,21 @@ function showError(message){
 }
 // stesso toast, bordo verde: esito riuscito
 function showInfo(message){showError(message);$('#toast').classList.add('ok')}
+// Conferma dentro la pagina, al posto di confirm() del browser: in Edge kiosk
+// a schermo intero (e in alcune app per tablet) il dialogo nativo puo' non
+// comparire e rispondere subito "Annulla" (show 31/10: LIVE -> TIMELINE non
+// tornava). Promise<boolean>; non usa #scrim, cosi' vale anche sopra un foglio aperto.
+function uiConfirm(text,{ok='OK',cancel='Annulla'}={}){
+  return new Promise(resolve=>{
+    const box=document.createElement('div');box.className='ui-confirm';box.setAttribute('role','alertdialog');
+    box.innerHTML=`<div class="ui-confirm-card"><p></p><div class="row"><button class="btn ghost" data-v="0"></button><button class="btn primary" data-v="1"></button></div></div>`;
+    box.querySelector('p').textContent=text;box.querySelector('[data-v="0"]').textContent=cancel;box.querySelector('[data-v="1"]').textContent=ok;
+    const done=v=>{box.remove();document.removeEventListener('keydown',key);resolve(v)};
+    const key=e=>{if(e.key==='Escape')done(false);else if(e.key==='Enter')done(true)};
+    box.addEventListener('pointerdown',e=>{const b=e.target.closest('[data-v]');if(b){e.preventDefault();done(b.dataset.v==='1')}else if(e.target===box)done(false)});
+    document.addEventListener('keydown',key);document.body.appendChild(box);box.querySelector('[data-v="1"]').focus();
+  });
+}
 function emit(msg,quiet){
   if(ws&&ws.readyState===1)ws.send(JSON.stringify(msg));
   if(quiet)return;
