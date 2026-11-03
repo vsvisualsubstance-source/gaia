@@ -226,7 +226,11 @@ function openFixEditor(w,f){
     // cosi' il campo resta comunque editabile come numero puro.
     const um=universeMap();
     const opts=(um&&um.universes&&um.universes.length)?um.universes:[{universe:f.universe,label:'Universo '+f.universe}];
-    $('#feUni').innerHTML=opts.map(u=>`<option value="${u.universe}"${u.universe===f.universe?' selected':''}>${esc(u.label||('Universo '+u.universe))}</option>`).join('');
+    // piu' porte sullo stesso universo (nodo Art-Net + Enttec USB, nota TD 53):
+    // DMX Master usa quella online, quindi e' l'unica da selezionare (prima
+    // restava selezionata l'ultima, l'Enttec spenta)
+    const same=opts.filter(u=>u.universe===f.universe),pick=same.find(u=>u.online!==false)||same[0];
+    $('#feUni').innerHTML=opts.map(u=>`<option value="${u.universe}"${u===pick?' selected':''}>${esc(u.label||('Universo '+u.universe))}${u.online===false?' · non attiva':''}</option>`).join('');
     if(!opts.some(u=>u.universe===f.universe))$('#feUni').insertAdjacentHTML('afterbegin',`<option value="${f.universe}" selected>Universo ${f.universe} (attuale)</option>`);
   }
   if($('#feModel')){
