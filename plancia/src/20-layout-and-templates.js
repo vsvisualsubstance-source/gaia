@@ -121,7 +121,7 @@ TPL.laser={name:'Laser',desc:'LaserCube: modalità per cubo (Show, PatchDeck, Yo
 // Teste · movimento (idea di Copilot, 2/11): scene di movimento come le scene
 // laser (63-head-motion*.js), timeline con la traccia MOVIMENTO, comandi base.
 TPL.teste={name:'Teste · scene e movimento',desc:'Scene di movimento delle teste (template, disegno, REC, SVG) e timeline con la traccia MOVIMENTO.',pages:()=>[P('Teste · movimento',[
-  W('timeline',0,0,16,4,{label:'Timeline show',...tlOpts()}),
+  W('timeline',0,0,16,4,{label:'Timeline show',...tlOpts(),tracks:['heads','motion']}),
   W('headmotion',0,4,9,6,{label:'Movimento teste',color:SWATCH[1]}),
   W('scenes',9,4,7,2,{label:'Selezione teste',addr:'/mh/select/heads',mode:'head-select',items:'',headValues:[],selectedHeads:[],value:[],cols:7,color:SWATCH[1]}),
   W('scenes',9,6,4,2,{label:'Posizioni',addr:'/mh/position',items:POS.join('\n'),cols:3,value:-1}),
@@ -131,13 +131,13 @@ TPL.teste={name:'Teste · scene e movimento',desc:'Scene di movimento delle test
 ])]};
 // Sequenze (chase a step, 63-chase*.js): libreria, scene di DMX Master, timeline.
 TPL.sequenze={name:'Sequenze (chase)',desc:'Chase a step con le scene di DMX Master, TAP tempo e traccia SEQUENZE della timeline.',pages:()=>[P('Sequenze',[
-  W('timeline',0,0,16,4,{label:'Timeline show',...tlOpts()}),
+  W('timeline',0,0,16,4,{label:'Timeline show',...tlOpts(),tracks:['chase']}),
   W('chase',0,4,10,6,{label:'Chase',color:SWATCH[4]}),
   W('scenes',10,4,6,6,{label:'Scene · DMX Master',addr:'/dmx/scene',items:sceneList,cols:2,value:0})
 ])]};
 // Effetti sulle luci (63-light-fx*.js, nota TD 59): libreria, scene, timeline.
 TPL.effetti={name:'Effetti luci',desc:'Onde di dimmer e colore, inseguimento, scintillio e strobo a tempo sulle luci dei gruppi, calcolati da DMX Master; traccia EFFETTI.',pages:()=>[P('Effetti',[
-  W('timeline',0,0,16,4,{label:'Timeline show',...tlOpts()}),
+  W('timeline',0,0,16,4,{label:'Timeline show',...tlOpts(),tracks:['fx']}),
   W('lightfx',0,4,10,6,{label:'Effetti luci',color:SWATCH[1]}),
   W('scenes',10,4,6,6,{label:'Scene · DMX Master',addr:'/dmx/scene',items:sceneList,cols:2,value:0})
 ])]};

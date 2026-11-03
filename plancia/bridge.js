@@ -62,7 +62,7 @@ function saveSharedState(state, ws, clientRevision) {
   sharedState = JSON.parse(JSON.stringify(state));
   const revision = ++sharedRevision;
   const stateSnapshot = sharedState;
-  const snapshot = JSON.stringify({ revision, state: stateSnapshot }, null, 2);
+  const snapshot = JSON.stringify({ revision, state: stateSnapshot });
   stateWriteQueue = stateWriteQueue.catch(() => {}).then(async () => {
     await fs.promises.mkdir(path.dirname(STATE_FILE), { recursive: true });
     const tempFile = `${STATE_FILE}.${process.pid}.tmp`;

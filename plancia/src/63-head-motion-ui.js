@@ -58,7 +58,7 @@ function hmLibHtml(w){
     <div class="hm-grid">${hmScenes().map(s=>`<div class="lzs-tile${run===s.id?' on':''}"><button class="lzs-go" data-hm="play" data-hm-v="${esc(s.id)}" title="Prova dal vivo (il motore su OPS muove le teste)">
       <canvas data-hm-cv="${esc(s.id)}" width="120" height="120"></canvas><span>${esc(s.name)}</span></button>
       <button class="lzs-ed" data-hm="edit" data-hm-v="${esc(s.id)}" title="Modifica">✎</button></div>`).join('')||'<p class="hint">Nessuna scena: tocca Template.</p>'}</div>
-    <p class="hint">Tocca una scena per provarla sulle teste (tutte selezionate, stesso movimento: ventaglio e onda per testa arriveranno col motore in DMX Master). In timeline: traccia MOVIMENTO.</p></div>`;
+    <p class="hint">Tocca una scena per provarla sulle teste. Con il motore DMX Master ogni testa va per conto suo (onda, specchio, ventaglio); con il motore OPS fanno tutte lo stesso movimento. In timeline: traccia TESTE MOV.</p></div>`;
 }
 function hmDown(e,el,w){
   const b=e.target.closest('[data-hm]');if(!b)return;e.preventDefault();
@@ -152,7 +152,7 @@ function openHeadMotionEditor(orig){
     else{const g=cv.getContext('2d');hmDraw(cv,{...sc,path:{pts:[]}},0,{bpm,heads:0});g.strokeStyle='#ffb23e';g.lineWidth=3;g.beginPath();
       drawing.pts.forEach(([x,y],i)=>{const px=(x+1)/2*cv.width,py=(1-y)/2*cv.height;i?g.lineTo(px,py):g.moveTo(px,py)});g.stroke()}
     requestAnimationFrame(anim)};anim();
-  const store=x=>{const list=[...hmScenes()],i=list.findIndex(y=>y.id===x.id);if(i<0)list.push(x);else list[i]=x;L.headMotions=list;save()};
+  const store=x=>{const list=[...hmScenes()],i=list.findIndex(y=>y.id===x.id);if(i<0)list.push(x);else list[i]=x;L.headMotions=list;if(hmDoc().cues.some(c=>c.scene===x.id))tlMarkTd();save()};
   q('#hmClose').onclick=closeSheet;
   q('#hmTry').onclick=()=>{read();hmPlay(sc);showInfo(`Prova di "${sc.name}" sulle teste (non salvata).`)};
   q('#hmStopB').onclick=()=>{hmStop();showInfo('Movimento fermato.')};
@@ -176,17 +176,17 @@ registerWidget('headmotion',{size:[8,6],label:'Movimento teste',showsValue:false
 function headMotionLaneHtml(w,D){
   const cues=[...hmDoc().cues].sort((a,b)=>a.time-b.time);
   const blocks=cues.map((c,i)=>{const e=cues[i+1]?.time??D,sc=hmScenes().find(s=>s.id===c.scene);
-    return`<div class="tl-blk tl-vblk" style="left:${c.time/D*100}%;width:${Math.max(0,e-c.time)/D*100}%;--ic:${c.scene==='off'||!sc?'#5d6573':'#3ec5ff'}"><span>${esc(c.label||sc?.name||'Fermo')}</span><em>${esc(c.scene==='off'?'fermo':sc?sc.name:'(scena tolta)')}</em></div>`}).join('');
-  return`<div class="tl-trk"><div class="tl-vhead"><span class="k">MOVIM.</span>
+    return`<div class="tl-blk tl-vblk" data-ci="${hmDoc().cues.indexOf(c)}" style="left:${c.time/D*100}%;width:${Math.max(0,e-c.time)/D*100}%;--ic:${c.scene==='off'||!sc?'#5d6573':'#3ec5ff'}"><span>${esc(c.label||sc?.name||'Fermo')}</span><em>${esc(c.scene==='off'?'fermo':sc?sc.name:'(scena tolta)')}</em></div>`}).join('');
+  return`<div class="tl-trk"><div class="tl-vhead"><span class="k" title="Figure che le teste percorrono: cerchio, otto, ventaglio...">TESTE MOV.</span>
     ${hmEngine()==='td'?'<span class="tl-mtd" title="Motore DMX Master: la traccia va con la timeline di TD e segue il suo LIVE/TIMELINE">TD</span>':`<button class="tl-live tl-mlive" data-act="mlive"${w.readonly?' disabled':''} title="MOVIMENTO · TIMELINE: il motore su OPS muove le teste secondo la timeline. LIVE: solo prove dal tablet">—</button>`}
-    ${w.readonly?'':'<button class="tl-vcue" data-act="mcue" title="Cue di movimento: quando parte quale scena">CUE MOV</button>'}
-    </div><div class="tl-vlane"><div class="tl-cues">${blocks}</div><span class="tl-vst tl-mst"></span><div class="tl-ph tl-mph"></div></div></div>`;
+    ${w.readonly?'':'<button class="tl-vcue" data-act="mcue" title="Elenco delle cue di movimento">CUE</button>'}
+    </div><div class="tl-vlane tl-tlane" data-trk="motion"${w.readonly?'':' title="Tocca un punto: un movimento parte da lì. Tocca un blocco per cambiarlo, trascinalo per spostarlo"'}><div class="tl-cues">${blocks}</div><span class="tl-vst tl-mst"></span><div class="tl-ph tl-mph"></div></div></div>`;
 }
 function paintHeadMotionLane(el,w,D,t){
-  const b=el.querySelector('.tl-mlive');if(!b)return;
-  const on=!!hmDoc().active,txt=on?'TIMELINE':'LIVE';
-  if(b.textContent!==txt){b.textContent=txt;b.classList.toggle('is-tl',on);b.classList.toggle('is-live',!on)}
-  const s=el.querySelector('.tl-mst'),msg=hmStatusText();if(s&&s.textContent!==msg)s.textContent=msg;
+  const b=el.querySelector('.tl-mlive');
+  if(b){const on=!!hmDoc().active,txt=on?'TIMELINE':'LIVE';if(b.textContent!==txt){b.textContent=txt;b.classList.toggle('is-tl',on);b.classList.toggle('is-live',!on)}}
+  const s=el.querySelector('.tl-mst');if(!s)return;
+  const msg=hmDoc().cues.length?(hmEngine()==='td'&&L.tlTdDirty?'da mandare: ⇪ TD':hmStatusText()):w.readonly?'':'tocca qui per far partire un movimento';if(s.textContent!==msg)s.textContent=msg;
   const ph=el.querySelector('.tl-mph');if(ph&&D>0)ph.style.left=Math.max(0,Math.min(1,t/D))*100+'%';
 }
 async function toggleHeadMotionActive(){

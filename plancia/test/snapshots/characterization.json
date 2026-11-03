@@ -3216,9 +3216,13 @@
    [
     "migrateUiLightFx",
     12
+   ],
+   [
+    "migrateUiTracks",
+    13
    ]
   ],
-  "uiRev": 12,
+  "uiRev": 13,
   "pages": [
    {
     "name": "Show",

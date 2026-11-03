@@ -246,12 +246,12 @@ function laserCueText(c){
 function laserLaneHtml(w,D){
   const cues=[...laserDoc().cues].sort((a,b)=>a.time-b.time);
   const blocks=cues.map((c,i)=>{const e=cues[i+1]?.time??D;
-    return`<div class="tl-blk tl-vblk" style="left:${c.time/D*100}%;width:${Math.max(0,e-c.time)/D*100}%;--ic:${c.mode==='off'?'#5d6573':'#ff365c'}"><span>${esc(c.label||'Laser')}</span><em>${esc(laserCueText(c))}</em></div>`}).join('');
+    return`<div class="tl-blk tl-vblk" data-ci="${laserDoc().cues.indexOf(c)}" style="left:${c.time/D*100}%;width:${Math.max(0,e-c.time)/D*100}%;--ic:${c.mode==='off'?'#5d6573':'#ff365c'}"><span>${esc(c.label||'Laser')}</span><em>${esc(laserCueText(c))}</em></div>`}).join('');
   return`<div class="tl-trk"><div class="tl-vhead"><span class="k">LASER</span>
     <button class="tl-live tl-llive" data-act="llive"${w.readonly?' disabled':''} title="LASER · TIMELINE: il bridge sceglie sorgente e scena dei cubi secondo la timeline. LIVE: dal tablet. Armare resta sempre manuale">—</button>
-    ${w.readonly?'':'<button class="tl-vcue" data-act="lcue" title="Cue laser: cubo, sorgente, scena">CUE LASER</button>'}
+    ${w.readonly?'':'<button class="tl-vcue" data-act="lcue" title="Elenco delle cue laser">CUE</button>'}
     </div>
-    <div class="tl-vlane"><div class="tl-cues">${blocks}</div><span class="tl-vst tl-lst"></span><div class="tl-ph tl-lph"></div></div></div>`;
+    <div class="tl-vlane tl-tlane" data-trk="laser"${w.readonly?'':' title="Tocca un punto o un blocco per le cue laser, trascina un blocco per spostarlo"'}><div class="tl-cues">${blocks}</div><span class="tl-vst tl-lst"></span><div class="tl-ph tl-lph"></div></div></div>`;
 }
 function paintLaserLane(el,w,D,t){
   const b=el.querySelector('.tl-llive');if(!b)return;

@@ -98,7 +98,7 @@ function openLightFxEditor(orig,isNew){
     q('#fxTry').onclick=()=>{read();fxPlay(fx);showInfo(`Prova di "${fx.name}" (non salvato).`)};
     q('#fxStopB').onclick=()=>fxStop(fx.id);
     q('#fxSave').onclick=()=>{read();if(fx.template){fx.id='efx-'+uid();if(fx.name===orig.name)fx.name+=' (mio)'}delete fx.template;
-      const list=[...lightFx()],i=list.findIndex(x=>x.id===fx.id);if(i<0)list.push(fx);else list[i]=fx;L.lightFx=list;save();closeSheet();showInfo(`Effetto "${fx.name}" salvato.`)};
+      const list=[...lightFx()],i=list.findIndex(x=>x.id===fx.id);if(i<0)list.push(fx);else list[i]=fx;L.lightFx=list;if(fxDoc().cues.some(c=>(c.effects||[]).includes(fx.id)))tlMarkTd();save();closeSheet();showInfo(`Effetto "${fx.name}" salvato.`)};
     if(q('#fxDup'))q('#fxDup').onclick=()=>{read();openLightFxEditor({...JSON.parse(JSON.stringify(fx)),id:'efx-'+uid(),name:fx.name+' (copia)',template:false},true)};
     if(q('#fxDel'))q('#fxDel').onclick=()=>{const used=fxDoc().cues.filter(c=>(c.effects||[]).includes(fx.id)).length;
       if(!confirm(`Eliminare "${fx.name}"?${used?`\nÈ usato da ${used} cue della traccia EFFETTI.`:''}`))return;
@@ -130,14 +130,14 @@ registerWidget('lightfx',{size:[8,6],label:'Effetti luci',showsValue:false,shows
 function fxLaneHtml(w,D){
   const cues=[...fxDoc().cues].sort((a,b)=>a.time-b.time);
   const blocks=cues.map((c,i)=>{const e=cues[i+1]?.time??D,names=(c.effects||[]).map(id=>lightFx().find(f=>f.id===id)?.name||'?');
-    return`<div class="tl-blk tl-vblk" style="left:${c.time/D*100}%;width:${Math.max(0,e-c.time)/D*100}%;--ic:${names.length?'#ffb23e':'#5d6573'}"><span>${esc(c.label||names[0]||'Nessuno')}</span><em>${esc(names.length?names.join(' + '):'nessun effetto')}</em></div>`}).join('');
+    return`<div class="tl-blk tl-vblk" data-ci="${fxDoc().cues.indexOf(c)}" style="left:${c.time/D*100}%;width:${Math.max(0,e-c.time)/D*100}%;--ic:${names.length?'#ffb23e':'#5d6573'}"><span>${esc(c.label||names[0]||'Nessuno')}</span><em>${esc(names.length?names.join(' + '):'nessun effetto')}</em></div>`}).join('');
   return`<div class="tl-trk"><div class="tl-vhead"><span class="k">EFFETTI</span>
-    ${w.readonly?'':'<button class="tl-vcue" data-act="fcue" title="Cue degli effetti: da quando suonano quali effetti (vanno nella timeline di DMX Master)">CUE FX</button>'}
-    </div><div class="tl-vlane"><div class="tl-cues">${blocks}</div><span class="tl-vst tl-fst"></span><div class="tl-ph tl-fph"></div></div></div>`;
+    ${w.readonly?'':'<button class="tl-vcue" data-act="fcue" title="Elenco delle cue degli effetti">CUE</button>'}
+    </div><div class="tl-vlane tl-tlane" data-trk="fx"${w.readonly?'':' title="Tocca un punto: quali effetti suonano da lì. Tocca un blocco per cambiarli, trascinalo per spostarlo"'}><div class="tl-cues">${blocks}</div><span class="tl-vst tl-fst"></span><div class="tl-ph tl-fph"></div></div></div>`;
 }
 function paintFxLane(el,w,D,t){
   const s=el.querySelector('.tl-fst');if(!s)return;
-  const st=fxState(),ids=st?.timeline?.ids||[],msg=ids.length?`▶ ${ids.map(id=>lightFx().find(f=>f.id===id)?.name||id).join(' + ')}`:fxDoc().cues.length?(tdTimelineDoc()?.effects?.cues?.length?'in DMX Master':'non ancora inviati a DMX Master'):'';
+  const st=fxState(),ids=st?.timeline?.ids||[],msg=ids.length?`▶ ${ids.map(id=>lightFx().find(f=>f.id===id)?.name||id).join(' + ')}`:fxDoc().cues.length?(L.tlTdDirty||!tdTimelineDoc()?.effects?.cues?.length?'da mandare: ⇪ TD':'in DMX Master'):w.readonly?'':'tocca qui per far partire degli effetti';
   if(s.textContent!==msg)s.textContent=msg;
   const ph=el.querySelector('.tl-fph');if(ph&&D>0)ph.style.left=Math.max(0,Math.min(1,t/D))*100+'%';
 }

@@ -50,6 +50,7 @@ function renderTabs(){
   const t=$('#tabs'); t.innerHTML='';
   L.pages.forEach((p,i)=>{const b=document.createElement('button');b.className='tab';b.textContent=p.name;b.setAttribute('aria-current',i===pi);
     b.onclick=()=>{pi=i;selId=null;render()};t.appendChild(b)});
+  t.querySelector('[aria-current="true"]')?.scrollIntoView({block:'nearest',inline:'nearest'});
   if(editing){const b=document.createElement('button');b.className='tab add';b.textContent='+';b.title='Nuova pagina';b.onclick=addPage;t.appendChild(b)}
 }
 function render(){oscIndexStale();document.body.classList.toggle('editing',editing);$('#addbar').hidden=!editing;

@@ -127,7 +127,7 @@ function openSheet(){
   $('#pOpen').onclick=openProjects;
 }
 function closeSheet(){$('#scrim').hidden=true;$('#scrim').innerHTML=''}
-$('#menuBtn').onclick=openSheet; $('#conn').onclick=openSheet; $('#gconn').onclick=openSheet;
+$('#pagesBtn').onclick=openPagesMenu;$('#menuBtn').onclick=openSheet; $('#conn').onclick=openSheet; $('#gconn').onclick=openSheet;
 
 /* stato iniziale del rig dai controlli salvati, senza inviare OSC */
 function initShow(){
@@ -195,5 +195,5 @@ function migrateUiAudioPage(){
 }
 // Avvio dell'app: lo chiama src/999-start.js, dopo che tutti i moduli sono stati valutati.
 function init(){
-  migrateLegacyHeadSelectors();migrateHeadPresetWidgets();migrateUiShowTimeline();migrateUiConsolePages();migrateUiAudioPage();migrateUiNoChase();migrateUiOneDmxV8();migrateUiLaserPage();migrateUiLaserScenes();migrateUiHeadMotion();migrateUiChase();migrateUiLaserFx();migrateUiLightFx();render(); initShow(); connect(); gStart(); requestAnimationFrame(loop);
+  migrateLegacyHeadSelectors();migrateHeadPresetWidgets();migrateUiShowTimeline();migrateUiConsolePages();migrateUiAudioPage();migrateUiNoChase();migrateUiOneDmxV8();migrateUiLaserPage();migrateUiLaserScenes();migrateUiHeadMotion();migrateUiChase();migrateUiLaserFx();migrateUiLightFx();migrateUiTracks();render(); initShow(); connect(); gStart(); requestAnimationFrame(loop);
 }

@@ -86,7 +86,7 @@ function openChaseEditor(orig,isNew){
     q('#chTry').onclick=()=>{read();if(!ch.steps.some(x=>x.scene)){showError('Chase: scegli almeno una scena.');return}chasePlay(ch);showInfo(`Prova di "${ch.name}" (non salvato).`)};
     q('#chStopB').onclick=()=>{chaseStop()};
     q('#chSave').onclick=()=>{read();if(!ch.steps.some(x=>x.scene)){showError('Chase: scegli almeno una scena.');return}
-      const list=[...chases()],i=list.findIndex(x=>x.id===ch.id);if(i<0)list.push(ch);else list[i]=ch;L.chases=list;save();closeSheet();showInfo(`Chase "${ch.name}" salvato.`)};
+      const list=[...chases()],i=list.findIndex(x=>x.id===ch.id);if(i<0)list.push(ch);else list[i]=ch;L.chases=list;if(chaseDoc().cues.some(c=>c.chase===ch.id))tlMarkTd();save();closeSheet();showInfo(`Chase "${ch.name}" salvato.`)};
     if(q('#chDup'))q('#chDup').onclick=()=>{read();openChaseEditor({...JSON.parse(JSON.stringify(ch)),id:'ch-'+uid(),name:ch.name+' (copia)'},true)};
     if(q('#chDel'))q('#chDel').onclick=()=>{const used=chaseDoc().cues.filter(c=>c.chase===ch.id).length;
       if(!confirm(`Eliminare "${ch.name}"?${used?`\nÈ usato da ${used} cue della traccia SEQUENZE.`:''}`))return;
@@ -122,29 +122,16 @@ function chaseLaneHtml(w,D){
   const cues=[...chaseDoc().cues].sort((a,b)=>a.time-b.time);
   const blocks=cues.map((c,i)=>{const e=cues[i+1]?.time??D,ch=chases().find(x=>x.id===c.chase);
     return`<div class="tl-blk tl-vblk" data-ci="${chaseDoc().cues.indexOf(c)}" style="left:${c.time/D*100}%;width:${Math.max(0,e-c.time)/D*100}%;--ic:${c.chase==='off'||!ch?'#5d6573':'#b18cff'}"><span>${esc(c.label||ch?.name||'Fermo')}</span><em>${esc(c.chase==='off'?'fermo':ch?`${ch.steps.length} step`:'(chase tolto)')}</em></div>`}).join('');
-  return`<div class="tl-trk"><div class="tl-vhead"><span class="k">SEQUENZE</span>
-    ${w.readonly?'':'<button class="tl-vcue" data-act="ccue" title="Elenco delle cue dei chase">CUE SEQ</button>'}${!w.readonly&&isShowTimeline(w)&&showClock.authority?'<button class="tl-vcue" data-act="csend" title="Manda la timeline a DMX Master (i chase diventano cue)">⇪ TD</button>':''}
-    </div><div class="tl-vlane tl-clane"${w.readonly?'':' title="Tocca un punto per far partire un chase da lì, tocca un blocco per cambiarlo"'}><div class="tl-cues">${blocks}</div><span class="tl-vst tl-cst"></span><div class="tl-ph tl-cph"></div></div></div>`;
+  return`<div class="tl-trk"><div class="tl-vhead"><span class="k" title="Chase: scene che si alternano a tempo">SEQUENZE</span>
+    ${w.readonly?'':'<button class="tl-vcue" data-act="ccue" title="Elenco delle cue dei chase">CUE</button>'}
+    </div><div class="tl-vlane tl-tlane" data-trk="chase"${w.readonly?'':' title="Tocca un punto: un chase parte da lì. Tocca un blocco per cambiarlo, trascinalo per spostarlo"'}><div class="tl-cues">${blocks}</div><span class="tl-vst tl-cst"></span><div class="tl-ph tl-cph"></div></div></div>`;
 }
 function paintChaseLane(el,w,D,t){
   const s=el.querySelector('.tl-cst');if(!s)return;
   const n=chaseDoc().cues.length,inTd=(tdTimelineDoc()?.cues||[]).filter(isChaseCue).length;
-  const msg=G.chaseSt?.chase?chaseStatusText():n?(inTd?`${inTd} cue in DMX Master`:'da mandare a DMX Master: ⇪ TD'):w.readonly?'':'tocca qui per far partire un chase';
+  const msg=G.chaseSt?.chase?chaseStatusText():n?(L.tlTdDirty||!inTd?'da mandare: ⇪ TD':`${inTd} cue in DMX Master`):w.readonly?'':'tocca qui per far partire un chase';
   if(s.textContent!==msg)s.textContent=msg;
   const ph=el.querySelector('.tl-cph');if(ph&&D>0)ph.style.left=Math.max(0,Math.min(1,t/D))*100+'%';
-}
-// tocco sulla traccia: in un punto vuoto sceglie il chase che parte da li', su un blocco lo cambia o lo toglie
-async function chaseLaneTap(w,t,ci){
-  const doc=chaseDoc(),cue=ci>=0?doc.cues[ci]:null;
-  if(!chases().length){showError('Nessun chase: crea quelli pronti con "Template" nella pagina Sequenze.');return}
-  const at=Math.max(0,Math.min(timelineDuration(w)-.01,Math.round(t*2)/2));
-  const pick=await uiChoose(cue?`Cue a ${formatCueTime(cue.time)}: ${chases().find(x=>x.id===cue.chase)?.name||'Fermo'}`:`Da ${formatCueTime(at)} parte…`,
-    [...chases().map(x=>({label:x.name,value:x.id,on:cue?.chase===x.id})),{label:'■ Fermo',value:'off',on:cue?.chase==='off'},...(cue?[{label:'Togli questa cue',value:'__del',cls:'danger'}]:[])]);
-  if(pick==null)return;
-  const cues=doc.cues.map(c=>({...c}));
-  if(pick==='__del')cues.splice(ci,1);else if(cue)cues[ci].chase=pick;else cues.push({time:at,label:'',chase:pick});
-  L.chaseTimeline={cues:cues.sort((a,b)=>a.time-b.time)};save();refreshShowTimelines();
-  showInfo(isShowTimeline(w)&&showClock.authority?'Traccia SEQUENZE cambiata: ⇪ TD per mandarla a DMX Master.':'Traccia SEQUENZE cambiata.');
 }
 // la timeline va a DMX Master con le cue dei chase rigenerate
 function chaseSendTimeline(w){const doc=tdTimelineDoc();if(doc){w.cues=serializeCues(timelineFromTD(doc));w.duration=Math.max(1,+doc.length||w.duration);if(+doc.bpm>0)w.bpm=+doc.bpm;w.tdBaseRev=doc.rev}sendTimelineToTD(w)}

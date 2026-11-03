@@ -686,3 +686,20 @@ button{cursor:pointer}
 /* scelta dentro la pagina (uiChoose) e traccia SEQUENZE toccabile */
 .ui-choose{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px;margin-bottom:12px}
 .tl-clane{cursor:pointer}
+/* tracce della timeline: stesso aspetto, bersagli comodi al tocco (43-timeline-tracks.js) */
+.tl-tr button.tl-tap,.tl-tap{width:auto;min-width:0;padding:0 8px;height:28px;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;font-family:var(--mono);font-size:11px;background:var(--panel2);border:1px solid var(--line2);border-radius:5px;color:var(--fg)}
+.tl-tap.dirty{background:var(--c,#ffb23e);border-color:var(--c,#ffb23e);color:#000;font-weight:700}
+.tl-trk .tl-vhead{width:176px}
+.tl-trk .tl-vhead .k{width:68px;white-space:nowrap}
+.tl-vcue{height:28px}
+.tl-tracks .tl-live{height:28px}
+.tl-trk .tl-vlane,.tl-trk .tl-hlane{height:34px}
+.tl-tlane,.tl-hlane{cursor:pointer}
+.tl-hst{position:absolute;right:6px;top:50%;transform:translateY(-50%);pointer-events:none;font-size:10px}
+.dv-sel{min-height:30px}
+.pagesbtn{flex:none;padding:0 10px}
+.ui-confirm-card .hint{margin-top:-4px}
+.toast{white-space:pre-line}
+@media (max-width:1500px){.bar>.pill{padding:5px 8px}.bar>.pill span{display:none}.projchip span{max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
+.pagesbtn{min-height:34px;min-width:38px}
+@media (max-width:1500px){.bar>.pill{min-height:34px;min-width:34px;justify-content:center}}

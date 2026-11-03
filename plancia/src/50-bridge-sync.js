@@ -56,17 +56,25 @@ function showInfo(message){showError(message);$('#toast').classList.add('ok')}
 // a schermo intero (e in alcune app per tablet) il dialogo nativo puo' non
 // comparire e rispondere subito "Annulla" (show 31/10: LIVE -> TIMELINE non
 // tornava). Promise<boolean>; non usa #scrim, cosi' vale anche sopra un foglio aperto.
-// scelta tra piu' voci dentro la pagina: Promise<value|null>
-function uiChoose(title,items){
+// scelta dentro la pagina: Promise<value|null>; con multi le voci si accendono e spengono e
+// "done" da' l'elenco (una voce single, es. Togli, risponde subito col suo valore)
+function uiChoose(title,items,{multi=false,done='OK',hint=''}={}){
   return new Promise(resolve=>{
-    const box=document.createElement('div');box.className='ui-confirm';box.setAttribute('role','dialog');
-    box.innerHTML=`<div class="ui-confirm-card"><p></p><div class="ui-choose">${items.map((it,i)=>`<button class="btn${it.on?' primary':''}${it.cls?' '+it.cls:''}" data-i="${i}"></button>`).join('')}</div><div class="row"><button class="btn ghost" data-x>Annulla</button></div></div>`;
-    box.querySelector('p').textContent=title;box.querySelectorAll('[data-i]').forEach(b=>b.textContent=items[+b.dataset.i].label);
-    const done=v=>{box.remove();document.removeEventListener('keydown',key);resolve(v)},key=e=>{if(e.key==='Escape')done(null)};
-    box.addEventListener('pointerdown',e=>{const b=e.target.closest('[data-i]');if(b){e.preventDefault();done(items[+b.dataset.i].value)}else if(e.target.closest('[data-x]')||e.target===box){e.preventDefault();done(null)}});
+    const box=document.createElement('div');box.className='ui-confirm';box.setAttribute('role','dialog');const on=new Set(items.filter(x=>x.on).map(x=>x.value));
+    box.innerHTML=`<div class="ui-confirm-card"><p></p><div class="ui-choose">${items.map((it,i)=>`<button class="btn${it.on?' primary':''}${it.cls?' '+it.cls:''}" data-i="${i}"${it.off?' disabled':''}></button>`).join('')}</div>${hint?'<p class="hint"></p>':''}<div class="row"><button class="btn ghost" data-x>Annulla</button>${multi?'<button class="btn primary" data-ok></button>':''}</div></div>`;
+    box.querySelector('p').textContent=title;if(hint)box.querySelector('.hint').textContent=hint;if(multi)box.querySelector('[data-ok]').textContent=done;
+    box.querySelectorAll('[data-i]').forEach(b=>b.textContent=items[+b.dataset.i].label);
+    const end=v=>{box.remove();document.removeEventListener('keydown',key);resolve(v)},key=e=>{if(e.key==='Escape')end(null)};
+    box.addEventListener('pointerdown',e=>{const b=e.target.closest('[data-i]');
+      if(b){e.preventDefault();if(b.disabled)return;const it=items[+b.dataset.i];if(!multi||it.single){end(it.value);return}
+        if(on.has(it.value))on.delete(it.value);else on.add(it.value);b.classList.toggle('primary',on.has(it.value));return}
+      if(e.target.closest('[data-ok]')){e.preventDefault();end(items.filter(x=>on.has(x.value)).map(x=>x.value));return}
+      if(e.target.closest('[data-x]')||e.target===box){e.preventDefault();end(null)}});
     document.addEventListener('keydown',key);document.body.appendChild(box);
   });
 }
+// alert del browser: mai bloccante, nei kiosk puo' non comparire; diventa il messaggio della pagina
+window.alert=m=>showInfo(String(m));
 function uiConfirm(text,{ok='OK',cancel='Annulla'}={}){
   return new Promise(resolve=>{
     const box=document.createElement('div');box.className='ui-confirm';box.setAttribute('role','alertdialog');

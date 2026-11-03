@@ -15,6 +15,7 @@ const appModules = [
   '41-widget-interactions.js',
   '42-control-widgets.js',
   '43-timeline-widget.js',
+  '43-timeline-tracks.js',
   '44-scene-widgets.js',
   '49-dmx-output.js',
   '50-bridge-sync.js',
@@ -67,7 +68,7 @@ window.__planciaTest={
   migrations:[['migrateLegacyHeadSelectors',migrateLegacyHeadSelectors],['migrateHeadPresetWidgets',migrateHeadPresetWidgets],
     ['migrateUiShowTimeline',migrateUiShowTimeline],['migrateUiConsolePages',migrateUiConsolePages],['migrateUiAudioPage',migrateUiAudioPage],
     ['migrateUiNoChase',migrateUiNoChase],['migrateUiOneDmxV8',migrateUiOneDmxV8],['migrateUiLaserPage',migrateUiLaserPage],
-    ['migrateUiLaserScenes',migrateUiLaserScenes],['migrateUiHeadMotion',migrateUiHeadMotion],['migrateUiChase',migrateUiChase],['migrateUiLaserFx',migrateUiLaserFx],['migrateUiLightFx',migrateUiLightFx]]};`;
+    ['migrateUiLaserScenes',migrateUiLaserScenes],['migrateUiHeadMotion',migrateUiHeadMotion],['migrateUiChase',migrateUiChase],['migrateUiLaserFx',migrateUiLaserFx],['migrateUiLightFx',migrateUiLightFx],['migrateUiTracks',migrateUiTracks]]};`;
 
 function buildAppBundle(sourceDir = path.join(__dirname, 'src'), { testHooks = false } = {}) {
   const modules = appModules.map(file => {

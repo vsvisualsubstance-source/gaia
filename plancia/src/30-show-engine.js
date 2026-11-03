@@ -187,7 +187,7 @@ function renderCueEditor(w,cues,meta={}){
     w.duration=duration;
     if(meta.bpm)w.bpm=meta.bpm;
     if(meta.rev)w.tdBaseRev=meta.rev;
-    save();refresh(w);return true;
+    syncShowWidgets(w);save();refreshShowTimelines();return true;
   };
   s.querySelector('#cueSave').onclick=()=>{if(commit()){closeSheet();if(tdMode)sendTimelineToTD(w)}};
   const send=s.querySelector('#cueSendTD');
@@ -294,7 +294,7 @@ async function sendTimelineToTD(w){
     if(!await uiConfirm(lines.join('\n'),{ok:'Invia'}))return;
     const r=await tdTimelineRequest(doc);
     if(!r.ok){showError('Caricamento rifiutato da DMX Master:'+list(r.errors));return}
-    w.tdBaseRev=r.rev;save();
+    w.tdBaseRev=r.rev;L.tlTdDirty=false;syncShowWidgets(w);save();
     // conferma vera = il topic retained porta la rev dell'esito (nota TD 31)
     let seen=G.tdTimeline?.rev===r.rev;
     for(let i=0;i<10&&!seen;i++){await new Promise(ok=>setTimeout(ok,500));seen=G.tdTimeline?.rev===r.rev}
@@ -527,7 +527,7 @@ async function toggleShowActive(){
   if(!devCmd('td-dmx-win',{action:on?'disable':'enable',service:'show_active'})){showError('Non collegata a Gaia: apri ⋯ → Gaia.');return}
   showInfo(on?'LIVE: la timeline non comanda più le luci. Componi e cattura le scene.':'TIMELINE: le luci seguono di nuovo la timeline.');
 }
-function tlAct(w,act){if(act==='live'){toggleShowActive();return}if(act==='vlive'){toggleVideoActive();return}if(act==='vcue'){openVideoCueEditor(w);return}if(act==='llive'){toggleLaserActive();return}if(act==='mlive'){toggleHeadMotionActive();return}if(act==='ccue'){openChaseCueEditor(w);return}if(act==='csend'){chaseSendTimeline(w);return}if(act==='fcue'){openFxCueEditor(w);return}if(act==='tap'){const b=tapTempo();if(b)showInfo(`Tempo: ${b} BPM`);return}if(act==='mcue'){openHeadMotionCueEditor(w);return}if(act==='lcue'){openLaserCueEditor(w);return}const r=rt(w),cues=parseCues(w);
+function tlAct(w,act){if(act==='live'){toggleShowActive();return}if(act==='vlive'){toggleVideoActive();return}if(act==='vcue'){openVideoCueEditor(w);return}if(act==='llive'){toggleLaserActive();return}if(act==='mlive'){toggleHeadMotionActive();return}if(act==='ccue'){openChaseCueEditor(w);return}if(act==='csend'){chaseSendTimeline(w);return}if(act==='tracks'){tlChooseTracks(w);return}if(act==='fcue'){openFxCueEditor(w);return}if(act==='tap'){const b=tapTempo();if(b)showInfo(`Tempo: ${b} BPM`);return}if(act==='mcue'){openHeadMotionCueEditor(w);return}if(act==='lcue'){openLaserCueEditor(w);return}const r=rt(w),cues=parseCues(w);
   if(isShowTimeline(w)&&showClock.authority){
     const sample=showClockSample();
     if(act==='edit-cues'){openCueEditor(w);return}
