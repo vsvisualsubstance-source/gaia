@@ -241,6 +241,8 @@ function timelineToTD(w){
   // traccia SEQUENZE: i chase diventano cue "⟳ …" (63-chase-ui.js), rigenerate a ogni invio
   const doc={v:1,name:w.label||'Timeline',bpm:+w.bpm>0?+w.bpm:null,length:w.duration,default_fade:2,
     missing_scenes:'marker',source:'plancia',cues:withChaseCues(cues,w)};
+  // traccia MOVIMENTO col motore di DMX Master (nota TD 57); undefined = TD non lo offre, non si tocca
+  const motion=hmTimelineMotion();if(motion!==undefined)doc.motion=motion;
   if(w.tdBaseRev)doc.base_rev=w.tdBaseRev;
   return{doc,notes};
 }

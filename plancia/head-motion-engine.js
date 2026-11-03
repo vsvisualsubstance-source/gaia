@@ -5,7 +5,8 @@
 // stesso movimento (testa 0 della scena): ventaglio, onda e specchio per testa
 // arrivano quando il motore sara' in DMX Master, con le stesse scene.
 //   prova dal vivo: messaggio WS {type:'head_motion', action:'play', scene, bpm} / {action:'stop'}
-//   timeline: layout.headTimeline = {active, bpm, cues: [{time, label, scene: <id>|'off'}]}
+//   timeline: layout.headTimeline = {engine: 'ops', active, bpm, cues: [{time, label, scene: <id>|'off'}]}
+//             (con engine 'td' o assente la traccia va in show_timeline e la esegue DMX Master, nota TD 57)
 // La prova dal vivo ha la precedenza sulla timeline finche' non si ferma.
 
 const { hmPoint } = require('./src/63-head-motion');
@@ -39,7 +40,7 @@ function startHeadMotion({ getDoc, getScenes, sendOsc, broadcast, rate = 30, url
     const fresh = !!clock && now - clock.receivedAt < 5000, tClock = fresh ? clockPosition(clock, now) : null;
     let sc = null, t = 0, bpm = +doc.bpm || 120, cue = -1, source = 'off';
     if (live) { sc = live.scene; t = (now - live.startedAt) / 1000; bpm = live.bpm || bpm; source = 'live'; }
-    else if (doc.active && tClock != null) {
+    else if (doc.active && doc.engine === 'ops' && tClock != null) {   // col motore di DMX Master la traccia la esegue TD
       const at = headMotionAt(doc.cues, tClock); cue = at.cue;
       sc = at.scene ? scenes.find(s => s.id === at.scene) || null : null; t = tClock; source = 'timeline';
     }

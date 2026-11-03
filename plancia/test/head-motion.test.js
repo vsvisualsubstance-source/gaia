@@ -42,6 +42,13 @@ test('timeline: last cue up to t wins, off stops', () => {
   assert.deepEqual(headMotionAt(cues, 25), { cue: 2, scene: null });
 });
 
+test('engine: the timeline runs here only with engine ops (with TD the track goes to show_timeline)', async () => {
+  const sent = [];
+  const eng = startHeadMotion({ getDoc: () => ({ active: true, cues: [{ time: 0, scene: 'hm-cerchio' }] }), getScenes: () => hmTemplates(), broadcast: () => {},
+    sendOsc: (a, args) => sent.push([a, ...args]), url: 'mqtt://127.0.0.1:9', rate: 50, log: () => {} });
+  try { await new Promise(r => setTimeout(r, 150)); assert.equal(sent.length, 0); } finally { eng.close(); }
+});
+
 test('engine: live play selects all heads and streams /mh/pantilt, stop ends it', async () => {
   const sent = [], states = [];
   const eng = startHeadMotion({ getDoc: () => null, getScenes: () => [], broadcast: m => { if (m.type === 'head_motion') states.push(m.state); },

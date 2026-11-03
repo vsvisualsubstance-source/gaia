@@ -1,14 +1,28 @@
 /* ---------- scene di movimento delle teste: libreria, editor, traccia MOVIMENTO ---------- */
 // Libreria nel layout condiviso (L.headMotions), come le scene laser; la timeline
-// del movimento e' L.headTimeline e la esegue il bridge (head-motion-engine.js).
+// del movimento e' L.headTimeline. Motore (nota TD 57): DMX Master (heads_motion dal
+// vivo, campo motion di show_timeline in timeline), ogni testa per conto suo; oppure,
+// se TD non lo offre o lo si sceglie, quello del bridge (head-motion-engine.js).
 // Le funzioni usate dal render della timeline sono dichiarazioni function.
 function hmScenes(){return Array.isArray(L.headMotions)?L.headMotions:[]}
 function hmDoc(){return L.headTimeline&&Array.isArray(L.headTimeline.cues)?L.headTimeline:{active:false,bpm:null,cues:[]}}
 // BPM della timeline dello show (DMX Master se la pubblica, altrimenti il widget)
 function hmBpm(){const d=tdTimelineDoc(),w=L.pages.flatMap(p=>p.widgets).find(x=>x.type==='timeline'&&x.addr==='/show');return+d?.bpm>0?+d.bpm:+w?.bpm>0?+w.bpm:120}
 function hmHeadCount(){return Math.max(1,Math.min(8,tdHeadEntries().length||4))}
-function hmPlay(sc){emit({type:'head_motion',action:'play',scene:sc,bpm:hmBpm()},true)}
-function hmStop(){emit({type:'head_motion',action:'stop'},true)}
+function hmTdReady(){return tdParams().heads_motion_state!==undefined||!!G.dxm['td-dmx-win']?.heads?.params?.heads_motion}
+// 'td' | 'ops': scelta salvata in L.headTimeline.engine, altrimenti TD se lo offre
+function hmEngine(){const e=L.headTimeline?.engine;return e==='ops'||!hmTdReady()?'ops':'td'}
+const hmTdScene=sc=>{const o=JSON.parse(JSON.stringify(sc));delete o.template;return o};
+function hmPlay(sc){
+  if(hmEngine()==='td'){emit({type:'head_motion',action:'stop'},true);devCmd('td-dmx-win',{action:'set',param:'heads_motion',value:{scene:hmTdScene(sc),bpm:liveBpm()}})}
+  else emit({type:'head_motion',action:'play',scene:sc,bpm:liveBpm()},true);
+}
+function hmStop(){if(hmTdReady())devCmd('td-dmx-win',{action:'set',param:'heads_motion',value:null});emit({type:'head_motion',action:'stop'},true)}
+// stato del motore in uso: {source, scene: {id, name}}
+function hmState(){
+  if(hmEngine()==='td'){const s=tdParams().heads_motion_state;return s?{source:s.source,scene:s.scene_id?{id:s.scene_id,name:s.name||s.scene_id}:null,td:true}:null}
+  return G.hmSt||null;
+}
 const HM_COL=['#3ec5ff','#ffb23e','#7dff9a','#ff6ad5','#b18cff','#ff5d5d','#e8ff5a','#5affe4'];
 // pad -1..1 (y in alto): figura percorsa e una testa per colore
 function hmDraw(cv,sc,t,{heads=hmHeadCount(),bpm=hmBpm(),grid=true}={}){
@@ -28,15 +42,17 @@ function hmAnimateThumbs(el){
     const s=sc.size||[.4,.3],m=Math.max(s[0],s[1])||1;hmDraw(cv,{...sc,center:[0,0],size:[s[0]/m*.8,s[1]/m*.8]},t,{grid:false})});
 }
 function hmStatusText(){
-  const st=G.hmSt;if(!st)return'motore: nessuno stato dal bridge';
+  const st=hmState();if(!st)return hmEngine()==='td'?'DMX Master: nessuno stato del movimento':'motore OPS: nessuno stato dal bridge';
+  if(st.td)return st.source==='live'?`▶ ${st.scene?.name||''} · dal vivo (DMX Master)`:st.source==='timeline'?`▶ ${st.scene?.name||''} · timeline (DMX Master)`:'fermo · motore DMX Master';
   if(st.source==='live')return`▶ ${st.scene?.name||''} · prova dal vivo`;
   if(st.source==='timeline'&&st.scene)return`▶ ${st.scene.name} · timeline`;
   return st.active?(st.clock?'timeline: nessun movimento ora':'timeline: nessun orologio dello show'):'fermo';
 }
 // ---- widget: la libreria delle scene di movimento
 function hmLibHtml(w){
-  const st=G.hmSt,run=st?.scene?.id;
+  const run=hmState()?.scene?.id,eng=hmEngine();
   return`<div class="hm"><div class="hm-top"><span class="hint hm-st">${esc(hmStatusText())}</span>
+      <button class="btn sm ghost" data-hm="engine" title="DMX Master: ogni testa per conto suo, sincrono col DMX. OPS: il bridge manda /mh/pantilt, tutte le teste uguali">Motore: ${eng==='td'?'DMX Master':'OPS'}</button>
       <button class="btn sm" data-hm="stop">■ Stop</button><button class="btn sm ghost" data-hm="new">+ Nuova</button>
       <button class="btn sm ghost" data-hm="svg">SVG</button><button class="btn sm ghost" data-hm="reset" title="Rimette i template mancanti">Template</button></div>
     <div class="hm-grid">${hmScenes().map(s=>`<div class="lzs-tile${run===s.id?' on':''}"><button class="lzs-go" data-hm="play" data-hm-v="${esc(s.id)}" title="Prova dal vivo (il motore su OPS muove le teste)">
@@ -49,6 +65,9 @@ function hmDown(e,el,w){
   const a=b.dataset.hm,s=hmScenes().find(x=>x.id===b.dataset.hmV);
   if(a==='play'&&s){hmPlay(s);showInfo(`Movimento "${s.name}" in prova sulle teste.`)}
   else if(a==='stop'){hmStop();showInfo('Movimento fermato: le teste restano dove sono.')}
+  else if(a==='engine'){if(!hmTdReady()&&hmEngine()==='ops'){showError('DMX Master non offre ancora il motore di movimento (heads_motion).');return}
+    hmStop();const to=hmEngine()==='td'?'ops':'td';L.headTimeline={...hmDoc(),engine:to};save();
+    showInfo(to==='td'?'Motore DMX Master: la traccia MOVIMENTO va nella timeline di TD al prossimo invio.':'Motore OPS: il bridge muove le teste (tutte uguali); la traccia MOVIMENTO la esegue il bridge.')}
   else if(a==='edit'&&s)openHeadMotionEditor(s);
   else if(a==='new')openHeadMotionEditor({...hmTemplates()[0],id:'mov-'+uid(),name:'Nuovo movimento',template:false});
   else if(a==='reset'){const have=new Set(hmScenes().map(x=>x.id)),add=hmTemplates().filter(x=>!have.has(x.id));
@@ -148,7 +167,7 @@ registerWidget('headmotion',{size:[8,6],label:'Movimento teste',showsValue:false
   inner:()=>'<div class="hm-box"></div>',
   onPointer:hmDown,
   tick:(el,w)=>{
-    const box=el.querySelector('.hm-box'),sig=JSON.stringify([hmScenes().map(s=>[s.id,s.name]),G.hmSt?.scene?.id||null]);
+    const box=el.querySelector('.hm-box'),sig=JSON.stringify([hmScenes().map(s=>[s.id,s.name]),hmState()?.scene?.id||null,hmEngine()]);
     if(box&&box._sig!==sig){box._sig=sig;box.innerHTML=hmLibHtml(w)}
     const st=el.querySelector('.hm-st'),txt=hmStatusText();if(st&&st.textContent!==txt)st.textContent=txt;hmAnimateThumbs(el)},
   help:()=>['Movimento teste','Scene di movimento delle teste, come le scene laser: tocca una scena per provarla, ✎ per modificarla (figura da template, disegnata, registrata con REC o da SVG; centro, ampiezza, durata di un giro in battiti o secondi, andamento, velocità dei motori). Le esegue il motore della Plancia su OPS, anche a tablet chiuso; in timeline vanno nella traccia MOVIMENTO.']});
@@ -159,7 +178,7 @@ function headMotionLaneHtml(w,D){
   const blocks=cues.map((c,i)=>{const e=cues[i+1]?.time??D,sc=hmScenes().find(s=>s.id===c.scene);
     return`<div class="tl-blk tl-vblk" style="left:${c.time/D*100}%;width:${Math.max(0,e-c.time)/D*100}%;--ic:${c.scene==='off'||!sc?'#5d6573':'#3ec5ff'}"><span>${esc(c.label||sc?.name||'Fermo')}</span><em>${esc(c.scene==='off'?'fermo':sc?sc.name:'(scena tolta)')}</em></div>`}).join('');
   return`<div class="tl-trk"><div class="tl-vhead"><span class="k">MOVIM.</span>
-    <button class="tl-live tl-mlive" data-act="mlive"${w.readonly?' disabled':''} title="MOVIMENTO · TIMELINE: il motore su OPS muove le teste secondo la timeline. LIVE: solo prove dal tablet">—</button>
+    ${hmEngine()==='td'?'<span class="tl-mtd" title="Motore DMX Master: la traccia va con la timeline di TD e segue il suo LIVE/TIMELINE">TD</span>':`<button class="tl-live tl-mlive" data-act="mlive"${w.readonly?' disabled':''} title="MOVIMENTO · TIMELINE: il motore su OPS muove le teste secondo la timeline. LIVE: solo prove dal tablet">—</button>`}
     ${w.readonly?'':'<button class="tl-vcue" data-act="mcue" title="Cue di movimento: quando parte quale scena">CUE MOV</button>'}
     </div><div class="tl-vlane"><div class="tl-cues">${blocks}</div><span class="tl-vst tl-mst"></span><div class="tl-ph tl-mph"></div></div></div>`;
 }
@@ -173,7 +192,7 @@ function paintHeadMotionLane(el,w,D,t){
 async function toggleHeadMotionActive(){
   const doc=hmDoc(),on=!!doc.active;
   if(!on&&!await uiConfirm('Il MOVIMENTO delle teste segue la timeline?\nIl motore su OPS muove subito le teste secondo il tempo corrente.',{ok:'TIMELINE'}))return;
-  L.headTimeline={...doc,active:!on,bpm:hmBpm()};save();refreshShowTimelines();
+  L.headTimeline={...doc,engine:'ops',active:!on,bpm:hmBpm()};save();refreshShowTimelines();
   showInfo(on?'MOVIMENTO LIVE: solo prove dal tablet.':'MOVIMENTO TIMELINE: il motore su OPS segue la timeline.');
 }
 function openHeadMotionCueEditor(w,cues,meta={}){
@@ -200,9 +219,18 @@ function openHeadMotionCueEditor(w,cues,meta={}){
   s.querySelector('#mcSave').onclick=()=>{
     const cur=read(),bad=cur.find(c=>!Number.isFinite(c.time)||c.time<0||c.time>=D);
     if(bad){showError(`Cue di movimento "${bad.label||'?'}": posizione tra 0:00 e prima di ${formatCueTime(D)}.`);return}
-    L.headTimeline={...hmDoc(),bpm:hmBpm(),cues:cur.sort((a,b)=>a.time-b.time)};
+    L.headTimeline={...hmDoc(),engine:hmEngine(),bpm:hmBpm(),cues:cur.sort((a,b)=>a.time-b.time)};
     save();refreshShowTimelines();closeSheet();showInfo(`Timeline movimento salvata: ${cur.length} cue.`);
+    // motore DMX Master: la traccia va con la timeline (campo motion di show_timeline)
+    if(hmEngine()==='td'&&isShowTimeline(w)&&showClock.authority){const doc=tdTimelineDoc();if(doc){w.cues=serializeCues(timelineFromTD(doc));w.duration=Math.max(1,+doc.length||w.duration);if(+doc.bpm>0)w.bpm=+doc.bpm;w.tdBaseRev=doc.rev}sendTimelineToTD(w)}
   };
+}
+// campo motion di show_timeline (nota TD 57): scene usate + cue; null = traccia tolta
+function hmTimelineMotion(){
+  if(hmEngine()!=='td')return hmTdReady()?null:undefined;
+  const cues=hmDoc().cues.filter(c=>Number.isFinite(+c.time)),used=new Set(cues.map(c=>c.scene).filter(x=>x&&x!=='off'));
+  if(!cues.length)return null;
+  return{scenes:hmScenes().filter(s=>used.has(s.id)).map(hmTdScene),cues:cues.map(c=>({time:+c.time,scene:used.has(c.scene)&&hmScenes().some(s=>s.id===c.scene)?c.scene:'off',label:c.label||''}))};
 }
 // 2026-11-03: libreria dei movimenti con i template e pagina "Teste · movimento"
 // rifatta attorno alla libreria (uiRev 9; la prima versione, uiRev 8, generava cue)
