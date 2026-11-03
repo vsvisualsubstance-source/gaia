@@ -43,6 +43,36 @@ async function main() {
     check(new Set(doc.cues.map(c => c.time)).size === doc.cues.length, 'nessuna cue allo stesso istante');
     check(doc.effects.effects.every(f => !f.template) && doc.motion.scenes.every(s => !s.template), 'niente campi interni della Plancia verso TD');
 
+    const audit = JSON.parse(await p.ev(`(()=>{const T=window.__planciaTest,w=T.L.pages.flatMap(p=>p.widgets).find(x=>x.type==='timeline'&&x.addr==='/show'&&!x.readonly);
+      T.G.devices['td-dmx-win'].params.dmx_models=${JSON.stringify(Object.entries({ 'D+RGB 4CH': 4, 'Dimmer 1CH': 1, 'Haze 2CH': 2, 'Wecam Moving Head 30W 11ch': 11 }).map(([model, footprint]) => ({ model, footprint })))};
+      const a=T.auditTimeline(T.timelineAuditData(w));T.openTimelineAudit(w);const n=document.querySelectorAll('.tla-row').length;document.querySelector('#auClose').click();
+      T.openTimelineAI(w);const ai=!!document.querySelector('#taGen');document.querySelector('#taClose').click();return JSON.stringify({a,n,ai})})()`));
+    audit.a.forEach(x => console.log(`      [${x.level}] ${x.track} ${x.t}: ${x.msg}`));
+    check(!audit.a.some(x => x.level === 'errore'), `controllo timeline sul Demo: ${audit.a.length} segnalazioni, nessun errore`);
+    check(audit.n === audit.a.length && audit.ai, 'fogli Controllo e Timeline con Ollama si aprono');
+
+    // "Applica" di Timeline con Ollama: fetch finta, conferma automatica, poi annulla
+    const applied = JSON.parse(await p.ev(`(async()=>{const T=window.__planciaTest,w=T.L.pages.flatMap(p=>p.widgets).find(x=>x.type==='timeline'&&x.addr==='/show'&&!x.readonly),z=ms=>new Promise(r=>setTimeout(r,ms));
+      new MutationObserver(()=>{const b=document.querySelector('.ui-confirm [data-v="1"]');if(b)b.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}))}).observe(document.body,{childList:true,subtree:true});
+      const J=x=>JSON.stringify(x),before=J({cues:w.cues,d:w.duration,bpm:w.bpm,c:T.L.chaseTimeline,f:T.L.fxTimeline,m:T.L.headTimeline,l:T.L.laserTimeline});
+      const ch=T.L.chases[0].id,fx=T.L.lightFx[0].id,mo=T.L.headMotions[0].id,la=T.L.laserScenes[0].id,realFetch=window.fetch;let sent=null;
+      window.fetch=async(u,o)=>{sent={u,body:JSON.parse(o.body)};return{json:async()=>({ok:true,model:'finto',seconds:1,corrections:['chase: prova'],plan:{bpm:128,sections:[{name:'Intro',seconds:30,scene:'colore_blu',motion:mo},{name:'Drop',seconds:30,scene:'colore_rosso',heads:'teste_pubblico',chase:ch,effects:[fx],laser:la},{name:'Fine',seconds:30,scene:'colore_blu',effects:[]}]}})}};
+      T.openTimelineAI(w);document.querySelector('#taPrompt').value='prova';document.querySelector('#taDur').value='1:30';document.querySelector('#taGen').click();await z(300);window.fetch=realFetch;
+      const warned=document.querySelector('.ai-plan')?.textContent.includes('chase: prova'),rows=document.querySelectorAll('.ai-table tr').length;
+      document.querySelector('#taApply').click();await z(400);
+      const tl=T.L.pages.flatMap(p=>p.widgets).find(x=>x.type==='timeline'&&x.addr==='/show'&&!x.readonly),doc=T.timelineToTD(tl).doc;
+      const after={cues:tl.cues,d:tl.duration,bpm:tl.bpm,chase:T.L.chaseTimeline.cues,fx:T.L.fxTimeline.cues,mo:T.L.headTimeline.cues,la:T.L.laserTimeline.cues,dirty:T.L.tlTdDirty,doc};
+      T.openTimelineAI(tl);document.querySelector('#taUndo').click();await z(200);
+      const back=J({cues:tl.cues,d:tl.duration,bpm:tl.bpm,c:T.L.chaseTimeline,f:T.L.fxTimeline,m:T.L.headTimeline,l:T.L.laserTimeline});
+      return J({sent,warned,rows,after,undone:back===before,leftover:!!T.L.aiTlBackup})})()`));
+    const af = applied.after;
+    check(applied.sent.u === '/api/timeline-ai' && applied.sent.body.lib.scenes.some(s => s.id === 'colore_blu') && !applied.sent.body.lib.scenes.some(s => s.id === 'teste_pubblico') && applied.sent.body.lib.heads.some(s => s.id === 'teste_pubblico'), 'Ollama riceve le librerie vere, scene e teste separate');
+    check(applied.warned && applied.rows === 4, 'anteprima con 3 sezioni e correzioni in vista');
+    check(af.d === 90 && af.bpm === 128 && af.dirty, 'applicata: durata, bpm, da mandare a TD');
+    check(af.cues.split('\n').length === 4 && af.chase.length === 2 && af.fx.length === 2 && af.mo.length === 2 && af.la.length === 2, `applicata: cue su ogni traccia (${JSON.stringify(af.cues)})`);
+    check(af.doc.motion.cues.length === 2 && af.doc.effects.cues.length === 2 && af.doc.cues.some(c => String(c.label).startsWith('⟳')), 'il documento per DMX Master contiene tutte le tracce');
+    check(applied.undone && !applied.leftover, 'annulla: timeline esattamente come prima');
+
     // ogni pagina si apre senza errori
     const names = await p.ev(`[...document.querySelectorAll('#tabs > *')].map(x=>x.textContent)`);
     for (let i = 0; i < names.length; i++) { await p.ev(`document.querySelectorAll('#tabs > *')[${i}].click()`); await sleep(250); }

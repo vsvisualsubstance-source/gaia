@@ -721,3 +721,12 @@ button{cursor:pointer}
 .au-libtab .au-load .au-btn{min-width:38px;min-height:34px}
 .hm-top .btn.sm{min-height:32px}.lzs-ed{min-width:32px;min-height:32px}
 .au-tempo select{min-height:34px}
+
+/* controllo della timeline */
+.tla-list{display:grid;gap:6px}
+.tla-row{display:grid;grid-template-columns:82px 92px 52px 1fr;gap:8px;align-items:baseline;padding:6px 8px;border:1px solid var(--line);border-left-width:4px;border-radius:6px;font-size:13px}
+.tla-row i{font:600 10px var(--mono);font-style:normal;text-transform:uppercase}.tla-row b{font:600 11px var(--mono)}.tla-row span{font:11px var(--mono);color:var(--dim)}.tla-row p{margin:0}
+.tla-row.errore{border-left-color:var(--bad)}.tla-row.errore i{color:var(--bad)}
+.tla-row.attenzione{border-left-color:var(--accent)}.tla-row.attenzione i{color:var(--accent)}
+.tla-row.info i{color:var(--dim)}
+@media (max-width:760px){.tla-row{grid-template-columns:1fr 1fr 1fr}.tla-row p{grid-column:1/-1}}

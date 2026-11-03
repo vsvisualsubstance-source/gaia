@@ -198,11 +198,22 @@ const server = http.createServer((req, res) => {
     let body = '';
     req.on('data', c => { body += c; if (body.length > 8192) req.destroy(); });
     req.on('end', () => {
-      let prompt = '';
-      try { prompt = String(JSON.parse(body).prompt || '').trim(); } catch { /* sotto */ }
+      let prompt = '', models = [];
+      try { const j = JSON.parse(body); prompt = String(j.prompt || '').trim(); if (Array.isArray(j.models)) models = j.models.filter(m => typeof m === 'string').slice(0, 60); } catch { /* sotto */ }
       const reply = (code, obj) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(obj)); };
       if (!prompt) return reply(400, { ok: false, error: 'Descrizione del palco mancante.' });
-      stageAI.generatePlan(prompt, (err, out) => err ? reply(502, { ok: false, error: err.message }) : reply(200, { ok: true, ...out }));
+      stageAI.generatePlan(prompt, (err, out) => err ? reply(502, { ok: false, error: err.message }) : reply(200, { ok: true, ...out }), undefined, { models });
+    });
+  } else if (req.url.split('?')[0] === '/api/timeline-ai' && req.method === 'POST') {
+    // Timeline base da descrizione: stesso giro di /api/stage-ai, con l'elenco di cio' che esiste
+    let body = '';
+    req.on('data', c => { body += c; if (body.length > 32768) req.destroy(); });
+    req.on('end', () => {
+      const reply = (code, obj) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(obj)); };
+      let j = {}; try { j = JSON.parse(body); } catch { /* sotto */ }
+      const prompt = String(j.prompt || '').trim();
+      if (!prompt) return reply(400, { ok: false, error: 'Descrizione dello show mancante.' });
+      stageAI.generateTimeline(prompt, j.lib || {}, (err, out) => err ? reply(502, { ok: false, error: err.message }) : reply(200, { ok: true, ...out }));
     });
   } else if (req.url.split('?')[0] === '/api/fixture-lib' || req.url.split('?')[0] === '/api/fixture-lib/fixture') {
     // Libreria fixture (Open Fixture Library + DMXControl DDF): il bridge

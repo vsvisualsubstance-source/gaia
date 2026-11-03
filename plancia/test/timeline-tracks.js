@@ -77,7 +77,7 @@ async function main() {
     check(t1 > t0, `EFFETTI: trascinato da ${t0} a ${t1}`);
 
     // scelta delle tracce: LASER compare; una traccia con cue non si puo' nascondere
-    await ev(`document.querySelector('[data-act="tracks"]').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}))`); await sleep(200);
+    await ev(`document.querySelector('[data-act="tlmenu"]').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}))`); await sleep(200); await choose('Tracce da vedere'); await sleep(200);
     check(await ev(`[...document.querySelectorAll('.ui-choose button')].find(x=>x.textContent==='Effetti luci').disabled`), 'Tracce: quella con cue resta visibile');
     await choose('Laser'); await ok(); await sleep(300);
     check((await kinds()).includes('LASER'), `Tracce: aggiunta ${(await kinds()).join(', ')}`);

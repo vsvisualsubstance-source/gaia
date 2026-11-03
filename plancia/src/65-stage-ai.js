@@ -4,8 +4,8 @@
 // deterministico (posizioni, nomi, gruppi, indirizzi DMX). Niente viene
 // mandato a DMX Master da solo: si controlla nella Pianta, poi ⇪ TD.
 const AI_ROWS={back:'fondo palco',mid:'centro palco',front:'bordo palco',truss:'americana',side_left:'lato sinistro',side_right:'lato destro',audience:'verso il pubblico',center:'centro'};
-const AI_TYPES={par:'PAR / wash',bar:'Barra LED',mh:'Testa mobile',blinder:'Blinder',haze:'Haze',wall:'LED wall',laser:'Laser',speaker:'Cassa'};
-const AI_PREFIX={par:'PAR',bar:'BAR',mh:'MH',blinder:'BLI',haze:'HAZ',wall:'LED WALL',laser:'LAS',speaker:'SPK'};
+const AI_TYPES={par:'PAR / wash',bar:'Barra LED',mh:'Testa mobile',blinder:'Blinder',haze:'Haze',wall:'LED wall',laser:'Laser',speaker:'Cassa',projector:'Proiettore',screen:'Schermo'};
+const AI_PREFIX={par:'PAR',bar:'BAR',mh:'MH',blinder:'BLI',haze:'HAZ',wall:'LED WALL',laser:'LAS',speaker:'SPK',projector:'PROIETTORE',screen:'SCHERMO'};
 const AI_DEFAULT_GROUP={bar:'ledbar',mh:'mh',blinder:'blinder',haze:'haze',wall:'ledwall'};
 const AI_GROUP_KIND={par:'chase',bar:'chase',blinder:'level',haze:'level'};
 
@@ -23,7 +23,7 @@ function expandStagePlan(plan,opts={}){
   // indirizzi: per universo, dopo l'ultimo canale usato
   const used={};for(const f of existing){const n=fp(f.type);if(n&&f.universe>0)used[f.universe]=Math.max(used[f.universe]||0,(+f.address||1)+n-1)}
   let uni=1;const alloc=n=>{for(;;){const start=(used[uni]||0)+1;if(start+n-1<=512){used[uni]=start+n-1;return[uni,start]}uni++;if(uni>16)return[0,0]}};
-  const rowCount={};let total=0;
+  const rowCount={},units={};let total=0;
   for(const g of groups){
     let count=Math.min(48,Math.round(+g.count));
     if(total+count>200){warnings.push('Oltre 200 fixture: piano troncato.');count=Math.max(0,200-total)}
@@ -44,9 +44,11 @@ function expandStagePlan(plan,opts={}){
       if(row==='truss')z=truss;
       if(g.type==='speaker'&&!side){x=(i%2?1:-1)*(W/2+1.2);y=D-1}
       const P=AI_PREFIX[g.type];num[P]=(num[P]||0)+1;
-      const n=fp(g.type),[u,a]=n?alloc(n):[0,0];
+      const n=fp(g.model?{type:g.type,model:g.model}:g.type),[u,a]=n?alloc(n):[0,0];
+      // luci a colori: ognuna per conto suo, a meno che il piano le voglia a specchio
+      const unit=AI_GROUP_KIND[g.type]==='chase'?(g.mirror?1:(units[group]=(units[group]||0)+1)):undefined;
       if(n&&!u)warnings.push('Universi esauriti: alcune fixture senza indirizzo.');
-      out.push({type:g.type,name:`${P}${g.type==='wall'?' ':''}${num[P]}`,group,universe:u,address:a,x:+x.toFixed(2),y:+y.toFixed(2),...(z!=null?{z}:{}),...(g.type==='mh'||row==='truss'?{mountToTruss:true}:{})});
+      out.push({type:g.type,name:`${P}${g.type==='wall'||g.type==='projector'||g.type==='screen'?' ':''}${num[P]}`,group,universe:u,address:a,...(g.model?{model:g.model}:{}),...(unit?{unit}:{}),x:+x.toFixed(2),y:+y.toFixed(2),...(z!=null?{z}:{}),...(g.type==='mh'||row==='truss'?{mountToTruss:true}:{})});
     }
   }
   return{stage:{width:W,depth:D},fixtures:out,newGroups,warnings};
@@ -83,10 +85,10 @@ function openStageAI(){
     <div class="row"><button class="btn primary" id="aiGen">✨ Genera con Ollama</button><span class="hint" id="aiStatus"></span></div>
     ${preview?`<div class="ai-plan">
       <h4>Piano · palco ${preview.stage.width} × ${preview.stage.depth} m · ${preview.fixtures.length} fixture <span class="hint">(${esc(lastAiPlan.model)}, ${lastAiPlan.seconds} s)</span></h4>
-      <table class="ai-table"><tr><th>Tipo</th><th>Quante</th><th>Dove</th><th>Gruppo</th></tr>${(plan.groups||[]).map(g=>`<tr><td>${esc(AI_TYPES[g.type]||g.type)}</td><td>${g.count}</td><td>${esc(AI_ROWS[g.row]||g.row)}</td><td>${esc(g.group||'—')}</td></tr>`).join('')}</table>
+      <table class="ai-table"><tr><th>Tipo</th><th>Quante</th><th>Dove</th><th>Gruppo</th><th>Modello</th><th>Specchio</th></tr>${(plan.groups||[]).map(g=>`<tr><td>${esc(AI_TYPES[g.type]||g.type)}</td><td>${g.count}</td><td>${esc(AI_ROWS[g.row]||g.row)}</td><td>${esc(g.group||'—')}</td><td>${esc(g.model||'di base')}</td><td>${g.mirror?'sì':''}</td></tr>`).join('')}</table>
       ${plan.notes?`<p class="hint">Ollama: ${esc(plan.notes)}</p>`:''}
       ${preview.newGroups.length?`<p class="hint warn">Gruppi nuovi da creare: ${preview.newGroups.map(g=>`<b>${esc(g.group)}</b> (${g.kind})`).join(', ')}. Li aggiungo alla lista; poi ▦ Gruppi → Salva e invia a TD.</p>`:''}
-      ${preview.warnings.map(w=>`<p class="hint warn">${esc(w)}</p>`).join('')}
+      ${[...(lastAiPlan.corrections||[]),...preview.warnings].map(w=>`<p class="hint warn">${esc(w)}</p>`).join('')}
       <div class="row"><button class="btn primary" id="aiApply">Applica alla Pianta</button></div></div>`:''}
     ${pendingTD()?`<div class="ai-plan"><p class="hint">${pendingTD()} fixture della Pianta non sono ancora in DMX Master. <b>Aggiungi</b>: usa ⇪ TD nel Palco. <b>Sostituisci</b>: manda qui tutta la patch, così in TD non restano le fixture vecchie (con indirizzi sovrapposti). Attenzione: scene e preset delle teste fanno riferimento alle teste di prima.</p>
       <div class="row"><button class="btn" id="aiReplaceTD">⇪ Sostituisci la patch di DMX Master</button></div></div>`:''}
@@ -99,9 +101,8 @@ function openStageAI(){
     const btn=s.querySelector('#aiGen'),st=s.querySelector('#aiStatus');btn.disabled=true;
     const t0=Date.now(),tick=setInterval(()=>st.textContent=`Ollama sta pensando… ${Math.round((Date.now()-t0)/1000)} s (di solito 30-60 s)`,1000);
     try{
-      const r=await fetch('/api/stage-ai',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({prompt})});
-      const d=await r.json();if(!d.ok)throw new Error(d.error||'errore');
-      lastAiPlan={prompt,mode,plan:d.plan,model:d.model,seconds:d.seconds};
+      const d=await aiRequest('/api/stage-ai',{prompt,models:tdModels().map(m=>m.model)});
+      lastAiPlan={prompt,mode,plan:d.plan,model:d.model,seconds:d.seconds,corrections:d.corrections||[]};
       clearInterval(tick);openStageAI();
     }catch(e){clearInterval(tick);btn.disabled=false;st.textContent='';showError('Palco AI: '+e.message)}
   };
@@ -109,7 +110,8 @@ function openStageAI(){
     const p=expandStagePlan(lastAiPlan.plan,{stage:L.stage,mode:lastAiPlan.mode,existing:L.fixtures,knownGroups:groupsOf().map(g=>g.group),footprint:t=>footprintFor(t)});
     if(lastAiPlan.mode!=='add'&&(L.fixtures||[]).length&&!await uiConfirm(`Sostituire le ${(L.fixtures||[]).length} fixture della Pianta con le ${p.fixtures.length} del piano?\nSi può annullare con "↶ Annulla l'ultima applicazione".`))return;
     L.aiBackup={fixtures:JSON.parse(JSON.stringify(L.fixtures||[])),stage:JSON.parse(JSON.stringify(L.stage||{})),groups:L.groups?JSON.parse(JSON.stringify(L.groups)):null,ts:Date.now()};
-    const made=p.fixtures.map(f=>{const x=mkFix(f.type,f.name,f.x,f.y,f.universe,f.address);x.group=f.group;if(f.z!=null)x.z=f.z;if(f.mountToTruss)x.mountToTruss=true;return x});
+    const made=p.fixtures.map(f=>{const x=mkFix(f.type,f.name,f.x,f.y,f.universe,f.address);x.group=f.group;if(f.z!=null)x.z=f.z;if(f.mountToTruss)x.mountToTruss=true;if(f.model)x.model=f.model;if(f.unit)x.unit=f.unit;return x});
+    const scr=made.find(f=>f.type==='screen');for(const f of made)if(f.type==='projector'&&scr)f.target=scr.id;
     L.stage={...(L.stage||stageDefaults()),width:p.stage.width,depth:p.stage.depth};
     L.fixtures=lastAiPlan.mode==='add'?[...(L.fixtures||[]),...made]:made;
     if(p.newGroups.length)L.groups=[...groupsOf().map(g=>({...g})),...p.newGroups.map(g=>({group:g.group,kind:g.kind,label:g.group}))];
