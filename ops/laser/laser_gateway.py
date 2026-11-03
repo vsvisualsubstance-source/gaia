@@ -41,6 +41,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.getenv("LASER_CONFIG", os.path.join(BASE_DIR, "cubes.json"))
 DEVICE_ID = os.getenv("LASER_DEVICE_ID", "laser-ops")
 MQTT_HOST = os.getenv("MQTT_HOST", "127.0.0.1")
+SHOW_CLOCK_TOPIC = os.getenv("SHOW_CLOCK_TOPIC", "gaia/show/clock/state")   # BPM per le scene a tempo
 MQTT_PORT = int(os.getenv("MQTT_PORT", "11883"))
 GLF_PORT = int(os.getenv("LASER_GLF_PORT", str(P.GLF_PORT)))
 STALE_S = 0.5          # sorgente zitta da piu' di cosi' -> uscita spenta
@@ -136,7 +137,8 @@ class Cube:
         self.reply_inflight = 0
         self.reply_time = 0.0
         self.test_ts = 0.0
-        self.scene_t0 = now()
+        self.scene_t = 0.0             # orologio della scena: corre col BPM se la scena e' a tempo
+        self.scene_last = now()
         self.stop_flag = False
         self.thread = threading.Thread(target=self._run, name=f"cube-{cid}", daemon=True)
 
@@ -382,6 +384,8 @@ class Gateway:
         self.mqtt_ok_ts = now()
         self.mqtt_up = False
         self.audio = {"level": 0.0, "at": 0.0, "kick_at": 0.0, "kicks": {}}
+        self.bpm = None            # dal TAP della Plancia (comando bpm); None = orologio dello show
+        self.clock_bpm = None
         self.cfg_lock = threading.RLock()
         for cid, conf in self.cfg["cubes"].items():
             if conf.get("mode") not in MODES:      # es. "dmx" di una config vecchia
@@ -462,7 +466,10 @@ class Gateway:
                     if c.mode == "test" and t0 - c.test_ts > 0.1:
                         self._test_frame(c)
                     elif c.mode == "scene" and c.conf.get("scene"):
-                        pts = SC.animate(c.conf["scene"], t0 - c.scene_t0, level, kick)
+                        sc = c.conf["scene"]
+                        c.scene_t += (t0 - c.scene_last) * SC.tempo_rate(sc, self.bpm_now())
+                        c.scene_last = t0
+                        pts = SC.animate(sc, c.scene_t, level, kick)
                         c.set_frame(render(pts, c.conf, c.pps))
                 except Exception as e:          # una scena rotta non deve fermare gli altri cubi
                     log.warning("%s: scena non disegnabile (%s)", c.id, e)
@@ -488,6 +495,10 @@ class Gateway:
             self.audio["kicks"][key] = k
         self.audio.update(level=max(0.0, min(1.0, level)), at=t)
 
+    def bpm_now(self):
+        """BPM per le scene a tempo: quello del TAP (comando bpm), poi l'orologio dello show."""
+        return self.bpm or self.clock_bpm or 120.0
+
     def audio_now(self):
         t = now()
         level = self.audio["level"] if t - self.audio["at"] < 1.0 else 0.0
@@ -502,7 +513,7 @@ class Gateway:
             self._test_frame(c)
         else:
             c.drop_frame()
-            c.scene_t0 = now()
+            c.scene_t, c.scene_last = 0.0, now()
 
     # -- MQTT
     def status_payload(self):
@@ -517,6 +528,7 @@ class Gateway:
                                 "frames": v["frames"], "ip": v["ip"]}
                             for k, v in self.sources.items() if "ts" in v},
                 "found": self.found,
+                "bpm": {"now": self.bpm_now(), "tap": self.bpm, "clock": self.clock_bpm},
                 "last_result": self.last_result,
             },
             "ts": int(time.time() * 1000),
@@ -542,6 +554,7 @@ class Gateway:
             self.mqtt_ok_ts = now()
             client.subscribe(f"gaia/device/{DEVICE_ID}/command")
             client.subscribe("gaia/devices/+/dmx_rigs")
+            client.subscribe(SHOW_CLOCK_TOPIC)
             log.info("MQTT connesso a %s:%d", MQTT_HOST, MQTT_PORT)
             self.status_dirty = True
 
@@ -552,6 +565,13 @@ class Gateway:
     def _on_message(self, client, userdata, msg):
         if msg.topic.endswith("/dmx_rigs"):
             self._on_rigs(msg.payload)
+            return
+        if msg.topic == SHOW_CLOCK_TOPIC:
+            try:
+                b = float(json.loads(msg.payload).get("bpm") or 0)
+                self.clock_bpm = b if 20 <= b <= 400 else None
+            except (ValueError, AttributeError, TypeError):
+                pass
             return
         try:
             cmd = json.loads(msg.payload.decode("utf-8"))
@@ -603,6 +623,10 @@ class Gateway:
             c.armed = True
             log.info("%s ARMATO (%s)", c.id, c.mode)
             return f"{c.id} armato"
+        if action == "set" and cmd.get("param") == "bpm":
+            v = cmd.get("value")
+            self.bpm = None if v in (None, "", 0) else max(20.0, min(400.0, float(v)))
+            return f"bpm = {self.bpm or 'dall orologio dello show'}"
         if action == "set":
             cid, _, key = str(cmd.get("param", "")).partition("_")
             if cid not in self.cubes:
@@ -633,7 +657,7 @@ class Gateway:
             for c in cubes:
                 with self.cfg_lock:
                     c.conf["scene"] = sc
-                c.scene_t0 = now()
+                c.scene_t, c.scene_last = 0.0, now()
                 if cmd.get("mode", True) and c.mode != "scene":
                     self._set_mode(c, "scene")
             self.save()

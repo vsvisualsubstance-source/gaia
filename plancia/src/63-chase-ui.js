@@ -7,7 +7,9 @@ let TAPS=[];
 function tapTempo(){
   const now=performance.now();if(TAPS.length&&now-TAPS[TAPS.length-1]>2000)TAPS=[];TAPS.push(now);
   const bpm=tapBpm(TAPS);if(!bpm)return null;
-  L.showBpm=bpm;save();emit({type:'tempo',bpm},true);return bpm;
+  L.showBpm=bpm;save();emit({type:'tempo',bpm},true);
+  if(lzDev())devCmd(lzDevId(),{action:'set',param:'bpm',value:bpm});   // scene laser a tempo
+  return bpm;
 }
 function chases(){return Array.isArray(L.chases)?L.chases:[]}
 function chaseDoc(){return L.chaseTimeline&&Array.isArray(L.chaseTimeline.cues)?L.chaseTimeline:{cues:[]}}

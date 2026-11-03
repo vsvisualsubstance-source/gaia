@@ -10,10 +10,15 @@ convertiti nel browser) e il gateway la anima a ogni frame:
    "color": {"mode": "fixed"|"cycle"|"palette"|"stroke", "rgb": [r, g, b],
              "palette": [[r, g, b], ...], "rate": Hz},
    "anim":  {"rotate": gradi/s, "scale": 0..1, "pulse": 0..1, "pulse_hz": Hz,
+             "pulse_shape": forma, "swing": gradi, "swing_hz": Hz, "swing_shape": forma,
              "orbit": 0..1, "orbit_hz": Hz, "draw_hz": Hz (0 = figura intera)},
+   "tempo": {"sync": bool, "bpm": BPM di riferimento},
    "audio": {"amount": 0..1, "to": "scale"|"brightness"}}
 
-x, y in -1..1 (y in alto), colori 0..1. L'audio viene dal controller
+x, y in -1..1 (y in alto), colori 0..1. Forme (pulsazione e oscillazione della
+rotazione, idee di Copilot 2/11): sine, triangle, saw, square, ease (avanti e
+indietro con accelerazione). "tempo.sync": tutte le velocita' scalano con il
+BPM dello show (bpm / tempo.bpm): l'orologio della scena lo fa il gateway. L'audio viene dal controller
 attraverso i meter dei rig di DMX Master (dmx_rigs: level 0..1 e kick).
 La stessa matematica e' in plancia/src/99-laser-scenes.js per l'anteprima.
 """
@@ -22,6 +27,31 @@ import math
 
 MAX_POINTS = 2000      # punti di tutta la scena (come arrivano, prima dell'interpolazione)
 COLOR_MODES = ("fixed", "cycle", "palette", "stroke")
+WAVES = ("sine", "triangle", "saw", "square", "ease")
+
+
+def wave(x, shape="sine"):
+    """Onda -1..1 di periodo 1; "sine" = sin(2 pi x) come prima delle forme."""
+    p = x - math.floor(x)
+    if shape == "triangle":
+        return 4 * abs(p - 0.5) - 1          # +1 a inizio giro, -1 a meta'
+    if shape == "saw":
+        return 2 * p - 1
+    if shape == "square":
+        return 1.0 if p < 0.5 else -1.0
+    if shape == "ease":
+        u = p * 2 if p < 0.5 else 2 - p * 2
+        e = 2 * u * u if u < 0.5 else 1 - (-2 * u + 2) ** 2 / 2
+        return 2 * e - 1
+    return math.sin(2 * math.pi * x)
+
+
+def tempo_rate(sc, bpm):
+    """Quanto corre l'orologio della scena: 1, o bpm / bpm di riferimento se a tempo."""
+    tp = sc.get("tempo") or {}
+    if not tp.get("sync") or not bpm:
+        return 1.0
+    return max(0.1, min(10.0, float(bpm) / tp["bpm"]))
 
 
 def _num(v, lo, hi, default):
@@ -69,7 +99,11 @@ def clean_scene(s):
         "anim": {"rotate": _num(a.get("rotate"), -720, 720, 0), "scale": _num(a.get("scale"), 0.05, 1, 0.8),
                  "pulse": _num(a.get("pulse"), 0, 1, 0), "pulse_hz": _num(a.get("pulse_hz"), 0, 10, 0.5),
                  "orbit": _num(a.get("orbit"), 0, 1, 0), "orbit_hz": _num(a.get("orbit_hz"), 0, 5, 0.2),
-                 "draw_hz": _num(a.get("draw_hz"), 0, 5, 0)},
+                 "draw_hz": _num(a.get("draw_hz"), 0, 5, 0),
+                 "pulse_shape": a.get("pulse_shape") if a.get("pulse_shape") in WAVES else "sine",
+                 "swing": _num(a.get("swing"), 0, 180, 0), "swing_hz": _num(a.get("swing_hz"), 0, 10, 0.25),
+                 "swing_shape": a.get("swing_shape") if a.get("swing_shape") in WAVES else "sine"},
+        "tempo": {"sync": bool((s.get("tempo") or {}).get("sync")), "bpm": _num((s.get("tempo") or {}).get("bpm"), 40, 300, 120)},
         "audio": {"amount": _num(au.get("amount"), 0, 1, 0),
                   "to": au.get("to") if au.get("to") in ("scale", "brightness") else "scale"},
     }
@@ -91,14 +125,14 @@ def animate(sc, t, level=0.0, kick=0.0):
     """Punti (x, y, r, g, b) del frame al tempo t (s). level 0..1 = audio,
     kick 0..1 = lampo del colpo (decade). Colori 0..255 per laser_render."""
     a, au = sc["anim"], sc["audio"]
-    s = a["scale"] * (1 - a["pulse"] * 0.5 + a["pulse"] * 0.5 * math.sin(2 * math.pi * a["pulse_hz"] * t))
+    s = a["scale"] * (1 - a["pulse"] * 0.5 + a["pulse"] * 0.5 * wave(a["pulse_hz"] * t, a.get("pulse_shape", "sine")))
     bright = 1.0
     react = min(1.0, level + 0.5 * kick) * au["amount"]
     if au["to"] == "scale":
         s *= 1 + 0.6 * react
     else:
         bright = (1 - au["amount"]) + react
-    ang = math.radians(a["rotate"] * t)
+    ang = math.radians(a["rotate"] * t + a.get("swing", 0) * wave(a.get("swing_hz", 0) * t, a.get("swing_shape", "sine")))
     ca, sa = math.cos(ang), math.sin(ang)
     ox = a["orbit"] * 0.5 * math.cos(2 * math.pi * a["orbit_hz"] * t)
     oy = a["orbit"] * 0.5 * math.sin(2 * math.pi * a["orbit_hz"] * t)

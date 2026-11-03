@@ -58,12 +58,24 @@ function lzsStrokeRgb(sc,i,t){
   if(c.mode==='stroke')return sc.strokes[i].rgb||c.rgb||[1,1,1];
   return c.rgb||[1,1,1];
 }
+// forme della pulsazione e dell'oscillazione (laser_scene.wave): sine = come prima
+const LZS_WAVES=[['sine','Sinusoide'],['triangle','Triangolo'],['saw','Dente di sega'],['square','Quadra (a scatti)'],['ease','Morbida (accelera e frena)']];
+function lzsWave(x,shape='sine'){
+  const p=x-Math.floor(x);
+  if(shape==='triangle')return 4*Math.abs(p-.5)-1;
+  if(shape==='saw')return 2*p-1;
+  if(shape==='square')return p<.5?1:-1;
+  if(shape==='ease'){const u=p<.5?p*2:2-p*2,e=u<.5?2*u*u:1-(-2*u+2)**2/2;return 2*e-1}
+  return Math.sin(2*Math.PI*x);
+}
+// scena a tempo: il tempo corre con bpm / bpm di riferimento (laser_scene.tempo_rate)
+function lzsTempoRate(sc,bpm){const tp=sc?.tempo;return tp?.sync&&bpm>0?Math.max(.1,Math.min(10,bpm/(+tp.bpm||120))):1}
 function lzsAnimate(sc,t,level=0,kick=0){
-  const a={rotate:0,scale:.8,pulse:0,pulse_hz:.5,orbit:0,orbit_hz:.2,draw_hz:0,...(sc.anim||{})},au={amount:0,to:'scale',...(sc.audio||{})};
-  let s=a.scale*(1-a.pulse*.5+a.pulse*.5*Math.sin(2*Math.PI*a.pulse_hz*t)),bright=1;
+  const a={rotate:0,scale:.8,pulse:0,pulse_hz:.5,orbit:0,orbit_hz:.2,draw_hz:0,pulse_shape:'sine',swing:0,swing_hz:.25,swing_shape:'sine',...(sc.anim||{})},au={amount:0,to:'scale',...(sc.audio||{})};
+  let s=a.scale*(1-a.pulse*.5+a.pulse*.5*lzsWave(a.pulse_hz*t,a.pulse_shape)),bright=1;
   const react=Math.min(1,level+.5*kick)*au.amount;
   if(au.to==='scale')s*=1+.6*react;else bright=(1-au.amount)+react;
-  const ang=a.rotate*t*Math.PI/180,ca=Math.cos(ang),sa=Math.sin(ang);
+  const ang=(a.rotate*t+a.swing*lzsWave(a.swing_hz*t,a.swing_shape))*Math.PI/180,ca=Math.cos(ang),sa=Math.sin(ang);
   const ox=a.orbit*.5*Math.cos(2*Math.PI*a.orbit_hz*t),oy=a.orbit*.5*Math.sin(2*Math.PI*a.orbit_hz*t);
   const total=sc.strokes.reduce((n,st)=>n+st.pts.length+(st.closed?1:0),0);
   let budget=a.draw_hz<=0?total:Math.max(2,Math.floor(total*((t*a.draw_hz)%1)));
@@ -80,7 +92,7 @@ function lzsDraw(cv,sc,t,level=0){
   const g=cv.getContext('2d'),W=cv.width,H=cv.height,k=Math.min(W,H)/2*.92;
   g.fillStyle='#05070a';g.fillRect(0,0,W,H);
   if(!sc?.strokes?.length)return;
-  const pts=lzsAnimate(sc,t,level);g.lineWidth=Math.max(1.2,W/90);g.lineCap='round';
+  const pts=lzsAnimate(sc,t*lzsTempoRate(sc,liveBpm()),level);g.lineWidth=Math.max(1.2,W/90);g.lineCap='round';
   for(let i=1;i<pts.length;i++){const p=pts[i],q=pts[i-1];if(!(p[2]||p[3]||p[4]))continue;
     g.strokeStyle=`rgb(${p[2]},${p[3]},${p[4]})`;g.beginPath();g.moveTo(W/2+q[0]*k,H/2-q[1]*k);g.lineTo(W/2+p[0]*k,H/2-p[1]*k);g.stroke()}
 }
@@ -159,7 +171,8 @@ function lzsDown(e,el,w){
 }
 function openLaserSceneEditor(orig){
   const sc=JSON.parse(JSON.stringify(orig)),s=$('#scrim');s.hidden=false;
-  const C={mode:'fixed',rgb:[1,1,1],palette:[[1,0,0],[0,1,0],[0,0,1]],rate:.2,...sc.color},A={rotate:0,scale:.8,pulse:0,pulse_hz:.5,orbit:0,orbit_hz:.2,draw_hz:0,...sc.anim},U={amount:0,to:'scale',...sc.audio};
+  const C={mode:'fixed',rgb:[1,1,1],palette:[[1,0,0],[0,1,0],[0,0,1]],rate:.2,...sc.color},A={rotate:0,scale:.8,pulse:0,pulse_hz:.5,orbit:0,orbit_hz:.2,draw_hz:0,pulse_shape:'sine',swing:0,swing_hz:.25,swing_shape:'sine',...sc.anim},U={amount:0,to:'scale',...sc.audio};
+  const TP={sync:false,bpm:liveBpm(),...sc.tempo},wv=(id,cur)=>`<select id="${id}">${LZS_WAVES.map(([k,t])=>`<option value="${k}"${k===cur?' selected':''}>${t}</option>`).join('')}</select>`;
   const hex=c=>'#'+c.map(x=>Math.round(x*255).toString(16).padStart(2,'0')).join(''),unhex=h=>[1,3,5].map(i=>+(parseInt(h.slice(i,i+2),16)/255).toFixed(3));
   const sl=(id,label,v,min,max,step)=>`<label class="ar-sl"><span>${label}<b id="${id}V">${(+v).toFixed(step<1?2:0)}</b></span><input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${v}"></label>`;
   const n=sc.strokes.reduce((k,x)=>k+x.pts.length,0);
@@ -174,6 +187,10 @@ function openLaserSceneEditor(orig){
     </div></div>
     <div class="two">${sl('lsRot','Rotazione (gradi/s)',A.rotate,-360,360,1)}${sl('lsScale','Dimensione',A.scale,.05,1,.01)}</div>
     <div class="two">${sl('lsPulse','Pulsazione',A.pulse,0,1,.01)}${sl('lsPulseHz','Pulsazione (Hz)',A.pulse_hz,0,4,.05)}</div>
+    <label>Forma della pulsazione${wv('lsPulseSh',A.pulse_shape)}</label>
+    <div class="two">${sl('lsSwing','Oscillazione della rotazione (gradi, 0 = gira e basta)',A.swing,0,180,1)}${sl('lsSwingHz','Oscillazione (Hz)',A.swing_hz,0,4,.05)}</div>
+    <label>Forma dell'oscillazione${wv('lsSwingSh',A.swing_shape)}</label>
+    <label class="chk"><input id="lsTempo" type="checkbox"${TP.sync?' checked':''}> A tempo: le velocità seguono il BPM dello show (riferimento <b id="lsTempoRef">${TP.bpm}</b> BPM: a quel BPM vanno come impostate qui)</label>
     <div class="two">${sl('lsOrbit','Orbita',A.orbit,0,1,.01)}${sl('lsOrbitHz','Orbita (Hz)',A.orbit_hz,0,2,.01)}</div>
     <div class="two">${sl('lsDraw','Scrittura progressiva (Hz, 0 = figura intera)',A.draw_hz,0,2,.01)}${sl('lsAudio','Audio dal controller',U.amount,0,1,.01)}</div>
     <label>L'audio muove<select id="lsAudioTo"><option value="scale"${U.to==='scale'?' selected':''}>la dimensione</option><option value="brightness"${U.to==='brightness'?' selected':''}>la luminosità</option></select></label>
@@ -184,10 +201,13 @@ function openLaserSceneEditor(orig){
   const read=()=>{
     sc.name=$('#lsName').value.trim()||'Scena';
     sc.color={...C,mode:$('#lsCm').value,rgb:unhex($('#lsRgb').value),palette:[...s.querySelectorAll('[data-pal]')].map(x=>unhex(x.value)),rate:+$('#lsRate').value};
-    sc.anim={rotate:+$('#lsRot').value,scale:+$('#lsScale').value,pulse:+$('#lsPulse').value,pulse_hz:+$('#lsPulseHz').value,orbit:+$('#lsOrbit').value,orbit_hz:+$('#lsOrbitHz').value,draw_hz:+$('#lsDraw').value};
+    sc.anim={rotate:+$('#lsRot').value,scale:+$('#lsScale').value,pulse:+$('#lsPulse').value,pulse_hz:+$('#lsPulseHz').value,orbit:+$('#lsOrbit').value,orbit_hz:+$('#lsOrbitHz').value,draw_hz:+$('#lsDraw').value,
+      pulse_shape:$('#lsPulseSh').value,swing:+$('#lsSwing').value,swing_hz:+$('#lsSwingHz').value,swing_shape:$('#lsSwingSh').value};
+    // a tempo: il riferimento e' il BPM del momento in cui lo si accende
+    const on=$('#lsTempo').checked;if(on&&!sc.tempo?.sync){TP.bpm=liveBpm();$('#lsTempoRef').textContent=TP.bpm}sc.tempo={sync:on,bpm:TP.bpm};
     sc.audio={amount:+$('#lsAudio').value,to:$('#lsAudioTo').value};return sc};
   s.querySelectorAll('input[type=range]').forEach(r=>r.oninput=()=>{const b=$('#'+r.id+'V');if(b)b.textContent=(+r.value).toFixed(+r.step<1?2:0);read()});
-  s.querySelectorAll('select,input[type=color],#lsName').forEach(x=>x.oninput=read);
+  s.querySelectorAll('select,input[type=color],#lsName,#lsTempo').forEach(x=>x.oninput=read);
   const d=lzDev(),tg=s.querySelector('#lsTg');let target=LZS_TARGET;
   const paintTg=()=>{tg.innerHTML=lzsTargets(d).map(id=>`<button class="${target===id?'on':''}" data-t="${id}">${id==='all'?'Tutti':esc(id)}</button>`).join('')};paintTg();
   tg.onclick=e=>{const b=e.target.closest('[data-t]');if(b){target=b.dataset.t;paintTg()}};

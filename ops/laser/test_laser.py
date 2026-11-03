@@ -129,6 +129,26 @@ class TestScene(unittest.TestCase):
         s = SC.clean_scene({**SQUARE, "anim": {"scale": 1, "draw_hz": 1}})
         self.assertLess(len(SC.animate(s, 0.3)), len(SC.animate(s, 0.9)))  # si scrive pian piano
 
+    def test_waves_swing_and_tempo(self):
+        # forme: sine identica a prima, le altre tra -1 e 1 col periodo giusto
+        self.assertAlmostEqual(SC.wave(0.25), 1.0)
+        self.assertEqual([SC.wave(x, "square") for x in (0.1, 0.6)], [1.0, -1.0])
+        self.assertAlmostEqual(SC.wave(0.5, "triangle"), -1.0); self.assertAlmostEqual(SC.wave(0.75, "saw"), 0.5)
+        self.assertAlmostEqual(SC.wave(0.0, "ease"), -1.0); self.assertAlmostEqual(SC.wave(0.5, "ease"), 1.0)
+        for sh in SC.WAVES:
+            self.assertTrue(all(-1.0001 <= SC.wave(i / 37, sh) <= 1.0001 for i in range(80)))
+        # scene vecchie: niente forme, niente tempo -> stesso disegno di prima
+        old = SC.clean_scene({**SQUARE, "anim": {"pulse": 0.5, "pulse_hz": 1}})
+        self.assertEqual(old["anim"]["pulse_shape"], "sine"); self.assertFalse(old["tempo"]["sync"])
+        self.assertEqual(SC.tempo_rate(old, 140), 1.0)
+        # oscillazione: la rotazione va e torna di +-90 gradi invece di girare
+        sw = SC.clean_scene({**SQUARE, "anim": {"scale": 1, "swing": 90, "swing_hz": 1}})
+        x, y = SC.animate(sw, 0.25)[1][:2]                                # +90 gradi a un quarto di giro
+        self.assertAlmostEqual(x, 0.5, places=3); self.assertAlmostEqual(y, -0.5, places=3)
+        # a tempo: l'orologio della scena corre con bpm / bpm di riferimento
+        tp = SC.clean_scene({**SQUARE, "tempo": {"sync": True, "bpm": 120}})
+        self.assertAlmostEqual(SC.tempo_rate(tp, 132), 1.1); self.assertEqual(SC.tempo_rate(tp, None), 1.0)
+
 
 class TestRender(unittest.TestCase):
     def test_zone_keeps_beam_inside(self):
@@ -307,6 +327,17 @@ class TestGateway(unittest.TestCase):
         self.assertTrue(self.gw.handle({"action": "mode", "cube": "all", "value": "off"})["ok"])
         self.assertFalse(self.cube.armed)
         self.assertTrue(wait(lambda: not self.emu.output, 1.0))
+
+    def test_10_bpm_from_tap_then_show_clock(self):
+        self.assertEqual(self.gw.bpm_now(), 120.0)
+        self.gw.clock_bpm = 128.0
+        self.assertEqual(self.gw.bpm_now(), 128.0)
+        self.assertTrue(self.gw.handle({"action": "set", "param": "bpm", "value": 140})["ok"])
+        self.assertEqual(self.gw.bpm_now(), 140.0)
+        self.assertEqual(self.gw.status_payload()["laser"]["bpm"]["tap"], 140.0)
+        self.gw.handle({"action": "set", "param": "bpm", "value": None})
+        self.assertEqual(self.gw.bpm_now(), 128.0)
+        self.gw.clock_bpm = None
 
     def test_7_status_payload_is_json(self):
         s = json.loads(json.dumps(self.gw.status_payload()))
