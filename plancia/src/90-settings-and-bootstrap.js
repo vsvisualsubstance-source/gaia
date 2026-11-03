@@ -186,6 +186,13 @@ function migrateUiLaserPage(){
   if(!L.pages.some(p=>p.name==='Laser')){const at=L.pages.findIndex(p=>p.name==='Audio')+1||L.pages.length;L.pages.splice(at,0,TPL.laser.pages()[0])}
   L.uiRev=6;save();
 }
+// 2026-11-03: pagina "Teste · movimento" dopo Teste mobili (idea di Copilot, 2/11)
+function migrateUiHeadMotionPage(){
+  if((L.uiRev||0)>=8)return;
+  const fresh=TPL.teste.pages()[0];
+  if(!L.pages.some(p=>p.name===fresh.name)){const at=L.pages.findIndex(p=>p.name==='Teste mobili')+1||L.pages.length;L.pages.splice(at,0,fresh)}
+  L.uiRev=8;save();
+}
 function migrateUiAudioPage(){
   if((L.uiRev||0)>=3)return;
   if(!L.pages.some(p=>p.name==='Audio')){const at=L.pages.findIndex(p=>p.name==='Luci')+1||L.pages.length;L.pages.splice(at,0,TPL.audio.pages()[0])}
@@ -195,5 +202,5 @@ function migrateUiAudioPage(){
 }
 // Avvio dell'app: lo chiama src/999-start.js, dopo che tutti i moduli sono stati valutati.
 function init(){
-  migrateLegacyHeadSelectors();migrateHeadPresetWidgets();migrateUiShowTimeline();migrateUiConsolePages();migrateUiAudioPage();migrateUiNoChase();migrateUiOneDmxV8();migrateUiLaserPage();migrateUiLaserScenes();render(); initShow(); connect(); gStart(); requestAnimationFrame(loop);
+  migrateLegacyHeadSelectors();migrateHeadPresetWidgets();migrateUiShowTimeline();migrateUiConsolePages();migrateUiAudioPage();migrateUiNoChase();migrateUiOneDmxV8();migrateUiLaserPage();migrateUiLaserScenes();migrateUiHeadMotionPage();render(); initShow(); connect(); gStart(); requestAnimationFrame(loop);
 }

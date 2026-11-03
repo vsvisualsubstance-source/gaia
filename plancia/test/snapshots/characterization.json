@@ -1544,6 +1544,106 @@
     }
    ]
   },
+  "teste": {
+   "name": "Teste · scene e movimento",
+   "pages": [
+    {
+     "name": "Teste · movimento",
+     "widgets": [
+      [
+       "timeline",
+       0,
+       0,
+       16,
+       3,
+       "/show",
+       "push",
+       "Timeline show"
+      ],
+      [
+       "scenes",
+       0,
+       3,
+       6,
+       2,
+       "/mh/select/heads",
+       "head-select",
+       "Selezione teste"
+      ],
+      [
+       "scenes",
+       6,
+       3,
+       6,
+       2,
+       "/mh/position",
+       "push",
+       "Posizioni"
+      ],
+      [
+       "scenes",
+       12,
+       3,
+       4,
+       2,
+       "",
+       "head-presets",
+       "Preset PTZ"
+      ],
+      [
+       "xy",
+       0,
+       5,
+       5,
+       5,
+       "/mh/pantilt",
+       "push",
+       "Pan / Tilt"
+      ],
+      [
+       "color",
+       5,
+       5,
+       3,
+       5,
+       "/mh/color",
+       "push",
+       "Colore"
+      ],
+      [
+       "scenes",
+       8,
+       5,
+       3,
+       5,
+       "/mh/gobo",
+       "push",
+       "Gobo"
+      ],
+      [
+       "fader",
+       11,
+       5,
+       2,
+       5,
+       "/mh/dimmer",
+       "push",
+       "Dimmer"
+      ],
+      [
+       "scenes",
+       13,
+       5,
+       3,
+       5,
+       "/dmx/scene",
+       "push",
+       "Scene · DMX Master"
+      ]
+     ]
+    }
+   ]
+  },
   "full": {
    "name": "Show completo",
    "pages": [
@@ -2244,6 +2344,101 @@
        "/mh/release",
        "push",
        "Rilascia"
+      ]
+     ]
+    },
+    {
+     "name": "Teste · movimento",
+     "widgets": [
+      [
+       "timeline",
+       0,
+       0,
+       16,
+       3,
+       "/show",
+       "push",
+       "Timeline show"
+      ],
+      [
+       "scenes",
+       0,
+       3,
+       6,
+       2,
+       "/mh/select/heads",
+       "head-select",
+       "Selezione teste"
+      ],
+      [
+       "scenes",
+       6,
+       3,
+       6,
+       2,
+       "/mh/position",
+       "push",
+       "Posizioni"
+      ],
+      [
+       "scenes",
+       12,
+       3,
+       4,
+       2,
+       "",
+       "head-presets",
+       "Preset PTZ"
+      ],
+      [
+       "xy",
+       0,
+       5,
+       5,
+       5,
+       "/mh/pantilt",
+       "push",
+       "Pan / Tilt"
+      ],
+      [
+       "color",
+       5,
+       5,
+       3,
+       5,
+       "/mh/color",
+       "push",
+       "Colore"
+      ],
+      [
+       "scenes",
+       8,
+       5,
+       3,
+       5,
+       "/mh/gobo",
+       "push",
+       "Gobo"
+      ],
+      [
+       "fader",
+       11,
+       5,
+       2,
+       5,
+       "/mh/dimmer",
+       "push",
+       "Dimmer"
+      ],
+      [
+       "scenes",
+       13,
+       5,
+       3,
+       5,
+       "/dmx/scene",
+       "push",
+       "Scene · DMX Master"
       ]
      ]
     },
@@ -3421,7 +3616,7 @@
  },
  "layout": {
   "idempotentOnReload": true,
-  "pages": 13
+  "pages": 14
  },
  "inspector": {
   "gaia": {

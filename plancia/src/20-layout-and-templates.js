@@ -108,8 +108,21 @@ TPL.audio={name:'Audio · reattività',desc:'Audio per gruppo: on/off, kick, sor
 // Laser: i LaserCube WiFi attraverso il laser gateway di OPS (ops/laser).
 TPL.laser={name:'Laser',desc:'LaserCube: modalità per cubo (Show, PatchDeck, Yolo), ARM, blackout, zona di sicurezza.',pages:()=>[P('Laser',[
   W('laser',0,0,16,10,{label:'Laser · LaserCube',color:SWATCH[2]})])]};
+// Teste · movimento (idea di Copilot, 2/11): comporre le scene delle teste e
+// metterle in timeline, con ↻ per le sequenze di posizioni (63-head-motion.js).
+TPL.teste={name:'Teste · scene e movimento',desc:'Teste mobili e timeline insieme: posizioni, colore, gobo, scene e sequenze di movimento nella traccia TESTE.',pages:()=>[P('Teste · movimento',[
+  W('timeline',0,0,16,3,{label:'Timeline show',...tlOpts()}),
+  W('scenes',0,3,6,2,{label:'Selezione teste',addr:'/mh/select/heads',mode:'head-select',items:'',headValues:[],selectedHeads:[],value:[],cols:6,color:SWATCH[1]}),
+  W('scenes',6,3,6,2,{label:'Posizioni',addr:'/mh/position',items:POS.join('\n'),cols:6,value:-1}),
+  W('scenes',12,3,4,2,{label:'Preset PTZ',mode:'head-presets',headPresets:[],color:SWATCH[4]}),
+  W('xy',0,5,5,5,{label:'Pan / Tilt',addr:'/mh/pantilt',min:-1,max:1,value:.5,valueY:.25,color:SWATCH[1]}),
+  W('color',5,5,3,5,{label:'Colore',addr:'/mh/color',value:{h:.58,s:.55},color:SWATCH[1]}),
+  W('scenes',8,5,3,5,{label:'Gobo',addr:'/mh/gobo',items:GOBOS.join('\n'),cols:2,value:0,color:SWATCH[3]}),
+  W('fader',11,5,2,5,{label:'Dimmer',addr:'/mh/dimmer',value:1}),
+  W('scenes',13,5,3,5,{label:'Scene · DMX Master',addr:'/dmx/scene',items:sceneList,cols:1,value:0})
+])]};
 TPL.full={name:'Show completo',desc:'Tutte le pagine insieme: Gaia, PatchDeck, DMX V8, panoramica show, DMX, teste mobili, timeline, palco, mix.',
-  pages:()=>['gaia','show','regia','luci','audio','laser','dmx','mh','timeline','palco','mix'].flatMap(k=>TPL[k].pages())};
+  pages:()=>['gaia','show','regia','luci','audio','laser','dmx','mh','teste','timeline','palco','mix'].flatMap(k=>TPL[k].pages())};
 const sample=()=>({pages:TPL.full.pages(),fixtures:defaultFixtures(),stage:stageDefaults()});
 
 let L=store.get(KEY)||sample();
