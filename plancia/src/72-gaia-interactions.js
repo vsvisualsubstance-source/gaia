@@ -30,6 +30,8 @@ function dragSlider(e,el,sl,apply){
   const mv=ev=>{pending=apply(clamp((ev.clientX-r.left)/r.width));const k=sl.dataset.par||'dz',n=now();if(n-(lastSet[k]||0)>80){lastSet[k]=n;pending();pending=null}};
   mv(e);sl.onpointermove=mv;sl.onpointerup=sl.onpointercancel=()=>{if(pending)pending();sl.onpointermove=sl.onpointerup=sl.onpointercancel=null;el._drag=null};
 }
+document.addEventListener('change',e=>{const s=e.target.closest?.('select.dv-sel');if(!s||s.value==='cur')return;
+  const p=devParams(s.dataset.dev).find(x=>x.n===s.dataset.par);if(p)devCmd(s.dataset.dev,{action:'set',param:p.n,value:p.options[+s.value]})});
 document.addEventListener('submit',e=>{const f=e.target.closest('.ga-in');if(!f)return;e.preventDefault();const i=f.querySelector('input');gSay(i.value);i.value='';G.dirty=true});
 
 /* ---------- tipi di widget della famiglia Gaia (MQTT, nessun indirizzo OSC) ---------- */

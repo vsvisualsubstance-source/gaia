@@ -55,7 +55,9 @@ function gPaint(el,w){
     if(body._sig!==sig){body._sig=sig;
       // sezioni apribili (per rig, teste, PTZ, show...) invece di un elenco unico; i
       // servizi delicati (patch, simulazione, file audio...) in "Avanzate" con conferma
-      const secs=tdDeviceSections(id,ps,sv),param=p=>p.options?`<div class="dv-p"><span title="${esc(p.n)}">${esc(p.label)}</span><div class="dv-opts">${p.options.map((o,i)=>`<button class="chip" data-par="${esc(p.n)}" data-opt="${esc(o)}" data-opt-type="${typeof o}">${esc(p.labels?.[i]??o)}</button>`).join('')}</div><span></span></div>`
+      // enum lunghi (schede audio, porte): menu a tendina; il valore e' l'indice dell'opzione
+      const secs=tdDeviceSections(id,ps,sv),param=p=>p.options?.length>6?`<div class="dv-p"><span title="${esc(p.n)}">${esc(p.label)}</span><select class="dv-sel" data-dev="${esc(id)}" data-par="${esc(p.n)}"><option value="cur" data-cur></option>${p.options.map((o,i)=>`<option value="${i}">${esc(p.labels?.[i]??o)}</option>`).join('')}</select><span></span></div>`
+          :p.options?`<div class="dv-p"><span title="${esc(p.n)}">${esc(p.label)}</span><div class="dv-opts">${p.options.map((o,i)=>`<button class="chip" data-par="${esc(p.n)}" data-opt="${esc(o)}" data-opt-type="${typeof o}">${esc(p.labels?.[i]??o)}</button>`).join('')}</div><span></span></div>`
           :`<div class="dv-p"><span title="${esc(p.n)}">${esc(p.label)}</span><div class="dv-sl" data-par="${esc(p.n)}" data-min="${p.min}" data-max="${p.max}"><i></i></div><span class="dv-v"></span></div>`;
       body.innerHTML=secs.map((s,i)=>`<details class="dv-sec${s.adv?' dv-adv':''}" data-sec="${esc(s.key)}"${(DV_OPEN.get(w.id+'|'+s.key)??(i===0&&!s.adv))?' open':''}>
           <summary>${esc(s.title)} <em>${[s.svc.length?s.svc.length+' interruttori':'',s.params.length?s.params.length+' regolazioni':''].filter(Boolean).join(' · ')}</em></summary>
@@ -65,7 +67,11 @@ function gPaint(el,w){
       body.querySelectorAll('details.dv-sec').forEach(d=>d.ontoggle=()=>DV_OPEN.set(w.id+'|'+d.dataset.sec,d.open))}
     const st=d?.services||{},pv=d?.params||{};
     body.querySelectorAll('.chip[data-svc]').forEach(c=>c.classList.toggle('on',st[c.dataset.svc]==='active'));
-    body.querySelectorAll('.chip[data-opt]').forEach(c=>c.classList.toggle('on',String(pv[c.dataset.par])===c.dataset.opt));
+    body.querySelectorAll('.chip[data-opt]').forEach(c=>c.classList.toggle('on',dvOptIndex(pv[c.dataset.par],[c.dataset.opt])===0));
+    // valore non tra le opzioni (lista vecchia o scheda sparita): resta visibile come "attuale"
+    body.querySelectorAll('select.dv-sel').forEach(s=>{if(document.activeElement===s)return;
+      const v=pv[s.dataset.par],i=dvOptIndex(v,ps.find(p=>p.n===s.dataset.par)?.options||[]),cur=s.options[0];
+      cur.hidden=i>=0;cur.textContent=v==null||v===''?'—':`${dvValueLabel(v)} (attuale, non in elenco)`;s.value=i>=0?String(i):'cur'});
     body.querySelectorAll('.dv-sl').forEach(s=>{if(s===el._drag)return;const v=+pv[s.dataset.par],mn=+s.dataset.min,mx=+s.dataset.max;
       sliderSet(s,isNaN(v)?0:(v-mn)/((mx-mn)||1),isNaN(v)?'—':fmt(v))});
     return;

@@ -249,10 +249,13 @@ function devParams(id){
   for(const n of Object.keys(d.params||{}))if(/^(dmx_.+|heads)_(fixture_count|start_address|output_port|fixture_profile|profile)$/.test(n))seen.add(n);
   const addDx=(params,rig)=>{for(const[n0,m]of Object.entries(params||{})){const n=rig?n0.replace(/^dmx_/,`dmx_${rig}_`):n0;if(seen.has(n))continue;seen.add(n);
     const lab=(rig?rig.toUpperCase()+' · ':'')+n0.replace(/^dmx_/,'').replace(/_/g,' ');
-    if(Array.isArray(m.options))out.push({n,label:lab,options:m.options});
+    if(Array.isArray(m.options))out.push({n,label:lab,options:m.options,...(Array.isArray(m.labels)?{labels:m.labels}:{})});
     else if(m.type==='bool'||m.type==='toggle')out.push({n,label:lab,options:[0,1],labels:['off','on']});
     else{const r=m.range||[m.min??0,m.max??1];out.push({n,label:lab,min:+r[0],max:+r[1]})}}};
   if(dm?.rigs)for(const[rig,r]of Object.entries(dm.rigs))addDx(r.params,rig);else if(dm)addDx(dm.params,null);
+  // sorgenti audio A/B (TD/Win-PD 6): tipo, mittente, driver e scheda sono enum
+  // solo qui, nello status sono stringhe e senza questo non comparivano
+  for(const s of Object.values(dm?.audio?.sources||{}))addDx(s.params,null);
   for(const[n,v]of Object.entries(d.params||{}))if(!seen.has(n)&&typeof v==='number'){seen.add(n);out.push({n,label:n.replace(/_/g,' '),min:0,max:Math.max(1,Math.abs(v)>1?Math.ceil(Math.abs(v)):1)})}
   return out;
 }

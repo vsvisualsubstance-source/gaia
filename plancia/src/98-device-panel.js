@@ -15,6 +15,17 @@ const DV_IT={level:'Livello',min_dimmer:'Dimmer minimo',max_dimmer:'Dimmer massi
   active:'Attiva',fan:'Ventola',speed:'Velocità',smooth:'Morbidezza',mode:'Modo',home:'Home',invert_pan:'Inverti pan',invert_tilt:'Inverti tilt',
   mirror:'Specchio',shutter_open:'Shutter aperto',blackout:'Blackout',output:'Uscita DMX',loop:'Loop',play:'Play',custom_color1:'Colore custom 1',
   custom_color2:'Colore custom 2',custom_color3:'Colore custom 3',custom_color4:'Colore custom 4',custom_color5:'Colore custom 5',time:'Tempo (s)',length:'Durata (s)'};
+// Valore di un enum TD contro le opzioni pubblicate. Per la scheda audio lo
+// status porta il nome interno di TD ("{id}||Gruppo_microfoni_(...)||1") e il
+// dmx_matrix l'etichetta ("Gruppo microfoni (...)"), a volte con ® perso nella
+// codifica: se non c'e' l'uguale esatto si confrontano solo lettere e cifre.
+function dvKey(v){const s=String(v??''),p=s.split('||');return(p.length>2?p[1]:s).toLowerCase().replace(/[^a-z0-9]/g,'')}
+function dvOptIndex(value,options){
+  if(value==null||value==='')return-1;
+  const i=options.findIndex(o=>String(o)===String(value));if(i>=0)return i;
+  const k=dvKey(value);return k?options.findIndex(o=>dvKey(o)===k):-1;
+}
+function dvValueLabel(v){const p=String(v??'').split('||');return p.length>2?p[1].replace(/_/g,' '):String(v??'')}
 const dvLabel=suffix=>DV_IT[suffix]||suffix.replace(/_/g,' ');
 function dvRigTitle(rig){
   const g=(L.groups||[]).find(x=>x.bind===`rig_${rig}`||x.group===rig);

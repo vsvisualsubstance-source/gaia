@@ -288,6 +288,7 @@ button{cursor:pointer}
 .dv-sl i{position:absolute;left:0;top:0;bottom:0;width:0;background:color-mix(in srgb,var(--c) 45%,transparent);border-right:2px solid var(--c)}
 .dv-v{font-family:var(--mono);font-size:11px;text-align:right;font-variant-numeric:tabular-nums}
 .dv-opts{display:flex;gap:4px;flex-wrap:wrap}
+.dv-sel{min-width:0;width:100%;grid-column:2/4;font-size:12px}
 .dv-empty{margin:auto;text-align:center;color:var(--dim);font-size:13px;line-height:1.45;max-width:34ch}
 .dz-pal{display:grid;grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:5px}
 .dz-sw{border:1px solid var(--line2);border-radius:5px;padding:18px 7px 6px;background:linear-gradient(var(--s),var(--s)) top/100% 12px no-repeat,var(--panel2);font-family:var(--display);font-weight:600;font-size:14.5px;letter-spacing:.04em;line-height:1.05;text-transform:uppercase;text-align:center;overflow:hidden;overflow-wrap:anywhere}
