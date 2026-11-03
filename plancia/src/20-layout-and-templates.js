@@ -135,8 +135,14 @@ TPL.sequenze={name:'Sequenze (chase)',desc:'Chase a step con le scene di DMX Mas
   W('chase',0,4,10,6,{label:'Chase',color:SWATCH[4]}),
   W('scenes',10,4,6,6,{label:'Scene · DMX Master',addr:'/dmx/scene',items:sceneList,cols:2,value:0})
 ])]};
+// Effetti sulle luci (63-light-fx*.js, nota TD 59): libreria, scene, timeline.
+TPL.effetti={name:'Effetti luci',desc:'Onde di dimmer e colore, inseguimento, scintillio e strobo a tempo sulle luci dei gruppi, calcolati da DMX Master; traccia EFFETTI.',pages:()=>[P('Effetti',[
+  W('timeline',0,0,16,4,{label:'Timeline show',...tlOpts()}),
+  W('lightfx',0,4,10,6,{label:'Effetti luci',color:SWATCH[1]}),
+  W('scenes',10,4,6,6,{label:'Scene · DMX Master',addr:'/dmx/scene',items:sceneList,cols:2,value:0})
+])]};
 TPL.full={name:'Show completo',desc:'Tutte le pagine insieme: Gaia, PatchDeck, DMX V8, panoramica show, DMX, teste mobili, timeline, palco, mix.',
-  pages:()=>['gaia','show','regia','sequenze','luci','audio','laser','dmx','mh','teste','timeline','palco','mix'].flatMap(k=>TPL[k].pages())};
+  pages:()=>['gaia','show','regia','sequenze','effetti','luci','audio','laser','dmx','mh','teste','timeline','palco','mix'].flatMap(k=>TPL[k].pages())};
 const sample=()=>({pages:TPL.full.pages(),fixtures:defaultFixtures(),stage:stageDefaults()});
 
 let L=store.get(KEY)||sample();

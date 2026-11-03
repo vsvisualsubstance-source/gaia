@@ -676,3 +676,10 @@ button{cursor:pointer}
 .ui-confirm-card .row{justify-content:flex-end;gap:8px}
 .tl-mtd{font-family:var(--mono);font-size:10px;padding:1px 6px;border:1px solid var(--line2);border-radius:4px;color:var(--dim)}
 .lz-mask{border-top:1px solid var(--line2);padding-top:6px;margin-top:6px}.lz-mask>b{font-size:12px;margin-right:6px}
+/* effetti sulle luci (63-light-fx-ui.js) */
+.fx-grid{grid-template-columns:repeat(auto-fill,minmax(170px,1fr))}
+.fx-grid canvas{width:100%;height:auto;aspect-ratio:160/44}
+.fx-grid .lzs-go em{font-style:normal;font-size:10px;color:var(--dim)}
+.fx-prev{width:100%;height:auto;aspect-ratio:560/90;border:1px solid var(--line);border-radius:6px;margin-bottom:8px}
+.row.fx-cols,.fx-cols{display:flex;flex-wrap:wrap;gap:4px}.fx-cols input[type=color]{width:38px;height:30px;padding:0}
+.fcue-row{grid-template-columns:110px 1fr 2fr auto;align-items:start}.fc-fx{display:flex;flex-wrap:wrap;gap:4px 12px;padding-top:18px}
