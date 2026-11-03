@@ -24,13 +24,13 @@ test('app bundle preserves module order and parses as one client scope', () => {
     '/* ---------- simulazione:',
     '/* ---------- ciclo principale ---------- */',
     '/* ---------- impostazioni e template ---------- */',
-    'migrateLegacyHeadSelectors();migrateHeadPresetWidgets();migrateUiShowTimeline();migrateUiConsolePages();migrateUiAudioPage();migrateUiNoChase();migrateUiOneDmxV8();migrateUiLaserPage();migrateUiLaserScenes();migrateUiHeadMotionPage();render();',
+    'migrateLegacyHeadSelectors();migrateHeadPresetWidgets();migrateUiShowTimeline();migrateUiConsolePages();migrateUiAudioPage();migrateUiNoChase();migrateUiOneDmxV8();migrateUiLaserPage();migrateUiLaserScenes();migrateUiHeadMotion();render();',
     '/* ---------- avvio ---------- */'
   ].map(marker => bundle.indexOf(marker));
 
   assert.equal(bundle.startsWith('(()=>{\n'), true);
   assert.equal(bundle.endsWith('\n})();\n'), true);
-  assert.equal(appModules.length, 42);
+  assert.equal(appModules.length, 43);
   assert.equal(positions.every(position => position >= 0), true);
   assert.deepEqual(positions, [...positions].sort((a, b) => a - b));
   assert.doesNotThrow(() => new vm.Script(bundle));

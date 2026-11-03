@@ -649,6 +649,11 @@ button{cursor:pointer}
 .au-time{align-items:center;gap:6px}.au-time .st{flex:1;text-align:center}.au-time .zm{min-width:3em;text-align:center}
 .au-btn.sm{min-width:30px;min-height:26px;padding:1px 6px;font-size:12px}
 .au-wave{cursor:grab;touch-action:none}.au-wave:active{cursor:grabbing}
-/* movimento teste (63-head-motion.js): posizioni nell'ordine scelto */
-.hm-pos{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 10px}
-.hm-pos .chip i{font-style:normal;font-family:var(--mono);font-size:11px;font-weight:700;margin-right:6px;padding:0 5px;border-radius:3px;background:var(--fg);color:var(--bg)}
+/* movimento teste (63-head-motion-ui.js): libreria come le scene laser */
+.hm-box{position:absolute;inset:30px 8px 8px;display:flex;flex-direction:column;min-height:0}
+.hm{display:flex;flex-direction:column;gap:6px;height:100%;min-height:0}
+.hm-top{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.hm-top .hm-st{flex:1;min-width:120px}
+.hm-grid{flex:1;min-height:0;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:6px;align-content:start}
+.hm-pad{width:100%;max-width:280px;aspect-ratio:1;border:1px solid var(--line);border-radius:6px;touch-action:none;cursor:crosshair}
+#hmRec.on{background:#ff365c;color:#fff}#hmDraw.on{background:var(--fg);color:var(--bg)}

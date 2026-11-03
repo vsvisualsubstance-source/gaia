@@ -30,14 +30,14 @@ registerWidget('timeline',{addrLabel:'Indirizzo base OSC',
         const target=[sc?sceneKind(sc.categories).label:'',c.sceneId?c.sceneId:c.scene!=null?'SC '+(c.scene+1):'',c.params?.length?'DMX '+c.params.length:''].filter(Boolean).join(' · ');
         return `<div class="tl-blk" data-k="${i}" style="left:${c.t/D*100}%;width:${(e-c.t)/D*100}%;--ic:${col}"><span><i>${i+1}</i>${esc(c.name)}</span><em>${target}</em></div>`}).join(''),blocks=blocksOf('lights');
       return `<div class="tl${isShowTimeline(w)?' tl-tracks':''}" data-duration="${D}"><div class="tl-head"><span class="tl-name">${esc(w.label)}</span>
-        <div class="tl-tr"><button data-act="start" aria-label="Inizio"${locked?' disabled':''}>${ICON.start}</button><button data-act="play" aria-label="Play/pausa"${locked?' disabled':''}>${ICON.play}</button><button data-act="stop" aria-label="Stop"${locked?' disabled':''}>${ICON.stop}</button><button data-act="loop" aria-label="Loop"${controlled?' disabled':''}>${ICON.loop}</button>${w.readonly?'':'<button data-act="edit-cues" aria-label="Modifica cue">CUE</button>'}${tracks&&!w.readonly?'<button data-act="motion" aria-label="Movimento teste" title="Movimento teste: cue in sequenza tra posizioni">↻</button>':''}</div>
+        <div class="tl-tr"><button data-act="start" aria-label="Inizio"${locked?' disabled':''}>${ICON.start}</button><button data-act="play" aria-label="Play/pausa"${locked?' disabled':''}>${ICON.play}</button><button data-act="stop" aria-label="Stop"${locked?' disabled':''}>${ICON.stop}</button><button data-act="loop" aria-label="Loop"${controlled?' disabled':''}>${ICON.loop}</button>${w.readonly?'':'<button data-act="edit-cues" aria-label="Modifica cue">CUE</button>'}</div>
         ${isShowTimeline(w)?`<button class="tl-live" data-act="live"${w.readonly?' disabled':''} title="${w.readonly?'Modalità di DMX Master: si cambia nella pagina Timeline':'LIVE: comandi tu dal tablet (per comporre e catturare le scene). TIMELINE: comanda la timeline dello show'}">—</button>`:''}<span class="tl-tc">00:00:00:00</span><span class="tl-cue"><span class="k">CUE</span><b>—</b></span><span class="tl-next"></span><span class="tl-bpm">${controlled?`TD · ${available?sample.source.toUpperCase():'OFFLINE · FERMO'}`:`${isShowTimeline(w)?'SIMULAZIONE · ':''}${w.bpm||120} BPM`} · ${Math.floor(D/60)}:${String(Math.round(D%60)).padStart(2,'0')}</span></div>
-        ${isShowTimeline(w)?'<div class="tl-trk tl-trk-main"><div class="tl-vhead"><span class="k">LUCI</span></div>':''}<div class="tl-lane"><div class="tl-ruler">${ticks}</div><div class="tl-cues">${blocks}</div><div class="tl-ph"></div></div>${tracks?`</div><div class="tl-trk"><div class="tl-vhead"><span class="k">TESTE</span></div><div class="tl-lane tl-hlane"><div class="tl-cues">${blocksOf('heads')}</div><div class="tl-ph"></div></div></div>`+videoLaneHtml(w,D)+laserLaneHtml(w,D):''}</div>`},
+        ${isShowTimeline(w)?'<div class="tl-trk tl-trk-main"><div class="tl-vhead"><span class="k">LUCI</span></div>':''}<div class="tl-lane"><div class="tl-ruler">${ticks}</div><div class="tl-cues">${blocks}</div><div class="tl-ph"></div></div>${tracks?`</div><div class="tl-trk"><div class="tl-vhead"><span class="k">TESTE</span></div><div class="tl-lane tl-hlane"><div class="tl-cues">${blocksOf('heads')}</div><div class="tl-ph"></div></div></div>`+headMotionLaneHtml(w,D)+videoLaneHtml(w,D)+laserLaneHtml(w,D):''}</div>`},
   // trasporto e pulsanti; blocchi delle cue (trascinabili, o richiamo della cue
   // quando comanda DMX Master); tocco o trascinamento sulla traccia = salto nel tempo
   onPointer(e,el,w){
     const end=()=>{el.classList.remove('active','press');el.onpointermove=null;el.onpointerup=el.onpointercancel=null;save()};
-      const b=e.target.closest('[data-act]'); if(b){e.preventDefault();if(b.dataset.act==='edit-cues')openCueEditor(w);else if(b.dataset.act==='motion')openHeadMotion(w);else tlAct(w,b.dataset.act);return}
+      const b=e.target.closest('[data-act]'); if(b){e.preventDefault();if(b.dataset.act==='edit-cues')openCueEditor(w);else tlAct(w,b.dataset.act);return}
       const lane=e.target.closest('.tl-lane'); if(!lane)return;
       const block=e.target.closest('.tl-blk');
       if(block){
@@ -70,7 +70,7 @@ registerWidget('timeline',{addrLabel:'Indirizzo base OSC',
       const lb=el.querySelector('.tl-live');if(lb){const on=tdShowActive(),t=on===null?'—':on?'TIMELINE':'LIVE';
         if(lb.textContent!==t){lb.textContent=t;lb.classList.toggle('is-live',on===false);lb.classList.toggle('is-tl',on===true)}}
       const r=rt(w),D=timelineDuration(w),cues=timelineCues(w);
-      el.querySelectorAll('.tl-lane>.tl-ph').forEach(p=>p.style.left=r.t/D*100+'%');paintVideoLane(el,w,D,r.t);paintLaserLane(el,w,D,r.t);el.querySelector('.tl-tc').textContent=tc(r.t);
+      el.querySelectorAll('.tl-lane>.tl-ph').forEach(p=>p.style.left=r.t/D*100+'%');paintHeadMotionLane(el,w,D,r.t);paintVideoLane(el,w,D,r.t);paintLaserLane(el,w,D,r.t);el.querySelector('.tl-tc').textContent=tc(r.t);
       const sample=isShowTimeline(w)&&showClock.authority?showClockSample():null;
       const controlled=isShowTimeline(w)&&showClock.authority,locked=controlled&&(!sample||!showClockFresh(sample));
       el.querySelector('[data-act="start"]').disabled=locked;

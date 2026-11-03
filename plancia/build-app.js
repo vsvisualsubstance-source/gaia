@@ -25,6 +25,7 @@ const appModules = [
   '62-dmx-groups.js',
   '63-dmx-scenes.js',
   '63-head-motion.js',
+  '63-head-motion-ui.js',
   '64-dmx-models.js',
   '65-stage-ai.js',
   '66-video-timeline.js',

@@ -270,6 +270,12 @@ const broadcast = (msg, except) => {
 const videoTimeline = require('./video-timeline').startVideoTimeline({ getDoc: () => persistedState?.layout?.videoTimeline, broadcast });
 // Timeline laser (ops/laser): stessa idea, verso il laser gateway. Scene in layout.laserScenes.
 const laserTimeline = require('./laser-timeline').startLaserTimeline({ getDoc: () => persistedState?.layout?.laserTimeline, getScenes: () => persistedState?.layout?.laserScenes || [], broadcast });
+// Movimento teste (head-motion-engine.js): scene in layout.headMotions, timeline in
+// layout.headTimeline, /mh/pantilt verso DMX Master sul canale OSC predefinito.
+const headMotion = require('./head-motion-engine').startHeadMotion({
+  getDoc: () => persistedState?.layout?.headTimeline, getScenes: () => persistedState?.layout?.headMotions || [], broadcast,
+  sendOsc: (address, args) => { const to = routeOf(address, 'default'); if (to) udp.send(encode(address, args), to.port, to.host, () => {}); }
+});
 
 // MIDI in ingresso (midi-in.js): i comandi si eseguono qui, una volta sola,
 // anche senza tablet aperti; le pagine ricevono il ritorno OSC e il messaggio
@@ -310,6 +316,8 @@ wss.on('connection', ws => {
         return;
       }
       saveSharedState(m.state, ws, m.clientRevision);
+    } else if (m.type === 'head_motion') {
+      if (m.action === 'play') headMotion.play(m.scene, m.bpm); else if (m.action === 'stop') headMotion.stop();
     } else if (m.type === 'osc' && typeof m.address === 'string' && m.address.startsWith('/')) {
       const args = Array.isArray(m.args) ? m.args : [];
       const channel = typeof m.channel === 'string' ? m.channel : 'default';

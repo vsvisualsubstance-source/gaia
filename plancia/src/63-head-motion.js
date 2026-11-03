@@ -1,99 +1,89 @@
-/* ---------- movimento teste: sequenze di cue nella traccia TESTE ---------- */
-// Idea di Copilot (99-motion-scenes.js, 2/11): animare le teste mobili. Un'animazione
-// calcolata dal tablet si fermerebbe col tablet; in TD non c'e' un generatore di
-// movimento e il movimento si fa con cue in sequenza e fade tra scene "solo teste"
-// (nota TD 39). Qui si genera quella sequenza: la esegue DMX Master anche senza
-// tablet. Una scena pos_<posizione> (categoria heads) per posizione, catturata
-// richiamando la posizione su tutte le teste; le cue arrivano nell'editor della
-// timeline, da rivedere prima dell'invio.
-const HM_PATTERNS=[{id:'loop',label:'In fila · A B C A B C'},{id:'pingpong',label:'Avanti e indietro · A B C B A'}];
-const hmSceneId=pos=>'pos_'+String(pos).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
-// posizioni di DMX Master [{index, position, label}]; senza TD quelle della Plancia
-function tdHeadPositions(){
-  const p=G.dxm['td-dmx-win']?.heads?.programmer?.positions;
-  return Array.isArray(p)&&p.length?p:POS.map((n,index)=>({index,position:n,label:n}));
-}
-function hmOrder(seq,pattern){return pattern==='pingpong'&&seq.length>2?[...seq,...seq.slice(1,-1).reverse()]:seq}
-// un passo ogni step secondi da start a end (escluso); fade in % del passo
-function hmCues({positions,pattern,start,end,step,fadePct}){
-  const order=hmOrder(positions,pattern),out=[];
-  if(!order.length||!(step>0))return out;
-  const fade=+(step*Math.max(0,Math.min(100,fadePct))/100).toFixed(2);
-  for(let i=0,t=start;t<end-1e-6&&out.length<200;i++,t=start+i*step){
-    const pos=order[i%order.length];
-    out.push({t:+t.toFixed(3),name:`↻ ${pos.label||pos.position}`,targets:`@${hmSceneId(pos.position)}; fade=${fade}`});
+/* ---------- scene di movimento delle teste: formato, matematica, template ---------- */
+// Come le scene laser: una figura (template, disegno, REC o SVG) e come
+// percorrerla. La esegue un motore fuori dal tablet: oggi quello della Plancia
+// su OPS (head-motion-engine.js, /mh/pantilt uguale per tutte le teste
+// selezionate), poi DMX Master con la stessa scena e ogni testa per conto suo
+// (ventaglio, onda, specchio). Idee di Copilot (99-motion-scenes.js, 2/11):
+// curve di accelerazione e avanti/indietro. Questo file e' anche un modulo
+// Node: il motore del bridge usa le stesse funzioni.
+//
+// Scena (L.headMotions[]):
+//   {id, name, template?, path: {pts: [[x, y]...], closed},  x, y in -1..1, y in alto
+//    center: [pan, tilt], size: [pan, tilt]      unita' di /mh/pantilt: -1..1 = escursione intera
+//    period: {value, unit: 'beats'|'s'}          durata di un giro
+//    easing: 'linear'|'easeIn'|'easeOut'|'easeInOut'|'sine', pingpong, reverse
+//    spread: {mode: 'same'|'phase'|'mirror'|'phase_mirror', phase}   testa k: +k*phase di giro, dispari a specchio
+//    motor: null | 0..1}                         velocita' dei motori (heads_speed), null = invariata
+const HM_EASINGS=[['linear','Costante'],['easeInOut','Morbido (accelera e frena)'],['easeIn','Accelera'],['easeOut','Frena'],['sine','Sinusoidale']];
+const HM_SPREADS=[['same','Tutte uguali'],['phase','Onda (sfasate)'],['mirror','A specchio'],['phase_mirror','Ventaglio (sfasate e a specchio)']];
+function hmEase(x,mode){
+  switch(mode){
+    case'easeIn':return x*x;
+    case'easeOut':return 1-(1-x)*(1-x);
+    case'easeInOut':return x<.5?2*x*x:1-(-2*x+2)**2/2;
+    case'sine':return(1-Math.cos(Math.PI*x))/2;
+    default:return x;
   }
-  return out;
 }
-const hmSleep=ms=>new Promise(ok=>setTimeout(ok,ms));
-// cattura le scene pos_* che mancano (o tutte con recapture), in LIVE come la
-// cattura a mano; la selezione teste resta "tutte" alla fine
-async function hmEnsureScenes(positions,recapture,onStep=()=>{}){
-  const need=positions.filter(p=>recapture||!tdSceneById(hmSceneId(p.position)));
-  if(!need.length)return 0;
-  const heads=tdHeadEntries().map(h=>h.id);
-  if(!heads.length)throw new Error('DMX Master non pubblica teste mobili.');
-  const wasActive=tdShowActive()===true;
-  try{
-    if(wasActive){
-      if(!devCmd('td-dmx-win',{action:'disable',service:'show_active'}))throw new Error('Non collegata a Gaia: apri ⋯ → Gaia.');
-      await tdWait(()=>tdShowActive()===false);
-    }
-    fire('/mh/select/heads',heads);await hmSleep(400);
-    for(const p of need){
-      const id=hmSceneId(p.position),pub=()=>`${G.devices['td-dmx-win']?.ts}|${JSON.stringify(tdSceneById(id))}`,before=pub();
-      onStep(p);fire('/mh/position',[p.index]);await hmSleep(900);
-      await tdSceneCommand('show_scene_capture',{name:id,label:`Teste · ${p.label||p.position}`,categories:['heads']},()=>!!tdSceneById(id)&&pub()!==before);
-    }
-  }finally{if(wasActive)devCmd('td-dmx-win',{action:'enable',service:'show_active'})}
-  return need.length;
+// punto a frazione u (0..1) della lunghezza del percorso: velocita' costante lungo la figura
+const HM_LEN=new WeakMap();
+function hmPathAt(path,u){
+  const pts=path?.pts||[];if(!pts.length)return[0,0];if(pts.length===1)return pts[0];
+  let c=HM_LEN.get(pts);
+  if(!c){const seq=path.closed?[...pts,pts[0]]:pts,acc=[0];
+    for(let i=1;i<seq.length;i++)acc.push(acc[i-1]+Math.hypot(seq[i][0]-seq[i-1][0],seq[i][1]-seq[i-1][1]));
+    c={seq,acc};HM_LEN.set(pts,c)}
+  const total=c.acc[c.acc.length-1];if(!(total>0))return pts[0];
+  const d=Math.max(0,Math.min(1,u))*total;let i=1;while(i<c.acc.length-1&&c.acc[i]<d)i++;
+  const a=c.seq[i-1],b=c.seq[i],f=(d-c.acc[i-1])/((c.acc[i]-c.acc[i-1])||1);
+  return[a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f];
 }
-function openHeadMotion(w){
-  const s=$('#scrim');s.hidden=false;
-  const positions=tdHeadPositions(),D=timelineDuration(w),bpm=+w.bpm>0?+w.bpm:null;
-  const f={sel:[],pattern:'loop',start:Math.floor(rt(w).t),end:D,step:4,unit:bpm?'beat':'s',fadePct:80,replace:true,recapture:false};
-  const stepSec=()=>f.unit==='beat'&&bpm?f.step*60/bpm:f.step;
-  const paint=()=>{
-    const picked=f.sel.map(i=>positions[i]),cues=hmCues({positions:picked,pattern:f.pattern,start:f.start,end:f.end,step:stepSec(),fadePct:f.fadePct});
-    const missing=picked.filter(p=>f.recapture||!tdSceneById(hmSceneId(p.position)));
-    s.innerHTML=`<div class="sheet" role="dialog" aria-label="Movimento teste">
-      <div class="top"><h3>↻ Movimento teste</h3><button class="btn ghost" id="hmClose">Chiudi</button></div>
-      <p class="hint">Le teste passano da una posizione all'altra con un fade: una cue per passo nella traccia TESTE. Le esegue DMX Master, anche a tablet chiuso. Tocca le posizioni nell'ordine in cui le vuoi.</p>
-      <div class="hm-pos">${positions.map((p,i)=>{const k=f.sel.indexOf(i);return`<button class="chip${k>=0?' on':''}" data-hm-pos="${i}">${k>=0?`<i>${k+1}</i>`:''}${esc(p.label||p.position)}</button>`}).join('')}</div>
-      <div class="two"><label>Andamento<select id="hmPattern">${HM_PATTERNS.map(x=>`<option value="${x.id}"${x.id===f.pattern?' selected':''}>${esc(x.label)}</option>`).join('')}</select></label>
-        <label>Passo<span class="row"><input id="hmStep" type="number" min="0.5" step="0.5" value="${f.step}" style="flex:1"><select id="hmUnit"${bpm?'':' disabled'}><option value="s"${f.unit==='s'?' selected':''}>secondi</option><option value="beat"${f.unit==='beat'?' selected':''}>battiti${bpm?` (${bpm} BPM)`:''}</option></select></span></label></div>
-      <div class="two"><label>Da (M:SS)<input id="hmStart" value="${esc(formatCueTime(f.start))}" inputmode="decimal"></label><label>A (M:SS)<input id="hmEnd" value="${esc(formatCueTime(f.end))}" inputmode="decimal"></label></div>
-      <label>Fade · ${f.fadePct}% del passo (${(stepSec()*f.fadePct/100).toFixed(1)} s): 100% = movimento continuo, poco = scatti<input id="hmFade" type="range" min="0" max="100" step="5" value="${f.fadePct}"></label>
-      <label class="chk"><input id="hmReplace" type="checkbox"${f.replace?' checked':''}> Togli le cue teste già presenti tra Da e A</label>
-      <label class="chk"><input id="hmRecap" type="checkbox"${f.recapture?' checked':''}> Ricattura le scene delle posizioni (dopo averle ricalibrate)</label>
-      <p class="hint"><b>${cues.length} cue</b> ogni ${stepSec().toFixed(2)} s${picked.length?` · ${hmOrder(picked,f.pattern).map(p=>esc(p.label||p.position)).join(' → ')}`:''}${missing.length?` · da catturare: ${missing.map(p=>hmSceneId(p.position)).join(', ')} (luci in LIVE per qualche secondo, tutte le teste selezionate)`:''}${cues.length>=200?' · massimo 200 cue':''}</p>
-      <p class="hint" id="hmStatus"></p>
-      <div class="row"><button class="btn primary" id="hmGo"${picked.length>1&&cues.length?'':' disabled'}>Crea le cue e apri l'editor</button></div>
-    </div>`;
-    const q=x=>s.querySelector(x);
-    q('#hmClose').onclick=closeSheet;
-    s.querySelectorAll('[data-hm-pos]').forEach(b=>b.onclick=()=>{const i=+b.dataset.hmPos,k=f.sel.indexOf(i);if(k>=0)f.sel.splice(k,1);else f.sel.push(i);paint()});
-    q('#hmPattern').onchange=e=>{f.pattern=e.target.value;paint()};
-    q('#hmStep').onchange=e=>{if(+e.target.value>0)f.step=+e.target.value;paint()};
-    q('#hmUnit').onchange=e=>{f.unit=e.target.value;paint()};
-    q('#hmStart').onchange=e=>{const t=parseCueTime(e.target.value);if(Number.isFinite(t))f.start=clamp(t,0,D);paint()};
-    q('#hmEnd').onchange=e=>{const t=parseCueTime(e.target.value);if(Number.isFinite(t))f.end=clamp(t,0,D);paint()};
-    q('#hmFade').onchange=e=>{f.fadePct=+e.target.value;paint()};
-    q('#hmReplace').onchange=e=>{f.replace=e.target.checked};
-    q('#hmRecap').onchange=e=>{f.recapture=e.target.checked;paint()};
-    q('#hmGo').onclick=async()=>{
-      const go=q('#hmGo'),st=q('#hmStatus');go.disabled=true;
-      try{
-        const n=await hmEnsureScenes(picked,f.recapture,p=>{st.textContent=`Cattura scena ${hmSceneId(p.position)}…`});
-        if(n)showInfo(`${n} scene di posizione catturate in DMX Master.`);
-        // base: la timeline di TD se la segue, altrimenti la bozza della Plancia
-        const doc=isShowTimeline(w)&&showClock.authority?tdTimelineDoc():null;
-        let list=doc?timelineFromTD(doc):parseCues(w).map(c=>({t:c.t,name:c.name,targets:cueTargets(c)}));
-        if(f.replace)list=list.filter(c=>{const id=/@([^;]+)/.exec(c.targets||'')?.[1]?.trim();return!(c.t>=f.start&&c.t<f.end&&id&&cueIsHeads({sceneId:id}))});
-        list=[...list,...hmCues({positions:picked,pattern:f.pattern,start:f.start,end:f.end,step:stepSec(),fadePct:f.fadePct})].sort((a,b)=>a.t-b.t);
-        renderCueEditor(w,list,doc?{td:true,duration:Math.max(1,+doc.length||w.duration),bpm:+doc.bpm>0?+doc.bpm:null,rev:doc.rev,_dirty:true}:{td:false,_dirty:true});
-      }catch(e){st.textContent='';go.disabled=false;showError('Movimento teste: '+e.message)}
-    };
-  };
-  paint();
+const hmPeriod=(sc,bpm)=>{const v=+sc?.period?.value||4;return Math.max(.05,sc?.period?.unit==='s'?v:v*60/(bpm>0?bpm:120))};
+// pan/tilt (-1..1) della testa k al tempo t (secondi)
+function hmPoint(sc,t,k=0,bpm=120){
+  const sp=sc.spread||{},mode=sp.mode||'same';
+  let u=t/hmPeriod(sc,bpm)+(mode==='phase'||mode==='phase_mirror'?k*(+sp.phase||0):0);
+  u-=Math.floor(u);
+  if(sc.pingpong)u=u<.5?u*2:2-u*2;
+  if(sc.reverse)u=1-u;
+  let[x,y]=hmPathAt(sc.path,hmEase(u,sc.easing));
+  if((mode==='mirror'||mode==='phase_mirror')&&k%2)x=-x;
+  const c=sc.center||[0,0],s=sc.size||[.4,.3],cl=v=>Math.max(-1,Math.min(1,v));
+  return[+cl(c[0]+s[0]*x).toFixed(4),+cl(c[1]+s[1]*y).toFixed(4)];
 }
+// ---- template: figure (x, y in -1..1, y in alto)
+function hmShape(kind){
+  const P=(n,f,closed)=>({pts:Array.from({length:n},(_,i)=>f(i/(closed?n:n-1))).map(([x,y])=>[+x.toFixed(4),+y.toFixed(4)]),closed:!!closed});
+  const TAU=Math.PI*2;
+  switch(kind){
+    case'cerchio':return P(72,u=>[Math.cos(u*TAU),Math.sin(u*TAU)],true);
+    case'otto':return P(96,u=>{const t=u*TAU,d=1+Math.sin(t)**2;return[Math.cos(t)/d,Math.sin(t)*Math.cos(t)/d*1.6]},true);
+    case'onda':return P(80,u=>[u*2-1,Math.sin(u*TAU*2)*.6]);
+    case'scanner':return{pts:[[-1,0],[1,0]],closed:false};
+    case'annuisci':return{pts:[[0,-1],[0,1]],closed:false};
+    case'apri':return{pts:[[0,0],[1,0]],closed:false};
+    case'quadrato':return{pts:[[-1,-1],[1,-1],[1,1],[-1,1]],closed:true};
+    case'triangolo':return{pts:[0,1,2].map(i=>[+Math.cos(Math.PI/2+i*TAU/3).toFixed(4),+Math.sin(Math.PI/2+i*TAU/3).toFixed(4)]),closed:true};
+    case'balletto':return P(120,u=>[Math.sin(3*u*TAU+Math.PI/2),Math.sin(2*u*TAU)],true);
+    case'vagare':return P(120,u=>{const t=u*TAU;return[(Math.sin(t)+.45*Math.sin(3*t+1)+.25*Math.sin(5*t+2))/1.5,(Math.cos(2*t)+.4*Math.sin(4*t+.5))/1.3]},true);
+  }
+  return{pts:[[0,0]],closed:false};
+}
+function hmTemplates(){
+  const T=(id,name,o={})=>({id:'hm-'+id,name,template:true,path:hmShape(id),center:[0,0],size:[.35,.25],period:{value:8,unit:'beats'},
+    easing:'linear',pingpong:false,reverse:false,spread:{mode:'same',phase:0},motor:null,...o});
+  return[
+    T('cerchio','Cerchio'),
+    T('otto','Otto',{size:[.4,.25],period:{value:16,unit:'beats'}}),
+    T('scanner','Scanner (pan)',{size:[.45,0],pingpong:true,easing:'sine'}),
+    T('annuisci','Sì (tilt)',{size:[0,.3],pingpong:true,easing:'sine',period:{value:4,unit:'beats'}}),
+    T('onda','Onda',{size:[.45,.2],pingpong:true,easing:'easeInOut'}),
+    T('apri','Ventaglio',{size:[.4,0],pingpong:true,easing:'sine',spread:{mode:'mirror',phase:0}}),
+    T('cerchio','Onda di cerchi',{id:'hm-onda-cerchi',spread:{mode:'phase',phase:.15}}),
+    T('balletto','Balletto',{size:[.35,.25],period:{value:16,unit:'beats'},spread:{mode:'phase_mirror',phase:.25}}),
+    T('quadrato','Quadrato',{easing:'easeInOut'}),
+    T('triangolo','Triangolo',{easing:'easeInOut'}),
+    T('vagare','Vagare (lento)',{size:[.4,.25],period:{value:30,unit:'s'},easing:'linear'})
+  ];
+}
+if(typeof module==='object'&&module.exports){module.exports={hmEase,hmPathAt,hmPeriod,hmPoint,hmShape,hmTemplates,HM_EASINGS,HM_SPREADS}}

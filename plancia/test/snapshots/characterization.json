@@ -285,6 +285,17 @@
    ],
    "probes": []
   },
+  "headmotion": {
+   "label": "Movimento teste",
+   "size": [
+    8,
+    6
+   ],
+   "args": [
+    -1
+   ],
+   "probes": []
+  },
   "gaia": {
    "label": "Gaia",
    "size": [
@@ -1555,16 +1566,26 @@
        0,
        0,
        16,
-       3,
+       4,
        "/show",
        "push",
        "Timeline show"
       ],
       [
-       "scenes",
+       "headmotion",
        0,
-       3,
+       4,
+       9,
        6,
+       "",
+       "push",
+       "Movimento teste"
+      ],
+      [
+       "scenes",
+       9,
+       4,
+       7,
        2,
        "/mh/select/heads",
        "head-select",
@@ -1572,9 +1593,9 @@
       ],
       [
        "scenes",
+       9,
        6,
-       3,
-       6,
+       4,
        2,
        "/mh/position",
        "push",
@@ -1582,9 +1603,9 @@
       ],
       [
        "scenes",
-       12,
+       13,
+       6,
        3,
-       4,
        2,
        "",
        "head-presets",
@@ -1592,53 +1613,23 @@
       ],
       [
        "xy",
-       0,
+       9,
+       8,
        5,
-       5,
-       5,
+       2,
        "/mh/pantilt",
        "push",
        "Pan / Tilt"
       ],
       [
-       "color",
-       5,
-       5,
-       3,
-       5,
-       "/mh/color",
-       "push",
-       "Colore"
-      ],
-      [
-       "scenes",
-       8,
-       5,
-       3,
-       5,
-       "/mh/gobo",
-       "push",
-       "Gobo"
-      ],
-      [
        "fader",
-       11,
-       5,
+       14,
+       8,
        2,
-       5,
+       2,
        "/mh/dimmer",
        "push",
        "Dimmer"
-      ],
-      [
-       "scenes",
-       13,
-       5,
-       3,
-       5,
-       "/dmx/scene",
-       "push",
-       "Scene · DMX Master"
       ]
      ]
     }
@@ -2355,16 +2346,26 @@
        0,
        0,
        16,
-       3,
+       4,
        "/show",
        "push",
        "Timeline show"
       ],
       [
-       "scenes",
+       "headmotion",
        0,
-       3,
+       4,
+       9,
        6,
+       "",
+       "push",
+       "Movimento teste"
+      ],
+      [
+       "scenes",
+       9,
+       4,
+       7,
        2,
        "/mh/select/heads",
        "head-select",
@@ -2372,9 +2373,9 @@
       ],
       [
        "scenes",
+       9,
        6,
-       3,
-       6,
+       4,
        2,
        "/mh/position",
        "push",
@@ -2382,9 +2383,9 @@
       ],
       [
        "scenes",
-       12,
+       13,
+       6,
        3,
-       4,
        2,
        "",
        "head-presets",
@@ -2392,53 +2393,23 @@
       ],
       [
        "xy",
-       0,
+       9,
+       8,
        5,
-       5,
-       5,
+       2,
        "/mh/pantilt",
        "push",
        "Pan / Tilt"
       ],
       [
-       "color",
-       5,
-       5,
-       3,
-       5,
-       "/mh/color",
-       "push",
-       "Colore"
-      ],
-      [
-       "scenes",
-       8,
-       5,
-       3,
-       5,
-       "/mh/gobo",
-       "push",
-       "Gobo"
-      ],
-      [
        "fader",
-       11,
-       5,
+       14,
+       8,
        2,
-       5,
+       2,
        "/mh/dimmer",
        "push",
        "Dimmer"
-      ],
-      [
-       "scenes",
-       13,
-       5,
-       3,
-       5,
-       "/dmx/scene",
-       "push",
-       "Scene · DMX Master"
       ]
      ]
     },
@@ -3840,6 +3811,16 @@
    "fields": {
     "fLabel": "Colore",
     "fAddr": "/mh/color",
+    "fOscChannel": "",
+    "fDup": "",
+    "fDel": ""
+   }
+  },
+  "headmotion": {
+   "html": "<h3>Movimento teste</h3> <label>Etichetta<input id=\"fLabel\"></label> <label>Indirizzo OSC<input id=\"fAddr\" class=\"mono\" spellcheck=\"false\" autocapitalize=\"off\"></label> <label>Canale OSC<select id=\"fOscChannel\"><option value=\"\">Predefinito · 192.168.1.73:7020</option></select></label> <p class=\"hint\">La famiglia e l’istanza identificano la destinazione; indirizzo e argomenti restano quelli definiti dal contratto del progetto TD.</p> <label>Colore</label><div class=\"sw\"><button class=\"swb\" data-c=\"#ffb23e\" style=\"--c:#ffb23e\" aria-label=\"Colore #ffb23e\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#3ec9ff\" style=\"--c:#3ec9ff\" aria-label=\"Colore #3ec9ff\" aria-pressed=\"true\"></button><button class=\"swb\" data-c=\"#ff5fa2\" style=\"--c:#ff5fa2\" aria-label=\"Colore #ff5fa2\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#9be15d\" style=\"--c:#9be15d\" aria-label=\"Colore #9be15d\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#b18cff\" style=\"--c:#b18cff\" aria-label=\"Colore #b18cff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#e9ebef\" style=\"--c:#e9ebef\" aria-label=\"Colore #e9ebef\" aria-pressed=\"false\"></button></div> <div class=\"row\"><button class=\"btn\" id=\"fDup\">Duplica</button><button class=\"btn danger\" id=\"fDel\">Elimina</button></div>",
+   "fields": {
+    "fLabel": "Movimento teste",
+    "fAddr": "",
     "fOscChannel": "",
     "fDup": "",
     "fDel": ""
