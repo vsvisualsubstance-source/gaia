@@ -13,6 +13,7 @@ convertiti nel browser) e il gateway la anima a ogni frame:
              "pulse_shape": forma, "swing": gradi, "swing_hz": Hz, "swing_shape": forma,
              "orbit": 0..1, "orbit_hz": Hz, "draw_hz": Hz (0 = figura intera)},
    "tempo": {"sync": bool, "bpm": BPM di riferimento},
+   "frames": [{"strokes": [...]}, ...], "frame_fps": fps     (facoltativi: animazione, es. da ILDA)
    "audio": {"amount": 0..1, "to": "scale"|"brightness"}}
 
 x, y in -1..1 (y in alto), colori 0..1. Forme (pulsazione e oscillazione della
@@ -26,6 +27,8 @@ import colorsys
 import math
 
 MAX_POINTS = 2000      # punti di tutta la scena (come arrivano, prima dell'interpolazione)
+MAX_FRAMES = 120       # animazioni (ILDA): frame al massimo
+MAX_FRAME_POINTS = 12000   # punti di tutti i frame insieme (la scena sta nel layout condiviso)
 COLOR_MODES = ("fixed", "cycle", "palette", "stroke")
 WAVES = ("sine", "triangle", "saw", "square", "ease")
 
@@ -70,23 +73,36 @@ def _rgb(v, default=(1.0, 1.0, 1.0)):
     return [_num(x, 0, 1, 1.0) for x in v[:3]]
 
 
-def clean_scene(s):
-    """Valida e limita una scena arrivata via MQTT; ValueError se inservibile."""
-    if not isinstance(s, dict):
-        raise ValueError("scena non valida")
+def _clean_strokes(raw, limit):
     strokes, total = [], 0
-    for st in s.get("strokes") or []:
+    for st in raw or []:
         if not isinstance(st, dict):
             continue
         pts = []
         for p in st.get("pts") or []:
             if isinstance(p, (list, tuple)) and len(p) >= 2:
                 pts.append([_num(p[0], -1, 1, 0.0), _num(p[1], -1, 1, 0.0)])
-        if not pts or total + len(pts) > MAX_POINTS:
+        if not pts or total + len(pts) > limit:
             continue
         total += len(pts)
         strokes.append({"pts": pts, "closed": bool(st.get("closed")),
                         "rgb": _rgb(st["rgb"]) if st.get("rgb") else None})
+    return strokes, total
+
+
+def clean_scene(s):
+    """Valida e limita una scena arrivata via MQTT; ValueError se inservibile."""
+    if not isinstance(s, dict):
+        raise ValueError("scena non valida")
+    frames, budget = [], MAX_FRAME_POINTS
+    for f in (s.get("frames") or [])[:MAX_FRAMES]:
+        st, n = _clean_strokes((f or {}).get("strokes") if isinstance(f, dict) else None, min(MAX_POINTS, budget))
+        if st:
+            frames.append({"strokes": st})
+            budget -= n
+        if budget <= 0:
+            break
+    strokes = frames[0]["strokes"] if frames else _clean_strokes(s.get("strokes"), MAX_POINTS)[0]
     if not strokes:
         raise ValueError("scena senza forme")
     c, a, au = s.get("color") or {}, s.get("anim") or {}, s.get("audio") or {}
@@ -104,12 +120,13 @@ def clean_scene(s):
                  "swing": _num(a.get("swing"), 0, 180, 0), "swing_hz": _num(a.get("swing_hz"), 0, 10, 0.25),
                  "swing_shape": a.get("swing_shape") if a.get("swing_shape") in WAVES else "sine"},
         "tempo": {"sync": bool((s.get("tempo") or {}).get("sync")), "bpm": _num((s.get("tempo") or {}).get("bpm"), 40, 300, 120)},
+        **({"frames": frames, "frame_fps": _num(s.get("frame_fps"), 1, 60, 25)} if len(frames) > 1 else {}),
         "audio": {"amount": _num(au.get("amount"), 0, 1, 0),
                   "to": au.get("to") if au.get("to") in ("scale", "brightness") else "scale"},
     }
 
 
-def _stroke_rgb(sc, i, t):
+def _stroke_rgb(sc, i, t, strokes=None):
     c = sc["color"]
     if c["mode"] == "cycle":
         return list(colorsys.hsv_to_rgb((t * c["rate"] + i * 0.12) % 1.0, 1.0, 1.0))
@@ -117,7 +134,7 @@ def _stroke_rgb(sc, i, t):
         pal = c["palette"]
         return pal[(int(t * c["rate"] * len(pal)) + i) % len(pal)]
     if c["mode"] == "stroke":
-        return sc["strokes"][i]["rgb"] or c["rgb"]
+        return (strokes or sc["strokes"])[i]["rgb"] or c["rgb"]
     return c["rgb"]
 
 
@@ -136,13 +153,16 @@ def animate(sc, t, level=0.0, kick=0.0):
     ca, sa = math.cos(ang), math.sin(ang)
     ox = a["orbit"] * 0.5 * math.cos(2 * math.pi * a["orbit_hz"] * t)
     oy = a["orbit"] * 0.5 * math.sin(2 * math.pi * a["orbit_hz"] * t)
-    total = sum(len(st["pts"]) + (1 if st["closed"] else 0) for st in sc["strokes"])
+    strokes = sc["strokes"]
+    if sc.get("frames"):                    # animazione: il frame del momento (a velocita' frame_fps)
+        strokes = sc["frames"][int(t * sc["frame_fps"]) % len(sc["frames"])]["strokes"]
+    total = sum(len(st["pts"]) + (1 if st["closed"] else 0) for st in strokes)
     budget = total if a["draw_hz"] <= 0 else max(2, int(total * ((t * a["draw_hz"]) % 1.0)))
     out = []
-    for i, st in enumerate(sc["strokes"]):
+    for i, st in enumerate(strokes):
         if budget <= 0:
             break
-        r, g, b = (max(0, min(255, int(v * 255 * bright))) for v in _stroke_rgb(sc, i, t))
+        r, g, b = (max(0, min(255, int(v * 255 * bright))) for v in _stroke_rgb(sc, i, t, strokes))
         pts = st["pts"] + ([st["pts"][0]] if st["closed"] else [])
         pts = pts[:budget]
         budget -= len(pts)

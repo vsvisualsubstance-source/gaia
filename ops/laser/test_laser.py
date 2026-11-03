@@ -129,6 +129,20 @@ class TestScene(unittest.TestCase):
         s = SC.clean_scene({**SQUARE, "anim": {"scale": 1, "draw_hz": 1}})
         self.assertLess(len(SC.animate(s, 0.3)), len(SC.animate(s, 0.9)))  # si scrive pian piano
 
+    def test_frames_animation(self):
+        red = {"pts": [[0, 0], [0.5, 0]], "rgb": [1, 0, 0]}
+        green = {"pts": [[0, 0], [0, 0.5], [0.2, 0.2]], "rgb": [0, 1, 0]}
+        sc = SC.clean_scene({"frames": [{"strokes": [red]}, {"strokes": [green]}], "frame_fps": 10,
+                             "color": {"mode": "stroke"}})
+        self.assertEqual(len(sc["frames"]), 2); self.assertEqual(sc["strokes"], sc["frames"][0]["strokes"])
+        self.assertEqual(SC.animate(sc, 0.05)[1][2:], (255, 0, 0))                     # frame 0
+        self.assertEqual(SC.animate(sc, 0.15)[1][2:], (0, 255, 0))                     # frame 1
+        self.assertEqual(len(SC.animate(sc, 0.25)), 3)                                 # di nuovo il frame 0
+        one = SC.clean_scene({"frames": [{"strokes": [red]}]})                          # un frame solo: scena normale
+        self.assertNotIn("frames", one)
+        big = SC.clean_scene({"frames": [{"strokes": [{"pts": [[0, 0]] * 1500}]}] * 200})
+        self.assertLessEqual(sum(len(f["strokes"][0]["pts"]) for f in big["frames"]), SC.MAX_FRAME_POINTS)
+
     def test_waves_swing_and_tempo(self):
         # forme: sine identica a prima, le altre tra -1 e 1 col periodo giusto
         self.assertAlmostEqual(SC.wave(0.25), 1.0)

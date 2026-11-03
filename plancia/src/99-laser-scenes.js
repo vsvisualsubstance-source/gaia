@@ -51,11 +51,11 @@ function laserDoc(){return L.laserTimeline&&Array.isArray(L.laserTimeline.cues)?
 
 // ---- animazione (specchio di laser_scene.animate)
 function lzsHsv(h){const i=Math.floor(h*6),f=h*6-i,q=1-f,m=[[1,f,0],[q,1,0],[0,1,f],[0,q,1],[f,0,1],[1,0,q]];return m[((i%6)+6)%6]}
-function lzsStrokeRgb(sc,i,t){
+function lzsStrokeRgb(sc,i,t,strokes=sc.strokes){
   const c=sc.color||{};
   if(c.mode==='cycle')return lzsHsv(((t*(c.rate||0)+i*.12)%1+1)%1);
   if(c.mode==='palette'){const p=c.palette?.length?c.palette:[[1,1,1]];return p[(Math.floor(t*(c.rate||0)*p.length)+i)%p.length]}
-  if(c.mode==='stroke')return sc.strokes[i].rgb||c.rgb||[1,1,1];
+  if(c.mode==='stroke')return strokes[i].rgb||c.rgb||[1,1,1];
   return c.rgb||[1,1,1];
 }
 // forme della pulsazione e dell'oscillazione (laser_scene.wave): sine = come prima
@@ -77,12 +77,14 @@ function lzsAnimate(sc,t,level=0,kick=0){
   if(au.to==='scale')s*=1+.6*react;else bright=(1-au.amount)+react;
   const ang=(a.rotate*t+a.swing*lzsWave(a.swing_hz*t,a.swing_shape))*Math.PI/180,ca=Math.cos(ang),sa=Math.sin(ang);
   const ox=a.orbit*.5*Math.cos(2*Math.PI*a.orbit_hz*t),oy=a.orbit*.5*Math.sin(2*Math.PI*a.orbit_hz*t);
-  const total=sc.strokes.reduce((n,st)=>n+st.pts.length+(st.closed?1:0),0);
+  // animazione (ILDA): il frame del momento, a frame_fps (laser_scene.animate)
+  const strokes=sc.frames?.length>1?sc.frames[Math.floor(t*(sc.frame_fps||25))%sc.frames.length].strokes:sc.strokes;
+  const total=strokes.reduce((n,st)=>n+st.pts.length+(st.closed?1:0),0);
   let budget=a.draw_hz<=0?total:Math.max(2,Math.floor(total*((t*a.draw_hz)%1)));
   const out=[];
-  sc.strokes.forEach((st,i)=>{
+  strokes.forEach((st,i)=>{
     if(budget<=0)return;
-    const [r,g,b]=lzsStrokeRgb(sc,i,t).map(v=>Math.max(0,Math.min(255,Math.floor(v*255*bright))));
+    const [r,g,b]=lzsStrokeRgb(sc,i,t,strokes).map(v=>Math.max(0,Math.min(255,Math.floor(v*255*bright))));
     const pts=(st.closed?[...st.pts,st.pts[0]]:st.pts).slice(0,budget);budget-=pts.length;
     pts.forEach(([x,y],j)=>{const px=(x*ca-y*sa)*s+ox,py=(x*sa+y*ca)*s+oy;if(!j)out.push([px,py,0,0,0]);out.push([px,py,r,g,b])});
   });
@@ -148,7 +150,7 @@ function lzScenesHtml(d){
   return`<div class="lzs"><div class="lzs-top"><b>Scene laser</b><span class="hint">tocca una scena per mandarla a</span>
       <span class="lzs-tg">${lzsTargets(d).map(id=>`<button class="${LZS_TARGET===id?'on':''}" data-lzs="target" data-lzs-v="${id}">${id==='all'?'Tutti':esc(id)}</button>`).join('')}</span>
       <button class="btn sm${LZS_FLASH?' on':''}" data-lzs="flash" title="FLASH: tieni premuta una scena per proiettarla sopra quella attiva, si toglie quando la lasci (su tutti i cubi in modalità Scene)">FLASH</button>
-      <button class="btn sm ghost" data-lzs="svg">+ Importa SVG</button><button class="btn sm ghost" data-lzs="reset" title="Rimette i template mancanti">Template</button></div>
+      <button class="btn sm ghost" data-lzs="svg">+ Importa SVG</button><button class="btn sm ghost" data-lzs="ilda" title="File ILDA (.ild), anche animati">+ ILDA</button><button class="btn sm ghost" data-lzs="text">+ Testo</button><button class="btn sm ghost" data-lzs="reset" title="Rimette i template mancanti">Template</button></div>
     <div class="lzs-grid">${laserScenes().map(s=>`<div class="lzs-tile${running.has(s.id)?' on':''}"><button class="lzs-go" data-lzs="apply" data-lzs-v="${esc(s.id)}" title="Manda a ${LZS_TARGET==='all'?'tutti i cubi':LZS_TARGET} (passa in modalità Scene)">
         <canvas data-lzs-cv="${esc(s.id)}" width="120" height="120"></canvas><span>${esc(s.name)}</span>${running.has(s.id)?`<em>${running.get(s.id).join(' ')}</em>`:''}</button>
         <button class="lzs-ed" data-lzs="edit" data-lzs-v="${esc(s.id)}" title="Modifica">✎</button></div>`).join('')||'<p class="hint">Nessuna scena: tocca Template.</p>'}</div></div>`;
@@ -167,6 +169,13 @@ function lzsDown(e,el,w){
   else if(a==='edit'&&s)openLaserSceneEditor(s);
   else if(a==='reset'){const have=new Set(laserScenes().map(x=>x.id)),add=lzsTemplates().filter(x=>!have.has(x.id));
     L.laserScenes=[...laserScenes(),...add];save();showInfo(add.length?`Aggiunti ${add.length} template.`:'Tutti i template ci sono già.')}
+  else if(a==='text'){const t=prompt('Testo da proiettare (meglio corto: poche parole):','GAIA');if(!t?.trim())return;
+    try{const sc=lzsTextScene(t.trim());L.laserScenes=[...laserScenes(),sc];save();paintLaser(el,w,true);openLaserSceneEditor(sc)}catch(err){showError('Testo: '+err.message)}return}
+  else if(a==='ilda'){const inp=document.createElement('input');inp.type='file';inp.accept='.ild,.ilda';
+    inp.onchange=async()=>{const f=inp.files?.[0];if(!f)return;
+      try{const sc=lzsParseIlda(await f.arrayBuffer(),f.name.replace(/\.ilda?$/i,'')),n=(sc.frames||[sc]).reduce((k,fr)=>k+fr.strokes.reduce((a,s)=>a+s.pts.length,0),0);
+        L.laserScenes=[...laserScenes(),sc];save();paintLaser(el,w,true);showInfo(`ILDA "${sc.name}": ${sc.frames?sc.frames.length+' frame':'1 frame'}, ${n} punti.`);openLaserSceneEditor(sc)}
+      catch(err){showError('ILDA: '+err.message)}};inp.click();return}
   else if(a==='svg'){const inp=document.createElement('input');inp.type='file';inp.accept='.svg,image/svg+xml';
     inp.onchange=async()=>{const f=inp.files?.[0];if(!f)return;
       try{const sc=await lzsImportSvg(f),n=sc.strokes.reduce((k,x)=>k+x.pts.length,0);L.laserScenes=[...laserScenes(),sc];save();paintLaser(el,w,true);
@@ -180,12 +189,12 @@ function openLaserSceneEditor(orig){
   const TP={sync:false,bpm:liveBpm(),...sc.tempo},wv=(id,cur)=>`<select id="${id}">${LZS_WAVES.map(([k,t])=>`<option value="${k}"${k===cur?' selected':''}>${t}</option>`).join('')}</select>`;
   const hex=c=>'#'+c.map(x=>Math.round(x*255).toString(16).padStart(2,'0')).join(''),unhex=h=>[1,3,5].map(i=>+(parseInt(h.slice(i,i+2),16)/255).toFixed(3));
   const sl=(id,label,v,min,max,step)=>`<label class="ar-sl"><span>${label}<b id="${id}V">${(+v).toFixed(step<1?2:0)}</b></span><input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${v}"></label>`;
-  const n=sc.strokes.reduce((k,x)=>k+x.pts.length,0);
+  const n=sc.strokes.reduce((k,x)=>k+x.pts.length,0),nf=sc.frames?.length||0;
   s.innerHTML=`<div class="sheet" role="dialog" aria-label="Scena laser">
     <div class="top"><h3>Scena laser</h3><button class="btn ghost" id="lsClose">Chiudi</button></div>
     <div class="lzs-ed-grid"><canvas id="lsPrev" width="260" height="260"></canvas><div>
       <label>Nome<input id="lsName" value="${esc(sc.name)}"></label>
-      <p class="hint">${sc.strokes.length} linee · ${n} punti${sc.template?' · template':''}. Anteprima qui accanto; il gateway applica poi zona e intensità di ogni cubo.</p>
+      <p class="hint">${sc.strokes.length} linee · ${n} punti${nf?` · animazione di ${nf} frame a ${sc.frame_fps||25} fps`:''}${sc.template?' · template':''}. Anteprima qui accanto; il gateway applica poi zona e intensità di ogni cubo.</p>
       <label>Colore<select id="lsCm">${[['fixed','Fisso'],['cycle','Arcobaleno che scorre'],['palette','Palette a turno'],['stroke','Colori dell\'SVG']].map(([k,t])=>`<option value="${k}"${C.mode===k?' selected':''}>${t}</option>`).join('')}</select></label>
       <div class="two"><label>Colore fisso<input type="color" id="lsRgb" value="${hex(C.rgb)}"></label><label>Palette<span class="lzs-pal">${C.palette.slice(0,4).map((c,i)=>`<input type="color" data-pal="${i}" value="${hex(c)}">`).join('')}</span></label></div>
       ${sl('lsRate','Velocità colore (giri/s)',C.rate,0,2,.01)}

@@ -49,6 +49,7 @@ const appModules = [
   '98-device-panel.js',
   '99-laser.js',
   '99-laser-scenes.js',
+  '99-laser-import.js',
   '999-start.js'
 ];
 
