@@ -146,7 +146,7 @@ function laserDown(e,el,w){
   const b=e.target.closest('[data-lz]');if(!b||b.disabled)return;e.preventDefault();
   const a=b.dataset.lz,cid=b.dataset.lzC,c=cid&&lzCube(cid),v=b.dataset.lzV;
   if(a==='blackout')lzCmd({action:'blackout'});
-  else if(a==='arm'){if(confirm(`Armare ${c?.name||cid} (${(LZ_MODES.find(m=>m[0]===c?.mode)||[])[1]||''})?\nLaser di Classe 4: beam block e zona di sicurezza controllati, nessuno nel fascio.`))lzCmd({action:'arm',cube:cid})}
+  else if(a==='arm'){uiConfirm(`Armare ${c?.name||cid} (${(LZ_MODES.find(m=>m[0]===c?.mode)||[])[1]||''})?\nLaser di Classe 4: beam block e zona di sicurezza controllati, nessuno nel fascio.`,{ok:'ARMA'}).then(y=>{if(y)lzCmd({action:'arm',cube:cid})})}
   else if(a==='disarm')lzCmd({action:'disarm',cube:cid});
   else if(a==='mode')lzSet(cid,'mode',v);
   else if(a==='flip_x'||a==='flip_y')lzSet(cid,a,!c?.[a]);
@@ -154,10 +154,10 @@ function laserDown(e,el,w){
   else if(a==='maskadd')lzSet(cid,'masks',[...(c?.masks||[]),[-.2,-.2,.2,.2]]);
   else if(a==='maskdel')lzSet(cid,'masks',(c?.masks||[]).filter((_,i)=>i!==+v));
   else if(a==='scan'){lzCmd({action:'scan'});showInfo('Laser: ricerca dei cubi sulla rete…')}
-  else if(a==='add'||a==='addip'){const ip=v||prompt('IP del cubo (LAN Client, es. 192.168.1.61):');if(ip)lzCmd({action:'add_cube',ip:ip.trim()},'add_cube')}
-  else if(a==='rename'){const n=prompt('Nome del cubo:',c?.name||'');if(n)lzSet(cid,'name',n)}
-  else if(a==='ip'){const ip=prompt('Nuovo IP del cubo:',c?.ip||'');if(ip)lzSet(cid,'ip',ip.trim())}
-  else if(a==='remove'){if(confirm(`Togliere ${c?.name||cid} dal gateway?`))lzCmd({action:'remove_cube',cube:cid})}
+  else if(a==='add'||a==='addip'){(v?Promise.resolve(v):uiPrompt('IP del cubo (LAN Client, es. 192.168.1.61):')).then(ip=>{if(ip)lzCmd({action:'add_cube',ip:ip.trim()},'add_cube')})}
+  else if(a==='rename'){uiPrompt('Nome del cubo:',c?.name||'').then(n=>{if(n)lzSet(cid,'name',n)})}
+  else if(a==='ip'){uiPrompt('Nuovo IP del cubo:',c?.ip||'').then(ip=>{if(ip)lzSet(cid,'ip',ip.trim())})}
+  else if(a==='remove'){uiConfirm(`Togliere ${c?.name||cid} dal gateway?`,{ok:'Togli'}).then(y=>{if(y)lzCmd({action:'remove_cube',cube:cid})})}
   else if(a==='tdtoggle'){const dev=b.dataset.lzDev,k=b.dataset.lzK;lzTdSet(dev,k,!G.devices?.[dev]?.params?.[k])}
   setTimeout(()=>paintLaser(el,w,true),400);
 }
@@ -215,9 +215,9 @@ function bindLaserFixtureEditor(f){
   const opts=[['','— nessuno (disegno di prova) —'],...cubes.map(c=>[c.id,`${c.id} · ${c.name||''}`])];
   if(f.cube&&!cubes.some(c=>c.id===f.cube))opts.push([f.cube,`${f.cube} · (il gateway non lo vede)`]);
   sel.innerHTML=opts.map(([v,l])=>`<option value="${esc(v)}">${esc(l)}</option>`).join('');sel.value=f.cube||'';
-  $('#feCubeArm').onclick=()=>{const c=laserCubeState(f.cube);if(!c)return;
+  $('#feCubeArm').onclick=async()=>{const c=laserCubeState(f.cube);if(!c)return;
     if(c.armed)lzCmd({action:'disarm',cube:c.id});
-    else if(confirm(`Armare ${c.name||c.id}?\nLaser di Classe 4: beam block e zona di sicurezza controllati, nessuno nel fascio.`))lzCmd({action:'arm',cube:c.id});
+    else if(await uiConfirm(`Armare ${c.name||c.id}?\nLaser di Classe 4: beam block e zona di sicurezza controllati, nessuno nel fascio.`))lzCmd({action:'arm',cube:c.id});
     setTimeout(()=>laserFixtureStatus(f),800)};
   $('#feCubePage').onclick=()=>{const i=L.pages.findIndex(p=>p.name==='Laser');if(i<0){showError('Nel layout non c\'è la pagina Laser.');return}
     closeSheet();pi=i;selId=null;render()};

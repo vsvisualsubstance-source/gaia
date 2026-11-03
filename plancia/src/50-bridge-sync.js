@@ -75,6 +75,18 @@ function uiChoose(title,items,{multi=false,done='OK',hint=''}={}){
 }
 // alert del browser: mai bloccante, nei kiosk puo' non comparire; diventa il messaggio della pagina
 window.alert=m=>showInfo(String(m));
+// testo da scrivere, dentro la pagina: Promise<stringa|null>
+function uiPrompt(title,value='',{ok='OK'}={}){
+  return new Promise(resolve=>{
+    const box=document.createElement('div');box.className='ui-confirm';box.setAttribute('role','dialog');
+    box.innerHTML=`<div class="ui-confirm-card"><p></p><input class="ui-input"><div class="row"><button class="btn ghost" data-x>Annulla</button><button class="btn primary" data-ok></button></div></div>`;
+    box.querySelector('p').textContent=title;box.querySelector('[data-ok]').textContent=ok;const inp=box.querySelector('input');inp.value=value;
+    const end=v=>{box.remove();resolve(v)};
+    inp.onkeydown=e=>{if(e.key==='Enter')end(inp.value.trim()||null);else if(e.key==='Escape')end(null)};
+    box.addEventListener('pointerdown',e=>{if(e.target.closest('[data-ok]')){e.preventDefault();end(inp.value.trim()||null)}else if(e.target.closest('[data-x]')||e.target===box){e.preventDefault();end(null)}});
+    document.body.appendChild(box);inp.focus();inp.select();
+  });
+}
 function uiConfirm(text,{ok='OK',cancel='Annulla'}={}){
   return new Promise(resolve=>{
     const box=document.createElement('div');box.className='ui-confirm';box.setAttribute('role','alertdialog');

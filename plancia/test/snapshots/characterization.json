@@ -1738,10 +1738,10 @@
    ]
   },
   "sequenze": {
-   "name": "Sequenze (chase)",
+   "name": "Sequenze ed effetti",
    "pages": [
     {
-     "name": "Sequenze",
+     "name": "Sequenze ed effetti",
      "widgets": [
       [
        "timeline",
@@ -1757,61 +1757,21 @@
        "chase",
        0,
        4,
-       10,
+       8,
        6,
        "",
        "push",
        "Chase"
       ],
       [
-       "scenes",
-       10,
-       4,
-       6,
-       6,
-       "/dmx/scene",
-       "push",
-       "Scene · DMX Master"
-      ]
-     ]
-    }
-   ]
-  },
-  "effetti": {
-   "name": "Effetti luci",
-   "pages": [
-    {
-     "name": "Effetti",
-     "widgets": [
-      [
-       "timeline",
-       0,
-       0,
-       16,
-       4,
-       "/show",
-       "push",
-       "Timeline show"
-      ],
-      [
        "lightfx",
-       0,
+       8,
        4,
-       10,
+       8,
        6,
        "",
        "push",
        "Effetti luci"
-      ],
-      [
-       "scenes",
-       10,
-       4,
-       6,
-       6,
-       "/dmx/scene",
-       "push",
-       "Scene · DMX Master"
       ]
      ]
     }
@@ -2176,7 +2136,7 @@
      ]
     },
     {
-     "name": "Sequenze",
+     "name": "Sequenze ed effetti",
      "widgets": [
       [
        "timeline",
@@ -2192,56 +2152,21 @@
        "chase",
        0,
        4,
-       10,
+       8,
        6,
        "",
        "push",
        "Chase"
       ],
       [
-       "scenes",
-       10,
-       4,
-       6,
-       6,
-       "/dmx/scene",
-       "push",
-       "Scene · DMX Master"
-      ]
-     ]
-    },
-    {
-     "name": "Effetti",
-     "widgets": [
-      [
-       "timeline",
-       0,
-       0,
-       16,
-       4,
-       "/show",
-       "push",
-       "Timeline show"
-      ],
-      [
        "lightfx",
-       0,
+       8,
        4,
-       10,
+       8,
        6,
        "",
        "push",
        "Effetti luci"
-      ],
-      [
-       "scenes",
-       10,
-       4,
-       6,
-       6,
-       "/dmx/scene",
-       "push",
-       "Scene · DMX Master"
       ]
      ]
     },
@@ -3220,9 +3145,13 @@
    [
     "migrateUiTracks",
     13
+   ],
+   [
+    "migrateUiPageGroups",
+    14
    ]
   ],
-  "uiRev": 13,
+  "uiRev": 14,
   "pages": [
    {
     "name": "Show",
@@ -3481,7 +3410,7 @@
     ]
    },
    {
-    "name": "Sequenze",
+    "name": "Sequenze ed effetti",
     "widgets": [
      [
       "timeline",
@@ -3496,33 +3425,10 @@
       "Chase"
      ],
      [
-      "scenes",
-      "/dmx/scene",
-      "push",
-      "Scene · DMX Master"
-     ]
-    ]
-   },
-   {
-    "name": "Effetti",
-    "widgets": [
-     [
-      "timeline",
-      "/show",
-      "push",
-      "Timeline show"
-     ],
-     [
       "lightfx",
       "",
       "push",
       "Effetti luci"
-     ],
-     [
-      "scenes",
-      "/dmx/scene",
-      "push",
-      "Scene · DMX Master"
      ]
     ]
    },
@@ -4083,7 +3989,7 @@
  },
  "layout": {
   "idempotentOnReload": true,
-  "pages": 16
+  "pages": 15
  },
  "inspector": {
   "gaia": {

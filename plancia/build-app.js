@@ -68,7 +68,7 @@ window.__planciaTest={
   migrations:[['migrateLegacyHeadSelectors',migrateLegacyHeadSelectors],['migrateHeadPresetWidgets',migrateHeadPresetWidgets],
     ['migrateUiShowTimeline',migrateUiShowTimeline],['migrateUiConsolePages',migrateUiConsolePages],['migrateUiAudioPage',migrateUiAudioPage],
     ['migrateUiNoChase',migrateUiNoChase],['migrateUiOneDmxV8',migrateUiOneDmxV8],['migrateUiLaserPage',migrateUiLaserPage],
-    ['migrateUiLaserScenes',migrateUiLaserScenes],['migrateUiHeadMotion',migrateUiHeadMotion],['migrateUiChase',migrateUiChase],['migrateUiLaserFx',migrateUiLaserFx],['migrateUiLightFx',migrateUiLightFx],['migrateUiTracks',migrateUiTracks]]};`;
+    ['migrateUiLaserScenes',migrateUiLaserScenes],['migrateUiHeadMotion',migrateUiHeadMotion],['migrateUiChase',migrateUiChase],['migrateUiLaserFx',migrateUiLaserFx],['migrateUiLightFx',migrateUiLightFx],['migrateUiTracks',migrateUiTracks],['migrateUiPageGroups',migrateUiPageGroups]]};`;
 
 function buildAppBundle(sourceDir = path.join(__dirname, 'src'), { testHooks = false } = {}) {
   const modules = appModules.map(file => {

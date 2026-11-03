@@ -300,12 +300,12 @@ function freeAddressTD(universe,ch){
 // SOLO le fixture con uid "p-..." (create da Plancia, qualunque
 // dispositivo); quelle native di TD restano in sola lettura via
 // tdFixtures().
-function importFromTD(silent){
+function importFromTD(silent,asked){
   const list=tdParams().dmx_fixtures;
   if(!Array.isArray(list)){if(!silent)alert('Nessun dato da DMX Master ancora (non collegata, o TD non ha ancora risposto).');return false}
   const mine=list.filter(x=>x.uid&&x.uid.startsWith('p-'));
   if(!mine.length){if(!silent)alert('DMX Master non ha ancora fixture create da Plancia — nulla da importare.');return false}
-  if(!silent&&!confirm(`Sostituisce le ${(L.fixtures||[]).length} fixture locali con le ${mine.length} trovate su DMX Master. Continuare?`))return false;
+  if(!silent&&!asked){uiConfirm(`Sostituisce le ${(L.fixtures||[]).length} fixture locali con le ${mine.length} trovate su DMX Master. Continuare?`).then(y=>{if(y)importFromTD(false,true)});return false}
   const localOnly=(L.fixtures||[]).filter(f=>!FIX_TYPES[f.type]?.ch);
   L.fixtures=[...mine.map(x=>({
     id:x.uid,type:GROUP_TO_TYPE[x.group]||'par',name:x.name||x.uid,

@@ -28,7 +28,7 @@ const TD = require('./fixtures/td-dmx-win.json');
         const old=cat.find(s=>s.id===q.name),pal=Object.fromEntries(Object.entries(d.params).filter(([k])=>/_palette$/.test(k)));
         if(old)Object.assign(old,{palettes:pal});else cat.push({id:q.name,index:cat.length,label:q.label||q.name,categories:q.categories,cues:[],palettes:pal});
         d.ts=Date.now()},100);
-      window.confirm=()=>true;return T.G.sim})()`);
+      new MutationObserver(()=>{const b=document.querySelector('.ui-confirm [data-v="1"]');if(b)b.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}))}).observe(document.body,{childList:true});return T.G.sim})()`);
     const rigs = await p.ev(`Object.keys(window.__planciaTest.G.devices['td-dmx-win'].params).filter(k=>/^dmx_.+_palette$/.test(k))`);
     assert.ok(rigs.length >= 2, 'nessuna palette dei rig nei dati di DMX Master');
 

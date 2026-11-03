@@ -90,8 +90,8 @@ function openProjects(){
         {label:'Salva e continua',cls:'primary',run:()=>{projUpdate(L._projectId);go()}},
         {label:'Continua senza salvare',cls:'danger',run:go},{label:'Annulla'}]};paint()};
     s.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>guard('Aprire l\'altro progetto?',()=>{projLoad(b.dataset.open);closeSheet();updateProjChip()}));
-    s.querySelectorAll('[data-tpl]').forEach(b=>b.onclick=()=>guard('Creare un progetto nuovo dal modello?',()=>{
-      if(!L._projectId&&!confirm('Il layout attuale non è salvato in un progetto: verrà sostituito. Continuare?'))return;
+    s.querySelectorAll('[data-tpl]').forEach(b=>b.onclick=()=>guard('Creare un progetto nuovo dal modello?',async()=>{
+      if(!L._projectId&&!await uiConfirm('Il layout attuale non è salvato in un progetto: verrà sostituito. Continuare?'))return;
       projLoadTemplate(b.dataset.tpl);closeSheet();updateProjChip();showInfo('Creato dal modello: dagli un nome da 📁 Progetti per salvarlo.')}));
     s.querySelectorAll('[data-dup]').forEach(b=>b.onclick=()=>{projDuplicate(b.dataset.dup);paint()});
     s.querySelectorAll('[data-exp]').forEach(b=>b.onclick=()=>projExport(b.dataset.exp));

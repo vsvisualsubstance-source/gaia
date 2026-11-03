@@ -84,10 +84,10 @@ function openSheet(){
       }));
       row.querySelector('[data-prop="family"]').addEventListener('change',e=>{oscChannelsDraft[i].family=e.target.value});
     });
-    list.querySelectorAll('[data-route-del]').forEach(button=>button.onclick=()=>{
+    list.querySelectorAll('[data-route-del]').forEach(button=>button.onclick=async()=>{
       const route=oscChannelsDraft[+button.dataset.route];
       const assigned=allW().filter(w=>w.oscChannel===route.id);
-      if(assigned.length&&!confirm(`Il canale è assegnato a ${assigned.length} controlli. Eliminarlo e riportarli alla destinazione predefinita?`))return;
+      if(assigned.length&&!await uiConfirm(`Il canale è assegnato a ${assigned.length} controlli. Eliminarlo e riportarli alla destinazione predefinita?`))return;
       deletedOscChannels.add(route.id);
       oscChannelsDraft.splice(+button.dataset.route,1);save();renderOscChannels();
     });
@@ -127,7 +127,7 @@ function openSheet(){
   $('#pOpen').onclick=openProjects;
 }
 function closeSheet(){$('#scrim').hidden=true;$('#scrim').innerHTML=''}
-$('#pagesBtn').onclick=openPagesMenu;$('#menuBtn').onclick=openSheet; $('#conn').onclick=openSheet; $('#gconn').onclick=openSheet;
+$('#menuBtn').onclick=openSheet; $('#conn').onclick=openSheet; $('#gconn').onclick=openSheet;
 
 /* stato iniziale del rig dai controlli salvati, senza inviare OSC */
 function initShow(){
@@ -195,5 +195,5 @@ function migrateUiAudioPage(){
 }
 // Avvio dell'app: lo chiama src/999-start.js, dopo che tutti i moduli sono stati valutati.
 function init(){
-  migrateLegacyHeadSelectors();migrateHeadPresetWidgets();migrateUiShowTimeline();migrateUiConsolePages();migrateUiAudioPage();migrateUiNoChase();migrateUiOneDmxV8();migrateUiLaserPage();migrateUiLaserScenes();migrateUiHeadMotion();migrateUiChase();migrateUiLaserFx();migrateUiLightFx();migrateUiTracks();render(); initShow(); connect(); gStart(); requestAnimationFrame(loop);
+  migrateLegacyHeadSelectors();migrateHeadPresetWidgets();migrateUiShowTimeline();migrateUiConsolePages();migrateUiAudioPage();migrateUiNoChase();migrateUiOneDmxV8();migrateUiLaserPage();migrateUiLaserScenes();migrateUiHeadMotion();migrateUiChase();migrateUiLaserFx();migrateUiLightFx();migrateUiTracks();migrateUiPageGroups();render(); initShow(); connect(); gStart(); requestAnimationFrame(loop);
 }

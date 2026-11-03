@@ -192,11 +192,11 @@ function renderCueEditor(w,cues,meta={}){
   s.querySelector('#cueSave').onclick=()=>{if(commit()){closeSheet();if(tdMode)sendTimelineToTD(w)}};
   const send=s.querySelector('#cueSendTD');
   if(send)send.onclick=()=>{if(commit()){closeSheet();sendTimelineToTD(w)}};
-  s.querySelector('#cueImportTD').onclick=()=>{
+  s.querySelector('#cueImportTD').onclick=async()=>{
     const doc=tdTimelineDoc();
     if(!doc){showError('DMX Master non pubblica show_timeline: collega Gaia (⋯ → Gaia) o aggiorna il contratto TD.');return}
     const n=readRows().length;
-    if(n&&!confirm(`Sostituire le ${n} cue nell'editor con la timeline di DMX Master${doc.name?` "${doc.name}"`:''} (${doc.cues.length} cue, ${formatCueTime(+doc.length||0)})?\nDiventa definitiva solo con Salva.`))return;
+    if(n&&!await uiConfirm(`Sostituire le ${n} cue nell'editor con la timeline di DMX Master${doc.name?` "${doc.name}"`:''} (${doc.cues.length} cue, ${formatCueTime(+doc.length||0)})?\nDiventa definitiva solo con Salva.`))return;
     renderCueEditor(w,timelineFromTD(doc),{...meta,duration:Math.max(1,+doc.length||duration),bpm:+doc.bpm>0?+doc.bpm:null,rev:doc.rev,_dirty:false});
   };
 }

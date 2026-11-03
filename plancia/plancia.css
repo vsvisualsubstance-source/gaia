@@ -703,3 +703,21 @@ button{cursor:pointer}
 @media (max-width:1500px){.bar>.pill{padding:5px 8px}.bar>.pill span{display:none}.projchip span{max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
 .pagesbtn{min-height:34px;min-width:38px}
 @media (max-width:1500px){.bar>.pill{min-height:34px;min-width:34px;justify-content:center}}
+/* pagine a due livelli: gruppi nella barra, pagine del gruppo sotto */
+.subtabs{flex:none;padding:0 0 6px;margin-top:-4px;overflow-x:auto}
+.subtabs.one{display:none}
+.subtabs .tab{padding:5px 12px;font-size:13px;min-height:32px}
+.tab[hidden]{display:none}
+.bar .tab{min-height:34px}
+.ui-input{width:100%;margin-bottom:12px;padding:8px 10px;border:1px solid var(--line2);border-radius:6px;background:var(--panel2);color:var(--fg)}
+/* barra del Palco: comandi principali + Strumenti */
+.seg button{min-height:30px}
+/* Console Audio: comandi comodi al tocco */
+.au-btn.sm{min-width:36px;min-height:34px;font-size:13px}
+.au-time{align-items:center;gap:6px;flex-wrap:wrap}
+.au-sim{white-space:nowrap;padding:4px 8px;border:1px solid var(--accent);border-radius:6px;color:var(--accent);font:600 11px var(--mono);letter-spacing:.06em;text-align:center}
+.au-tempo input[type=range]{min-height:26px}
+.au-xf input{min-height:34px}
+.au-libtab .au-load .au-btn{min-width:38px;min-height:34px}
+.hm-top .btn.sm{min-height:32px}.lzs-ed{min-width:32px;min-height:32px}
+.au-tempo select{min-height:34px}

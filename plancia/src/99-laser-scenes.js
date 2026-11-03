@@ -169,8 +169,8 @@ function lzsDown(e,el,w){
   else if(a==='edit'&&s)openLaserSceneEditor(s);
   else if(a==='reset'){const have=new Set(laserScenes().map(x=>x.id)),add=lzsTemplates().filter(x=>!have.has(x.id));
     L.laserScenes=[...laserScenes(),...add];save();showInfo(add.length?`Aggiunti ${add.length} template.`:'Tutti i template ci sono già.')}
-  else if(a==='text'){const t=prompt('Testo da proiettare (meglio corto: poche parole):','GAIA');if(!t?.trim())return;
-    try{const sc=lzsTextScene(t.trim());L.laserScenes=[...laserScenes(),sc];save();paintLaser(el,w,true);openLaserSceneEditor(sc)}catch(err){showError('Testo: '+err.message)}return}
+  else if(a==='text'){uiPrompt('Testo da proiettare (meglio corto: poche parole):','GAIA').then(t=>{if(!t)return;
+    try{const sc=lzsTextScene(t);L.laserScenes=[...laserScenes(),sc];save();paintLaser(el,w,true);openLaserSceneEditor(sc)}catch(err){showError('Testo: '+err.message)}});return}
   else if(a==='ilda'){const inp=document.createElement('input');inp.type='file';inp.accept='.ild,.ilda';
     inp.onchange=async()=>{const f=inp.files?.[0];if(!f)return;
       try{const sc=lzsParseIlda(await f.arrayBuffer(),f.name.replace(/\.ilda?$/i,'')),n=(sc.frames||[sc]).reduce((k,fr)=>k+fr.strokes.reduce((a,s)=>a+s.pts.length,0),0);
@@ -232,8 +232,8 @@ function openLaserSceneEditor(orig){
   $('#lsTry').onclick=()=>{read();if(!d){showError('Laser gateway non collegato.');return}lzsApply(sc,target);showInfo(`Laser: prova di "${sc.name}" su ${target==='all'?'tutti i cubi':target} (non salvata).`)};
   $('#lsSave').onclick=()=>{read();delete sc.template;store(sc);closeSheet();showInfo(`Scena "${sc.name}" salvata nel progetto.`)};
   $('#lsDup').onclick=()=>{read();const c={...JSON.parse(JSON.stringify(sc)),id:'scn-'+uid(),name:sc.name+' (copia)'};delete c.template;store(c);openLaserSceneEditor(c)};
-  $('#lsDel').onclick=()=>{const used=laserDoc().cues.filter(c=>c.scene===sc.id).length;
-    if(!confirm(`Eliminare "${sc.name}"?${used?`\nÈ usata da ${used} cue della timeline laser.`:''}`))return;
+  $('#lsDel').onclick=async()=>{const used=laserDoc().cues.filter(c=>c.scene===sc.id).length;
+    if(used&&!await uiConfirm(`"${sc.name}" è usata da ${used} cue della traccia LASER. Eliminarla?`,{ok:'Elimina'}))return;
     L.laserScenes=laserScenes().filter(x=>x.id!==sc.id);save();closeSheet()};
 }
 

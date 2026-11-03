@@ -67,7 +67,7 @@ async function alignProjectModels({only,ask=true}={}){
   const todo=projModelDiff().filter(x=>only?x.state===only:x.state==='missing'||x.state==='different');
   if(!todo.length)return true;
   const add=todo.filter(x=>x.state==='missing').map(x=>x.name),upd=todo.filter(x=>x.state==='different').map(x=>x.name);
-  if(ask&&!confirm(`Modelli del progetto verso DMX Master:${add.length?`\n• aggiungo: ${add.join(', ')}`:''}${upd.length?`\n• aggiorno: ${upd.join(', ')} (vale anche per gli altri progetti che li usano)`:''}\nContinuare?`))return false;
+  if(ask&&!await uiConfirm(`Modelli del progetto verso DMX Master:${add.length?`\n• aggiungo: ${add.join(', ')}`:''}${upd.length?`\n• aggiorno: ${upd.join(', ')} (vale anche per gli altri progetti che li usano)`:''}\nContinuare?`))return false;
   const errs=[];
   for(const x of todo){
     const v=modelPayload(x.def),isAdd=x.state==='missing';

@@ -159,8 +159,8 @@ function openHeadMotionEditor(orig){
   // un template modificato diventa una scena nuova: il template resta com'era
   q('#hmSave').onclick=()=>{read();if(sc.template){sc.id='mov-'+uid();if(sc.name===orig.name)sc.name+=' (mio)'}delete sc.template;store(sc);closeSheet();showInfo(`Movimento "${sc.name}" salvato nel progetto.`)};
   q('#hmDup').onclick=()=>{read();const c={...JSON.parse(JSON.stringify(sc)),id:'mov-'+uid(),name:sc.name+' (copia)'};delete c.template;store(c);openHeadMotionEditor(c)};
-  q('#hmDel').onclick=()=>{const used=hmDoc().cues.filter(c=>c.scene===sc.id).length;
-    if(!confirm(`Eliminare "${sc.name}"?${used?`\nÈ usato da ${used} cue della traccia MOVIMENTO.`:''}`))return;
+  q('#hmDel').onclick=async()=>{const used=hmDoc().cues.filter(c=>c.scene===sc.id).length;
+    if(used&&!await uiConfirm(`"${sc.name}" è usato da ${used} cue della traccia TESTE MOV. Eliminarlo?`,{ok:'Elimina'}))return;
     L.headMotions=hmScenes().filter(x=>x.id!==sc.id);save();closeSheet()};
 }
 registerWidget('headmotion',{size:[8,6],label:'Movimento teste',showsValue:false,showsAddr:false,

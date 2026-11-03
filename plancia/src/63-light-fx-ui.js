@@ -100,8 +100,8 @@ function openLightFxEditor(orig,isNew){
     q('#fxSave').onclick=()=>{read();if(fx.template){fx.id='efx-'+uid();if(fx.name===orig.name)fx.name+=' (mio)'}delete fx.template;
       const list=[...lightFx()],i=list.findIndex(x=>x.id===fx.id);if(i<0)list.push(fx);else list[i]=fx;L.lightFx=list;if(fxDoc().cues.some(c=>(c.effects||[]).includes(fx.id)))tlMarkTd();save();closeSheet();showInfo(`Effetto "${fx.name}" salvato.`)};
     if(q('#fxDup'))q('#fxDup').onclick=()=>{read();openLightFxEditor({...JSON.parse(JSON.stringify(fx)),id:'efx-'+uid(),name:fx.name+' (copia)',template:false},true)};
-    if(q('#fxDel'))q('#fxDel').onclick=()=>{const used=fxDoc().cues.filter(c=>(c.effects||[]).includes(fx.id)).length;
-      if(!confirm(`Eliminare "${fx.name}"?${used?`\nÈ usato da ${used} cue della traccia EFFETTI.`:''}`))return;
+    if(q('#fxDel'))q('#fxDel').onclick=async()=>{const used=fxDoc().cues.filter(c=>(c.effects||[]).includes(fx.id)).length;
+      if(used&&!await uiConfirm(`"${fx.name}" è usato da ${used} cue della traccia EFFETTI. Eliminarlo?`,{ok:'Elimina'}))return;
       fxStop(fx.id);L.lightFx=lightFx().filter(x=>x.id!==fx.id);save();closeSheet()};
     const cv=q('#fxPrev'),t0=performance.now();
     const anim=()=>{if(!document.body.contains(cv))return;fxDraw(cv,fx,(performance.now()-t0)/1000);requestAnimationFrame(anim)};anim();
@@ -177,11 +177,9 @@ function fxTimelineEffects(){
   const known=new Set(lightFx().map(f=>f.id)),used=new Set(cues.flatMap(c=>(c.effects||[]).filter(id=>known.has(id))));
   return{effects:lightFx().filter(f=>used.has(f.id)).map(fxTd),cues:cues.map(c=>({time:+c.time,effects:(c.effects||[]).filter(id=>used.has(id)),label:c.label||''}))};
 }
-// 2026-11-03: pagina "Effetti" (effetti sulle luci) dopo Sequenze (uiRev 12)
+// 2026-11-03: libreria degli effetti con i template (uiRev 12); la pagina e' "Sequenze ed effetti"
 function migrateUiLightFx(){
   if((L.uiRev||0)>=12)return;
   if(!Array.isArray(L.lightFx))L.lightFx=fxTemplates(groupsOf().find(g=>g.kind==='chase')?.group||'front');
-  const fresh=TPL.effetti.pages()[0];
-  if(!L.pages.some(p=>p.name===fresh.name)){const at=L.pages.findIndex(p=>p.name==='Sequenze')+1||L.pages.length;L.pages.splice(at,0,fresh)}
   L.uiRev=12;save();
 }

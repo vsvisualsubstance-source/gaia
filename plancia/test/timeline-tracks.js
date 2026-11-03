@@ -31,9 +31,9 @@ async function main() {
       T.L.chases=[{id:'c1',name:'Giro',steps:[{scene:'rosso'},{scene:'blu'}],hold:{value:4,unit:'beats'},fadePct:50}];return 1})()`);
 
     // ogni pagina mostra le sue tracce
-    await goto('Sequenze'); await sleep(400);
+    await goto('Sequenze ed effetti'); await sleep(400);
     const kinds = () => ev(`[...document.querySelectorAll('.tl-tracks .tl-trk .k')].map(k=>k.textContent)`);
-    const k1 = await kinds(); check(k1.includes('SEQUENZE') && !k1.includes('EFFETTI') && !k1.includes('TESTE MOV.'), `pagina Sequenze: ${k1.join(', ')}`);
+    const k1 = await kinds(); check(k1.includes('SEQUENZE') && k1.includes('EFFETTI') && !k1.includes('TESTE MOV.'), `pagina Sequenze ed effetti: ${k1.join(', ')}`);
     await goto('Teste · movimento'); await sleep(400);
     const k2 = await kinds(); check(k2.includes('TESTE POS.') && k2.includes('TESTE MOV.') && !k2.includes('SEQUENZE'), `pagina Teste: ${k2.join(', ')}`);
 
@@ -50,7 +50,7 @@ async function main() {
     check(shows === 1, `una sola timeline dello show in tutte le pagine (${shows})`);
 
     // SEQUENZE: tocco, poi su un blocco si cambia e si toglie
-    await goto('Sequenze'); await sleep(400);
+    await goto('Sequenze ed effetti'); await sleep(400);
     check(await ev(`document.querySelector('.tl-cst').textContent`) === 'tocca qui per far partire un chase', 'SEQUENZE vuota dice cosa fare');
     await tap('[data-trk="chase"]', 0.25); await sleep(200); await choose('Giro'); await sleep(300);
     let cues = (await L('chaseTimeline')).cues;
@@ -61,7 +61,6 @@ async function main() {
     check((await L('chaseTimeline')).cues.length === 0, 'SEQUENZE: cue tolta');
 
     // EFFETTI: scelta multipla
-    await goto('Effetti'); await sleep(400);
     await tap('[data-trk="fx"]', 0.5); await sleep(200);
     const names = await choices();
     await choose(names[0]); await choose(names[1]); await ok(); await sleep(300);
@@ -88,15 +87,35 @@ async function main() {
     check(await ev(`document.querySelectorAll('.lcue-row').length`) === 1, 'LASER: tocco apre il suo editor con la cue nuova');
     await ev(`document.querySelector('#lcClose').click()`); await sleep(200);
 
-    // menu con tutte le pagine
-    await ev(`document.querySelector('#pagesBtn').click()`); await sleep(200);
-    const pages = await choices();
-    check(pages.length === await ev(`window.__planciaTest.L.pages.length`), `menu pagine: ${pages.length} pagine`);
-    await choose('Laser'); await sleep(400);
-    check(await ev(`document.querySelector('#tabs [aria-current="true"]').textContent`) === 'Laser', 'menu pagine: porta alla pagina');
-    check(await ev(`(()=>{const a=document.querySelector('#tabs [aria-current="true"]').getBoundingClientRect(),t=document.querySelector('#tabs').getBoundingClientRect();return a.left>=t.left-1&&a.right<=t.right+1})()`), 'la scheda attuale resta visibile nella barra');
+    // gruppi: nella barra i gruppi, sotto le pagine del gruppo; ogni gruppo ricorda l'ultima pagina
+    const groupClick = n => ev(`[...document.querySelectorAll('#groups > *')].find(x=>x.textContent==='${n}').click()`);
+    const visible = () => ev(`[...document.querySelectorAll('#tabs > *')].filter(x=>!x.hidden).map(x=>x.textContent)`);
+    const groups = await ev(`[...document.querySelectorAll('#groups > *')].map(x=>x.textContent)`);
+    check(groups.length <= 7 && groups.includes('Luci') && groups.includes('Sistema'), `gruppi: ${groups.join(', ')}`);
+    check(await ev(`[...document.querySelectorAll('#groups > *')].every(b=>{const r=b.getBoundingClientRect();return r.width>0&&r.right<=innerWidth})`), 'tutti i gruppi si vedono a 1280 px');
+    await groupClick('Teste'); await sleep(300);
+    check((await visible()).join() === 'Teste mobili,Teste · movimento', `gruppo Teste: ${(await visible()).join(', ')}`);
+    await goto('Teste · movimento'); await sleep(300); await groupClick('Laser'); await sleep(300);
+    check(await ev(`getComputedStyle(document.querySelector('#tabs')).display`) === 'none', 'gruppo con una pagina sola: nessuna riga sotto');
+    await groupClick('Teste'); await sleep(300);
+    check(await ev(`[...document.querySelectorAll('#tabs > *')].find(x=>x.getAttribute('aria-current')==='true').textContent`) === 'Teste · movimento', 'il gruppo torna all\'ultima pagina vista');
 
-    await goto('Effetti'); await sleep(400);
+    // Palco: comandi principali e menu Strumenti con le stesse azioni di prima
+    await goto('Palco'); await sleep(400);
+    const seg = await ev(`[...document.querySelectorAll('.seg > button')].map(b=>b.textContent.trim())`);
+    check(seg.length <= 5 && seg.some(x => x.includes('Strumenti')), `barra del Palco: ${seg.join(' · ')}`);
+    await ev(`document.querySelector('.seg [data-act="more"]').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}))`); await sleep(200);
+    const tools = await choices();
+    check(tools.length >= 8 && tools.some(x => x.includes('Modelli')), `Strumenti: ${tools.length} voci`);
+    await choose(tools.find(x => x.includes('Modelli'))); await sleep(400);
+    check(await ev(`!document.querySelector('#scrim').hidden`), 'Strumenti: Modelli apre il suo editor');
+    await ev(`document.querySelector('#scrim button.ghost')?.click()`); await sleep(200);
+
+    // nessuna finestra del browser: confirm e prompt falliscono se chiamati
+    await ev(`(()=>{window.confirm=window.prompt=()=>{throw new Error('finestra del browser')};return 1})()`);
+    await goto('Laser'); await sleep(300);
+
+    await goto('Sequenze ed effetti'); await sleep(400);
     const shot = arg('--shot'); if (shot) await p.shot(shot);
     check(!p.problems.length, `nessun errore nella pagina ${p.problems.join(' ').slice(0, 200)}`);
   } finally { p.close(); }

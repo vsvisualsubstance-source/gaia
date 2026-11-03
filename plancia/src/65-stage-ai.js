@@ -61,7 +61,7 @@ async function replacePatchInTD(){
   // palette e audio inclusi: senza, dmx_fixtures li azzera (nota 44)
   const list=(L.fixtures||[]).filter(f=>FIX_TYPES[f.type]?.ch).map(fixtureTdValue);
   const before=(tdParams().dmx_fixtures||[]).length;
-  if(!confirm(`Sostituire TUTTA la patch di DMX Master (${before} fixture) con le ${list.length} della Pianta?
+  if(!await uiConfirm(`Sostituire TUTTA la patch di DMX Master (${before} fixture) con le ${list.length} della Pianta?
 Le fixture che ora sono in TD e non nella Pianta vengono tolte.`))return;
   const ids=new Set(list.map(f=>f.id));
   try{
@@ -105,9 +105,9 @@ function openStageAI(){
       clearInterval(tick);openStageAI();
     }catch(e){clearInterval(tick);btn.disabled=false;st.textContent='';showError('Palco AI: '+e.message)}
   };
-  if(s.querySelector('#aiApply'))s.querySelector('#aiApply').onclick=()=>{
+  if(s.querySelector('#aiApply'))s.querySelector('#aiApply').onclick=async()=>{
     const p=expandStagePlan(lastAiPlan.plan,{stage:L.stage,mode:lastAiPlan.mode,existing:L.fixtures,knownGroups:groupsOf().map(g=>g.group),footprint:t=>footprintFor(t)});
-    if(lastAiPlan.mode!=='add'&&(L.fixtures||[]).length&&!confirm(`Sostituire le ${(L.fixtures||[]).length} fixture della Pianta con le ${p.fixtures.length} del piano?\nSi può annullare con "↶ Annulla l'ultima applicazione".`))return;
+    if(lastAiPlan.mode!=='add'&&(L.fixtures||[]).length&&!await uiConfirm(`Sostituire le ${(L.fixtures||[]).length} fixture della Pianta con le ${p.fixtures.length} del piano?\nSi può annullare con "↶ Annulla l'ultima applicazione".`))return;
     L.aiBackup={fixtures:JSON.parse(JSON.stringify(L.fixtures||[])),stage:JSON.parse(JSON.stringify(L.stage||{})),groups:L.groups?JSON.parse(JSON.stringify(L.groups)):null,ts:Date.now()};
     const made=p.fixtures.map(f=>{const x=mkFix(f.type,f.name,f.x,f.y,f.universe,f.address);x.group=f.group;if(f.z!=null)x.z=f.z;if(f.mountToTruss)x.mountToTruss=true;return x});
     L.stage={...(L.stage||stageDefaults()),width:p.stage.width,depth:p.stage.depth};
@@ -117,8 +117,8 @@ function openStageAI(){
     showInfo(`${made.length} fixture nella Pianta.${p.newGroups.length?' Gruppi nuovi: ▦ Gruppi → Salva e invia a TD.':''} Controlla, poi ⇪ TD per mandarle a DMX Master.`);
   };
   if(s.querySelector('#aiReplaceTD'))s.querySelector('#aiReplaceTD').onclick=replacePatchInTD;
-  if(s.querySelector('#aiUndo'))s.querySelector('#aiUndo').onclick=()=>{
-    if(!confirm('Rimettere fixture, palco e gruppi di prima dell\'ultima applicazione?'))return;
+  if(s.querySelector('#aiUndo'))s.querySelector('#aiUndo').onclick=async()=>{
+    if(!await uiConfirm('Rimettere fixture, palco e gruppi di prima dell\'ultima applicazione?'))return;
     const b=L.aiBackup;L.fixtures=b.fixtures;L.stage=b.stage;if(b.groups)L.groups=b.groups;else delete L.groups;delete L.aiBackup;
     ensureStageData(L);save();render();closeSheet();showInfo('Pianta rimessa come prima.');
   };

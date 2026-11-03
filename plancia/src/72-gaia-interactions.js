@@ -8,8 +8,8 @@ function gBind(e,el,w){
     const b=t.closest('[data-deck]');if(b){e.preventDefault();devCmd(id,{action:b.dataset.state==='1'?'disable':'enable',service:b.dataset.deck})}return}
   if(w.type==='tddevice'){const id=pickDev(w,w.fam||'');
     const sv=t.closest('.chip[data-svc]');if(sv){e.preventDefault();const on=sv.classList.contains('on');
-      if(sv.classList.contains('dv-warn')&&!confirm(`${on?'Spegnere':'Accendere'} "${sv.textContent}" (${sv.dataset.svc}) su ${id}? È un interruttore tecnico di DMX Master.`))return;
-      devCmd(id,{action:on?'disable':'enable',service:sv.dataset.svc});return}
+      const go=()=>devCmd(id,{action:on?'disable':'enable',service:sv.dataset.svc});
+      if(sv.classList.contains('dv-warn'))uiConfirm(`${on?'Spegnere':'Accendere'} "${sv.textContent}" (${sv.dataset.svc}) su ${id}? È un interruttore tecnico di DMX Master.`).then(y=>{if(y)go()});else go();return}
     const op=t.closest('.chip[data-opt]');if(op){e.preventDefault();const raw=op.dataset.opt,type=op.dataset.optType;
       const value=type==='number'?Number(raw):type==='boolean'?raw==='true':raw;
       devCmd(id,{action:'set',param:op.dataset.par,value});return}

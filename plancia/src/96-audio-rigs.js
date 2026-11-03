@@ -69,8 +69,8 @@ async function arApplyPreset(pr,keys){
     showInfo(`Audio: "${pr.name}" su ${rigs.length} ${rigs.length>1?'gruppi':'gruppo'}.`);
   }catch(e){showError('Preset audio: '+e.message)}
 }
-function arSavePreset(r){
-  const name=prompt(`Nome del preset audio (preso da ${r.label}):`);if(!name)return;
+async function arSavePreset(r){
+  const name=await uiPrompt(`Nome del preset audio (preso da ${r.label}):`);if(!name)return;
   const p={};for(const n of AUDIO_KEYS){const v=arVal(r.key,n);if(v!=null)p[n]=v}
   const a=arGroupAudio(r);
   L.audioPresets=[...(L.audioPresets||[]).filter(x=>x.name!==name),{name,desc:'salvato da '+r.label,p,kick:arKickOn(r.key),...(a.mode?{audio:a.mode}:{}),...(a.gain!=null?{gain:a.gain}:{})}];save();

@@ -13,8 +13,8 @@ const midiMapText=map=>!map||((map.cc===''||map.cc==null)&&map.note==null)?'ness
   `${map.note!=null?'Nota '+map.note:'CC '+map.cc} · canale ${map.ch||1}`;
 
 // prossimo messaggio MIDI -> fn(m); 15 s per muovere il controllo
-function midiLearn(label,fn){
-  if(!MIDI_PORTS.length&&!confirm('Il bridge non vede nessuna porta MIDI in ingresso.\nCollega il controller (o avvia rtpMIDI) e riprova, oppure aspetta comunque?'))return;
+async function midiLearn(label,fn){
+  if(!MIDI_PORTS.length&&!await uiConfirm('Il bridge non vede nessuna porta MIDI in ingresso.\nCollega il controller (o avvia rtpMIDI) e riprova, oppure aspetta comunque?'))return;
   clearTimeout(MIDI_LEARN?.timer);
   MIDI_LEARN={fn,timer:setTimeout(()=>{MIDI_LEARN=null;showError('Impara MIDI: nessun messaggio in 15 s.')},15000)};
   showInfo(`Impara MIDI · ${label}: muovi il fader o premi il tasto sul controller…`);

@@ -18,7 +18,7 @@ const { startPlancia, sleep } = require('./browser-harness');
   await new Promise(r => ctl.on('open', r));
   const midi = (midiType, msg) => ctl.send(JSON.stringify({ type: 'midi_fake', midiType, msg }));
   try {
-    await p.ev(`window.confirm=()=>true;1`);   // "nessuna porta MIDI: aspettare comunque?"
+    await p.ev(`new MutationObserver(()=>{const b=document.querySelector('.ui-confirm [data-v="1"]');if(b)b.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}))}).observe(document.body,{childList:true});1`);   // "nessuna porta MIDI: aspettare comunque?"
     // un fader del layout: Modifica griglia, pagina giusta, tocco vero, Impara
     const t = await p.ev(`(()=>{let out=null;window.__planciaTest.L.pages.forEach((pg,pi)=>pg.widgets.forEach(w=>{if(!out&&w.type==='fader'&&w.addr)out={pi,id:w.id,addr:w.addr}}));return out})()`);
     assert.ok(t, 'nessun fader nel layout di prova');

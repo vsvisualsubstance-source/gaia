@@ -129,20 +129,14 @@ TPL.teste={name:'Teste · scene e movimento',desc:'Scene di movimento delle test
   W('xy',9,8,5,2,{label:'Pan / Tilt',addr:'/mh/pantilt',min:-1,max:1,value:.5,valueY:.5,color:SWATCH[1]}),
   W('fader',14,8,2,2,{label:'Dimmer',addr:'/mh/dimmer',value:1})
 ])]};
-// Sequenze (chase a step, 63-chase*.js): libreria, scene di DMX Master, timeline.
-TPL.sequenze={name:'Sequenze (chase)',desc:'Chase a step con le scene di DMX Master, TAP tempo e traccia SEQUENZE della timeline.',pages:()=>[P('Sequenze',[
-  W('timeline',0,0,16,4,{label:'Timeline show',...tlOpts(),tracks:['chase']}),
-  W('chase',0,4,10,6,{label:'Chase',color:SWATCH[4]}),
-  W('scenes',10,4,6,6,{label:'Scene · DMX Master',addr:'/dmx/scene',items:sceneList,cols:2,value:0})
-])]};
-// Effetti sulle luci (63-light-fx*.js, nota TD 59): libreria, scene, timeline.
-TPL.effetti={name:'Effetti luci',desc:'Onde di dimmer e colore, inseguimento, scintillio e strobo a tempo sulle luci dei gruppi, calcolati da DMX Master; traccia EFFETTI.',pages:()=>[P('Effetti',[
-  W('timeline',0,0,16,4,{label:'Timeline show',...tlOpts(),tracks:['fx']}),
-  W('lightfx',0,4,10,6,{label:'Effetti luci',color:SWATCH[1]}),
-  W('scenes',10,4,6,6,{label:'Scene · DMX Master',addr:'/dmx/scene',items:sceneList,cols:2,value:0})
+// Teste a parte; chase a step (63-chase*.js) ed effetti sulle luci (63-light-fx*.js, nota TD 59) insieme.
+TPL.sequenze={name:'Sequenze ed effetti',desc:'Chase a step con le scene di DMX Master, effetti sulle luci (onde, inseguimento, scintillio), TAP e le loro tracce in timeline.',pages:()=>[P('Sequenze ed effetti',[
+  W('timeline',0,0,16,4,{label:'Timeline show',...tlOpts(),tracks:['chase','fx']}),
+  W('chase',0,4,8,6,{label:'Chase',color:SWATCH[4]}),
+  W('lightfx',8,4,8,6,{label:'Effetti luci',color:SWATCH[1]})
 ])]};
 TPL.full={name:'Show completo',desc:'Tutte le pagine insieme: Gaia, PatchDeck, DMX V8, panoramica show, DMX, teste mobili, timeline, palco, mix.',
-  pages:()=>['gaia','show','regia','sequenze','effetti','luci','audio','laser','dmx','mh','teste','timeline','palco','mix'].flatMap(k=>TPL[k].pages())};
+  pages:()=>['gaia','show','regia','sequenze','luci','audio','laser','dmx','mh','teste','timeline','palco','mix'].flatMap(k=>TPL[k].pages())};
 const sample=()=>({pages:TPL.full.pages(),fixtures:defaultFixtures(),stage:stageDefaults()});
 
 let L=store.get(KEY)||sample();

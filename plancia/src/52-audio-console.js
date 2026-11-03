@@ -181,7 +181,7 @@ function auPaintDeck(el,w){
   const box=el.querySelector('.au-deck');if(!box)return;const k=box.dataset.deck,d=AU.decks[k],col=w.color||SWATCH[0];
   auDrawWave(box.querySelector('.au-wave'),d,col);auDrawOver(box.querySelector('.au-over'),d,col);
   const set=(sel,txt)=>{const e=box.querySelector(sel);if(e&&e.textContent!==txt)e.textContent=txt};
-  set('.au-title .t',d.track?d.track.title:(d.loading?'carico…':'Trascina o scegli una traccia dalla libreria'));
+  set('.au-title .t',d.track?d.track.title:(d.loading?'carico…':'Scegli una traccia dalla libreria: pulsante A o B'));
   set('.au-title .a',d.track?d.track.artist:'');
   set('.au-bpm b',d.track?.bpm?auBpm(d).toFixed(2):'—');
   set('.au-bpm i',`${d.tempo*d.range>=0?'+':''}${(d.tempo*d.range*100).toFixed(1)}%`);
@@ -232,7 +232,7 @@ function auLibRows(){
   return list;
 }
 function auLibHtml(){
-  return`<div class="au au-lib"><div class="au-libbar">
+  return`<div class="au au-lib"><div class="au-libbar">${AU.live?'':'<span class="au-sim" title="Il motore audio gaia-audio non è ancora collegato: i comandi si provano qui, ma non esce suono">SIMULAZIONE · NESSUN SUONO</span>'}
     <input type="search" placeholder="Cerca titolo, artista, cartella" data-au-s="q">
     <select data-au-s="folder"></select>
     <span class="au-libn hint"></span>

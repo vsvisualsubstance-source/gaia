@@ -173,7 +173,7 @@ function openSceneEditor(){
     const pals=[...s.querySelectorAll('.sp-pal:checked')].map(x=>x.value),rigs=[...s.querySelectorAll('.sp-rig:checked')].map(x=>x.value);
     if(!pals.length){showError('Scene dalle palette: scegli almeno una palette.');return}
     if(!rigs.length){showError('Scene dalle palette: scegli almeno un rig.');return}
-    if(!confirm(`Creare ${pals.length} scen${pals.length>1?'e':'a'} colore (${pals.map(paletteSceneId).join(', ')})?\nLe luci cambiano dal vivo per qualche secondo per ogni palette: non farlo durante lo show.`))return;
+    if(!await uiConfirm(`Creare ${pals.length} scen${pals.length>1?'e':'a'} colore (${pals.map(paletteSceneId).join(', ')})?\nLe luci cambiano dal vivo per qualche secondo per ogni palette: non farlo durante lo show.`))return;
     const prog=s.querySelector('#spProg');spBuild.disabled=true;
     try{const cats=await buildPaletteScenes(pals,rigs,(i,p)=>{if(prog)prog.textContent=`${i+1}/${pals.length} · ${p}…`});
       reopen();showInfo(`${pals.length} scen${pals.length>1?'e':'a'} palette pronte (${sceneCategoryText(cats,SCENE_CATEGORIES)}): sceglile nelle cue, gruppo Colore.`)}
@@ -184,7 +184,7 @@ function openSceneEditor(){
     row.querySelector('[data-sa="recall"]').onclick=async()=>{
       try{await tdSceneCommand('show_scene_recall',id,()=>tdActiveScene(tdParams())?.id===id);reopen()}catch(e){fail(e)}};
     row.querySelector('[data-sa="recapture"]').onclick=async()=>{
-      if(!confirm(`Sovrascrivere "${id}" con i valori dal vivo di adesso?\nCambiano solo le sue categorie: ${sceneCategoryText(sc?.categories,cats)}.`))return;
+      if(!await uiConfirm(`Sovrascrivere "${id}" con i valori dal vivo di adesso?\nCambiano solo le sue categorie: ${sceneCategoryText(sc?.categories,cats)}.`))return;
       // conferma = TD ha ripubblicato status/matrix dopo il comando
       const pub=()=>`${G.devices['td-dmx-win']?.ts}|${G.dxm['td-dmx-win']?.ts}`,before=pub();
       try{await tdSceneCommand('show_scene_capture',{name:id,categories:sc?.categories||cats.map(c=>c.id)},()=>pub()!==before);
@@ -203,7 +203,7 @@ function openSceneEditor(){
         reopen();showInfo(`Scena "${to}" aggiornata.`)}catch(e){fail(e)}
     };
     row.querySelector('[data-sa="delete"]').onclick=async()=>{
-      if(!confirm(`Eliminare la scena "${id}" da DMX Master?`))return;
+      if(!await uiConfirm(`Eliminare la scena "${id}" da DMX Master?`,{ok:'Elimina'}))return;
       try{await tdSceneCommand('show_scene_delete',id,()=>!tdSceneById(id));reopen()}catch(e){fail(e)}
     };
   });

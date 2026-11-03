@@ -46,12 +46,23 @@ window.addEventListener('resize',()=>{
   if(portrait!==stage.classList.contains('portrait'))renderStage();
 });
 function refresh(w){const o=elOf(w.id); if(o) o.replaceWith(build(w))}
+// Pagine a due livelli: i gruppi nella barra, le pagine del gruppo in una riga sotto
+// (solo se sono piu' di una). p.group sceglie il gruppo; senza, vale il nome; altrimenti "Altro".
+const PAGE_GROUPS=[['Show',['Show','Regia','Timeline']],['Luci',['Luci','Sequenze ed effetti','DMX','Audio']],['Teste',['Teste mobili','Teste · movimento']],
+  ['Laser',['Laser']],['Video e audio',['PatchDeck','Console Audio','Mix']],['Sistema',['Gaia','DMX V8','Palco']]];
+const GROUP_LAST={};   // ultima pagina vista di ogni gruppo
+function pageGroup(p){return p?.group||PAGE_GROUPS.find(([,n])=>n.includes(p?.name))?.[0]||'Altro'}
 function renderTabs(){
-  const t=$('#tabs'); t.innerHTML='';
-  L.pages.forEach((p,i)=>{const b=document.createElement('button');b.className='tab';b.textContent=p.name;b.setAttribute('aria-current',i===pi);
+  const t=$('#tabs'),g=$('#groups'),cur=pageGroup(page());GROUP_LAST[cur]=pi;t.innerHTML='';g.innerHTML='';
+  const names=[...PAGE_GROUPS.map(x=>x[0]),'Altro'].filter(n=>L.pages.some(p=>pageGroup(p)===n));
+  names.forEach(n=>{const b=document.createElement('button');b.className='tab';b.textContent=n;b.setAttribute('aria-current',n===cur);
+    b.onclick=()=>{const last=GROUP_LAST[n];pi=L.pages[last]&&pageGroup(L.pages[last])===n?last:L.pages.findIndex(p=>pageGroup(p)===n);selId=null;render()};g.appendChild(b)});
+  // tutte le pagine restano nel DOM: quelle degli altri gruppi sono nascoste
+  L.pages.forEach((p,i)=>{const b=document.createElement('button');b.className='tab';b.textContent=p.name;b.setAttribute('aria-current',i===pi);b.hidden=pageGroup(p)!==cur;
     b.onclick=()=>{pi=i;selId=null;render()};t.appendChild(b)});
-  t.querySelector('[aria-current="true"]')?.scrollIntoView({block:'nearest',inline:'nearest'});
   if(editing){const b=document.createElement('button');b.className='tab add';b.textContent='+';b.title='Nuova pagina';b.onclick=addPage;t.appendChild(b)}
+  t.classList.toggle('one',!editing&&L.pages.filter(p=>pageGroup(p)===cur).length<2);
+  t.querySelector('[aria-current="true"]')?.scrollIntoView({block:'nearest',inline:'nearest'});
 }
 function render(){oscIndexStale();document.body.classList.toggle('editing',editing);$('#addbar').hidden=!editing;
   $('#editBtn').textContent=editing?'Fine griglia':'Modifica griglia';

@@ -88,8 +88,8 @@ function openChaseEditor(orig,isNew){
     q('#chSave').onclick=()=>{read();if(!ch.steps.some(x=>x.scene)){showError('Chase: scegli almeno una scena.');return}
       const list=[...chases()],i=list.findIndex(x=>x.id===ch.id);if(i<0)list.push(ch);else list[i]=ch;L.chases=list;if(chaseDoc().cues.some(c=>c.chase===ch.id))tlMarkTd();save();closeSheet();showInfo(`Chase "${ch.name}" salvato.`)};
     if(q('#chDup'))q('#chDup').onclick=()=>{read();openChaseEditor({...JSON.parse(JSON.stringify(ch)),id:'ch-'+uid(),name:ch.name+' (copia)'},true)};
-    if(q('#chDel'))q('#chDel').onclick=()=>{const used=chaseDoc().cues.filter(c=>c.chase===ch.id).length;
-      if(!confirm(`Eliminare "${ch.name}"?${used?`\nÈ usato da ${used} cue della traccia SEQUENZE.`:''}`))return;
+    if(q('#chDel'))q('#chDel').onclick=async()=>{const used=chaseDoc().cues.filter(c=>c.chase===ch.id).length;
+      if(used&&!await uiConfirm(`"${ch.name}" è usato da ${used} cue della traccia SEQUENZE. Eliminarlo?`,{ok:'Elimina'}))return;
       L.chases=chases().filter(x=>x.id!==ch.id);save();closeSheet()};
     // anteprima: lo step che sarebbe in corso adesso, al BPM dal vivo
     const t0=performance.now(),strip=q('.ch-prev');

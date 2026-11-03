@@ -119,9 +119,8 @@ async function pickNdiSource(f){
   try{
     const r=await fetch(`${gatewayUrl}/api/sources`);const j=await r.json();
     if(!j.sources?.length){alert('Nessuna sorgente NDI trovata sulla rete al momento.');return}
-    const pick=j.sources.length===1?j.sources[0]:prompt(`Sorgenti NDI trovate:\n${j.sources.map((s,i)=>`${i+1}. ${s}`).join('\n')}\n\nScrivi il nome esatto (copia/incolla da sopra):`,j.sources[0]);
+    const pick=j.sources.length===1?j.sources[0]:await uiChoose('Sorgenti NDI trovate',j.sources.map(s=>({label:s,value:s})));
     if(pick&&j.sources.includes(pick)){val2('#feSourceRef',pick);$('#feSourceRef').dispatchEvent(new Event('input'))}
-    else if(pick)alert('Nome non riconosciuto fra le sorgenti trovate — copialo esattamente.');
   }catch(err){alert('Video Service non raggiungibile: '+err.message)}
 }
 function syncWallVideoPlayers(fixtures){

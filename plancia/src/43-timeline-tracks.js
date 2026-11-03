@@ -9,12 +9,12 @@ function tlTrackDefs(){
   return[
     {id:'chase',label:'Sequenze (chase)',html:chaseLaneHtml,count:()=>chaseDoc().cues.length,td:true,edit:openChaseCueEditor,
       list:()=>chaseDoc().cues,store:cues=>{L.chaseTimeline={cues}},name:c=>chases().find(x=>x.id===c.chase)?.name||'Fermo',
-      empty:()=>chases().length?null:'Nessun chase: crea quelli pronti con "Template" nella pagina Sequenze.',
+      empty:()=>chases().length?null:'Nessun chase: crea quelli pronti con "Template" nella pagina Sequenze ed effetti.',
       items:c=>[...chases().map(x=>({label:x.name,value:x.id,on:c?.chase===x.id})),{label:'■ Fermo',value:'off',on:c?.chase==='off'}],
       set:(c,v)=>({...c,chase:v})},
     {id:'fx',label:'Effetti luci',html:fxLaneHtml,count:()=>fxDoc().cues.length,td:true,edit:openFxCueEditor,multi:true,
       list:()=>fxDoc().cues,store:cues=>{L.fxTimeline={cues}},name:c=>(c.effects||[]).map(id=>lightFx().find(f=>f.id===id)?.name||'?').join(' + ')||'Nessuno',
-      empty:()=>lightFx().length?null:'Nessun effetto: tocca "Template" nella pagina Effetti.',
+      empty:()=>lightFx().length?null:'Nessun effetto: tocca "Template" nella pagina Sequenze ed effetti.',
       items:c=>lightFx().map(f=>({label:f.name,value:f.id,on:(c?.effects||[]).includes(f.id)})),
       set:(c,v)=>({...c,effects:v})},
     {id:'heads',label:'Teste · posizioni',html:headsLaneHtml,count:w=>timelineCues(w).filter(cueIsHeads).length,edit:w=>openCueEditor(w)},
@@ -105,18 +105,27 @@ async function headsLaneTap(w,t,blk){
     if(doc)sendTimelineToTD(w);else showInfo('Traccia TESTE cambiata.');
   }catch(e){showError('Teste: '+e.message)}
 }
-// menu con tutte le pagine: su tablet nella barra se ne vedono poche
-async function openPagesMenu(){
-  const v=await uiChoose('Vai alla pagina',L.pages.map((p,i)=>({label:p.name,value:i,on:i===pi})));
-  if(v==null)return;pi=v;selId=null;render();
-}
 // 2026-11-03: ogni timeline mostra le sue tracce; una sola timeline dello show in tutte le pagine (uiRev 13)
 function migrateUiTracks(){
   if((L.uiRev||0)>=13)return;
   const shows=L.pages.flatMap(p=>p.widgets.filter(w=>w.type==='timeline'&&w.addr==='/show').map(w=>({p,w})));
-  const focus={Sequenze:['chase'],Effetti:['fx'],'Teste · movimento':['heads','motion'],Timeline:['chase','fx','heads','motion']};
+  const focus={Sequenze:['chase'],Effetti:['fx'],'Sequenze ed effetti':['chase','fx'],'Teste · movimento':['heads','motion'],Timeline:['chase','fx','heads','motion']};
   for(const{p,w}of shows)if(focus[p.name])w.tracks=focus[p.name];
   const master=shows.find(x=>x.p.name==='Timeline')?.w||shows[0]?.w;
   if(master){L.pagesBackup={...(L.pagesBackup||{}),timelineDrafts_20261103:shows.map(x=>({page:x.p.name,cues:x.w.cues,duration:x.w.duration}))};syncShowWidgets(master)}
   L.uiRev=13;save();
+}
+// 2026-11-03: Sequenze ed Effetti diventano una pagina sola, gruppi di pagine (uiRev 14)
+function migrateUiPageGroups(){
+  if((L.uiRev||0)>=14)return;
+  const a=L.pages.find(p=>p.name==='Sequenze'),b=L.pages.find(p=>p.name==='Effetti');
+  const plain=(p,type)=>!p||p.widgets.every(w=>['timeline','scenes',type].includes(w.type));
+  if(a&&plain(a,'chase')&&plain(b,'lightfx')){
+    const fresh=TPL.sequenze.pages()[0],old=a.widgets.find(w=>w.type==='timeline');fresh.id=a.id;
+    if(old){const t=fresh.widgets.find(w=>w.type==='timeline');t.cues=old.cues;t.duration=old.duration;t.bpm=old.bpm;if(old.tdBaseRev)t.tdBaseRev=old.tdBaseRev}
+    L.pagesBackup={...(L.pagesBackup||{}),sequenzeEffetti_20261103:JSON.parse(JSON.stringify([a,b].filter(Boolean)))};
+    L.pages[L.pages.indexOf(a)]=fresh;if(b)L.pages.splice(L.pages.indexOf(b),1);
+    pi=Math.min(pi,L.pages.length-1);
+  }
+  L.uiRev=14;save();
 }

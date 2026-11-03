@@ -45,12 +45,13 @@ function renderInsp(){
   insp.hidden=!editing; if(!editing)return;
   const w=selId&&findW(selId);
   if(!w){
-    insp.innerHTML=`<h3>Pagina</h3><label>Nome<input id="pgName"></label>
+    insp.innerHTML=`<h3>Pagina</h3><label>Nome<input id="pgName"></label><label>Gruppo<select id="pgGroup">${[...PAGE_GROUPS.map(x=>x[0]),'Altro'].map(n=>`<option${n===pageGroup(page())?' selected':''}>${n}</option>`).join('')}</select></label>
       <div class="row"><button class="btn" id="pgAdd">Nuova pagina</button><button class="btn danger" id="pgDel">Elimina pagina</button></div>
       <p class="hint">Questa modalità modifica la griglia dei widget, non le fixture del palco. Trascina un widget per spostarlo, usa l'angolo per ridimensionarlo; ogni modifica si salva automaticamente.</p>
       <p class="hint">Da <code>⋯</code> trovi i template pronti: DMX, teste mobili, timeline, design del palco.</p>`;
     $('#pgName').value=page().name;
     $('#pgName').oninput=e=>{page().name=e.target.value||'Pagina';save();renderTabs()};
+    $('#pgGroup').onchange=e=>{page().group=e.target.value;save();renderTabs()};
     $('#pgAdd').onclick=addPage;
     const del=$('#pgDel'); del.disabled=L.pages.length<2; let armed=false;
     del.onclick=()=>{if(!armed){armed=true;del.textContent='Conferma eliminazione';return}

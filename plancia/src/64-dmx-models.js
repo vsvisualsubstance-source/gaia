@@ -129,7 +129,7 @@ function openModelForm(m,opts={}){
           // nota TD 43: canali cambiati su un modello in uso e fixture che si
           // sovrapporrebbero -> rifiutato (reject); l'operatore puo' farle spostare
           if(isNew||!/\d+-\d+ con /.test(e.message))throw e;
-          if(!confirm(`DMX Master non scrive: le fixture di questo modello si sovrapporrebbero ad altre.\n${e.message}\n\nOK = sposta in avanti le fixture che si sovrappongono (on_conflict auto).\nAnnulla = non scrivere niente.`))return;
+          if(!await uiConfirm(`DMX Master non scrive: le fixture di questo modello si sovrapporrebbero ad altre.\n${e.message}\n\nOK = sposta in avanti le fixture che si sovrappongono (on_conflict auto).\nAnnulla = non scrivere niente.`))return;
           await send({...v,on_conflict:'auto'});
         }
         rememberModel(v);
@@ -141,7 +141,7 @@ function openModelForm(m,opts={}){
         fail(e)}
     };
     if(s.querySelector('#mfDel'))s.querySelector('#mfDel').onclick=async()=>{
-      if(!confirm(`Eliminare il modello "${m.model}" da DMX Master?`))return;
+      if(!await uiConfirm(`Eliminare il modello "${m.model}" da DMX Master?`,{ok:'Elimina'}))return;
       try{await tdSceneCommand('dmx_model_remove',m.model,()=>!tdModels().some(x=>x.model===m.model));showInfo(`Modello "${m.model}" eliminato.`);back()}catch(e){fail(e)}
     };
   };
@@ -172,8 +172,7 @@ function openLampPanel(){
     </div>`;
     s.querySelector('#lpClose').onclick=closeSheet;
     const go=async v=>{
-      if(v==='off'&&!confirm('Spegnere le lampade? Una lampada a scarica spenta deve raffreddarsi qualche minuto prima di poter essere riaccesa.'))return;
-      if(v==='on'&&!confirm(`Accendere le lampade di ${heads.length} teste?`))return;
+      if(v==='off'&&!await uiConfirm('Spegnere le lampade? Una lampada a scarica spenta deve raffreddarsi qualche minuto prima di poter essere riaccesa.'))return;
       // esito in heads_last_result {seq, action, ok, message}: aspetta un seq nuovo
       const seq0=tdParams().heads_last_result?.seq;
       try{await tdSceneCommand('heads_lamp',v,()=>{const r=tdParams().heads_last_result;return!!r&&r.seq!==seq0&&r.action==='heads_lamp'});
