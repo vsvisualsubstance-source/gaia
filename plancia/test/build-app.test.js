@@ -30,7 +30,7 @@ test('app bundle preserves module order and parses as one client scope', () => {
 
   assert.equal(bundle.startsWith('(()=>{\n'), true);
   assert.equal(bundle.endsWith('\n})();\n'), true);
-  assert.equal(appModules.length, 49);
+  assert.equal(appModules.length, 50);
   assert.equal(positions.every(position => position >= 0), true);
   assert.deepEqual(positions, [...positions].sort((a, b) => a - b));
   assert.doesNotThrow(() => new vm.Script(bundle));

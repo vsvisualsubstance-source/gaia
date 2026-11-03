@@ -152,6 +152,7 @@ function fixCounts(){ // conteggi per tipo, usati da drawRender/legenda invece d
 // progetto e' uno SNAPSHOT esplicito, non il continuo autosave.
 const PROJKEY='plancia.projects.v1';
 const PROJECT_TEMPLATES=[
+  {tid:'tpl-demo',name:'Demo completo: un po\' di tutto, per provare ogni funzione',demo:true},
   {tid:'tpl-small',name:'Palco piccolo (4 teste)',rig:{heads:4,uplights:2,bars:2,wall:false,speakers:true}},
   {tid:'tpl-standard',name:'Palco standard (8 teste + LED wall)',rig:{heads:8,uplights:6,bars:8,wall:true,speakers:true}},
   {tid:'tpl-large',name:'Palco grande (12 teste + 2 LED wall)',rig:{heads:12,uplights:8,bars:12,walls:2,speakers:true}},
@@ -212,7 +213,7 @@ function projDelete(id){
 function projLoadTemplate(tid){
   const t=PROJECT_TEMPLATES.find(x=>x.tid===tid);if(!t)return;
   const v=t.venue&&VENUES[t.venue];
-  L=v?{pages:TPL.full.pages(),fixtures:v.fixtures(),stage:{...stageDefaults(),...v.stage},groups:v.groups.map(g=>({...g})),models:Object.fromEntries((v.models||[]).map(m=>[m.model,modelPayload(m)])),uiRev:5}
+  L=t.demo?demoProjectLayout():v?{pages:TPL.full.pages(),fixtures:v.fixtures(),stage:{...stageDefaults(),...v.stage},groups:v.groups.map(g=>({...g})),models:Object.fromEntries((v.models||[]).map(m=>[m.model,modelPayload(m)])),uiRev:5}
     :{pages:TPL.full.pages(),fixtures:defaultFixtures(t.rig),stage:stageDefaults(),uiRev:5};
   delete L._projectId;delete L._projectName;ensureStageData(L);
   pi=0;selId=null;save();render();initShow();checkProjectModelsSoon();

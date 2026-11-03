@@ -53,6 +53,7 @@ const appModules = [
   '99-laser.js',
   '99-laser-scenes.js',
   '99-laser-import.js',
+  '99-demo-project.js',
   '999-start.js'
 ];
 
@@ -64,7 +65,7 @@ window.__planciaTest={
   get L(){return L},set L(v){L=v},
   G,W,P,TPL,DEF,NAMES,argsOf,out,set,setXY,send,fire,flush,render,ensureStageData,widgetType,WIDGET_TYPES,
   receive,gIn,SH,DMX_OUTPUT,mqttTopics,showClock,drawRender,ensureHeadPool,
-  openSceneEditor,cueSceneFields,openSheet,openFixEditor,AU,auLoad,auCmd,auBpm,auPhase,timelineToTD,timelineFromTD,
+  openSceneEditor,cueSceneFields,openSheet,openFixEditor,AU,auLoad,auCmd,auBpm,auPhase,timelineToTD,timelineFromTD,demoProjectLayout,
   migrations:[['migrateLegacyHeadSelectors',migrateLegacyHeadSelectors],['migrateHeadPresetWidgets',migrateHeadPresetWidgets],
     ['migrateUiShowTimeline',migrateUiShowTimeline],['migrateUiConsolePages',migrateUiConsolePages],['migrateUiAudioPage',migrateUiAudioPage],
     ['migrateUiNoChase',migrateUiNoChase],['migrateUiOneDmxV8',migrateUiOneDmxV8],['migrateUiLaserPage',migrateUiLaserPage],
