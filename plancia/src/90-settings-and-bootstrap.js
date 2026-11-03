@@ -195,5 +195,5 @@ function migrateUiAudioPage(){
 }
 // Avvio dell'app: lo chiama src/999-start.js, dopo che tutti i moduli sono stati valutati.
 function init(){
-  migrateLegacyHeadSelectors();migrateHeadPresetWidgets();migrateUiShowTimeline();migrateUiConsolePages();migrateUiAudioPage();migrateUiNoChase();migrateUiOneDmxV8();migrateUiLaserPage();migrateUiLaserScenes();migrateUiHeadMotion();render(); initShow(); connect(); gStart(); requestAnimationFrame(loop);
+  migrateLegacyHeadSelectors();migrateHeadPresetWidgets();migrateUiShowTimeline();migrateUiConsolePages();migrateUiAudioPage();migrateUiNoChase();migrateUiOneDmxV8();migrateUiLaserPage();migrateUiLaserScenes();migrateUiHeadMotion();migrateUiChase();render(); initShow(); connect(); gStart(); requestAnimationFrame(loop);
 }

@@ -14,6 +14,7 @@ function connect(){
   ws.onerror=()=>{};
   ws.onmessage=ev=>{let m;try{m=JSON.parse(ev.data)}catch{return}
   if(m.type==='laser'){G.laserSt=m.state||null;return} // stato della timeline laser dal bridge
+  if(m.type==='chase'){G.chaseSt=m.state||null;return} // chase dal vivo nel bridge
   if(m.type==='head_motion'){G.hmSt=m.state||null;return} // stato del motore del movimento teste
   if(m.type==='video'){VIDEO_ST=m.state||null;return} // stato della timeline video dal bridge
   if(m.type==='midi_in'){midiFromBridge(m);return}     // MIDI in ingresso (eseguito dal bridge)

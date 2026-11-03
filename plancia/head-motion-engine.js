@@ -60,6 +60,8 @@ function startHeadMotion({ getDoc, getScenes, sendOsc, broadcast, rate = 30, url
   return {
     play: (scene, bpm) => { if (scene && scene.path) live = { scene, bpm: +bpm || null, startedAt: Date.now() }; },
     stop: () => { live = null; },
+    // TAP: il giro cambia durata senza saltare (stessa fase al nuovo tempo)
+    tempo: bpm => { if (live && +bpm > 0) { const now = Date.now(), old = live.bpm || 120; live.startedAt = now - (now - live.startedAt) * old / +bpm; live.bpm = +bpm; } },
     status: () => status,
     close: () => { clearInterval(timer); client?.end(true); }
   };

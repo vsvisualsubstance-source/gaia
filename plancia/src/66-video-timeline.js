@@ -27,7 +27,7 @@ function videoLaneHtml(w,D){
     <button class="tl-live tl-vlive" data-act="vlive"${w.readonly?' disabled':''} title="VIDEO · TIMELINE: PatchDeck segue la timeline (la esegue il bridge su OPS). LIVE: comandi tu dal tablet">—</button>
     ${w.readonly?'':'<button class="tl-vcue" data-act="vcue" title="Cue video: deck, patch, cosa mostrare, effetti">CUE VIDEO</button>'}
     </div>
-    <div class="tl-vlane"><div class="tl-cues">${blocks}</div><span class="tl-vst"></span><div class="tl-ph tl-vph"></div></div></div>`;
+    <div class="tl-vlane"><div class="tl-cues">${blocks}</div><span class="tl-vst tl-vvst"></span><div class="tl-ph tl-vph"></div></div></div>`;
 }
 function toggleVideoActive(){
   const doc=videoDoc(),on=!!doc.active;
@@ -41,7 +41,7 @@ function paintVideoLane(el,w,D,t){
   if(b.textContent!==txt){b.textContent=txt;b.classList.toggle('is-tl',on);b.classList.toggle('is-live',!on)}
   const st=VIDEO_ST,msg=!st?'bridge: nessuno stato':!st.mqtt?'bridge senza MQTT':!st.clock?'nessun orologio dello show':
     on?(st.cue>=0?`cue ${st.cue+1}${st.label?' · '+st.label:''}`:'prima della prima cue'):'PatchDeck dal tablet';
-  const s=el.querySelector('.tl-vst');if(s&&s.textContent!==msg)s.textContent=msg;
+  const s=el.querySelector(".tl-vvst");if(s&&s.textContent!==msg)s.textContent=msg;
   const ph=el.querySelector('.tl-vph');if(ph&&D>0)ph.style.left=Math.max(0,Math.min(1,t/D))*100+'%';
 }
 function openVideoCueEditor(w,cues,meta={}){

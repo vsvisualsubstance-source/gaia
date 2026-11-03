@@ -26,6 +26,8 @@ const appModules = [
   '63-dmx-scenes.js',
   '63-head-motion.js',
   '63-head-motion-ui.js',
+  '63-chase.js',
+  '63-chase-ui.js',
   '64-dmx-models.js',
   '65-stage-ai.js',
   '66-video-timeline.js',
@@ -58,11 +60,11 @@ window.__planciaTest={
   get L(){return L},set L(v){L=v},
   G,W,P,TPL,DEF,NAMES,argsOf,out,set,setXY,send,fire,flush,render,ensureStageData,widgetType,WIDGET_TYPES,
   receive,gIn,SH,DMX_OUTPUT,mqttTopics,showClock,drawRender,ensureHeadPool,
-  openSceneEditor,cueSceneFields,openSheet,AU,auLoad,auCmd,auBpm,auPhase,
+  openSceneEditor,cueSceneFields,openSheet,AU,auLoad,auCmd,auBpm,auPhase,timelineToTD,timelineFromTD,
   migrations:[['migrateLegacyHeadSelectors',migrateLegacyHeadSelectors],['migrateHeadPresetWidgets',migrateHeadPresetWidgets],
     ['migrateUiShowTimeline',migrateUiShowTimeline],['migrateUiConsolePages',migrateUiConsolePages],['migrateUiAudioPage',migrateUiAudioPage],
     ['migrateUiNoChase',migrateUiNoChase],['migrateUiOneDmxV8',migrateUiOneDmxV8],['migrateUiLaserPage',migrateUiLaserPage],
-    ['migrateUiLaserScenes',migrateUiLaserScenes]]};`;
+    ['migrateUiLaserScenes',migrateUiLaserScenes],['migrateUiHeadMotion',migrateUiHeadMotion],['migrateUiChase',migrateUiChase]]};`;
 
 function buildAppBundle(sourceDir = path.join(__dirname, 'src'), { testHooks = false } = {}) {
   const modules = appModules.map(file => {

@@ -296,6 +296,17 @@
    ],
    "probes": []
   },
+  "chase": {
+   "label": "Chase",
+   "size": [
+    8,
+    6
+   ],
+   "args": [
+    -1
+   ],
+   "probes": []
+  },
   "gaia": {
    "label": "Gaia",
    "size": [
@@ -1635,6 +1646,46 @@
     }
    ]
   },
+  "sequenze": {
+   "name": "Sequenze (chase)",
+   "pages": [
+    {
+     "name": "Sequenze",
+     "widgets": [
+      [
+       "timeline",
+       0,
+       0,
+       16,
+       4,
+       "/show",
+       "push",
+       "Timeline show"
+      ],
+      [
+       "chase",
+       0,
+       4,
+       10,
+       6,
+       "",
+       "push",
+       "Chase"
+      ],
+      [
+       "scenes",
+       10,
+       4,
+       6,
+       6,
+       "/dmx/scene",
+       "push",
+       "Scene · DMX Master"
+      ]
+     ]
+    }
+   ]
+  },
   "full": {
    "name": "Show completo",
    "pages": [
@@ -1990,6 +2041,41 @@
        "/dmx/strobe",
        "push",
        "Flash strobo"
+      ]
+     ]
+    },
+    {
+     "name": "Sequenze",
+     "widgets": [
+      [
+       "timeline",
+       0,
+       0,
+       16,
+       4,
+       "/show",
+       "push",
+       "Timeline show"
+      ],
+      [
+       "chase",
+       0,
+       4,
+       10,
+       6,
+       "",
+       "push",
+       "Chase"
+      ],
+      [
+       "scenes",
+       10,
+       4,
+       6,
+       6,
+       "/dmx/scene",
+       "push",
+       "Scene · DMX Master"
       ]
      ]
     },
@@ -2868,9 +2954,17 @@
    [
     "migrateUiLaserScenes",
     7
+   ],
+   [
+    "migrateUiHeadMotion",
+    9
+   ],
+   [
+    "migrateUiChase",
+    10
    ]
   ],
-  "uiRev": 7,
+  "uiRev": 10,
   "pages": [
    {
     "name": "Show",
@@ -3023,6 +3117,53 @@
     ]
    },
    {
+    "name": "Teste · movimento",
+    "widgets": [
+     [
+      "timeline",
+      "/show",
+      "push",
+      "Timeline show"
+     ],
+     [
+      "headmotion",
+      "",
+      "push",
+      "Movimento teste"
+     ],
+     [
+      "scenes",
+      "/mh/select/heads",
+      "head-select",
+      "Selezione teste"
+     ],
+     [
+      "scenes",
+      "/mh/position",
+      "push",
+      "Posizioni"
+     ],
+     [
+      "scenes",
+      "",
+      "head-presets",
+      "Preset PTZ"
+     ],
+     [
+      "xy",
+      "/mh/pantilt",
+      "push",
+      "Pan / Tilt"
+     ],
+     [
+      "fader",
+      "/mh/dimmer",
+      "push",
+      "Dimmer"
+     ]
+    ]
+   },
+   {
     "name": "Regia",
     "widgets": [
      [
@@ -3030,6 +3171,29 @@
       "",
       "push",
       "Audio"
+     ]
+    ]
+   },
+   {
+    "name": "Sequenze",
+    "widgets": [
+     [
+      "timeline",
+      "/show",
+      "push",
+      "Timeline show"
+     ],
+     [
+      "chase",
+      "",
+      "push",
+      "Chase"
+     ],
+     [
+      "scenes",
+      "/dmx/scene",
+      "push",
+      "Scene · DMX Master"
      ]
     ]
    },
@@ -3587,7 +3751,7 @@
  },
  "layout": {
   "idempotentOnReload": true,
-  "pages": 14
+  "pages": 15
  },
  "inspector": {
   "gaia": {
@@ -3747,6 +3911,16 @@
     "fOscChannel": "",
     "fMin": "0",
     "fMax": "1",
+    "fDup": "",
+    "fDel": ""
+   }
+  },
+  "chase": {
+   "html": "<h3>Chase</h3> <label>Etichetta<input id=\"fLabel\"></label> <label>Indirizzo OSC<input id=\"fAddr\" class=\"mono\" spellcheck=\"false\" autocapitalize=\"off\"></label> <label>Canale OSC<select id=\"fOscChannel\"><option value=\"\">Predefinito · 192.168.1.73:7020</option></select></label> <p class=\"hint\">La famiglia e l’istanza identificano la destinazione; indirizzo e argomenti restano quelli definiti dal contratto del progetto TD.</p> <label>Colore</label><div class=\"sw\"><button class=\"swb\" data-c=\"#ffb23e\" style=\"--c:#ffb23e\" aria-label=\"Colore #ffb23e\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#3ec9ff\" style=\"--c:#3ec9ff\" aria-label=\"Colore #3ec9ff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#ff5fa2\" style=\"--c:#ff5fa2\" aria-label=\"Colore #ff5fa2\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#9be15d\" style=\"--c:#9be15d\" aria-label=\"Colore #9be15d\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#b18cff\" style=\"--c:#b18cff\" aria-label=\"Colore #b18cff\" aria-pressed=\"true\"></button><button class=\"swb\" data-c=\"#e9ebef\" style=\"--c:#e9ebef\" aria-label=\"Colore #e9ebef\" aria-pressed=\"false\"></button></div> <div class=\"row\"><button class=\"btn\" id=\"fDup\">Duplica</button><button class=\"btn danger\" id=\"fDel\">Elimina</button></div>",
+   "fields": {
+    "fLabel": "Chase",
+    "fAddr": "",
+    "fOscChannel": "",
     "fDup": "",
     "fDel": ""
    }

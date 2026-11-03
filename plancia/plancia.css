@@ -657,3 +657,15 @@ button{cursor:pointer}
 .hm-grid{flex:1;min-height:0;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:6px;align-content:start}
 .hm-pad{width:100%;max-width:280px;aspect-ratio:1;border:1px solid var(--line);border-radius:6px;touch-action:none;cursor:crosshair}
 #hmRec.on{background:#ff365c;color:#fff}#hmDraw.on{background:var(--fg);color:var(--bg)}
+/* chase a step (63-chase-ui.js) e TAP */
+.ch-list{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:6px}
+.ch-row{position:relative;display:flex;border:1px solid var(--line);border-radius:7px;background:var(--panel2)}
+.ch-row.on{border-color:#b18cff;box-shadow:0 0 0 1px #b18cff inset}
+.ch-go{flex:1;display:grid;gap:4px;text-align:left;padding:8px 40px 8px 10px;background:none;border:0;color:inherit;cursor:pointer}
+.ch-go em{font-style:normal;font-size:11px;color:var(--dim)}
+.ch-steps{display:flex;gap:3px}.ch-steps i{flex:1;max-width:46px;height:12px;border-radius:3px;background:color-mix(in srgb,var(--ic) 45%,var(--bg));border:1px solid color-mix(in srgb,var(--ic) 60%,transparent)}
+.ch-steps i.on{background:var(--ic);box-shadow:0 0 10px var(--ic)}
+.ch-prev{margin:6px 0 10px}.ch-prev i{height:22px;max-width:none}
+.ch-step{grid-template-columns:auto 1fr 110px auto;align-items:end}.ch-n{font-family:var(--mono);font-weight:700;padding:0 4px 10px}
+.tl-tap b{font-family:var(--mono);margin-left:4px}
+.tl-tap{white-space:nowrap}
