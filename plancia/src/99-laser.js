@@ -68,6 +68,14 @@ function lzZoneHtml(c){
     <div class="lz-zs">${zs(0,'Sinistra',x0)}${zs(2,'Destra',x1)}${zs(1,'Basso',y0)}${zs(3,'Alto',y1)}</div></div>
     <button class="btn sm ghost" data-lz="zonereset" data-lz-c="${c.id}">Zona intera</button>`;
 }
+// maschere (laser_render): rettangoli dentro la zona dove il fascio si spegne, max 8
+function lzMasksHtml(c){
+  const ms=Array.isArray(c.masks)?c.masks:[],ms_=(i,k,label,v)=>`<label class="ar-sl"><span>${label}<b>${(+v).toFixed(2)}</b></span><input type="range" min="-1" max="1" step=".01" value="${v}" data-lz-m="${i}:${k}" data-lz-c="${c.id}"></label>`;
+  return`${ms.map((m,i)=>`<div class="lz-mask"><b>Maschera ${i+1}</b><button class="btn sm ghost" data-lz="maskdel" data-lz-v="${i}" data-lz-c="${c.id}">×</button>
+      <div class="lz-zs">${ms_(i,0,'Sinistra',m[0])}${ms_(i,2,'Destra',m[2])}${ms_(i,1,'Basso',m[1])}${ms_(i,3,'Alto',m[3])}</div></div>`).join('')}
+    <button class="btn sm ghost" data-lz="maskadd" data-lz-c="${c.id}"${ms.length>=8?' disabled':''}>＋ Maschera</button>
+    <p class="hint">Dentro una maschera il fascio si spegne (es. una persona, un oggetto, una zona del pubblico). Vale insieme alla zona di sicurezza, dopo rotazione e trapezio.</p>`;
+}
 function lzCardHtml(c,d){
   const warn=[!c.online&&'NON RISPONDE',c.online&&c.interlock===false&&'interlock aperto',c.temp_warn&&'temperatura alta',c.temp_fault&&'SURRISCALDATO'].filter(Boolean);
   const live=c.streaming?'IN USCITA':c.armed?(c.mode==='off'?'armato':'armato · in attesa della sorgente'):'disarmato';
@@ -82,11 +90,17 @@ function lzCardHtml(c,d){
     ${lzSlider(c.id,'max_intensity','Intensità massima',c.max_intensity??.5)}
     ${content.list.length?`<details class="ar-cal lz-sec" data-sec="content-${c.mode}"><summary>Contenuto (${srcName})</summary>${content.list.map(x=>lzContentHtml(x)).join('')}<p class="hint">Un solo set per ${srcName}: vale per tutti i cubi in questa modalità.</p></details>`:srcName?`<p class="hint">${srcName} non pubblica ancora parametri laser_* (nota OPS 33).</p>`:''}
     <details class="ar-cal lz-sec" data-sec="zone"><summary>Zona di sicurezza</summary>${lzZoneHtml(c)}</details>
+    <details class="ar-cal lz-sec" data-sec="masks"><summary>Maschere${c.masks?.length?` (${c.masks.length})`:''}</summary>${lzMasksHtml(c)}</details>
     <details class="ar-cal lz-sec" data-sec="align"><summary>Allineamento e cubo</summary>
       ${lzSlider(c.id,'scale','Dimensione',c.scale??1,.05,1)}${lzSlider(c.id,'offset_x','Sposta X',c.offset_x??0,-1,1)}${lzSlider(c.id,'offset_y','Sposta Y',c.offset_y??0,-1,1)}
       <div class="ar-togs"><button class="ar-tog${c.flip_x?' on':''}" data-lz="flip_x" data-lz-c="${c.id}">Specchia X<i>${c.flip_x?'ON':'OFF'}</i></button><button class="ar-tog${c.flip_y?' on':''}" data-lz="flip_y" data-lz-c="${c.id}">Capovolgi Y<i>${c.flip_y?'ON':'OFF'}</i></button></div>
+      ${lzSlider(c.id,'rotate','Rotazione (gradi)',c.rotate??0,-180,180,1)}${lzSlider(c.id,'keystone_x','Trapezio orizzontale',c.keystone_x??0,-.5,.5)}${lzSlider(c.id,'keystone_y','Trapezio verticale',c.keystone_y??0,-.5,.5)}
       ${lzSlider(c.id,'pps','Punti al secondo',c.pps??30000,6000,35000,1000)}
       <div class="lz-row"><button class="btn sm ghost" data-lz="rename" data-lz-c="${c.id}">Rinomina</button><button class="btn sm ghost" data-lz="ip" data-lz-c="${c.id}">Cambia IP</button><button class="btn sm ghost" data-lz="remove" data-lz-c="${c.id}">Togli</button></div></details>
+    <details class="ar-cal lz-sec" data-sec="color"><summary>Colore e scansione</summary>
+      ${lzSlider(c.id,'gain_r','Rosso',c.gain_r??1)}${lzSlider(c.id,'gain_g','Verde',c.gain_g??1)}${lzSlider(c.id,'gain_b','Blu',c.gain_b??1)}
+      ${lzSlider(c.id,'color_min','Soglia minima dei diodi',c.color_min??0,0,.3)}${lzSlider(c.id,'blank_shift','Blank shift (campioni)',c.blank_shift??0,0,10,1)}
+      <p class="hint">Rosso/Verde/Blu bilanciano il bianco del cubo. La soglia fa accendere i colori deboli che altrimenti restano spenti. Il blank shift ritarda il colore rispetto al movimento: alzalo se ai cambi di colore si vedono code o punti fuori posto. Si regolano guardando il cubo, su un test o una scena.</p></details>
   </div>`;
 }
 const LZ_PARAM_IT={enabled:'Sorgente accesa',target:'Cubo',mode:'Contorni',threshold:'Soglia',min_size:'Forma minima',max_points:'Punti massimi',size:'Dimensione',color:'Colore da',palette:'Colore fisso',audio_amount:'Audio (dal controller)',points:'Punti nell’ultimo frame'};
@@ -137,6 +151,8 @@ function laserDown(e,el,w){
   else if(a==='mode')lzSet(cid,'mode',v);
   else if(a==='flip_x'||a==='flip_y')lzSet(cid,a,!c?.[a]);
   else if(a==='zonereset')lzSet(cid,'zone',[-1,-1,1,1]);
+  else if(a==='maskadd')lzSet(cid,'masks',[...(c?.masks||[]),[-.2,-.2,.2,.2]]);
+  else if(a==='maskdel')lzSet(cid,'masks',(c?.masks||[]).filter((_,i)=>i!==+v));
   else if(a==='scan'){lzCmd({action:'scan'});showInfo('Laser: ricerca dei cubi sulla rete…')}
   else if(a==='add'||a==='addip'){const ip=v||prompt('IP del cubo (LAN Client, es. 192.168.1.61):');if(ip)lzCmd({action:'add_cube',ip:ip.trim()},'add_cube')}
   else if(a==='rename'){const n=prompt('Nome del cubo:',c?.name||'');if(n)lzSet(cid,'name',n)}
@@ -153,8 +169,11 @@ document.addEventListener('change',e=>{
   if(t.dataset?.lzZ!=null){const card=t.closest('.lz-card'),z=[0,1,2,3].map(i=>+card.querySelector(`[data-lz-z="${i}"]`).value);
     if(z[0]>=z[2]||z[1]>=z[3]){showError('Laser: la zona deve avere sinistra < destra e basso < alto.');return}
     lzSet(t.dataset.lzC,'zone',z);t.blur();return}
+  if(t.dataset?.lzM!=null){const [i]=t.dataset.lzM.split(':').map(Number),card=t.closest('.lz-card'),m=[0,1,2,3].map(k=>+card.querySelector(`[data-lz-m="${i}:${k}"]`).value);
+    if(m[0]>=m[2]||m[1]>=m[3]){showError('Laser: la maschera deve avere sinistra < destra e basso < alto.');return}
+    const all=[...(lzCube(t.dataset.lzC)?.masks||[])];all[i]=m;lzSet(t.dataset.lzC,'masks',all);t.blur();return}
   if(t.dataset?.lzP){lzSet(t.dataset.lzC,t.dataset.lzP,+t.value);t.blur()}});
-document.addEventListener('input',e=>{const t=e.target;if(!t.dataset||(t.dataset.lzP==null&&t.dataset.lzZ==null&&t.dataset.lzK==null)||t.type!=='range')return;
+document.addEventListener('input',e=>{const t=e.target;if(!t.dataset||(t.dataset.lzP==null&&t.dataset.lzZ==null&&t.dataset.lzK==null&&t.dataset.lzM==null)||t.type!=='range')return;
   const b=t.parentElement.querySelector('b');if(b)b.textContent=(+t.value).toFixed(+t.step<1?2:0)});
 
 /* ---------- laser nel Palco: fixture collegata a un cubo reale (f.cube) ---------- */

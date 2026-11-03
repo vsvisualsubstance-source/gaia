@@ -109,6 +109,24 @@ def clean_value(key, v):
         return max(0.05, min(1.0, float(v)))
     if key in ("offset_x", "offset_y"):
         return max(-1.0, min(1.0, float(v)))
+    if key == "rotate":
+        return max(-180.0, min(180.0, float(v)))
+    if key in ("keystone_x", "keystone_y"):
+        return max(-0.5, min(0.5, float(v)))
+    if key in ("gain_r", "gain_g", "gain_b"):
+        return max(0.0, min(1.0, float(v)))
+    if key == "color_min":
+        return max(0.0, min(0.3, float(v)))
+    if key == "blank_shift":
+        return max(0, min(10, int(v)))
+    if key == "masks":
+        out = []
+        for m in (v or [])[:8]:
+            m = [max(-1.0, min(1.0, float(a))) for a in m]
+            if len(m) != 4:
+                raise ValueError("ogni maschera vuole [x0, y0, x1, y1]")
+            out.append(m)
+        return out
     raise ValueError(f"parametro sconosciuto: {key}")
 
 

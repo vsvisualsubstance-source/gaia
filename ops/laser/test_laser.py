@@ -195,6 +195,28 @@ class TestRender(unittest.TestCase):
             else:
                 self.assertLessEqual(d, R.BLANK_STEP * 0.5 * P.DAC_MAX + 2)
 
+    def test_output_adjustments(self):
+        line = [(-0.8, 0, 0, 0, 0)] + [(-0.8 + i * 0.016, 0, 255, 255, 255) for i in range(101)]
+        full = {"max_intensity": 1.0}
+        # maschera al centro: dentro il fascio e' spento, fuori no
+        out = unpack(R.render(line, {**full, "masks": [[-0.2, -0.2, 0.2, 0.2]]}, 30000))
+        mid = P.DAC_MAX // 2
+        self.assertTrue(all(not (s[2] or s[3] or s[4]) for s in out if abs(s[0] - mid) < 0.15 * 0.5 * P.DAC_MAX))
+        self.assertTrue(any(s[2] for s in out if s[0] < 0.3 * P.DAC_MAX))
+        # rotazione di 90 gradi: la linea orizzontale diventa verticale
+        rot = [s for s in unpack(R.render(line, {**full, "rotate": 90}, 30000)) if s[2]]
+        self.assertLess(max(s[0] for s in rot) - min(s[0] for s in rot), 0.01 * P.DAC_MAX)
+        # calibrazione: verde a zero, rosso a meta'; soglia minima alza i valori bassi
+        dim = [(-0.5, 0, 0, 0, 0)] + [(-0.5 + i * 0.02, 0, 25, 25, 25) for i in range(51)]   # linea, non un punto fermo
+        cal = [s for s in unpack(R.render(dim, {**full, "gain_r": 0.5, "gain_g": 0, "color_min": 0.2}, 30000)) if s[2] or s[3] or s[4]]
+        self.assertTrue(all(s[3] == 0 for s in cal))
+        self.assertGreater(cal[-1][4], int(0.2 * P.DAC_MAX))          # 25/255 diventa almeno il 20%
+        self.assertAlmostEqual(cal[-1][2] / cal[-1][4], 0.5, delta=0.02)
+        # blank shift: i colori scorrono di n campioni, le posizioni no
+        a = unpack(R.render(dim, full, 30000)); b = unpack(R.render(dim, {**full, "blank_shift": 3}, 30000))
+        self.assertEqual([s[:2] for s in a], [s[:2] for s in b])
+        self.assertEqual([s[2:] for s in b][3:], [s[2:] for s in a][:-3])
+
     def test_budget(self):
         big = R.circle(1.0, 5000)
         out = unpack(R.render(big, {}, 30000))

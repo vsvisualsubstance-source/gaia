@@ -10,6 +10,13 @@ modalita' LaserOS la sua Safety Zone non si applica):
   STATIC_GAIN: mai un punto statico a piena potenza (spec par. 8);
 - passi interpolati: i galvo non seguono salti grandi, e gli spostamenti
   a raggio spento hanno una pausa al buio prima di riaccendere.
+
+Regolazioni d'uscita (come Liberation): rotazione e trapezio per il
+montaggio, maschere (rettangoli vietati dentro la zona, il fascio si
+spegne), calibrazione colore (guadagno per canale, soglia minima dei
+diodi) e blank shift (il colore in ritardo di qualche campione rispetto
+alla posizione, contro le code). Zona e maschere si controllano DOPO
+tutte le trasformazioni.
 """
 import math
 
@@ -33,7 +40,15 @@ DEFAULTS = {
     "flip_y": False,
     "master": 1.0,
     "max_intensity": 0.5,
+    "rotate": 0.0,                    # gradi, montaggio del cubo
+    "keystone_x": 0.0,                # trapezio: larghezza diversa in alto e in basso
+    "keystone_y": 0.0,                #           altezza diversa a sinistra e a destra
+    "masks": [],                      # [[x0, y0, x1, y1], ...] spazio d'uscita, fascio spento dentro
+    "gain_r": 1.0, "gain_g": 1.0, "gain_b": 1.0,
+    "color_min": 0.0,                 # soglia dei diodi: un canale acceso parte da qui
+    "blank_shift": 0,                 # campioni di ritardo del colore
 }
+MAX_MASKS = 8
 
 
 def render(points, cfg, pps):
@@ -52,7 +67,16 @@ def render(points, cfg, pps):
         k *= len(path) / budget
     else:
         path = path[:budget - 1] + [(path[0][0], path[0][1], 0, 0, 0)]
+    path = _blank_shift(path, int(c["blank_shift"]))
     return b"".join(_dac(p) for p in path)
+
+
+def _blank_shift(path, n):
+    """Colore di ogni campione preso da n campioni prima (il frame gira in ciclo)."""
+    n = max(0, min(10, n))
+    if not n or len(path) <= n:
+        return path
+    return [(p[0], p[1], *path[i - n][2:]) for i, p in enumerate(path)]
 
 
 def _prepare(points, c):
@@ -62,12 +86,23 @@ def _prepare(points, c):
     gain = max(0.0, min(1.0, c["master"])) * max(0.0, min(1.0, c["max_intensity"]))
     sx = -c["scale"] if c["flip_x"] else c["scale"]
     sy = -c["scale"] if c["flip_y"] else c["scale"]
+    a = math.radians(c["rotate"])
+    ca, sa = math.cos(a), math.sin(a)
+    kx, ky = c["keystone_x"], c["keystone_y"]
+    masks = [m for m in (c["masks"] or [])[:MAX_MASKS] if len(m) == 4]
+    gains = [max(0.0, min(1.0, c[k])) for k in ("gain_r", "gain_g", "gain_b")]
+    cmin = max(0.0, min(0.3, c["color_min"]))
     out = []
     for x, y, r, g, b in points:
-        tx, ty = x * sx + c["offset_x"], y * sy + c["offset_y"]
-        inside = x0 <= tx <= x1 and y0 <= ty <= y1
+        px, py = x * sx, y * sy
+        px, py = px * ca - py * sa, px * sa + py * ca
+        px, py = px * (1 + kx * py), py * (1 + ky * px)
+        tx, ty = px + c["offset_x"], py + c["offset_y"]
+        inside = x0 <= tx <= x1 and y0 <= ty <= y1 and not any(
+            min(m[0], m[2]) <= tx <= max(m[0], m[2]) and min(m[1], m[3]) <= ty <= max(m[1], m[3]) for m in masks)
         tx, ty = min(max(tx, x0), x1), min(max(ty, y0), y1)
         if inside and gain > 0:
+            r, g, b = (0 if v <= 0 else (cmin + v / 255 * (1 - cmin)) * 255 * k for v, k in zip((r, g, b), gains))
             out.append((tx, ty, r * gain, g * gain, b * gain))
         else:
             out.append((tx, ty, 0, 0, 0))
