@@ -21,16 +21,26 @@ function chaseStatusText(){
   if(!st.chase)return'fermo';
   return`▶ ${st.chase.name} · step ${st.step+1}/${st.steps} · ${st.bpm} BPM${st.missing?` · scena "${st.missing}" non in DMX Master`:''}`;
 }
+// chase pronti ricavati dal catalogo di DMX Master: colori (lenti e veloci), teste, strobo
+function chaseTemplatesFromTD(){
+  const sc=tdScenes(),only=(s,set)=>(s.categories||[]).length&&(s.categories||[]).every(c=>set.includes(c));
+  const colors=sc.filter(s=>s.id!=='base'&&only(s,['rigs','palette'])),heads=sc.filter(s=>only(s,['heads']));
+  const on=sc.find(s=>only(s,['strobe'])&&/on/i.test(s.id)),off=sc.find(s=>only(s,['strobe'])&&/off/i.test(s.id));
+  const C=(id,name,steps,o)=>steps.length>1?[{id:'cht-'+id,name,steps:steps.map(s=>({scene:s.id})),hold:{value:4,unit:'beats'},fadePct:50,pingpong:false,...o}]:[];
+  return[...C('colori','Colori',colors,{}),...C('colori-veloci','Colori veloci',colors,{hold:{value:1,unit:'beats'},fadePct:0}),
+    ...C('teste','Teste avanti e indietro',heads,{hold:{value:8,unit:'beats'},fadePct:80,pingpong:true}),
+    ...C('strobo','Strobo a colpi',on&&off?[on,off]:[],{hold:{value:1,unit:'beats'},fadePct:0})];
+}
 // ---- widget: libreria dei chase
 function chaseLibHtml(){
   const run=G.chaseSt?.chase?.id;
   return`<div class="hm"><div class="hm-top"><span class="hint ch-st">${esc(chaseStatusText())}</span>
       <button class="btn sm" data-ch="tap" title="Batti il tempo (3-4 colpi)">TAP <b class="ch-bpm">${liveBpm()}</b></button>
-      <button class="btn sm" data-ch="stop">■ Stop</button><button class="btn sm ghost" data-ch="new">+ Nuovo</button></div>
+      <button class="btn sm" data-ch="stop">■ Stop</button><button class="btn sm ghost" data-ch="new">+ Nuovo</button><button class="btn sm ghost" data-ch="tpl" title="Chase pronti fatti con le scene di DMX Master">Template</button></div>
     <div class="ch-list">${chases().map(c=>`<div class="ch-row${run===c.id?' on':''}"><button class="ch-go" data-ch="play" data-ch-v="${esc(c.id)}" title="Parte dal vivo (il motore su OPS richiama le scene)">
       <b>${esc(c.name)}</b><span class="ch-steps">${c.steps.map((s,i)=>`<i data-k="${i}" style="--ic:${chaseSceneColor(s.scene)}"></i>`).join('')}</span>
       <em>${c.steps.length} step · ${c.hold.value} ${c.hold.unit==='s'?'s':'battiti'} · fade ${c.fadePct??0}%${c.pingpong?' · avanti e indietro':''}</em></button>
-      <button class="lzs-ed" data-ch="edit" data-ch-v="${esc(c.id)}" title="Modifica">✎</button></div>`).join('')||'<p class="hint">Nessun chase: tocca + Nuovo e scegli le scene di DMX Master.</p>'}</div>
+      <button class="lzs-ed" data-ch="edit" data-ch-v="${esc(c.id)}" title="Modifica">✎</button></div>`).join('')||'<p class="hint">Nessun chase ancora. Tocca <b>Template</b> per averne di pronti fatti con le scene di DMX Master (colori, teste, strobo), oppure <b>+ Nuovo</b>.</p>'}</div>
     <p class="hint">Un chase richiama in sequenza scene di DMX Master, con fade. Dal vivo lo esegue il motore su OPS (tieni la timeline luci in LIVE); in timeline va nella traccia SEQUENZE e lo esegue DMX Master.</p></div>`;
 }
 function chaseDown(e,el,w){
@@ -40,6 +50,9 @@ function chaseDown(e,el,w){
   if(a==='play'&&c){chasePlay(c);showInfo(`Chase "${c.name}" dal vivo.`)}
   else if(a==='stop'){chaseStop();showInfo('Chase fermato: resta l\'ultima scena.')}
   else if(a==='edit'&&c)openChaseEditor(c);
+  else if(a==='tpl'){if(!tdScenes().length){showError('DMX Master non pubblica scene: collega Gaia.');return}
+    const have=new Set(chases().map(x=>x.id)),add=chaseTemplatesFromTD().filter(x=>!have.has(x.id));
+    L.chases=[...chases(),...add];save();showInfo(add.length?`Aggiunti ${add.length} chase: ${add.map(x=>x.name).join(', ')}.`:'I chase pronti ci sono già.')}
   else if(a==='new'){const sc=tdScenes();openChaseEditor({id:'ch-'+uid(),name:'Nuovo chase',steps:sc.slice(0,4).map(s=>({scene:s.id})),hold:{value:4,unit:'beats'},fadePct:50,pingpong:false},true)}
 }
 function openChaseEditor(orig,isNew){
@@ -108,18 +121,33 @@ registerWidget('chase',{size:[8,6],label:'Chase',showsValue:false,showsAddr:fals
 function chaseLaneHtml(w,D){
   const cues=[...chaseDoc().cues].sort((a,b)=>a.time-b.time);
   const blocks=cues.map((c,i)=>{const e=cues[i+1]?.time??D,ch=chases().find(x=>x.id===c.chase);
-    return`<div class="tl-blk tl-vblk" style="left:${c.time/D*100}%;width:${Math.max(0,e-c.time)/D*100}%;--ic:${c.chase==='off'||!ch?'#5d6573':'#b18cff'}"><span>${esc(c.label||ch?.name||'Fermo')}</span><em>${esc(c.chase==='off'?'fermo':ch?`${ch.steps.length} step`:'(chase tolto)')}</em></div>`}).join('');
+    return`<div class="tl-blk tl-vblk" data-ci="${chaseDoc().cues.indexOf(c)}" style="left:${c.time/D*100}%;width:${Math.max(0,e-c.time)/D*100}%;--ic:${c.chase==='off'||!ch?'#5d6573':'#b18cff'}"><span>${esc(c.label||ch?.name||'Fermo')}</span><em>${esc(c.chase==='off'?'fermo':ch?`${ch.steps.length} step`:'(chase tolto)')}</em></div>`}).join('');
   return`<div class="tl-trk"><div class="tl-vhead"><span class="k">SEQUENZE</span>
-    ${w.readonly?'':'<button class="tl-vcue" data-act="ccue" title="Cue dei chase: quando parte quale chase (diventano cue di DMX Master)">CUE SEQ</button>'}
-    </div><div class="tl-vlane"><div class="tl-cues">${blocks}</div><span class="tl-vst tl-cst"></span><div class="tl-ph tl-cph"></div></div></div>`;
+    ${w.readonly?'':'<button class="tl-vcue" data-act="ccue" title="Elenco delle cue dei chase">CUE SEQ</button>'}${!w.readonly&&isShowTimeline(w)&&showClock.authority?'<button class="tl-vcue" data-act="csend" title="Manda la timeline a DMX Master (i chase diventano cue)">⇪ TD</button>':''}
+    </div><div class="tl-vlane tl-clane"${w.readonly?'':' title="Tocca un punto per far partire un chase da lì, tocca un blocco per cambiarlo"'}><div class="tl-cues">${blocks}</div><span class="tl-vst tl-cst"></span><div class="tl-ph tl-cph"></div></div></div>`;
 }
 function paintChaseLane(el,w,D,t){
   const s=el.querySelector('.tl-cst');if(!s)return;
   const n=chaseDoc().cues.length,inTd=(tdTimelineDoc()?.cues||[]).filter(isChaseCue).length;
-  const msg=G.chaseSt?.chase?chaseStatusText():n?(inTd?`${inTd} cue in DMX Master`:'non ancora inviate a DMX Master'):'';
+  const msg=G.chaseSt?.chase?chaseStatusText():n?(inTd?`${inTd} cue in DMX Master`:'da mandare a DMX Master: ⇪ TD'):w.readonly?'':'tocca qui per far partire un chase';
   if(s.textContent!==msg)s.textContent=msg;
   const ph=el.querySelector('.tl-cph');if(ph&&D>0)ph.style.left=Math.max(0,Math.min(1,t/D))*100+'%';
 }
+// tocco sulla traccia: in un punto vuoto sceglie il chase che parte da li', su un blocco lo cambia o lo toglie
+async function chaseLaneTap(w,t,ci){
+  const doc=chaseDoc(),cue=ci>=0?doc.cues[ci]:null;
+  if(!chases().length){showError('Nessun chase: crea quelli pronti con "Template" nella pagina Sequenze.');return}
+  const at=Math.max(0,Math.min(timelineDuration(w)-.01,Math.round(t*2)/2));
+  const pick=await uiChoose(cue?`Cue a ${formatCueTime(cue.time)}: ${chases().find(x=>x.id===cue.chase)?.name||'Fermo'}`:`Da ${formatCueTime(at)} parte…`,
+    [...chases().map(x=>({label:x.name,value:x.id,on:cue?.chase===x.id})),{label:'■ Fermo',value:'off',on:cue?.chase==='off'},...(cue?[{label:'Togli questa cue',value:'__del',cls:'danger'}]:[])]);
+  if(pick==null)return;
+  const cues=doc.cues.map(c=>({...c}));
+  if(pick==='__del')cues.splice(ci,1);else if(cue)cues[ci].chase=pick;else cues.push({time:at,label:'',chase:pick});
+  L.chaseTimeline={cues:cues.sort((a,b)=>a.time-b.time)};save();refreshShowTimelines();
+  showInfo(isShowTimeline(w)&&showClock.authority?'Traccia SEQUENZE cambiata: ⇪ TD per mandarla a DMX Master.':'Traccia SEQUENZE cambiata.');
+}
+// la timeline va a DMX Master con le cue dei chase rigenerate
+function chaseSendTimeline(w){const doc=tdTimelineDoc();if(doc){w.cues=serializeCues(timelineFromTD(doc));w.duration=Math.max(1,+doc.length||w.duration);if(+doc.bpm>0)w.bpm=+doc.bpm;w.tdBaseRev=doc.rev}sendTimelineToTD(w)}
 function openChaseCueEditor(w,cues,meta={}){
   const D=meta.duration||timelineDuration(w),s=$('#scrim');s.hidden=false;
   cues=cues||chaseDoc().cues.map(c=>({...c}));
@@ -147,7 +175,7 @@ function openChaseCueEditor(w,cues,meta={}){
     if(bad){showError(`Cue di chase "${bad.label||'?'}": posizione tra 0:00 e prima di ${formatCueTime(D)}.`);return}
     L.chaseTimeline={cues:cur.sort((a,b)=>a.time-b.time)};save();refreshShowTimelines();closeSheet();
     showInfo(`Sequenze salvate: ${cur.length} cue.`);
-    if(td){const doc=tdTimelineDoc();if(doc){w.cues=serializeCues(timelineFromTD(doc));w.duration=Math.max(1,+doc.length||w.duration);if(+doc.bpm>0)w.bpm=+doc.bpm;w.tdBaseRev=doc.rev}sendTimelineToTD(w)}
+    if(td)chaseSendTimeline(w);
   };
 }
 // cue della timeline per DMX Master: quelle dei chase rigenerate, mai doppie

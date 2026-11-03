@@ -683,3 +683,6 @@ button{cursor:pointer}
 .fx-prev{width:100%;height:auto;aspect-ratio:560/90;border:1px solid var(--line);border-radius:6px;margin-bottom:8px}
 .row.fx-cols,.fx-cols{display:flex;flex-wrap:wrap;gap:4px}.fx-cols input[type=color]{width:38px;height:30px;padding:0}
 .fcue-row{grid-template-columns:110px 1fr 2fr auto;align-items:start}.fc-fx{display:flex;flex-wrap:wrap;gap:4px 12px;padding-top:18px}
+/* scelta dentro la pagina (uiChoose) e traccia SEQUENZE toccabile */
+.ui-choose{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px;margin-bottom:12px}
+.tl-clane{cursor:pointer}

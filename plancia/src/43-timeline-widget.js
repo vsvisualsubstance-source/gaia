@@ -38,6 +38,8 @@ registerWidget('timeline',{addrLabel:'Indirizzo base OSC',
   onPointer(e,el,w){
     const end=()=>{el.classList.remove('active','press');el.onpointermove=null;el.onpointerup=el.onpointercancel=null;save()};
       const b=e.target.closest('[data-act]'); if(b){e.preventDefault();if(b.dataset.act==='edit-cues')openCueEditor(w);else tlAct(w,b.dataset.act);return}
+      const cl=e.target.closest('.tl-clane');
+      if(cl&&!w.readonly){e.preventDefault();const r=cl.getBoundingClientRect(),blk=e.target.closest('[data-ci]');chaseLaneTap(w,clamp((e.clientX-r.left)/r.width)*timelineDuration(w),blk?+blk.dataset.ci:-1);return}
       const lane=e.target.closest('.tl-lane'); if(!lane)return;
       const block=e.target.closest('.tl-blk');
       if(block){

@@ -56,6 +56,17 @@ function showInfo(message){showError(message);$('#toast').classList.add('ok')}
 // a schermo intero (e in alcune app per tablet) il dialogo nativo puo' non
 // comparire e rispondere subito "Annulla" (show 31/10: LIVE -> TIMELINE non
 // tornava). Promise<boolean>; non usa #scrim, cosi' vale anche sopra un foglio aperto.
+// scelta tra piu' voci dentro la pagina: Promise<value|null>
+function uiChoose(title,items){
+  return new Promise(resolve=>{
+    const box=document.createElement('div');box.className='ui-confirm';box.setAttribute('role','dialog');
+    box.innerHTML=`<div class="ui-confirm-card"><p></p><div class="ui-choose">${items.map((it,i)=>`<button class="btn${it.on?' primary':''}${it.cls?' '+it.cls:''}" data-i="${i}"></button>`).join('')}</div><div class="row"><button class="btn ghost" data-x>Annulla</button></div></div>`;
+    box.querySelector('p').textContent=title;box.querySelectorAll('[data-i]').forEach(b=>b.textContent=items[+b.dataset.i].label);
+    const done=v=>{box.remove();document.removeEventListener('keydown',key);resolve(v)},key=e=>{if(e.key==='Escape')done(null)};
+    box.addEventListener('pointerdown',e=>{const b=e.target.closest('[data-i]');if(b){e.preventDefault();done(items[+b.dataset.i].value)}else if(e.target.closest('[data-x]')||e.target===box){e.preventDefault();done(null)}});
+    document.addEventListener('keydown',key);document.body.appendChild(box);
+  });
+}
 function uiConfirm(text,{ok='OK',cancel='Annulla'}={}){
   return new Promise(resolve=>{
     const box=document.createElement('div');box.className='ui-confirm';box.setAttribute('role','alertdialog');

@@ -282,24 +282,24 @@ async function sendTimelineToTD(w){
   try{
     let check=await tdTimelineRequest({...doc,dry_run:true});
     if(!check.ok&&check.conflict&&check.errors.every(e=>e.startsWith('conflitto'))){
-      if(!confirm('La timeline in DMX Master è stata modificata dopo l\'ultimo import/invio da Plancia.\nSovrascriverla comunque con questa?'))return;
+      if(!await uiConfirm('La timeline in DMX Master è stata modificata dopo l\'ultimo import/invio da Plancia.\nSovrascriverla comunque con questa?',{ok:'Sovrascrivi'}))return;
       doc.force=true;check=await tdTimelineRequest({...doc,dry_run:true});
     }
-    if(!check.ok){alert('DMX Master rifiuta la timeline:'+list(check.errors));return}
+    if(!check.ok){showError('DMX Master rifiuta la timeline:'+list(check.errors));return}
     const lines=[`Inviare "${doc.name}" a DMX Master?`,
       `${check.cues} cue · durata ${formatCueTime(check.length)}${check.markers?` · ${check.markers} senza scena (marker)`:''}`,
       'Sostituisce le cue dello show in TD; le automazioni restano invariate.'];
     if(check.warnings?.length)lines.push('','Avvisi di TD:'+list(check.warnings));
     if(notes.length)lines.push('','Parametri DMX che TD non riceve (restano solo in Plancia):'+list(notes));
-    if(!confirm(lines.join('\n')))return;
+    if(!await uiConfirm(lines.join('\n'),{ok:'Invia'}))return;
     const r=await tdTimelineRequest(doc);
-    if(!r.ok){alert('Caricamento rifiutato da DMX Master:'+list(r.errors));return}
+    if(!r.ok){showError('Caricamento rifiutato da DMX Master:'+list(r.errors));return}
     w.tdBaseRev=r.rev;save();
     // conferma vera = il topic retained porta la rev dell'esito (nota TD 31)
     let seen=G.tdTimeline?.rev===r.rev;
     for(let i=0;i<10&&!seen;i++){await new Promise(ok=>setTimeout(ok,500));seen=G.tdTimeline?.rev===r.rev}
-    alert(`Timeline caricata in DMX Master: ${r.cues} cue (rev ${r.rev}).`+(seen?' Confermata sul topic show_timeline.':' Il topic show_timeline non ha ancora la nuova rev: controlla che la timeline dello show si aggiorni.'));
-  }catch(e){alert(e.message)}
+    showInfo(`Timeline caricata in DMX Master: ${r.cues} cue (rev ${r.rev}).`+(seen?' Confermata sul topic show_timeline.':' Il topic show_timeline non ha ancora la nuova rev: controlla che la timeline dello show si aggiorni.'));
+  }catch(e){showError(e.message)}
 }
 function openCueEditor(w){
   // /show che segue TD: si modifica la timeline di DMX Master, non la bozza locale
@@ -527,7 +527,7 @@ async function toggleShowActive(){
   if(!devCmd('td-dmx-win',{action:on?'disable':'enable',service:'show_active'})){showError('Non collegata a Gaia: apri ⋯ → Gaia.');return}
   showInfo(on?'LIVE: la timeline non comanda più le luci. Componi e cattura le scene.':'TIMELINE: le luci seguono di nuovo la timeline.');
 }
-function tlAct(w,act){if(act==='live'){toggleShowActive();return}if(act==='vlive'){toggleVideoActive();return}if(act==='vcue'){openVideoCueEditor(w);return}if(act==='llive'){toggleLaserActive();return}if(act==='mlive'){toggleHeadMotionActive();return}if(act==='ccue'){openChaseCueEditor(w);return}if(act==='fcue'){openFxCueEditor(w);return}if(act==='tap'){const b=tapTempo();if(b)showInfo(`Tempo: ${b} BPM`);return}if(act==='mcue'){openHeadMotionCueEditor(w);return}if(act==='lcue'){openLaserCueEditor(w);return}const r=rt(w),cues=parseCues(w);
+function tlAct(w,act){if(act==='live'){toggleShowActive();return}if(act==='vlive'){toggleVideoActive();return}if(act==='vcue'){openVideoCueEditor(w);return}if(act==='llive'){toggleLaserActive();return}if(act==='mlive'){toggleHeadMotionActive();return}if(act==='ccue'){openChaseCueEditor(w);return}if(act==='csend'){chaseSendTimeline(w);return}if(act==='fcue'){openFxCueEditor(w);return}if(act==='tap'){const b=tapTempo();if(b)showInfo(`Tempo: ${b} BPM`);return}if(act==='mcue'){openHeadMotionCueEditor(w);return}if(act==='lcue'){openLaserCueEditor(w);return}const r=rt(w),cues=parseCues(w);
   if(isShowTimeline(w)&&showClock.authority){
     const sample=showClockSample();
     if(act==='edit-cues'){openCueEditor(w);return}
