@@ -34,6 +34,10 @@ const SCENE_KINDS=[
   {id:'groups',label:'Accensioni',group:'Accensioni gruppi'},
   {id:'audio',label:'Audio',group:'Sorgente audio'},
   {id:'mixed',label:'Mista',group:'Miste'}];
+// cue della timeline che muove solo le teste (scena con la sola categoria heads)
+function cueIsHeads(c){const sc=c?.sceneId?tdScenes().find(s=>s.id===c.sceneId):null;return!!sc&&sceneKind(sc.categories)?.id==='heads'}
+// cue che riposiziona le teste: anche una scena completa (colori + teste) in LUCI
+function cueTouchesHeads(c){const sc=c?.sceneId?tdScenes().find(s=>s.id===c.sceneId):null;return!!sc&&(sc.categories||[]).includes('heads')}
 function sceneKind(categories){
   const c=[...new Set(categories||[])],one={rigs:'color',palette:'color',heads:'heads',strobe:'strobe',groups:'groups',audio:'audio'};
   let id='mixed';

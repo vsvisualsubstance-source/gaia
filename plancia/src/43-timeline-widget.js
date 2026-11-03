@@ -19,14 +19,20 @@ registerWidget('timeline',{addrLabel:'Indirizzo base OSC',
       const sample=controlled?showClockSample():null,available=!!sample&&showClockFresh(sample),locked=controlled&&!available;
       const step=[5,10,15,30,60,120,300].find(s=>D/s<=12)||600; let ticks='';
       for(let t=0;t<D;t+=step)ticks+=`<span style="left:${t/D*100}%">${Math.floor(t/60)}:${String(t%60).padStart(2,'0')}</span>`;
-      const blocks=cues.map((c,i)=>{const e=(cues[i+1]?.t??D);const col=c.sceneId?tdSceneLook(tdScenes().find(s=>s.id===c.sceneId)).ic||w.color:c.scene!=null&&LOOKS[c.scene]?lookHex(c.scene):w.color;
+      // timeline dello show: le cue di scene "solo teste" in una traccia TESTE a parte.
+      // DMX Master compone le scene a strati (nota TD 39), quindi un blocco dura fino
+      // alla cue successiva della SUA traccia: il colore resta mentre le teste cambiano.
+      // Un blocco TESTE finisce anche a una scena completa che riposiziona le teste
+      const tracks=isShowTimeline(w),lane=c=>tracks&&cueIsHeads(c)?'heads':'lights';
+      const ends=(n,which)=>which==='heads'?cueTouchesHeads(n):lane(n)==='lights';
+      const blocksOf=which=>cues.map((c,i)=>{if(lane(c)!==which)return'';const e=(cues.slice(i+1).find(n=>ends(n,which))?.t??D);const col=c.sceneId?tdSceneLook(tdScenes().find(s=>s.id===c.sceneId)).ic||w.color:c.scene!=null&&LOOKS[c.scene]?lookHex(c.scene):w.color;
         const sc=c.sceneId?tdScenes().find(s=>s.id===c.sceneId):null;
         const target=[sc?sceneKind(sc.categories).label:'',c.sceneId?c.sceneId:c.scene!=null?'SC '+(c.scene+1):'',c.params?.length?'DMX '+c.params.length:''].filter(Boolean).join(' · ');
-        return `<div class="tl-blk" data-k="${i}" style="left:${c.t/D*100}%;width:${(e-c.t)/D*100}%;--ic:${col}"><span><i>${i+1}</i>${esc(c.name)}</span><em>${target}</em></div>`}).join('');
+        return `<div class="tl-blk" data-k="${i}" style="left:${c.t/D*100}%;width:${(e-c.t)/D*100}%;--ic:${col}"><span><i>${i+1}</i>${esc(c.name)}</span><em>${target}</em></div>`}).join(''),blocks=blocksOf('lights');
       return `<div class="tl${isShowTimeline(w)?' tl-tracks':''}" data-duration="${D}"><div class="tl-head"><span class="tl-name">${esc(w.label)}</span>
         <div class="tl-tr"><button data-act="start" aria-label="Inizio"${locked?' disabled':''}>${ICON.start}</button><button data-act="play" aria-label="Play/pausa"${locked?' disabled':''}>${ICON.play}</button><button data-act="stop" aria-label="Stop"${locked?' disabled':''}>${ICON.stop}</button><button data-act="loop" aria-label="Loop"${controlled?' disabled':''}>${ICON.loop}</button>${w.readonly?'':'<button data-act="edit-cues" aria-label="Modifica cue">CUE</button>'}</div>
         ${isShowTimeline(w)?`<button class="tl-live" data-act="live"${w.readonly?' disabled':''} title="${w.readonly?'Modalità di DMX Master: si cambia nella pagina Timeline':'LIVE: comandi tu dal tablet (per comporre e catturare le scene). TIMELINE: comanda la timeline dello show'}">—</button>`:''}<span class="tl-tc">00:00:00:00</span><span class="tl-cue"><span class="k">CUE</span><b>—</b></span><span class="tl-next"></span><span class="tl-bpm">${controlled?`TD · ${available?sample.source.toUpperCase():'OFFLINE · FERMO'}`:`${isShowTimeline(w)?'SIMULAZIONE · ':''}${w.bpm||120} BPM`} · ${Math.floor(D/60)}:${String(Math.round(D%60)).padStart(2,'0')}</span></div>
-        ${isShowTimeline(w)?'<div class="tl-trk tl-trk-main"><div class="tl-vhead"><span class="k">LUCI</span></div>':''}<div class="tl-lane"><div class="tl-ruler">${ticks}</div><div class="tl-cues">${blocks}</div><div class="tl-ph"></div></div>${isShowTimeline(w)?'</div>'+videoLaneHtml(w,D)+laserLaneHtml(w,D):''}</div>`},
+        ${isShowTimeline(w)?'<div class="tl-trk tl-trk-main"><div class="tl-vhead"><span class="k">LUCI</span></div>':''}<div class="tl-lane"><div class="tl-ruler">${ticks}</div><div class="tl-cues">${blocks}</div><div class="tl-ph"></div></div>${tracks?`</div><div class="tl-trk"><div class="tl-vhead"><span class="k">TESTE</span></div><div class="tl-lane tl-hlane"><div class="tl-cues">${blocksOf('heads')}</div><div class="tl-ph"></div></div></div>`+videoLaneHtml(w,D)+laserLaneHtml(w,D):''}</div>`},
   // trasporto e pulsanti; blocchi delle cue (trascinabili, o richiamo della cue
   // quando comanda DMX Master); tocco o trascinamento sulla traccia = salto nel tempo
   onPointer(e,el,w){
@@ -64,7 +70,7 @@ registerWidget('timeline',{addrLabel:'Indirizzo base OSC',
       const lb=el.querySelector('.tl-live');if(lb){const on=tdShowActive(),t=on===null?'—':on?'TIMELINE':'LIVE';
         if(lb.textContent!==t){lb.textContent=t;lb.classList.toggle('is-live',on===false);lb.classList.toggle('is-tl',on===true)}}
       const r=rt(w),D=timelineDuration(w),cues=timelineCues(w);
-      el.querySelector('.tl-ph').style.left=r.t/D*100+'%';paintVideoLane(el,w,D,r.t);paintLaserLane(el,w,D,r.t);el.querySelector('.tl-tc').textContent=tc(r.t);
+      el.querySelectorAll('.tl-lane>.tl-ph').forEach(p=>p.style.left=r.t/D*100+'%');paintVideoLane(el,w,D,r.t);paintLaserLane(el,w,D,r.t);el.querySelector('.tl-tc').textContent=tc(r.t);
       const sample=isShowTimeline(w)&&showClock.authority?showClockSample():null;
       const controlled=isShowTimeline(w)&&showClock.authority,locked=controlled&&(!sample||!showClockFresh(sample));
       el.querySelector('[data-act="start"]').disabled=locked;
