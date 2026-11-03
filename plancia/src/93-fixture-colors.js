@@ -32,7 +32,8 @@ function fixtureStyleFields(f){
   if(fixtureHasPalette(f)&&(t||f.audio!==undefined||f.audio_gain!==undefined)){o.audio=fixtureAudioOf(f);o.audio_gain=fixtureGainOf(f)}
   return o;
 }
-const fixtureTdValue=f=>({id:f.id,type:f.type,name:f.name,group:f.group,model:f.model,universe:f.universe,address:f.address,x:f.x,y:f.y,enabled:f.enabled!==false,...fixtureStyleFields(f)});
+// unit (nota TD 56): stessa unita' = a specchio; senza, TD mette le teste in fila e le altre sulla 1
+const fixtureTdValue=f=>({id:f.id,type:f.type,name:f.name,group:f.group,model:f.model,universe:f.universe,address:f.address,x:f.x,y:f.y,enabled:f.enabled!==false,...(Number.isFinite(+f.unit)&&f.unit>0?{unit:+f.unit}:{}),...fixtureStyleFields(f)});
 // modo e/o guadagno audio su piu' luci in un colpo (dmx_fixture_audio, nota 44)
 async function setFixturesAudio(fixtures,fields){
   fixtures.forEach(f=>Object.assign(f,fields));save();

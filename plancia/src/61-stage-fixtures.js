@@ -27,7 +27,7 @@ async function syncAllFixtures(){
     // suggerimento -- meglio di scrivere comunque e aggiungere un
     // altro doppione (come successo ieri, 19+ gruppi).
     const ok=devCmd('td-dmx-win',{action:'set',param:f._synced?'dmx_fixture_update':'dmx_fixture_add',
-      value:{id:f.id,type:f.type,name:f.name,group:f.group,model:f.model,universe:f.universe,address:f.address,x:f.x,y:f.y,enabled:f.enabled!==false,...fixtureStyleFields(f),on_conflict:'reject'}});
+      value:{...fixtureTdValue(f),on_conflict:'reject'}});
     if(ok)sent++;
   }
   if(sent)list.forEach(f=>f._synced=true);
@@ -191,6 +191,9 @@ function openFixEditor(w,f){
     <label>Modello <em>profilo DMX, nota 19</em><span class="md-pick"><select id="feModel"></select><button class="btn sm ghost" id="feModelEdit" title="Canali, colore lampada, ruota colori del modello">✎ Modello</button></span></label>
     <div class="two"><label>Universo<select id="feUni"></select></label><label>Indirizzo<input id="feAddr" type="number" min="1" max="512"></label></div>
     <div class="row"><button class="btn sm ghost" id="feAuto">Primo indirizzo libero (da DMX Master)</button></div>`:''}
+    ${fixtureHasPalette(f)?`<label>Unità nel gruppo <em>luci con la stessa unità fanno lo stesso (a specchio); unità diverse vanno ognuna per conto suo e il chase corre dall'una all'altra</em><input id="feUnit" type="number" min="1" max="64" placeholder="1"></label>
+    <div class="row"><button class="btn sm ghost" id="feUnitsOwn" title="Unità 1, 2, 3… da sinistra a destra nella Pianta">Gruppo: ognuna per conto suo</button><button class="btn sm ghost" id="feUnitsMirror" title="Tutte unità 1">Gruppo: tutte a specchio</button></div>
+    <p class="hint" id="feUnitMsg"></p>`:''}
     ${fixtureHasPalette(f)?`<label>Colore <em>palette propria: cambia solo il colore, livello e audio restano quelli del rig</em></label>${paletteChipsHtml(fixturePaletteOf(f),'fePal')}<p class="hint" id="fePalMsg"></p>
     <label>Audio <em>come segue la musica questa luce; livello e colore restano del gruppo</em></label>${audioControlsHtml(fixtureAudioOf(f),fixtureGainOf(f),'feAud')}<p class="hint" id="feAudMsg"></p>`:''}
     <label class="chk"><input id="feOn" type="checkbox"> Attiva</label>
@@ -260,16 +263,18 @@ function openFixEditor(w,f){
   // contano per TD al momento dell'apertura, confrontata ad ogni
   // modifica: se diverge e la fixture era gia' sincronizzata, avviso
   // subito -- non solo dopo aver premuto "Aggiorna" e aspettato l'esito.
-  let syncedSnap=f._synced?JSON.stringify({group:f.group,model:f.model,universe:f.universe,address:f.address}):null;
+  if($('#feUnit'))val2('#feUnit',f.unit??'');
+  let syncedSnap=f._synced?JSON.stringify({group:f.group,model:f.model,universe:f.universe,address:f.address,unit:f.unit??null}):null;
   const checkDirty=()=>{
     if(!syncedSnap||!$('#feSyncMsg'))return;
-    const now=JSON.stringify({group:f.group,model:f.model,universe:f.universe,address:f.address});
+    const now=JSON.stringify({group:f.group,model:f.model,universe:f.universe,address:f.address,unit:f.unit??null});
     $('#feSyncMsg').textContent=now!==syncedSnap?'Modifiche non ancora mandate a DMX Master — premi "Aggiorna su DMX Master" per salvarle davvero, altrimenti si perdono al prossimo aggiornamento del palco.':'';
   };
   const upd=()=>{f.name=$('#feName').value.trim()||f.name;
     const z=Number($('#feZ').value);if(Number.isFinite(z))f.z=clamp(z,-5,30);
     if($('#feTruss')){f.mountToTruss=$('#feTruss').checked;$('#feZ').disabled=f.mountToTruss}
     if($('#feGroup')){f.group=$('#feGroup').value.trim();f.universe=+$('#feUni').value||0;f.address=clamp(+$('#feAddr').value||1,1,512)}
+    if($('#feUnit')){const u=Math.round(+$('#feUnit').value);if(u>=1)f.unit=Math.min(64,u);else delete f.unit}
     if($('#feW')){f.w=clamp(+$('#feW').value||6,f.type==='screen'?.5:1,f.type==='screen'?40:20);f.h=clamp(+$('#feH').value||3.5,f.type==='screen'?.3:.5,f.type==='screen'?20:10);f.rot=clamp(+$('#feRot').value||0,-180,180)}
     if($('#fePrTarget')){f.target=$('#fePrTarget').value;f.throw=clamp(+$('#fePrThrow').value||1.5,.2,10);f.rot=clamp(+$('#feRot').value||0,-180,180);prInfo()}
     if($('#feSource')){
@@ -280,9 +285,18 @@ function openFixEditor(w,f){
     if($('#feAngle')){f.angle=clamp(+$('#feAngle').value||0,-180,180);f.spread=clamp(+$('#feSpread').value||28,1,120)}
     if($('#feCube')){f.cube=$('#feCube').value||undefined;laserFixtureStatus(f)}
     f.enabled=$('#feOn').checked; save(); checkDirty()};
-  ['feName','feZ','feGroup','feAddr','feW','feH','feRot','feSource','feSourceRef','feAngle','feSpread','feCube','fePrTarget','fePrThrow'].forEach(id=>{const n=$('#'+id);if(n){n.addEventListener('input',upd);n.addEventListener('change',upd)}});
+  ['feName','feZ','feGroup','feAddr','feUnit','feW','feH','feRot','feSource','feSourceRef','feAngle','feSpread','feCube','fePrTarget','fePrThrow'].forEach(id=>{const n=$('#'+id);if(n){n.addEventListener('input',upd);n.addEventListener('change',upd)}});
   $('#feOn').addEventListener('change',upd);if($('#feTruss'))$('#feTruss').addEventListener('change',upd);
   if($('#feNdiSearch'))$('#feNdiSearch').onclick=()=>pickNdiSource(f);
+  // unità di tutto il gruppo, poi a DMX Master le luci gia' mandate
+  const groupUnits=async own=>{
+    const list=(L.fixtures||[]).filter(x=>x.group===f.group&&fixtureHasPalette(x)).sort((a,b)=>(a.x||0)-(b.x||0)||String(a.name).localeCompare(String(b.name)));
+    list.forEach((x,i)=>{x.unit=own?i+1:1});save();val2('#feUnit',f.unit);checkDirty();
+    const sent=list.filter(x=>x._synced);let ok=0;for(const x of sent)if(devCmd('td-dmx-win',{action:'set',param:'dmx_fixture_update',value:{...fixtureTdValue(x),on_conflict:'reject'}}))ok++;
+    syncedSnap=JSON.stringify({group:f.group,model:f.model,universe:f.universe,address:f.address,unit:f.unit??null});
+    $('#feUnitMsg').textContent=`${list.length} luci del gruppo ${own?'ognuna per conto suo (1…'+list.length+')':'a specchio (unità 1)'}${sent.length?` · mandate ${ok}/${sent.length} a DMX Master`:''}.`};
+  if($('#feUnitsOwn'))$('#feUnitsOwn').onclick=()=>groupUnits(true);
+  if($('#feUnitsMirror'))$('#feUnitsMirror').onclick=()=>groupUnits(false);
   // Universo: cambiarlo da solo non basta, l'indirizzo scelto per
   // l'universo vecchio quasi sempre collide nel nuovo -- ricalcola
   // SUBITO il primo indirizzo libero reale (da TD) per l'universo
@@ -330,7 +344,7 @@ function openFixEditor(w,f){
     // scelto a mano, un conflitto deve dare un errore leggibile (con
     // suggerimento) invece di scrivere comunque sopra un'altra fixture.
     const ok=devCmd('td-dmx-win',{action:'set',param:f._synced?'dmx_fixture_update':'dmx_fixture_add',
-      value:{id:f.id,type:f.type,name:f.name,group:f.group,model:f.model,universe:f.universe,address:f.address,x:f.x,y:f.y,enabled:f.enabled!==false,...fixtureStyleFields(f),on_conflict:'reject'}});
+      value:{...fixtureTdValue(f),on_conflict:'reject'}});
     if(!ok){$('#feSyncMsg').textContent='Non collegata a Gaia — apri ⋯ → Gaia e collegati prima.';return}
     const btn=$('#feSync'); btn.disabled=true; $('#feSyncMsg').textContent='Mandato, verifico la conferma da DMX Master…';
     let tries=0;
