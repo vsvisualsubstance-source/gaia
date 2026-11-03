@@ -276,6 +276,16 @@ const headMotion = require('./head-motion-engine').startHeadMotion({
   getDoc: () => persistedState?.layout?.headTimeline, getScenes: () => persistedState?.layout?.headMotions || [], broadcast,
   sendOsc: (address, args) => { const to = routeOf(address, 'default'); if (to) udp.send(encode(address, args), to.port, to.host, () => {}); }
 });
+// Controlli dal vivo del laser (/laser/fx, /laser/flash, /laser/blackout): comandi al
+// laser gateway via MQTT, da fader e pulsanti del tablet o dal MIDI (laser-live.js).
+const { laserLiveCommand } = require('./laser-live');
+const LASER_CMD_TOPIC = `gaia/device/${process.env.LASER_ID || 'laser-ops'}/command`;
+function laserLive(address, args) {
+  const cmd = laserLiveCommand(address, args, persistedState?.layout?.laserScenes || []);
+  if (!cmd) return false;
+  if (!cmd.skip && midiMqtt) midiMqtt.publish(LASER_CMD_TOPIC, JSON.stringify(cmd));
+  return true;
+}
 // Chase dal vivo (chase-engine.js): /dmx/fade + /dmx/scene verso DMX Master a ogni step.
 const chase = require('./chase-engine').startChase({ broadcast,
   sendOsc: (address, args) => { const to = routeOf(address, 'default'); if (to) udp.send(encode(address, args), to.port, to.host, () => {}); }
@@ -296,6 +306,7 @@ function onMidi(m, port) {
   broadcast({ type: 'midi_in', port, ...m });
   const r = midiIn.midiActions(m, persistedState?.layout, midiState, { laserId: process.env.LASER_ID || 'laser-ops' });
   for (const o of r.osc) {
+    if (laserLive(o.address, o.args)) { broadcast({ type: 'osc', address: o.address, args: o.args, channel: o.channel, echo: true }); continue; }
     const to = routeOf(o.address, o.channel);
     if (to) udp.send(encode(o.address, o.args), to.port, to.host, () => {});
     broadcast({ type: 'osc', address: o.address, args: o.args, channel: o.channel, echo: true });
@@ -329,6 +340,7 @@ wss.on('connection', ws => {
     } else if (m.type === 'osc' && typeof m.address === 'string' && m.address.startsWith('/')) {
       const args = Array.isArray(m.args) ? m.args : [];
       const channel = typeof m.channel === 'string' ? m.channel : 'default';
+      if (laserLive(m.address, args)) { broadcast({ type: 'osc', address: m.address, args, channel, echo: true }, ws); return; }
       const to = routeOf(m.address, channel);
       if (!to) {
         if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'error', message: `Canale OSC "${channel}" non configurato.` }));

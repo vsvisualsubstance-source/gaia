@@ -146,6 +146,17 @@ class TestScene(unittest.TestCase):
         x, y = SC.animate(sw, 0.25)[1][:2]                                # +90 gradi a un quarto di giro
         self.assertAlmostEqual(x, 0.5, places=3); self.assertAlmostEqual(y, -0.5, places=3)
         # a tempo: l'orologio della scena corre con bpm / bpm di riferimento
+        fx = SC.clean_fx({"zoom": 9, "bright": -1, "boh": 3})
+        self.assertEqual((fx["zoom"], fx["bright"]), (2.0, 0.0)); self.assertNotIn("boh", fx)
+        pts = [(0.5, 0.0, 255, 0, 0)]
+        self.assertIs(SC.apply_fx(pts, dict(SC.FX_DEFAULTS), 0, 0), pts)            # a riposo: niente da fare
+        z = SC.apply_fx(pts, SC.clean_fx({"zoom": 0.5}), 0, 0)[0]
+        self.assertAlmostEqual(z[0], 0.25)
+        r = SC.apply_fx(pts, SC.clean_fx({}), 0, 90)[0]                               # rotazione accumulata 90 gradi
+        self.assertAlmostEqual(r[0], 0.0, places=6); self.assertAlmostEqual(r[1], 0.5)
+        h = SC.apply_fx(pts, SC.clean_fx({"hue": 1 / 3, "bright": 0.5}), 0, 0)[0]   # rosso -> verde, a meta'
+        self.assertEqual(h[2:], (0, 127, 0))
+        self.assertEqual(SC.apply_fx([(0, 0, 0, 0, 0)], SC.clean_fx({"hue": .5}), 0, 0)[0][2:], (0, 0, 0))  # il buio resta buio
         tp = SC.clean_scene({**SQUARE, "tempo": {"sync": True, "bpm": 120}})
         self.assertAlmostEqual(SC.tempo_rate(tp, 132), 1.1); self.assertEqual(SC.tempo_rate(tp, None), 1.0)
 
@@ -328,7 +339,7 @@ class TestGateway(unittest.TestCase):
         self.assertFalse(self.cube.armed)
         self.assertTrue(wait(lambda: not self.emu.output, 1.0))
 
-    def test_10_bpm_from_tap_then_show_clock(self):
+    def test_9b_bpm_from_tap_then_show_clock(self):
         self.assertEqual(self.gw.bpm_now(), 120.0)
         self.gw.clock_bpm = 128.0
         self.assertEqual(self.gw.bpm_now(), 128.0)
@@ -338,6 +349,30 @@ class TestGateway(unittest.TestCase):
         self.gw.handle({"action": "set", "param": "bpm", "value": None})
         self.assertEqual(self.gw.bpm_now(), 128.0)
         self.gw.clock_bpm = None
+
+    def test_9c_flash_and_fx_over_scene(self):
+        self.assertTrue(wait(self.cube.online))
+        self.gw.handle({"action": "scene", "cube": "c1", "scene": SQUARE})            # blu
+        self.gw.handle({"action": "arm", "cube": "c1"})
+        red = {"id": "r", "name": "Rosso", "strokes": SQUARE["strokes"], "color": {"mode": "fixed", "rgb": [1, 0, 0]}}
+        self.assertTrue(self.gw.handle({"action": "flash", "on": True, "scene": red})["ok"])
+        self.emu.take_played()
+        self.assertTrue(wait(lambda: len(lit(self.emu.played)) > 1500))
+        on = lit(self.emu.take_played())
+        self.assertGreater(sum(1 for s in on if s[2] > 0 and s[4] == 0), len(on) * 0.9)   # rosso mentre e' tenuto
+        self.assertEqual(self.gw.status_payload()["laser"]["flash"]["name"], "Rosso")
+        self.gw.handle({"action": "flash", "on": False})
+        self.gw.handle({"action": "fx", "values": {"bright": 0.5}})
+        time.sleep(0.4)                                                                    # i frame rossi gia' in coda
+        self.emu.take_played()
+        self.assertTrue(wait(lambda: len(lit(self.emu.played)) > 1500))
+        on = lit(self.emu.take_played())
+        self.assertTrue(all(s[2] == 0 for s in on[-500:]))                                # di nuovo blu
+        self.gw.handle({"action": "fx", "reset": True})
+        self.assertEqual(self.gw.fx, SC.FX_DEFAULTS)
+        self.gw.handle({"action": "flash", "on": True, "scene": red})
+        self.gw.disarm_all("prova")
+        self.assertIsNone(self.gw.flash)                                                   # il blackout chiude il flash
 
     def test_7_status_payload_is_json(self):
         s = json.loads(json.dumps(self.gw.status_payload()))

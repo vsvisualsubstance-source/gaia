@@ -140,24 +140,29 @@ function lzsCssRgb(v){const m=/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?/.
   const c=[m[1],m[2],m[3]].map(x=>+(x/255).toFixed(3));return c.some(x=>x>0)?c:null}
 
 // ---- pagina Laser: libreria delle scene, da mandare ai cubi scelti
-let LZS_TARGET='all';
+let LZS_TARGET='all',LZS_FLASH=false;   // FLASH: la scena solo finche' la tieni premuta
 function lzsTargets(d){return['all',...(d?.laser.cubes||[]).map(c=>c.id)]}
 function lzScenesHtml(d){
   const cubes=d.laser.cubes||[],running=new Map();cubes.forEach(c=>{if(c.mode==='scene'&&c.scene)running.set(c.scene.id,[...(running.get(c.scene.id)||[]),c.id])});
   if(!lzsTargets(d).includes(LZS_TARGET))LZS_TARGET='all';
   return`<div class="lzs"><div class="lzs-top"><b>Scene laser</b><span class="hint">tocca una scena per mandarla a</span>
       <span class="lzs-tg">${lzsTargets(d).map(id=>`<button class="${LZS_TARGET===id?'on':''}" data-lzs="target" data-lzs-v="${id}">${id==='all'?'Tutti':esc(id)}</button>`).join('')}</span>
+      <button class="btn sm${LZS_FLASH?' on':''}" data-lzs="flash" title="FLASH: tieni premuta una scena per proiettarla sopra quella attiva, si toglie quando la lasci (su tutti i cubi in modalità Scene)">FLASH</button>
       <button class="btn sm ghost" data-lzs="svg">+ Importa SVG</button><button class="btn sm ghost" data-lzs="reset" title="Rimette i template mancanti">Template</button></div>
     <div class="lzs-grid">${laserScenes().map(s=>`<div class="lzs-tile${running.has(s.id)?' on':''}"><button class="lzs-go" data-lzs="apply" data-lzs-v="${esc(s.id)}" title="Manda a ${LZS_TARGET==='all'?'tutti i cubi':LZS_TARGET} (passa in modalità Scene)">
         <canvas data-lzs-cv="${esc(s.id)}" width="120" height="120"></canvas><span>${esc(s.name)}</span>${running.has(s.id)?`<em>${running.get(s.id).join(' ')}</em>`:''}</button>
         <button class="lzs-ed" data-lzs="edit" data-lzs-v="${esc(s.id)}" title="Modifica">✎</button></div>`).join('')||'<p class="hint">Nessuna scena: tocca Template.</p>'}</div></div>`;
 }
-function lzsSig(){return[LZS_TARGET,laserScenes().map(s=>[s.id,s.name])]}
+function lzsSig(){return[LZS_TARGET,LZS_FLASH,laserScenes().map(s=>[s.id,s.name])]}
 function lzsApply(s,target=LZS_TARGET){lzCmd({action:'scene',cube:target,scene:s},'scene')}
 function lzsDown(e,el,w){
   const b=e.target.closest('[data-lzs]');if(!b)return;e.preventDefault();
   const a=b.dataset.lzs,v=b.dataset.lzsV,s=laserScenes().find(x=>x.id===v);
   if(a==='target')LZS_TARGET=v;
+  else if(a==='flash')LZS_FLASH=!LZS_FLASH;
+  else if(a==='apply'&&s&&LZS_FLASH){lzCmd({action:'flash',on:true,scene:s},'flash');b.classList.add('press');
+    const up=()=>{b.removeEventListener('pointerup',up);b.removeEventListener('pointercancel',up);b.removeEventListener('pointerleave',up);b.classList.remove('press');lzCmd({action:'flash',on:false},'flash')};
+    b.addEventListener('pointerup',up);b.addEventListener('pointercancel',up);b.addEventListener('pointerleave',up);return}
   else if(a==='apply'&&s){lzsApply(s);showInfo(`Laser: "${s.name}" a ${LZS_TARGET==='all'?'tutti i cubi':LZS_TARGET} (modalità Scene; armare resta manuale).`)}
   else if(a==='edit'&&s)openLaserSceneEditor(s);
   else if(a==='reset'){const have=new Set(laserScenes().map(x=>x.id)),add=lzsTemplates().filter(x=>!have.has(x.id));
@@ -289,6 +294,13 @@ function openLaserCueEditor(w,cues,meta={}){
   };
 }
 // 2026-10-28: libreria scene laser con i template, una volta sola (uiRev 7)
+// 2026-11-03: riga di effetti dal vivo sotto il widget laser (uiRev 11)
+function migrateUiLaserFx(){
+  if((L.uiRev||0)>=11)return;
+  const pg=L.pages.find(p=>p.name==='Laser'),lw=pg?.widgets.find(w=>w.type==='laser');
+  if(pg&&lw&&!pg.widgets.some(w=>String(w.addr||'').startsWith('/laser/'))&&lw.y===0&&lw.h>=10){lw.h=7;pg.widgets.push(...laserFxWidgets(7))}
+  L.uiRev=11;save();
+}
 function migrateUiLaserScenes(){
   if((L.uiRev||0)>=7)return;
   if(!Array.isArray(L.laserScenes))L.laserScenes=lzsTemplates();

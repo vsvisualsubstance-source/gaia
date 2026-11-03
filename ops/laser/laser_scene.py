@@ -153,3 +153,42 @@ def animate(sc, t, level=0.0, kick=0.0):
                 out.append((px, py, 0, 0, 0))       # attacco al buio
             out.append((px, py, r, g, b))
     return out
+
+
+# ---------------------------------------------------------------- effetti dal vivo
+# Sopra alla scena (come gli effetti di Liberation), per tutti i cubi in modalita'
+# scene: rotazione aggiunta, zoom, onda, tinta e luminosita'. La zona di sicurezza
+# si applica dopo (laser_render), quindi nemmeno lo zoom ne esce.
+FX_DEFAULTS = {"rotate": 0.0, "zoom": 1.0, "hue": 0.0, "wave": 0.0, "wave_hz": 1.0, "bright": 1.0}
+FX_LIMITS = {"rotate": (-720, 720), "zoom": (0.2, 2.0), "hue": (0, 1), "wave": (0, 1), "wave_hz": (0.05, 8), "bright": (0, 1)}
+
+
+def clean_fx(values, fx=None):
+    """Nuovi valori degli effetti dentro i limiti; chiavi sconosciute ignorate."""
+    out = dict(fx or FX_DEFAULTS)
+    for k, v in (values or {}).items():
+        if k in FX_LIMITS:
+            out[k] = _num(v, *FX_LIMITS[k], FX_DEFAULTS[k])
+    return out
+
+
+def apply_fx(pts, fx, t, angle_deg):
+    """pts (x, y, r, g, b) -> pts con gli effetti; angle_deg = rotazione accumulata (gradi)."""
+    if fx == FX_DEFAULTS and not angle_deg:
+        return pts
+    a = math.radians(angle_deg)
+    ca, sa, z = math.cos(a), math.sin(a), fx["zoom"]
+    wave, wh, hue, br = fx["wave"], fx["wave_hz"], fx["hue"], fx["bright"]
+    out = []
+    for x, y, r, g, b in pts:
+        px, py = (x * ca - y * sa) * z, (x * sa + y * ca) * z
+        if wave:
+            px += wave * 0.25 * math.sin(2 * math.pi * (wh * t + py))
+        if (r or g or b) and (hue or br < 1):
+            if hue:
+                h, sv, v = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
+                r, g, b = (int(c * 255) for c in colorsys.hsv_to_rgb((h + hue) % 1.0, sv, v))
+            r, g, b = int(r * br), int(g * br), int(b * br)
+        out.append((px, py, r, g, b))
+    return out
+

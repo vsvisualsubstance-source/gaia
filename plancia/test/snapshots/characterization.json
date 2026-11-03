@@ -1557,10 +1557,90 @@
        0,
        0,
        16,
-       10,
+       7,
        "",
        "push",
        "Laser · LaserCube"
+      ],
+      [
+       "fader",
+       0,
+       7,
+       2,
+       3,
+       "/laser/fx/rotate",
+       "push",
+       "Rotazione"
+      ],
+      [
+       "fader",
+       2,
+       7,
+       2,
+       3,
+       "/laser/fx/zoom",
+       "push",
+       "Zoom"
+      ],
+      [
+       "fader",
+       4,
+       7,
+       2,
+       3,
+       "/laser/fx/hue",
+       "push",
+       "Tinta"
+      ],
+      [
+       "fader",
+       6,
+       7,
+       2,
+       3,
+       "/laser/fx/wave",
+       "push",
+       "Onda"
+      ],
+      [
+       "fader",
+       8,
+       7,
+       2,
+       3,
+       "/laser/fx/wave_hz",
+       "push",
+       "Velocità onda"
+      ],
+      [
+       "fader",
+       10,
+       7,
+       2,
+       3,
+       "/laser/fx/bright",
+       "push",
+       "Luminosità"
+      ],
+      [
+       "button",
+       12,
+       7,
+       2,
+       3,
+       "/laser/fx/reset",
+       "push",
+       "Reset effetti"
+      ],
+      [
+       "button",
+       14,
+       7,
+       2,
+       3,
+       "/laser/blackout",
+       "push",
+       "BLACKOUT laser"
       ]
      ]
     }
@@ -2117,10 +2197,90 @@
        0,
        0,
        16,
-       10,
+       7,
        "",
        "push",
        "Laser · LaserCube"
+      ],
+      [
+       "fader",
+       0,
+       7,
+       2,
+       3,
+       "/laser/fx/rotate",
+       "push",
+       "Rotazione"
+      ],
+      [
+       "fader",
+       2,
+       7,
+       2,
+       3,
+       "/laser/fx/zoom",
+       "push",
+       "Zoom"
+      ],
+      [
+       "fader",
+       4,
+       7,
+       2,
+       3,
+       "/laser/fx/hue",
+       "push",
+       "Tinta"
+      ],
+      [
+       "fader",
+       6,
+       7,
+       2,
+       3,
+       "/laser/fx/wave",
+       "push",
+       "Onda"
+      ],
+      [
+       "fader",
+       8,
+       7,
+       2,
+       3,
+       "/laser/fx/wave_hz",
+       "push",
+       "Velocità onda"
+      ],
+      [
+       "fader",
+       10,
+       7,
+       2,
+       3,
+       "/laser/fx/bright",
+       "push",
+       "Luminosità"
+      ],
+      [
+       "button",
+       12,
+       7,
+       2,
+       3,
+       "/laser/fx/reset",
+       "push",
+       "Reset effetti"
+      ],
+      [
+       "button",
+       14,
+       7,
+       2,
+       3,
+       "/laser/blackout",
+       "push",
+       "BLACKOUT laser"
       ]
      ]
     },
@@ -2962,9 +3122,13 @@
    [
     "migrateUiChase",
     10
+   ],
+   [
+    "migrateUiLaserFx",
+    11
    ]
   ],
-  "uiRev": 10,
+  "uiRev": 11,
   "pages": [
    {
     "name": "Show",
@@ -3007,6 +3171,54 @@
       "",
       "push",
       "Laser · LaserCube"
+     ],
+     [
+      "fader",
+      "/laser/fx/rotate",
+      "push",
+      "Rotazione"
+     ],
+     [
+      "fader",
+      "/laser/fx/zoom",
+      "push",
+      "Zoom"
+     ],
+     [
+      "fader",
+      "/laser/fx/hue",
+      "push",
+      "Tinta"
+     ],
+     [
+      "fader",
+      "/laser/fx/wave",
+      "push",
+      "Onda"
+     ],
+     [
+      "fader",
+      "/laser/fx/wave_hz",
+      "push",
+      "Velocità onda"
+     ],
+     [
+      "fader",
+      "/laser/fx/bright",
+      "push",
+      "Luminosità"
+     ],
+     [
+      "button",
+      "/laser/fx/reset",
+      "push",
+      "Reset effetti"
+     ],
+     [
+      "button",
+      "/laser/blackout",
+      "push",
+      "BLACKOUT laser"
      ]
     ]
    },

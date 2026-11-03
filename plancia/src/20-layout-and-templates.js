@@ -106,8 +106,18 @@ TPL.luci={name:'Luci · colori singoli',desc:'Tutte le luci della patch col colo
 TPL.audio={name:'Audio · reattività',desc:'Audio per gruppo: on/off, kick, sorgente A/B, minimo/massimo, soglia, preset.',pages:()=>[P('Audio',[
   W('audiorigs',0,0,16,10,{label:'Audio · reattività dei gruppi',color:SWATCH[4]})])]};
 // Laser: i LaserCube WiFi attraverso il laser gateway di OPS (ops/laser).
-TPL.laser={name:'Laser',desc:'LaserCube: modalità per cubo (Show, PatchDeck, Yolo), ARM, blackout, zona di sicurezza.',pages:()=>[P('Laser',[
-  W('laser',0,0,16,10,{label:'Laser · LaserCube',color:SWATCH[2]})])]};
+// effetti dal vivo (/laser/fx/..., laser-live.js nel bridge): fader e pulsanti normali, assegnabili all'APC40
+const laserFxWidgets=(y=7)=>[
+  W('fader',0,y,2,3,{label:'Rotazione',addr:'/laser/fx/rotate',min:-180,max:180,value:.5,color:SWATCH[2]}),
+  W('fader',2,y,2,3,{label:'Zoom',addr:'/laser/fx/zoom',min:.2,max:2,value:(1-.2)/1.8,color:SWATCH[2]}),
+  W('fader',4,y,2,3,{label:'Tinta',addr:'/laser/fx/hue',min:0,max:1,value:0,color:SWATCH[2]}),
+  W('fader',6,y,2,3,{label:'Onda',addr:'/laser/fx/wave',min:0,max:1,value:0,color:SWATCH[2]}),
+  W('fader',8,y,2,3,{label:'Velocità onda',addr:'/laser/fx/wave_hz',min:.1,max:4,value:(1-.1)/3.9,color:SWATCH[2]}),
+  W('fader',10,y,2,3,{label:'Luminosità',addr:'/laser/fx/bright',min:0,max:1,value:1,color:SWATCH[2]}),
+  W('button',12,y,2,3,{label:'Reset effetti',addr:'/laser/fx/reset',color:SWATCH[4]}),
+  W('button',14,y,2,3,{label:'BLACKOUT laser',addr:'/laser/blackout',color:SWATCH[5]})];
+TPL.laser={name:'Laser',desc:'LaserCube: modalità per cubo (Show, PatchDeck, Yolo), ARM, blackout, zona di sicurezza, effetti dal vivo e flash.',pages:()=>[P('Laser',[
+  W('laser',0,0,16,7,{label:'Laser · LaserCube',color:SWATCH[2]}),...laserFxWidgets(7)])]};
 // Teste · movimento (idea di Copilot, 2/11): scene di movimento come le scene
 // laser (63-head-motion*.js), timeline con la traccia MOVIMENTO, comandi base.
 TPL.teste={name:'Teste · scene e movimento',desc:'Scene di movimento delle teste (template, disegno, REC, SVG) e timeline con la traccia MOVIMENTO.',pages:()=>[P('Teste · movimento',[

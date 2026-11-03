@@ -385,6 +385,10 @@ class Gateway:
         self.mqtt_up = False
         self.audio = {"level": 0.0, "at": 0.0, "kick_at": 0.0, "kicks": {}}
         self.bpm = None            # dal TAP della Plancia (comando bpm); None = orologio dello show
+        self.fx = dict(SC.FX_DEFAULTS)   # effetti dal vivo sopra alle scene (comando fx)
+        self.fx_angle = 0.0
+        self.flash = None          # scena che sostituisce quella dei cubi finche' e' tenuta (comando flash)
+        self.flash_t0 = 0.0
         self.clock_bpm = None
         self.cfg_lock = threading.RLock()
         for cid, conf in self.cfg["cubes"].items():
@@ -461,15 +465,20 @@ class Gateway:
         while not self.stopping:
             t0 = now()
             level, kick = self.audio_now()
+            self.fx_angle = (self.fx_angle + self.fx["rotate"] * period) % 360.0
             for c in list(self.cubes.values()):
                 try:
                     if c.mode == "test" and t0 - c.test_ts > 0.1:
                         self._test_frame(c)
-                    elif c.mode == "scene" and c.conf.get("scene"):
-                        sc = c.conf["scene"]
-                        c.scene_t += (t0 - c.scene_last) * SC.tempo_rate(sc, self.bpm_now())
+                    elif c.mode == "scene" and (c.conf.get("scene") or self.flash):
+                        sc = c.conf.get("scene")
+                        c.scene_t += (t0 - c.scene_last) * (SC.tempo_rate(sc, self.bpm_now()) if sc else 1.0)
                         c.scene_last = t0
-                        pts = SC.animate(sc, c.scene_t, level, kick)
+                        if self.flash:          # il flash suona dall'inizio finche' e' tenuto, la scena sotto continua
+                            pts = SC.animate(self.flash, (t0 - self.flash_t0) * SC.tempo_rate(self.flash, self.bpm_now()), level, kick)
+                        else:
+                            pts = SC.animate(sc, c.scene_t, level, kick)
+                        pts = SC.apply_fx(pts, self.fx, t0, self.fx_angle)
                         c.set_frame(render(pts, c.conf, c.pps))
                 except Exception as e:          # una scena rotta non deve fermare gli altri cubi
                     log.warning("%s: scena non disegnabile (%s)", c.id, e)
@@ -529,6 +538,7 @@ class Gateway:
                             for k, v in self.sources.items() if "ts" in v},
                 "found": self.found,
                 "bpm": {"now": self.bpm_now(), "tap": self.bpm, "clock": self.clock_bpm},
+                "fx": self.fx, "flash": {"id": self.flash["id"], "name": self.flash["name"]} if self.flash else None,
                 "last_result": self.last_result,
             },
             "ts": int(time.time() * 1000),
@@ -623,6 +633,18 @@ class Gateway:
             c.armed = True
             log.info("%s ARMATO (%s)", c.id, c.mode)
             return f"{c.id} armato"
+        if action == "fx":
+            if cmd.get("reset"):
+                self.fx, self.fx_angle = dict(SC.FX_DEFAULTS), 0.0
+                return "effetti azzerati"
+            self.fx = SC.clean_fx(cmd.get("values") or {}, self.fx)
+            return "effetti " + ", ".join(f"{k}={v:g}" for k, v in self.fx.items() if v != SC.FX_DEFAULTS[k]) if self.fx != SC.FX_DEFAULTS else "effetti a riposo"
+        if action == "flash":
+            if not cmd.get("on"):
+                self.flash = None
+                return "flash finito"
+            self.flash, self.flash_t0 = SC.clean_scene(cmd.get("scene")), now()
+            return f"flash {self.flash['name']}"
         if action == "set" and cmd.get("param") == "bpm":
             v = cmd.get("value")
             self.bpm = None if v in (None, "", 0) else max(20.0, min(400.0, float(v)))
@@ -695,6 +717,7 @@ class Gateway:
 
     def disarm_all(self, why):
         any_armed = any(c.armed for c in self.cubes.values())
+        self.flash = None                       # un flash tenuto non riparte al riarmo
         for c in self.cubes.values():
             c.armed = False
         if any_armed:
