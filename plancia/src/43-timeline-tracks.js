@@ -32,13 +32,16 @@ function tlTrackDefs(){
   ];
 }
 const tlTrackDef=id=>tlTrackDefs().find(d=>d.id===id);
-// visibile se ha delle cue o l'ha scelta chi usa la pagina (mai nascondere del contenuto)
-function tlTrackVisible(d,w){return d.count(w)>0||(!w.readonly&&(w.tracks||[]).includes(d.id))}
+// visibile se ha delle cue o l'ha scelta chi usa la pagina (mai nascondere del contenuto).
+// Le timeline secondarie (Show, Sequenze ed effetti) hanno w.onlyTracks: solo quelle,
+// tutte le tracce restano nella pagina Timeline.
+function tlTrackVisible(d,w){if(Array.isArray(w.onlyTracks))return w.onlyTracks.includes(d.id);return d.count(w)>0||(!w.readonly&&(w.tracks||[]).includes(d.id))}
 function tlTracksHtml(w,D){return tlTrackDefs().filter(d=>tlTrackVisible(d,w)).map(d=>d.html(w,D)).join('')}
 async function tlChooseTracks(w){
-  const v=await uiChoose('Tracce da vedere in questa timeline',tlTrackDefs().map(d=>({label:d.label,value:d.id,on:tlTrackVisible(d,w),off:d.count(w)>0})),{multi:true,done:'Fatto',hint:'Una traccia con delle cue resta sempre visibile.'});
+  const only=Array.isArray(w.onlyTracks);
+  const v=await uiChoose('Tracce da vedere in questa timeline',tlTrackDefs().map(d=>({label:d.label,value:d.id,on:tlTrackVisible(d,w),off:!only&&d.count(w)>0})),{multi:true,done:'Fatto',hint:only?'Qui solo le tracce scelte: tutte le tracce sono nella pagina Timeline.':'Una traccia con delle cue resta sempre visibile.'});
   if(v==null)return;
-  w.tracks=v;save();refresh(w);
+  if(only)w.onlyTracks=v;else w.tracks=v;save();refresh(w);
 }
 function tlMarkTd(){L.tlTdDirty=true}
 // tutte le timeline dello show sono la stessa: una modifica vale per ogni pagina
@@ -128,4 +131,29 @@ function migrateUiPageGroups(){
     pi=Math.min(pi,L.pages.length-1);
   }
   L.uiRev=14;save();
+}
+// 2026-11-04, scelta dell'operatore: Timeline = timeline grande + colonna scene;
+// i doppioni (palette, teste, strobo) restano nelle loro pagine; GO/BACK passano
+// in Show; la timeline di Sequenze ed effetti mostra solo le sue tracce.
+function migrateUiTimelinePage(){
+  if((L.uiRev||0)>=15)return;
+  const at=(w,x,y,ww,h)=>w.x===x&&w.y===y&&w.w===ww&&w.h===h;
+  const tl=L.pages.find(p=>p.name==='Timeline');
+  if(tl){
+    const dup=w=>(w.type==='scenes'&&['dmx-enum','head-presets','head-select'].includes(w.mode))||(w.type!=='timeline'&&['/mh/position','/mh/color','/dmx/strobe','/dmx/strobe/rate','/show/go','/show/back'].includes(w.addr));
+    L.pagesBackup={...(L.pagesBackup||{}),timeline_20261104:JSON.parse(JSON.stringify(tl))};
+    tl.widgets=tl.widgets.filter(w=>!dup(w));
+    const t=tl.widgets.find(w=>w.type==='timeline'),sc=tl.widgets.find(w=>w.type==='scenes'&&w.addr==='/dmx/scene');
+    if(t&&tl.widgets.length===(sc?2:1)){Object.assign(t,{x:0,y:0,w:sc?12:16,h:10});if(sc)Object.assign(sc,{x:12,y:0,w:4,h:10,cols:2})}
+  }
+  for(const p of L.pages)if(p.name!=='Timeline')for(const w of p.widgets)if(w.type==='timeline'&&w.addr==='/show'&&w.readonly&&!Array.isArray(w.onlyTracks))w.onlyTracks=['chase','fx'];
+  const sh=L.pages.find(p=>p.name==='Show');
+  if(sh&&!sh.widgets.some(w=>w.addr==='/show/go')){
+    const st=sh.widgets.find(w=>w.type==='stage'),t=sh.widgets.find(w=>w.type==='timeline');
+    if(st&&t&&at(st,0,0,11,7)&&at(t,0,7,11,3)){st.h=6;t.y=6;if(!Array.isArray(t.onlyTracks))t.onlyTracks=['chase','fx'];
+      sh.widgets.push(W('button',0,9,7,1,{label:'GO',addr:'/show/go',color:SWATCH[3]}),W('button',7,9,4,1,{label:'Back',addr:'/show/back',color:SWATCH[5]}))}
+  }
+  const se=L.pages.find(p=>p.name==='Sequenze ed effetti')?.widgets.find(w=>w.type==='timeline');
+  if(se&&!Array.isArray(se.onlyTracks))se.onlyTracks=['chase','fx'];
+  pi=Math.min(pi,L.pages.length-1);L.uiRev=15;save();
 }

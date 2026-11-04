@@ -75,6 +75,7 @@ registerWidget('timeline',{addrLabel:'Indirizzo base OSC',
         if(lb.textContent!==t){lb.textContent=t;lb.classList.toggle('is-live',on===false);lb.classList.toggle('is-tl',on===true)}}
       const r=rt(w),D=timelineDuration(w),cues=timelineCues(w);
       const snd=el.querySelector('.tl-send');if(snd)snd.classList.toggle('dirty',!!L.tlTdDirty);
+      el.querySelectorAll('.tl-vst').forEach(s=>{const on=s.textContent.startsWith('▶');if(s.classList.contains('run')!==on)s.classList.toggle('run',on)});
       const tap=el.querySelector('.tl-tap b');if(tap&&tap.textContent!==String(liveBpm()))tap.textContent=liveBpm();
       el.querySelectorAll('.tl-lane>.tl-ph').forEach(p=>p.style.left=r.t/D*100+'%');paintChaseLane(el,w,D,r.t);paintFxLane(el,w,D,r.t);paintHeadMotionLane(el,w,D,r.t);paintVideoLane(el,w,D,r.t);paintLaserLane(el,w,D,r.t);el.querySelector('.tl-tc').textContent=tc(r.t);
       const sample=isShowTimeline(w)&&showClock.authority?showClockSample():null;

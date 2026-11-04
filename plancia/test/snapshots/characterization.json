@@ -468,7 +468,7 @@
        0,
        0,
        11,
-       7,
+       6,
        "",
        "push",
        "Palco"
@@ -506,12 +506,32 @@
       [
        "timeline",
        0,
-       7,
+       6,
        11,
        3,
        "/show",
        "push",
        "Timeline"
+      ],
+      [
+       "button",
+       0,
+       9,
+       7,
+       1,
+       "/show/go",
+       "push",
+       "GO"
+      ],
+      [
+       "button",
+       7,
+       9,
+       4,
+       1,
+       "/show/back",
+       "push",
+       "Back"
       ],
       [
        "fader",
@@ -867,131 +887,21 @@
        "timeline",
        0,
        0,
-       11,
-       3,
+       12,
+       10,
        "/show",
        "push",
        "Timeline show"
       ],
       [
        "scenes",
-       11,
+       12,
        0,
-       5,
-       3,
+       4,
+       10,
        "/dmx/scene",
        "push",
        "Scene · DMX Master"
-      ],
-      [
-       "scenes",
-       0,
-       3,
-       4,
-       4,
-       "",
-       "dmx-enum",
-       "Palette FRONT · rig A"
-      ],
-      [
-       "scenes",
-       4,
-       3,
-       4,
-       4,
-       "",
-       "dmx-enum",
-       "Palette BACK · rig B"
-      ],
-      [
-       "scenes",
-       8,
-       3,
-       3,
-       4,
-       "",
-       "dmx-enum",
-       "Palette LED bar"
-      ],
-      [
-       "scenes",
-       11,
-       3,
-       3,
-       4,
-       "/mh/position",
-       "push",
-       "Posizioni teste"
-      ],
-      [
-       "scenes",
-       14,
-       3,
-       2,
-       4,
-       "",
-       "head-presets",
-       "Preset PTZ"
-      ],
-      [
-       "scenes",
-       0,
-       7,
-       4,
-       3,
-       "/mh/select/heads",
-       "head-select",
-       "Selezione teste"
-      ],
-      [
-       "color",
-       4,
-       7,
-       3,
-       3,
-       "/mh/color",
-       "push",
-       "Colore teste"
-      ],
-      [
-       "button",
-       7,
-       7,
-       2,
-       3,
-       "/dmx/strobe",
-       "toggle",
-       "Strobo"
-      ],
-      [
-       "fader",
-       9,
-       7,
-       2,
-       3,
-       "/dmx/strobe/rate",
-       "push",
-       "Strobo (Hz)"
-      ],
-      [
-       "button",
-       11,
-       7,
-       3,
-       3,
-       "/show/go",
-       "push",
-       "GO"
-      ],
-      [
-       "button",
-       14,
-       7,
-       2,
-       3,
-       "/show/back",
-       "push",
-       "Back"
       ]
      ]
     }
@@ -1893,7 +1803,7 @@
        0,
        0,
        11,
-       7,
+       6,
        "",
        "push",
        "Palco"
@@ -1931,12 +1841,32 @@
       [
        "timeline",
        0,
-       7,
+       6,
        11,
        3,
        "/show",
        "push",
        "Timeline"
+      ],
+      [
+       "button",
+       0,
+       9,
+       7,
+       1,
+       "/show/go",
+       "push",
+       "GO"
+      ],
+      [
+       "button",
+       7,
+       9,
+       4,
+       1,
+       "/show/back",
+       "push",
+       "Back"
       ],
       [
        "fader",
@@ -2677,131 +2607,21 @@
        "timeline",
        0,
        0,
-       11,
-       3,
+       12,
+       10,
        "/show",
        "push",
        "Timeline show"
       ],
       [
        "scenes",
-       11,
+       12,
        0,
-       5,
-       3,
+       4,
+       10,
        "/dmx/scene",
        "push",
        "Scene · DMX Master"
-      ],
-      [
-       "scenes",
-       0,
-       3,
-       4,
-       4,
-       "",
-       "dmx-enum",
-       "Palette FRONT · rig A"
-      ],
-      [
-       "scenes",
-       4,
-       3,
-       4,
-       4,
-       "",
-       "dmx-enum",
-       "Palette BACK · rig B"
-      ],
-      [
-       "scenes",
-       8,
-       3,
-       3,
-       4,
-       "",
-       "dmx-enum",
-       "Palette LED bar"
-      ],
-      [
-       "scenes",
-       11,
-       3,
-       3,
-       4,
-       "/mh/position",
-       "push",
-       "Posizioni teste"
-      ],
-      [
-       "scenes",
-       14,
-       3,
-       2,
-       4,
-       "",
-       "head-presets",
-       "Preset PTZ"
-      ],
-      [
-       "scenes",
-       0,
-       7,
-       4,
-       3,
-       "/mh/select/heads",
-       "head-select",
-       "Selezione teste"
-      ],
-      [
-       "color",
-       4,
-       7,
-       3,
-       3,
-       "/mh/color",
-       "push",
-       "Colore teste"
-      ],
-      [
-       "button",
-       7,
-       7,
-       2,
-       3,
-       "/dmx/strobe",
-       "toggle",
-       "Strobo"
-      ],
-      [
-       "fader",
-       9,
-       7,
-       2,
-       3,
-       "/dmx/strobe/rate",
-       "push",
-       "Strobo (Hz)"
-      ],
-      [
-       "button",
-       11,
-       7,
-       3,
-       3,
-       "/show/go",
-       "push",
-       "GO"
-      ],
-      [
-       "button",
-       14,
-       7,
-       2,
-       3,
-       "/show/back",
-       "push",
-       "Back"
       ]
      ]
     },
@@ -3149,9 +2969,13 @@
    [
     "migrateUiPageGroups",
     14
+   ],
+   [
+    "migrateUiTimelinePage",
+    15
    ]
   ],
-  "uiRev": 14,
+  "uiRev": 15,
   "pages": [
    {
     "name": "Show",
@@ -3259,72 +3083,6 @@
       "/dmx/scene",
       "push",
       "Scene · DMX Master"
-     ],
-     [
-      "scenes",
-      "",
-      "dmx-enum",
-      "Palette FRONT · rig A"
-     ],
-     [
-      "scenes",
-      "",
-      "dmx-enum",
-      "Palette BACK · rig B"
-     ],
-     [
-      "scenes",
-      "",
-      "dmx-enum",
-      "Palette LED bar"
-     ],
-     [
-      "scenes",
-      "/mh/position",
-      "push",
-      "Posizioni teste"
-     ],
-     [
-      "scenes",
-      "",
-      "head-presets",
-      "Preset PTZ"
-     ],
-     [
-      "scenes",
-      "/mh/select/heads",
-      "head-select",
-      "Selezione teste"
-     ],
-     [
-      "color",
-      "/mh/color",
-      "push",
-      "Colore teste"
-     ],
-     [
-      "button",
-      "/dmx/strobe",
-      "toggle",
-      "Strobo"
-     ],
-     [
-      "fader",
-      "/dmx/strobe/rate",
-      "push",
-      "Strobo (Hz)"
-     ],
-     [
-      "button",
-      "/show/go",
-      "push",
-      "GO"
-     ],
-     [
-      "button",
-      "/show/back",
-      "push",
-      "Back"
      ]
     ]
    },

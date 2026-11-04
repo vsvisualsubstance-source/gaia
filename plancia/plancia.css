@@ -731,3 +731,10 @@ button{cursor:pointer}
 .tla-row.attenzione{border-left-color:var(--accent)}.tla-row.attenzione i{color:var(--accent)}
 .tla-row.info i{color:var(--dim)}
 @media (max-width:760px){.tla-row{grid-template-columns:1fr 1fr 1fr}.tla-row p{grid-column:1/-1}}
+
+/* stato delle tracce: sopra i blocchi solo quando qualcosa gira (2026-11-04) */
+.tl-vlane:has(.tl-cues > *) .tl-vst:not(.run),.tl-lane:has(.tl-cues > *) .tl-hst:not(.run){display:none}
+/* timeline alta (pagina Timeline): lo spazio in piu' va a tutte le tracce, non solo a LUCI */
+.tl-trk-main{max-height:180px}
+.tl-trk:not(.tl-trk-main){flex:1 0 auto;max-height:64px}
+.tl-trk:not(.tl-trk-main) .tl-vlane,.tl-trk:not(.tl-trk-main) .tl-hlane{height:auto;min-height:34px}
