@@ -92,6 +92,10 @@ test('audit finds what would go wrong', () => {
   assert.doesNotMatch(msgs({ chasesInTd: true, chases: [{ id: 'c', name: 'C', steps: [{ scene: 'rosso' }], hold: { value: .25, unit: 's' } }], chaseCues: [{ time: 0, chase: 'c' }] }), /Circa/);
   assert.match(msgs({ cues: [{ t: 40, name: 'Dopo', sceneId: 'blu' }], chases: [{ id: 'c', name: 'C', steps: [{ scene: 'rosso' }], hold: { value: 4, unit: 'beats' } }], chaseCues: [{ time: 0, chase: 'c' }, { time: 10, chase: 'off' }] }), /resta acceso il suo ultimo step per 30 s, fino a "Dopo"/);
   assert.doesNotMatch(msgs({ cues: [{ t: 12, name: 'Dopo', sceneId: 'blu' }], chases: [{ id: 'c', name: 'C', steps: [{ scene: 'rosso' }], hold: { value: 4, unit: 'beats' } }], chaseCues: [{ time: 0, chase: 'c' }, { time: 10, chase: 'off' }] }), /ultimo step/);
+  const pal = (id, a, b) => ({ id, categories: ['palette'], preview: { rig_a: { palette: a }, rig_b: { palette: b } } });
+  const same = { patchGroups: ['rig_b'], scenes: [pal('p1', 'Forest', 'Blue'), pal('p2', 'Deep Purple', 'Blue'), pal('p3', 'Red', 'Red')] };
+  assert.match(msgs({ ...same, cues: [{ t: 0, name: 'Forest', sceneId: 'p1' }, { t: 10, name: 'Purple', sceneId: 'p2' }] }), /"Purple" sulle luci in patch è uguale a "Forest" [(]rig_b: Blue[)]: cambia solo rig_a/);
+  assert.doesNotMatch(msgs({ ...same, cues: [{ t: 0, name: 'Forest', sceneId: 'p1' }, { t: 10, name: 'Rosso', sceneId: 'p3' }] }), /uguale/);
   assert.match(msgs({ footprint: () => 10 }), /si sovrappongono nell'universo 1/);
 });
 

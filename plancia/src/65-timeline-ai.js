@@ -23,6 +23,14 @@ function auditTimeline(d){
     const fade=c.fade!=null?+c.fade:2;
     if(next&&cc.length&&fade>next.t-c.t+.001)add('attenzione',track,c.t,`"${c.name}": il fade di ${fade} s non finisce, "${next.name}" arriva dopo ${(next.t-c.t).toFixed(1)} s.`);
   });
+  // scena colore che sulle luci in patch e' uguale alla precedente (2026-11-04: pal_* salvate
+  // solo per rig_a, e il progetto ha luci solo su rig_b e ledbar: "sempre azzurre")
+  const pg=(d.patchGroups||[]).filter(Boolean);let prevCol=null;
+  if(pg.length)cues.forEach(c=>{const sc=scene(c.sceneId),pv=sc?.preview;if(!pv||!cats(c.sceneId).some(x=>x==='palette'||x==='rigs'))return;
+    const parts=pg.filter(g=>pv[g]?.palette).map(g=>`${g}: ${pv[g].palette}`);if(!parts.length)return;const sig=parts.join(', ');
+    if(prevCol&&prevCol.sig===sig&&prevCol.id!==c.sceneId){const other=Object.keys(pv).filter(g=>!pg.includes(g)&&pv[g]?.palette).join(', ');
+      add('attenzione','LUCI',c.t,`"${c.name}" sulle luci in patch è uguale a "${prevCol.name}" (${sig}): ${other?`cambia solo ${other}, che non ${other.includes(',')?'hanno':'ha'} luci. `:''}Ricrea la scena da "Scene dalle palette" con tutti i rig.`)}
+    prevCol={sig,id:c.sceneId,name:c.name}});
   if(cues.length&&cues[0].t>0.5)add('info','LUCI',0,`Prima della prima cue (${cues[0].t} s) le luci restano come sono.`);
   // SEQUENZE
   past('SEQUENZE',d.chaseCues);
@@ -105,7 +113,7 @@ if(typeof module==='object'&&module.exports)module.exports={auditTimeline,expand
 function timelineAuditData(w){
   const scenes=tdScenes(),cues=L.tlTdDirty||w.cues?parseCues(w):timelineCues(w); // quello che partirebbe con ⇪ TD
   return{cues,duration:timelineDuration(w),bpm:+w.bpm||hmBpm(),scenes,chases:chases(),chaseCues:chaseDoc().cues,fx:lightFx(),fxCues:fxDoc().cues,motions:hmScenes(),motionCues:hmDoc().cues,
-    chasesInTd:chaseTdReady(),laserScenes:laserScenes(),laserCues:laserDoc().cues,videoCues:videoDoc().cues,fixtures:L.fixtures,groups:groupsOf(),footprint:f=>modelFootprint(f.model||typeDefaultModel(f.type))||0};
+    chasesInTd:chaseTdReady(),patchGroups:[...new Set((tdParams().dmx_fixtures||[]).filter(f=>f.enabled!==0&&f.group!=='heads').map(f=>f.group))],laserScenes:laserScenes(),laserCues:laserDoc().cues,videoCues:videoDoc().cues,fixtures:L.fixtures,groups:groupsOf(),footprint:f=>modelFootprint(f.model||typeDefaultModel(f.type))||0};
 }
 function openTimelineAudit(w){
   const list=auditTimeline(timelineAuditData(w)),s=$('#scrim');s.hidden=false;
