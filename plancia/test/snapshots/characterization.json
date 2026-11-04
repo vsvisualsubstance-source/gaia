@@ -1587,61 +1587,11 @@
        "headmotion",
        0,
        4,
-       9,
+       16,
        6,
        "",
        "push",
        "Movimento teste"
-      ],
-      [
-       "scenes",
-       9,
-       4,
-       7,
-       2,
-       "/mh/select/heads",
-       "head-select",
-       "Selezione teste"
-      ],
-      [
-       "scenes",
-       9,
-       6,
-       4,
-       2,
-       "/mh/position",
-       "push",
-       "Posizioni"
-      ],
-      [
-       "scenes",
-       13,
-       6,
-       3,
-       2,
-       "",
-       "head-presets",
-       "Preset PTZ"
-      ],
-      [
-       "xy",
-       9,
-       8,
-       5,
-       2,
-       "/mh/pantilt",
-       "push",
-       "Pan / Tilt"
-      ],
-      [
-       "fader",
-       14,
-       8,
-       2,
-       2,
-       "/mh/dimmer",
-       "push",
-       "Dimmer"
       ]
      ]
     }
@@ -2542,61 +2492,11 @@
        "headmotion",
        0,
        4,
-       9,
+       16,
        6,
        "",
        "push",
        "Movimento teste"
-      ],
-      [
-       "scenes",
-       9,
-       4,
-       7,
-       2,
-       "/mh/select/heads",
-       "head-select",
-       "Selezione teste"
-      ],
-      [
-       "scenes",
-       9,
-       6,
-       4,
-       2,
-       "/mh/position",
-       "push",
-       "Posizioni"
-      ],
-      [
-       "scenes",
-       13,
-       6,
-       3,
-       2,
-       "",
-       "head-presets",
-       "Preset PTZ"
-      ],
-      [
-       "xy",
-       9,
-       8,
-       5,
-       2,
-       "/mh/pantilt",
-       "push",
-       "Pan / Tilt"
-      ],
-      [
-       "fader",
-       14,
-       8,
-       2,
-       2,
-       "/mh/dimmer",
-       "push",
-       "Dimmer"
       ]
      ]
     },
@@ -2973,9 +2873,13 @@
    [
     "migrateUiTimelinePage",
     15
+   ],
+   [
+    "migrateUiHeadPages",
+    16
    ]
   ],
-  "uiRev": 15,
+  "uiRev": 16,
   "pages": [
    {
     "name": "Show",
@@ -3123,36 +3027,6 @@
       "",
       "push",
       "Movimento teste"
-     ],
-     [
-      "scenes",
-      "/mh/select/heads",
-      "head-select",
-      "Selezione teste"
-     ],
-     [
-      "scenes",
-      "/mh/position",
-      "push",
-      "Posizioni"
-     ],
-     [
-      "scenes",
-      "",
-      "head-presets",
-      "Preset PTZ"
-     ],
-     [
-      "xy",
-      "/mh/pantilt",
-      "push",
-      "Pan / Tilt"
-     ],
-     [
-      "fader",
-      "/mh/dimmer",
-      "push",
-      "Dimmer"
      ]
     ]
    },

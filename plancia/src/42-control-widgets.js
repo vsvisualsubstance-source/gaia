@@ -20,6 +20,8 @@ const ignorePointer=()=>{};
 const receiveLevel=(w,args)=>{if(!args.length)return false;w.value=oscNorm(w,args[0]);return true};
 
 registerWidget('fader',{range:true,midi:true,size:[2,5],label:'Fader',receive:receiveLevel,
+  tick(el,w){if(w.addr!=='/mh/zoom'&&w.addr!=='/mh/focus')return;const na=!headHasChannel(w.addr.slice(4));
+    if(el.classList.contains('na')!==na){el.classList.toggle('na',na);el.title=na?'Il modello delle teste non ha questo canale':''}},
   inner:()=>TRACK_HTML,paint:paintTrack,
   onPointer(e,el,w){
     const end=startDrag(el,e),r=el.querySelector('.box').getBoundingClientRect();
@@ -101,7 +103,10 @@ registerWidget('button',{oscAddress:true,range:{min:'Valore OFF',max:'Valore ON'
 
 registerWidget('color',{size:[4,4],label:'Colore',
   receive:(w,args)=>{if(args.length>2){const[h,s]=rgb2hsv(+args[0],+args[1],+args[2]);w.value={h,s}}return true},
-  inner:()=>`<div class="cw"><div class="disc"><i class="mk"></i></div><div class="sws">${SWC.map((c,i)=>`<i data-s="${i}" style="--s:${hex(c)}"></i>`).join('')}</div></div>`,
+  // teste a ruota: sotto la ruota gli slot del modello (/mh/colorwheel i); il pad resta, TD sceglie lo slot piu' vicino
+  inner:w=>{const wh=(w.addr||'').startsWith('/mh')?headWheel():[];
+    return`<div class="cw"><div class="disc"><i class="mk"></i></div><div class="sws${wh.length?' whl':''}">${wh.length?wh.map((c,i)=>`<i data-wh="${i}" title="${esc(headSlotName(c.name))}" style="--s:${hex(c.rgb||[1,1,1])}"></i>`).join(''):SWC.map((c,i)=>`<i data-s="${i}" style="--s:${hex(c)}"></i>`).join('')}</div></div>`},
+  tick(el,w,{repaint}){if(repaint&&(w.addr||'').startsWith('/mh')&&headSigChanged(w,JSON.stringify(headWheel().map(c=>c.rgb))))refresh(w)},
   paint(el,w){
     const h=w.value?.h??0,s=w.value?.s??0,mk=el.querySelector('.mk');
     mk.style.left=50+Math.cos(h*2*Math.PI)*s*50+'%';mk.style.top=50+Math.sin(h*2*Math.PI)*s*50+'%';
@@ -111,6 +116,8 @@ registerWidget('color',{size:[4,4],label:'Colore',
   args:w=>colorRGB(w).map(x=>+x.toFixed(4)),          // r g b 0..1
   // un campione sotto la ruota, oppure la ruota (tinta = angolo, saturazione = distanza dal centro)
   onPointer(e,el,w){
+    const wh=e.target.closest('[data-wh]');
+    if(wh){e.preventDefault();const i=+wh.dataset.wh,c=headWheel()[i];if(c?.rgb){const [h,s]=rgb2hsv(...c.rgb);w.value={h,s};paint(el,w)}fire('/mh/colorwheel',[i],w.oscChannel);save();return}
     const end=startDrag(el,e),sw=e.target.closest('[data-s]');
     if(sw){const [h,s]=rgb2hsv(...SWC[+sw.dataset.s]);w.value={h,s};paint(el,w);send(w);save();return}
     const r=el.querySelector('.disc').getBoundingClientRect();

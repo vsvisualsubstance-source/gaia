@@ -94,8 +94,7 @@ async function headsLaneTap(w,t,blk){
   try{
     let id=pick;
     if(pick==='__re'){await tdSceneCommand('show_scene_capture',{name:cue.sceneId,categories:['heads']},()=>true);showInfo(`Scena "${cue.sceneId}" ricatturata.`);return}
-    if(pick==='__new'){let n=1;while(tdSceneById(`teste_${n}`))n++;id=`teste_${n}`;
-      await tdSceneCommand('show_scene_capture',{name:id,label:`Teste ${n}`,categories:['heads']},()=>!!tdSceneById(id))}
+    if(pick==='__new')id=await captureHeadsScene();
     const doc=isShowTimeline(w)&&showClock.authority?tdTimelineDoc():null;
     let list=doc?timelineFromTD(doc):parseCues(w).map(c=>({t:c.t,name:c.name,targets:cueTargets(c)}));
     const same=c=>cue&&Math.abs(c.t-cue.t)<.01;

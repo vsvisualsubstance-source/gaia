@@ -112,13 +112,8 @@ TPL.laser={name:'Laser',desc:'LaserCube: modalità per cubo (Show, PatchDeck, Yo
 // Teste · movimento (idea di Copilot, 2/11): scene di movimento come le scene
 // laser (63-head-motion*.js), timeline con la traccia MOVIMENTO, comandi base.
 TPL.teste={name:'Teste · scene e movimento',desc:'Scene di movimento delle teste (template, disegno, REC, SVG) e timeline con la traccia MOVIMENTO.',pages:()=>[P('Teste · movimento',[
-  W('timeline',0,0,16,4,{label:'Timeline show',...tlOpts(),tracks:['heads','motion']}),
-  W('headmotion',0,4,9,6,{label:'Movimento teste',color:SWATCH[1]}),
-  W('scenes',9,4,7,2,{label:'Selezione teste',addr:'/mh/select/heads',mode:'head-select',items:'',headValues:[],selectedHeads:[],value:[],cols:7,color:SWATCH[1]}),
-  W('scenes',9,6,4,2,{label:'Posizioni',addr:'/mh/position',items:POS.join('\n'),cols:3,value:-1}),
-  W('scenes',13,6,3,2,{label:'Preset PTZ',mode:'head-presets',headPresets:[],color:SWATCH[4]}),
-  W('xy',9,8,5,2,{label:'Pan / Tilt',addr:'/mh/pantilt',min:-1,max:1,value:.5,valueY:.5,color:SWATCH[1]}),
-  W('fader',14,8,2,2,{label:'Dimmer',addr:'/mh/dimmer',value:1})
+  W('timeline',0,0,16,4,{label:'Timeline show',...tlOpts(),onlyTracks:['heads','motion']}),
+  W('headmotion',0,4,16,6,{label:'Movimento teste',color:SWATCH[1]})
 ])]};
 // Teste a parte; chase a step (63-chase*.js) ed effetti sulle luci (63-light-fx*.js, nota TD 59) insieme.
 TPL.sequenze={name:'Sequenze ed effetti',desc:'Chase a step con le scene di DMX Master, effetti sulle luci (onde, inseguimento, scintillio), TAP e le loro tracce in timeline.',pages:()=>[P('Sequenze ed effetti',[
