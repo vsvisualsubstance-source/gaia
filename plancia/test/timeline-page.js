@@ -26,6 +26,21 @@ async function main() {
     check(go && back && tl[3] === 6 && r.show.find(w => w[0] === 'stage')[5] === 6 && JSON.stringify(tl[6]) === '["chase","fx"]', 'Show: GO e BACK sotto la timeline, 3 tracce');
     check(JSON.stringify(r.seq[0][6]) === '["chase","fx"]', 'Sequenze ed effetti: solo le sue tracce');
     check(r.twice, 'seconda volta: non cambia niente');
+    // ▶ con DMX Master in LIVE: si chiede, e "Play in TIMELINE" riaccende show_active prima di partire
+    const live = JSON.parse(await p.ev(`(async()=>{const T=window.__planciaTest,z=ms=>new Promise(r=>setTimeout(r,ms)),pub=[];
+      T.L=T.demoProjectLayout();T.render();await z(300);
+      const d=T.G.devices['td-dmx-win']={...(T.G.devices['td-dmx-win']||{}),services:{show_active:'inactive'}};
+      const was={ok:T.G.ok,client:T.G.client};T.G.ok=true;T.G.client={publish:(t,b)=>pub.push([t,JSON.parse(b)])};
+      T.showClock.authority=true;T.showClock.state={playing:false,position:0,active:false,seq:1};T.showClock.receivedAt=Date.now();
+      const w=T.L.pages.find(p=>p.name==='Timeline').widgets.find(x=>x.type==='timeline');
+      [...document.querySelectorAll('#groups > *')].find(b=>b.textContent==='Show').click();await z(200);
+      [...document.querySelectorAll('#tabs > *')].find(b=>b.textContent==='Timeline').click();await z(400);
+      document.querySelector('[data-id="'+w.id+'"] [data-act="play"]').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));await z(300);
+      const asked=document.querySelector('.ui-choose')?.textContent||'';
+      [...document.querySelectorAll('.ui-choose button')].find(b=>b.textContent.includes('in TIMELINE'))?.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));await z(300);
+      T.G.ok=was.ok;T.G.client=was.client;T.showClock.authority=false;
+      return JSON.stringify({asked:/LIVE/.test(asked),pub:pub.map(([t,m])=>t.split('/').pop()+':'+(m.action||'')+(m.service?'/'+m.service:''))})})()`));
+    check(live.asked && live.pub.join() === 'command:enable/show_active,command:play', `▶ in LIVE: chiede, poi TIMELINE e play (${live.pub.join(', ')})`);
     check(!p.problems.length, `nessun errore nella pagina ${p.problems.join(' ').slice(0, 300)}`);
   } finally { p.close(); }
   if (fail.length) { console.error(`timeline-page: ${fail.length} errori`); process.exit(1); }

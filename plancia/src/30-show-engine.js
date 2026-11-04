@@ -556,12 +556,22 @@ async function toggleShowActive(){
   if(!devCmd('td-dmx-win',{action:on?'disable':'enable',service:'show_active'})){showError('Non collegata a Gaia: apri ⋯ → Gaia.');return}
   showInfo(on?'LIVE: la timeline non comanda più le luci. Componi e cattura le scene.':'TIMELINE: le luci seguono di nuovo la timeline.');
 }
+// ▶ con DMX Master in LIVE: l'orologio partirebbe ma le luci non seguirebbero le cue
+// (2026-11-04, "i colori non cambiano durante la timeline"): si chiede prima.
+async function playShowClock(w){
+  if(tdShowActive()===false){
+    const v=await uiChoose('DMX Master è in LIVE: le luci non seguono la timeline',[{label:'▶ Play in TIMELINE (le luci seguono le cue)',value:'tl'},{label:'▶ Play restando in LIVE',value:'live'}],{hint:'In LIVE la timeline scorre ma le luci restano come le comandi dal tablet.'});
+    if(v==null)return;
+    if(v==='tl'){if(!devCmd('td-dmx-win',{action:'enable',service:'show_active'})){showError('Non collegata a Gaia: apri ⋯ → Gaia.');return}showInfo('TIMELINE: le luci seguono di nuovo la timeline.')}
+  }
+  showClockCommand(w,'play');
+}
 function tlAct(w,act){if(act==='live'){toggleShowActive();return}if(act==='vlive'){toggleVideoActive();return}if(act==='vcue'){openVideoCueEditor(w);return}if(act==='llive'){toggleLaserActive();return}if(act==='mlive'){toggleHeadMotionActive();return}if(act==='ccue'){openChaseCueEditor(w);return}if(act==='csend'){chaseSendTimeline(w);return}if(act==='tlmenu'){tlMenu(w);return}if(act==='fcue'){openFxCueEditor(w);return}if(act==='tap'){const b=tapTempo();if(b)showInfo(`Tempo: ${b} BPM`);return}if(act==='mcue'){openHeadMotionCueEditor(w);return}if(act==='lcue'){openLaserCueEditor(w);return}const r=rt(w),cues=parseCues(w);
   if(isShowTimeline(w)&&showClock.authority){
     const sample=showClockSample();
     if(act==='edit-cues'){openCueEditor(w);return}
     if(act==='loop'){showError('Il clock TD non espone ancora un comando loop.');return}
-    if(act==='play')showClockCommand(w,sample?.state.playing?'pause':'play');
+    if(act==='play'){if(sample?.state.playing)showClockCommand(w,'pause');else playShowClock(w);}
     else if(act==='stop')showClockCommand(w,'stop');
     else if(act==='start')showClockCommand(w,'seek',0);
     else if(act==='go'||act==='back')showClockCommand(w,act);
