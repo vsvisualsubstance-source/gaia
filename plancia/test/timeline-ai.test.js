@@ -89,6 +89,9 @@ test('audit finds what would go wrong', () => {
   assert.match(msgs({ cues: [{ t: 5, name: 'Pos', sceneId: 'pos' }], motions: [{ id: 'm', name: 'M' }], motionCues: [{ time: 0, scene: 'm' }] }), /il movimento vince.*"Pos"/);
   assert.match(msgs({ motions: [{ id: 'm', name: 'M' }], motionCues: [{ time: 0, scene: 'm' }] }), /manca un Fermo/);
   assert.match(msgs({ chases: [{ id: 'c', name: 'C', steps: [{ scene: 'rosso' }], hold: { value: .25, unit: 's' } }], chaseCues: [{ time: 0, chase: 'c' }] }), /Circa 240 cue/);
+  assert.doesNotMatch(msgs({ chasesInTd: true, chases: [{ id: 'c', name: 'C', steps: [{ scene: 'rosso' }], hold: { value: .25, unit: 's' } }], chaseCues: [{ time: 0, chase: 'c' }] }), /Circa/);
+  assert.match(msgs({ cues: [{ t: 40, name: 'Dopo', sceneId: 'blu' }], chases: [{ id: 'c', name: 'C', steps: [{ scene: 'rosso' }], hold: { value: 4, unit: 'beats' } }], chaseCues: [{ time: 0, chase: 'c' }, { time: 10, chase: 'off' }] }), /resta acceso il suo ultimo step per 30 s, fino a "Dopo"/);
+  assert.doesNotMatch(msgs({ cues: [{ t: 12, name: 'Dopo', sceneId: 'blu' }], chases: [{ id: 'c', name: 'C', steps: [{ scene: 'rosso' }], hold: { value: 4, unit: 'beats' } }], chaseCues: [{ time: 0, chase: 'c' }, { time: 10, chase: 'off' }] }), /ultimo step/);
   assert.match(msgs({ footprint: () => 10 }), /si sovrappongono nell'universo 1/);
 });
 

@@ -73,6 +73,16 @@ async function main() {
     check(af.doc.motion.cues.length === 2 && af.doc.effects.cues.length === 2 && af.doc.cues.some(c => String(c.label).startsWith('⟳')), 'il documento per DMX Master contiene tutte le tracce');
     check(applied.undone && !applied.leftover, 'annulla: timeline esattamente come prima');
 
+    // con la nota TD 60: chase nel campo chases, cue di sole teste su "teste", niente cue ⟳
+    const n60 = JSON.parse(await p.ev(`(()=>{const T=window.__planciaTest,w=T.L.pages.flatMap(p=>p.widgets).find(x=>x.type==='timeline'&&x.addr==='/show'&&!x.readonly);
+      T.G.dxm['td-dmx-win']={...(T.G.dxm['td-dmx-win']||{}),show:{timeline_features:['track','motion','effects','chases','scene_only'],scene_groups:['rig_a','rig_b','heads']}};
+      const doc=T.timelineToTD(w).doc;T.openSceneEditor();const only=document.querySelectorAll('.sn-only').length;document.querySelector('#scnClose').click();
+      delete T.G.dxm['td-dmx-win'].show;return JSON.stringify({doc,only})})()`));
+    const d60 = n60.doc;
+    check(!d60.cues.some(c => String(c.label).startsWith('⟳')) && d60.chases.cues.length === 4 && d60.chases.chases.length === 2 && !d60.chases.chases.some(c => c.template), `chase nel campo chases: ${d60.chases.cues.length} cue, ${d60.chases.chases.length} chase, ${d60.cues.length} cue luci`);
+    check(d60.cues.filter(c => c.track === 'teste').map(c => c.scene).join() === 'teste_pubblico,teste_cielo,teste_pubblico' && d60.cues.filter(c => !c.track).length === 10, 'cue di sole teste sulla traccia teste, le altre sulla principale');
+    check(n60.only === 3, 'editor scene: scelta dei gruppi (only)');
+
     // ogni pagina si apre senza errori
     const names = await p.ev(`[...document.querySelectorAll('#tabs > *')].map(x=>x.textContent)`);
     for (let i = 0; i < names.length; i++) { await p.ev(`document.querySelectorAll('#tabs > *')[${i}].click()`); await sleep(250); }

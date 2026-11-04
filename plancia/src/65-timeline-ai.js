@@ -34,13 +34,16 @@ function auditTimeline(d){
     const fast=Math.min(...ch.steps.map(s=>secs(s.hold||ch.hold)));
     if(fast<.25)add('attenzione','SEQUENZE',c.time,`"${ch.name}": step di ${fast.toFixed(2)} s: dal vivo, via rete, sotto 0,25 s non è preciso.`);
     const end=l[i+1]?.time??D,n=end>c.time&&ch.steps.length?Math.ceil((end-c.time)/Math.max(.05,secs(ch.hold))):0;
-    if(n>200)add('attenzione','SEQUENZE',c.time,`"${ch.name}": circa ${n} cue in DMX Master, lista molto lunga.`);
+    if(n>200&&!d.chasesInTd)add('attenzione','SEQUENZE',c.time,`"${ch.name}": circa ${n} cue in DMX Master, lista molto lunga.`);
     // colori della traccia LUCI coperti dal chase
     const lay=new Set(ch.steps.flatMap(s=>cats(s.scene))),over=cues.filter(q=>q.t>c.time&&q.t<end&&cats(q.sceneId).some(x=>lay.has(x)));
+    // dopo "Fermo" resta acceso l'ultimo step finche' una cue luci non cambia quelle categorie
+    if(l[i+1]?.chase==='off'){const nx=cues.find(q=>q.t>=end-.001&&cats(q.sceneId).some(x=>lay.has(x))),gap=(nx?nx.t:D)-end;
+      if(gap>5)add('attenzione','SEQUENZE',end,`"${ch.name}" si ferma ma resta acceso il suo ultimo step per ${Math.round(gap)} s, fino a ${nx?`"${nx.name}"`:'la fine'}: metti una cue luci dopo il Fermo.`)}
     if(over.length)add('attenzione','SEQUENZE',c.time,`"${ch.name}" e la traccia LUCI si sovrappongono: ${over.map(q=>`"${q.name}"`).join(', ')} durerà solo fino allo step dopo.`);
   });
   const total=(d.cues||[]).length+sorted(d.chaseCues).reduce((a,c,i,l)=>{const ch=(d.chases||[]).find(x=>x.id===c.chase);if(!ch)return a;const end=l[i+1]?.time??D;return a+Math.max(0,Math.ceil((end-c.time)/Math.max(.05,secs(ch.hold))))},0);
-  if(total>200)add('attenzione','SEQUENZE',0,`Circa ${total} cue in DMX Master, quasi tutte dai chase: lista lunga, GO e BACK diventano scomodi.`);
+  if(total>200&&!d.chasesInTd)add('attenzione','SEQUENZE',0,`Circa ${total} cue in DMX Master, quasi tutte dai chase: lista lunga, GO e BACK diventano scomodi.`);
   // EFFETTI
   past('EFFETTI',d.fxCues);
   const lightsOf=g=>(d.fixtures||[]).filter(f=>f.group===g&&(+f.address>0));
@@ -102,7 +105,7 @@ if(typeof module==='object'&&module.exports)module.exports={auditTimeline,expand
 function timelineAuditData(w){
   const scenes=tdScenes(),cues=L.tlTdDirty||w.cues?parseCues(w):timelineCues(w); // quello che partirebbe con ⇪ TD
   return{cues,duration:timelineDuration(w),bpm:+w.bpm||hmBpm(),scenes,chases:chases(),chaseCues:chaseDoc().cues,fx:lightFx(),fxCues:fxDoc().cues,motions:hmScenes(),motionCues:hmDoc().cues,
-    laserScenes:laserScenes(),laserCues:laserDoc().cues,videoCues:videoDoc().cues,fixtures:L.fixtures,groups:groupsOf(),footprint:f=>modelFootprint(f.model||typeDefaultModel(f.type))||0};
+    chasesInTd:chaseTdReady(),laserScenes:laserScenes(),laserCues:laserDoc().cues,videoCues:videoDoc().cues,fixtures:L.fixtures,groups:groupsOf(),footprint:f=>modelFootprint(f.model||typeDefaultModel(f.type))||0};
 }
 function openTimelineAudit(w){
   const list=auditTimeline(timelineAuditData(w)),s=$('#scrim');s.hidden=false;

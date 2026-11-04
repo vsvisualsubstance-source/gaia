@@ -185,7 +185,7 @@ const devDot=d=>!d?'':devAge(d)<180000?'on':devAge(d)<1800000?'idle':'';
 // status "slim" = heartbeat; modelli, patch, scene e teste su topic retained con rev.
 // I loro params si fondono in G.devices[id].params: tutto il resto della Plancia
 // continua a leggere tdParams() come prima. Senza i topic nuovi vale lo status pieno.
-const TD_STATE_TOPICS=['dmx_catalog','dmx_patch','show_scenes','heads_state','audio_devices','heads_motion','dmx_effects'];
+const TD_STATE_TOPICS=['dmx_catalog','dmx_patch','show_scenes','heads_state','audio_devices','heads_motion','dmx_effects','dmx_chase'];
 function mergeTdState(id){
   const d=G.devices[id],st=G.tdState[id];if(!d||!st)return;
   d.params=d.params||{};for(const s of Object.values(st))Object.assign(d.params,s.params);

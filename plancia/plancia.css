@@ -398,6 +398,7 @@ button{cursor:pointer}
 .scn-sw{width:56px;height:12px;border-radius:3px;background:var(--panel2);border:1px solid var(--line2);flex:none}
 .scn-act{gap:6px;flex-wrap:wrap}
 .scn-cats{display:flex;flex-wrap:wrap;gap:4px 14px}
+.scn-only{margin-top:6px;padding-top:6px;border-top:1px dashed var(--line)}.scn-only .hint{flex-basis:100%}
 .scn-new{border-top:1px solid var(--line);padding-top:10px;display:flex;flex-direction:column;gap:8px}
 .scn-new h4{margin:0;font-family:var(--display);letter-spacing:.08em;text-transform:uppercase;font-size:13px}
 .si.si-manage{border-style:dashed;color:var(--accent);background:transparent}

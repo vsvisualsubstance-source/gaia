@@ -13,13 +13,30 @@ function tapTempo(){
 }
 function chases(){return Array.isArray(L.chases)?L.chases:[]}
 function chaseDoc(){return L.chaseTimeline&&Array.isArray(L.chaseTimeline.cues)?L.chaseTimeline:{cues:[]}}
-function chasePlay(ch){emit({type:'chase',action:'play',chase:ch,bpm:liveBpm()},true)}
-function chaseStop(){emit({type:'chase',action:'stop'},true)}
+// novita' della timeline che DMX Master dichiara (nota TD 60): track, chases, scene_only...
+function tdTimelineHas(f){return(G.dxm['td-dmx-win']?.show?.timeline_features||[]).includes(f)}
+// chase dentro DMX Master (dmx_chase, campo chases): se c'e' si usa quello, il motore su OPS resta di riserva
+function chaseTdReady(){return tdTimelineHas('chases')}
+const chaseTd=ch=>{const o=JSON.parse(JSON.stringify(ch));delete o.template;return o};
+function chasePlay(ch){
+  if(chaseTdReady()){emit({type:'chase',action:'stop'},true);devCmd('td-dmx-win',{action:'set',param:'dmx_chase',value:{chase:chaseTd(ch),bpm:liveBpm()}})}
+  else emit({type:'chase',action:'play',chase:ch,bpm:liveBpm()},true);
+}
+function chaseStop(){if(chaseTdReady())devCmd('td-dmx-win',{action:'set',param:'dmx_chase',value:null});emit({type:'chase',action:'stop'},true)}
+// chase che gira adesso, da TD (dal vivo o timeline) o dal bridge: {id, name, step, steps, bpm, where}
+function chaseRun(){
+  const steps=id=>chases().find(c=>c.id===id)?.steps.length||0;
+  if(chaseTdReady()){const s=tdParams().dmx_chase_state;if(!s)return null;
+    if(s.live?.chase_id)return{id:s.live.chase_id,name:s.live.name||s.live.chase_id,step:+s.live.step||0,steps:steps(s.live.chase_id),bpm:s.live.bpm,where:'dal vivo'};
+    if(s.timeline?.chase_id){const ch=chases().find(c=>c.id===s.timeline.chase_id);return{id:s.timeline.chase_id,name:ch?.name||s.timeline.chase_id,step:+s.timeline.step||0,steps:steps(s.timeline.chase_id),bpm:null,where:'timeline'}}
+    return null}
+  const st=G.chaseSt;return st?.chase?{id:st.chase.id,name:st.chase.name,step:st.step,steps:st.steps,bpm:st.bpm,missing:st.missing,where:'OPS'}:null;
+}
 const chaseSceneColor=id=>{const sc=tdScenes().find(s=>s.id===id);return sc?tdSceneLook(sc).ic||'#8a92a0':'#5d6573'};
 function chaseStatusText(){
-  const st=G.chaseSt;if(!st)return'motore: nessuno stato dal bridge';
-  if(!st.chase)return'fermo';
-  return`▶ ${st.chase.name} · step ${st.step+1}/${st.steps} · ${st.bpm} BPM${st.missing?` · scena "${st.missing}" non in DMX Master`:''}`;
+  if(!chaseTdReady()&&!G.chaseSt)return'motore: nessuno stato dal bridge';
+  const r=chaseRun();if(!r)return chaseTdReady()?'fermo · motore DMX Master':'fermo';
+  return`▶ ${r.name} · step ${r.step+1}${r.steps?`/${r.steps}`:''}${r.bpm?` · ${r.bpm} BPM`:''} · ${r.where}${r.missing?` · scena "${r.missing}" non in DMX Master`:''}`;
 }
 // chase pronti ricavati dal catalogo di DMX Master: colori (lenti e veloci), teste, strobo
 function chaseTemplatesFromTD(){
@@ -33,7 +50,7 @@ function chaseTemplatesFromTD(){
 }
 // ---- widget: libreria dei chase
 function chaseLibHtml(){
-  const run=G.chaseSt?.chase?.id;
+  const run=chaseRun()?.id;
   return`<div class="hm"><div class="hm-top"><span class="hint ch-st">${esc(chaseStatusText())}</span>
       <button class="btn sm" data-ch="tap" title="Batti il tempo (3-4 colpi)">TAP <b class="ch-bpm">${liveBpm()}</b></button>
       <button class="btn sm" data-ch="stop">■ Stop</button><button class="btn sm ghost" data-ch="new">+ Nuovo</button><button class="btn sm ghost" data-ch="tpl" title="Chase pronti fatti con le scene di DMX Master">Template</button></div>
@@ -109,12 +126,12 @@ registerWidget('chase',{size:[8,6],label:'Chase',showsValue:false,showsAddr:fals
   inner:()=>'<div class="hm-box"></div>',
   onPointer:chaseDown,
   tick:(el)=>{
-    const box=el.querySelector('.hm-box'),sig=JSON.stringify([chases(),G.chaseSt?.chase?.id||null,tdScenes().map(s=>s.id)]);
+    const box=el.querySelector('.hm-box'),sig=JSON.stringify([chases(),chaseRun()?.id||null,tdScenes().map(s=>s.id)]);
     if(box&&box._sig!==sig){box._sig=sig;box.innerHTML=chaseLibHtml()}
     const st=el.querySelector('.ch-st'),txt=chaseStatusText();if(st&&st.textContent!==txt)st.textContent=txt;
     const bp=el.querySelector('.ch-bpm');if(bp&&bp.textContent!==String(liveBpm()))bp.textContent=liveBpm();
-    const run=G.chaseSt?.chase?.id;el.querySelectorAll('.ch-row').forEach(r=>{const on=r.querySelector('[data-ch-v]')?.dataset.chV===run;
-      r.querySelectorAll('.ch-steps i').forEach((n,k)=>n.classList.toggle('on',on&&k===G.chaseSt.step))})},
+    const cr=chaseRun(),run=cr?.id;el.querySelectorAll('.ch-row').forEach(r=>{const on=r.querySelector('[data-ch-v]')?.dataset.chV===run;
+      r.querySelectorAll('.ch-steps i').forEach((n,k)=>n.classList.toggle('on',on&&k===cr.step))})},
   help:()=>['Chase','Sequenze di scene di DMX Master, come le scene a step di Daslight: ogni step tiene per un tempo (battiti o secondi) e ci arriva con un fade. Tocca un chase per farlo partire dal vivo, ✎ per modificarlo, TAP per battere il tempo. In timeline: traccia SEQUENZE.']});
 
 // ---- traccia SEQUENZE della timeline dello show: in DMX Master diventa cue "⟳ …"
@@ -128,8 +145,8 @@ function chaseLaneHtml(w,D){
 }
 function paintChaseLane(el,w,D,t){
   const s=el.querySelector('.tl-cst');if(!s)return;
-  const n=chaseDoc().cues.length,inTd=(tdTimelineDoc()?.cues||[]).filter(isChaseCue).length;
-  const msg=G.chaseSt?.chase?chaseStatusText():n?(L.tlTdDirty||!inTd?'da mandare: ⇪ TD':`${inTd} cue in DMX Master`):w.readonly?'':'tocca qui per far partire un chase';
+  const n=chaseDoc().cues.length,td=tdTimelineDoc(),inTd=chaseTdReady()?(td?.chases?.cues||[]).length:(td?.cues||[]).filter(isChaseCue).length;
+  const msg=chaseRun()?chaseStatusText():n?(L.tlTdDirty||!inTd?'da mandare: ⇪ TD':`${inTd} cue in DMX Master`):w.readonly?'':'tocca qui per far partire un chase';
   if(s.textContent!==msg)s.textContent=msg;
   const ph=el.querySelector('.tl-cph');if(ph&&D>0)ph.style.left=Math.max(0,Math.min(1,t/D))*100+'%';
 }
@@ -147,7 +164,7 @@ function openChaseCueEditor(w,cues,meta={}){
   const td=isShowTimeline(w)&&showClock.authority;
   s.innerHTML=`<div class="sheet" role="dialog" aria-label="Timeline sequenze">
     <div class="top"><h3>Timeline sequenze (chase)</h3><button class="btn ghost" id="ccClose">Chiudi</button></div>
-    <p class="hint">Ogni cue fa partire un <b>chase</b> fino alla cue successiva (o lo ferma). Battiti al BPM della timeline (${+w.bpm||120}). ${td?'Salva li manda a DMX Master insieme alla timeline: diventano cue "⟳ …" che esegue TD.':'La timeline non segue DMX Master: si salvano qui e vanno a TD col prossimo invio.'}</p>
+    <p class="hint">Ogni cue fa partire un <b>chase</b> fino alla cue successiva (o lo ferma). Battiti al BPM della timeline (${+w.bpm||120}). ${td?(chaseTdReady()?'Salva li manda a DMX Master insieme alla timeline: i chase girano dentro TD, GO e BACK non si fermano sugli step.':'Salva li manda a DMX Master insieme alla timeline: diventano cue "⟳ …" che esegue TD.'):'La timeline non segue DMX Master: si salvano qui e vanno a TD col prossimo invio.'}</p>
     <div class="vcue-list">${rows||'<p class="hint">Nessuna cue di chase.</p>'}</div>
     <div class="row"><button class="btn" id="ccAdd">＋ Aggiungi cue</button></div>
     <div class="cue-editor-actions"><button class="btn ghost" id="ccCancel">Annulla</button><button class="btn primary" id="ccSave">${td?'Salva e invia a DMX Master':'Salva'}</button></div>
@@ -165,9 +182,18 @@ function openChaseCueEditor(w,cues,meta={}){
     if(td)chaseSendTimeline(w);
   };
 }
-// cue della timeline per DMX Master: quelle dei chase rigenerate, mai doppie
+// campo chases di show_timeline (nota TD 60): chase usati + cue; null = traccia tolta; undefined = TD non li offre
+function chaseTimelineDoc(){
+  if(!chaseTdReady())return undefined;
+  const known=new Set(chases().map(c=>c.id)),cues=chaseDoc().cues.filter(c=>Number.isFinite(+c.time)&&(c.chase==='off'||known.has(c.chase)));if(!cues.length)return null;
+  const used=new Set(cues.map(c=>c.chase));
+  return{chases:chases().filter(c=>used.has(c.id)).map(chaseTd),cues:cues.map(c=>({time:+c.time,chase:c.chase,label:c.label||''}))};
+}
+// cue della timeline per DMX Master: quelle dei chase rigenerate, mai doppie.
+// Con i chase in TD niente cue "⟳": quelle vecchie spariscono al primo invio.
 function withChaseCues(cues,w){
-  const own=cues.filter(c=>!isChaseCue(c)),taken=new Set(own.map(c=>Math.round(c.time*100)));
+  const own=cues.filter(c=>!isChaseCue(c));if(chaseTdReady())return own;
+  const taken=new Set(own.map(c=>Math.round(c.time*100)));
   const gen=chaseTimelineCues(chaseDoc(),chases(),w.duration,+w.bpm||120).map(c=>{let k=Math.round(c.time*100);while(taken.has(k))k++;taken.add(k);return{...c,time:k/100}});
   return[...own,...gen].sort((a,b)=>a.time-b.time);
 }

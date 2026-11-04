@@ -126,12 +126,17 @@ async function buildPaletteScenes(palettes,rigParams,onStep=()=>{}){
 function openSceneEditor(){
   const cats=sceneCategoriesFrom(G.dxm['td-dmx-win']),scenes=tdScenes(),active=tdActiveScene(tdParams())?.index;
   const s=$('#scrim');s.hidden=false;
+  // scene limitate ad alcuni gruppi (nota TD 60): vuoto = tutti
+  const groupsOnly=tdTimelineHas('scene_only')?(G.dxm['td-dmx-win']?.show?.scene_groups||[]):[];
+  const gName=g=>({rig_a:'Rig A',rig_b:'Rig B',heads:'Teste'})[g]||groupsOf().find(x=>x.group===g)?.label||g;
+  const onlyChecks=(sel,cls)=>groupsOnly.length?`<div class="scn-cats scn-only"><span class="hint">Solo i gruppi (nessuno = tutti):</span>${groupsOnly.map(g=>`<label class="chk"><input type="checkbox" class="${cls}" value="${esc(g)}"${(sel||[]).includes(g)?' checked':''}> ${esc(gName(g))}</label>`).join('')}</div>`:'';
+  const onlyOf=(root,cls)=>groupsOnly.length?{only:[...root.querySelectorAll('.'+cls+':checked')].map(x=>x.value)}:{};
   const checks=(sel,cls)=>cats.map(c=>`<label class="chk"><input type="checkbox" class="${cls}" value="${esc(c.id)}"${sel.includes(c.id)?' checked':''}> ${esc(c.label)}</label>`).join('');
   const rows=scenes.map(sc=>{const look=tdSceneLook(sc),used=(sc.cues||[]).length;
     return`<div class="scn-row${sc.index===active?' on':''}" data-scene="${esc(sc.id)}">
       <div class="scn-head"><span class="scn-sw" style="${look.grad?`background:${look.grad}`:''}"></span>
         <b>${String(sc.index+1).padStart(2,'0')} · ${esc(sc.label||sc.id)}</b>${sc.label&&sc.label!==sc.id?` <span class="mono hint">${esc(sc.id)}</span>`:''}
-        <span class="hint">${esc(sceneCategoryText(sc.categories,cats))}${used?` · in ${used} cue`:''}</span></div>
+        <span class="hint">${esc(sceneCategoryText(sc.categories,cats))}${(sc.only||[]).length?` · solo ${esc(sc.only.map(gName).join(', '))}`:''}${used?` · in ${used} cue`:''}</span></div>
       <div class="row scn-act">
         <button class="btn sm" data-sa="recall" title="Applica ora la scena (dal vivo)">▶ Richiama</button>
         <button class="btn sm" data-sa="recapture" title="Sovrascrive la scena con i valori dal vivo di adesso, solo per le sue categorie">⟳ Ricattura</button>
@@ -140,7 +145,7 @@ function openSceneEditor(){
       </div>
       <div class="scn-edit" hidden>
         <div class="two"><label>Nome (id)<input class="se-name" value="${esc(sc.id)}"></label><label>Etichetta<input class="se-label" value="${esc(sc.label||'')}"></label></div>
-        <div class="scn-cats">${checks(sc.categories||[],'se-cat')}</div>
+        <div class="scn-cats">${checks(sc.categories||[],'se-cat')}</div>${onlyChecks(sc.only,'se-only')}
         <div class="row"><button class="btn sm primary" data-sa="save">Salva modifiche</button></div>
       </div>
     </div>`}).join('');
@@ -151,7 +156,7 @@ function openSceneEditor(){
     <div class="scn-new">
       <h4>Nuova scena dai valori dal vivo</h4>
       <div class="two"><label>Nome (id)<input id="snName" placeholder="es. rosso_caldo"></label><label>Etichetta<input id="snLabel" placeholder="es. Rosso caldo"></label></div>
-      <div class="scn-cats">${checks(cats.map(c=>c.id),'sn-cat')}</div>
+      <div class="scn-cats">${checks(cats.map(c=>c.id),'sn-cat')}</div>${onlyChecks([],'sn-only')}
       <div class="row"><button class="btn primary" id="snCapture">📷 Cattura scena</button></div>
     </div>
     ${paletteScenesSection(scenes)}
@@ -165,8 +170,9 @@ function openSceneEditor(){
     const categories=[...s.querySelectorAll('.sn-cat:checked')].map(x=>x.value);
     const bad=validateSceneName(name,ids);if(bad){showError('Nuova scena: '+bad);return}
     if(!categories.length){showError('Nuova scena: scegli almeno una categoria.');return}
-    try{await tdSceneCommand('show_scene_capture',{name,...(label?{label}:{}),categories},()=>!!tdSceneById(name));
-      reopen();showInfo(`Scena "${name}" catturata (${sceneCategoryText(categories,cats)}).`)}catch(e){fail(e)}
+    const only=onlyOf(s.querySelector('.scn-new'),'sn-only');
+    try{await tdSceneCommand('show_scene_capture',{name,...(label?{label}:{}),categories,...only},()=>!!tdSceneById(name));
+      reopen();showInfo(`Scena "${name}" catturata (${sceneCategoryText(categories,cats)}${only.only?.length?`, solo ${only.only.map(gName).join(', ')}`:''}).`)}catch(e){fail(e)}
   };
   const spBuild=s.querySelector('#spBuild');
   if(spBuild)spBuild.onclick=async()=>{
@@ -187,19 +193,21 @@ function openSceneEditor(){
       if(!await uiConfirm(`Sovrascrivere "${id}" con i valori dal vivo di adesso?\nCambiano solo le sue categorie: ${sceneCategoryText(sc?.categories,cats)}.`))return;
       // conferma = TD ha ripubblicato status/matrix dopo il comando
       const pub=()=>`${G.devices['td-dmx-win']?.ts}|${G.dxm['td-dmx-win']?.ts}`,before=pub();
-      try{await tdSceneCommand('show_scene_capture',{name:id,categories:sc?.categories||cats.map(c=>c.id)},()=>pub()!==before);
+      // stessi gruppi di prima: senza only TD la riporterebbe a tutti
+      try{await tdSceneCommand('show_scene_capture',{name:id,categories:sc?.categories||cats.map(c=>c.id),...(groupsOnly.length?{only:sc?.only||[]}:{})},()=>pub()!==before);
         reopen();showInfo(`Scena "${id}" ricatturata.`)}catch(e){fail(e)}
     };
     row.querySelector('[data-sa="edit"]').onclick=()=>{const ed=row.querySelector('.scn-edit');ed.hidden=!ed.hidden};
     row.querySelector('[data-sa="save"]').onclick=async()=>{
       const to=row.querySelector('.se-name').value.trim(),label=row.querySelector('.se-label').value.trim();
-      const categories=[...row.querySelectorAll('.se-cat:checked')].map(x=>x.value);
+      const categories=[...row.querySelectorAll('.se-cat:checked')].map(x=>x.value),only=onlyOf(row,'se-only');
       const bad=validateSceneName(to,ids,id);if(bad){showError('Scena: '+bad);return}
       if(!categories.length){showError('Scena: almeno una categoria.');return}
       try{
         if(to!==id)await tdSceneCommand('show_scene_rename',{name:id,to,...(label?{label}:{})},()=>!!tdSceneById(to)&&!tdSceneById(id));
-        await tdSceneCommand('show_scene_update',{name:to,label:label||to,categories},()=>{const x=tdSceneById(to);
-          return!!x&&(x.label||x.id)===(label||to)&&JSON.stringify([...(x.categories||[])].sort())===JSON.stringify([...categories].sort())});
+        const same=(a,b)=>JSON.stringify([...(a||[])].sort())===JSON.stringify([...(b||[])].sort());
+        await tdSceneCommand('show_scene_update',{name:to,label:label||to,categories,...only},()=>{const x=tdSceneById(to);
+          return!!x&&(x.label||x.id)===(label||to)&&same(x.categories,categories)&&(!only.only||same(x.only,only.only))});
         reopen();showInfo(`Scena "${to}" aggiornata.`)}catch(e){fail(e)}
     };
     row.querySelector('[data-sa="delete"]').onclick=async()=>{

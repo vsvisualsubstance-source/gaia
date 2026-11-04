@@ -35,7 +35,7 @@ function demoProjectLayout(){
   const cues=serializeCues([
     T(0,'Apertura','@base; fade=2'),T(10,'Teste al pubblico','@teste_pubblico; fade=3'),T(20,'Rosso','@colore_rosso; fade=1'),T(40,'Blu','@colore_blu; fade=4'),
     T(60,'Magenta-Cyan','@pal_magenta_cyan; fade=0'),T(70,'Teste al cielo','@teste_cielo; fade=5'),T(80,'Forest','@pal_forest; fade=2'),
-    T(100,'Strobo acceso','@strobo_on; fade=0'),T(110,'Strobo spento','@strobo_off; fade=0'),T(120,'Deep Purple','@pal_deep_purple; fade=3'),T(130,'Teste al pubblico 2','@teste_pubblico; fade=2'),T(160,'Finale','@base; fade=4')]);
+    T(100,'Strobo acceso','@strobo_on; fade=0'),T(102,'Ambra dopo il chase','@pal_forest; fade=2'),T(110,'Strobo spento','@strobo_off; fade=0'),T(120,'Deep Purple','@pal_deep_purple; fade=3'),T(130,'Teste al pubblico 2','@teste_pubblico; fade=2'),T(160,'Finale','@base; fade=4')]);
   const tracks=['chase','fx','heads','motion','video','laser'];
   for(const p of pages)for(const w of p.widgets)if(w.type==='timeline'&&w.addr==='/show'){Object.assign(w,{cues,duration:180,bpm:120});if(!w.readonly)w.tracks=tracks}
   const fx=fxTemplates('front'),fxg={'fx-inseguimento':'back','fx-centro':'ledbar','fx-respiro':'back','fx-scintillio':'ledbar','fx-due-colori':'back'};

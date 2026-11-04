@@ -3902,6 +3902,7 @@
     "gaia/device/+/status",
     "gaia/devices/+/audio_devices",
     "gaia/devices/+/dmx_catalog",
+    "gaia/devices/+/dmx_chase",
     "gaia/devices/+/dmx_effects",
     "gaia/devices/+/dmx_layout",
     "gaia/devices/+/dmx_live",

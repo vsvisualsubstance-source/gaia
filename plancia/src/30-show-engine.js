@@ -236,6 +236,8 @@ function timelineToTD(w){
     const placeholder=(known&&c.name===known.id)||/^Cue( \d+)?$/.test(c.name);
     const d={time:+c.t.toFixed(3),scene:c.sceneId!=null?c.sceneId:c.scene==null?null:known?known.id:c.scene,label:placeholder?'':c.name};
     if(c.fade!=null)d.fade=c.fade;
+    // cue di sole teste su una traccia sua (nota TD 60): GO/BACK restano sulle luci
+    if(tdTimelineHas('track')&&known&&(known.categories||[]).length&&known.categories.every(x=>x==='heads'))d.track='teste';
     return d;
   });
   // traccia SEQUENZE: i chase diventano cue "⟳ …" (63-chase-ui.js), rigenerate a ogni invio
@@ -245,6 +247,8 @@ function timelineToTD(w){
   const motion=hmTimelineMotion();if(motion!==undefined)doc.motion=motion;
   // traccia EFFETTI (nota TD 59), stessa regola
   const effects=fxTimelineEffects();if(effects!==undefined)doc.effects=effects;
+  // traccia SEQUENZE con i chase dentro DMX Master (nota TD 60), stessa regola
+  const ch=chaseTimelineDoc();if(ch!==undefined)doc.chases=ch;
   if(w.tdBaseRev)doc.base_rev=w.tdBaseRev;
   return{doc,notes};
 }
