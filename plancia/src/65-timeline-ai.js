@@ -80,6 +80,11 @@ function auditTimeline(d){
   sorted(d.laserCues).forEach(c=>{if(c.scene&&!has(d.laserScenes,c.scene))add('errore','LASER',c.time,'La scena laser di questa cue non esiste più.');
     if(!c.mode&&!c.scene)add('errore','LASER',c.time,'Cue laser senza sorgente né scena.')});
   sorted(d.videoCues).forEach(c=>{if(!c.deck&&!c.show&&c.show!=='')add('info','VIDEO',c.time,'Cue video senza deck né uscita.')});
+  // patch: palette fissata sulla singola luce, vince su quella del rig e le scene non la cambiano
+  // (2026-11-04: PAR1 e BAR1 con "Fire Inverted", "sempre azzurre" con qualunque scena)
+  const fixed=(d.patchFixtures||[]).filter(f=>f.palette&&f.group!=='heads');
+  if(fixed.length&&cues.some(c=>cats(c.sceneId).some(x=>x==='palette'||x==='rigs')))
+    add('attenzione','PATCH',0,`${fixed.map(f=>`${f.name} ("${f.palette}")`).join(', ')}: palette fissata sulla luce, le scene colore non la cambiano. Se la luce deve seguire il suo gruppo: pagina Luci, tocca la luce, "Segue il rig".`);
   // patch: indirizzi sovrapposti nello stesso universo
   const fp=d.footprint||(()=>0),spans=(d.fixtures||[]).filter(f=>+f.address>0&&fp(f)>0).map(f=>({f,a:+f.address,b:+f.address+fp(f)-1,u:f.universe}));
   spans.forEach((x,i)=>spans.slice(i+1).forEach(y=>{if(x.u===y.u&&x.a<=y.b&&y.a<=x.b)add('errore','PATCH',0,`${x.f.name} (${x.a}-${x.b}) e ${y.f.name} (${y.a}-${y.b}) si sovrappongono nell'universo ${x.u}.`)}));
@@ -113,7 +118,7 @@ if(typeof module==='object'&&module.exports)module.exports={auditTimeline,expand
 function timelineAuditData(w){
   const scenes=tdScenes(),cues=L.tlTdDirty||w.cues?parseCues(w):timelineCues(w); // quello che partirebbe con ⇪ TD
   return{cues,duration:timelineDuration(w),bpm:+w.bpm||hmBpm(),scenes,chases:chases(),chaseCues:chaseDoc().cues,fx:lightFx(),fxCues:fxDoc().cues,motions:hmScenes(),motionCues:hmDoc().cues,
-    chasesInTd:chaseTdReady(),patchGroups:[...new Set((tdParams().dmx_fixtures||[]).filter(f=>f.enabled!==0&&f.group!=='heads').map(f=>f.group))],laserScenes:laserScenes(),laserCues:laserDoc().cues,videoCues:videoDoc().cues,fixtures:L.fixtures,groups:groupsOf(),footprint:f=>modelFootprint(f.model||typeDefaultModel(f.type))||0};
+    chasesInTd:chaseTdReady(),patchFixtures:(tdParams().dmx_fixtures||[]).filter(f=>f.enabled!==0),patchGroups:[...new Set((tdParams().dmx_fixtures||[]).filter(f=>f.enabled!==0&&f.group!=='heads').map(f=>f.group))],laserScenes:laserScenes(),laserCues:laserDoc().cues,videoCues:videoDoc().cues,fixtures:L.fixtures,groups:groupsOf(),footprint:f=>modelFootprint(f.model||typeDefaultModel(f.type))||0};
 }
 function openTimelineAudit(w){
   const list=auditTimeline(timelineAuditData(w)),s=$('#scrim');s.hidden=false;
