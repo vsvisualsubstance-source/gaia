@@ -39,7 +39,8 @@ function cueIsHeads(c){const sc=c?.sceneId?tdScenes().find(s=>s.id===c.sceneId):
 // cue che riposiziona le teste: anche una scena completa (colori + teste) in LUCI
 function cueTouchesHeads(c){const sc=c?.sceneId?tdScenes().find(s=>s.id===c.sceneId):null;return!!sc&&(sc.categories||[]).includes('heads')}
 function sceneKind(categories){
-  const c=[...new Set(categories||[])],one={rigs:'color',palette:'color',heads:'heads',strobe:'strobe',groups:'groups',audio:'audio'};
+  const c=[...new Set(categories||[])],one={rigs:'color',palette:'color',heads:'heads',heads_color:'heads',strobe:'strobe',groups:'groups',audio:'audio'};
+  if(c.length===2&&c.includes('heads')&&c.includes('heads_color'))return SCENE_KINDS.find(k=>k.id==='heads');
   let id='mixed';
   if(c.length>=3||(c.includes('heads')&&c.some(x=>x==='rigs'||x==='palette')))id='full';
   else if(c.length&&c.every(x=>x==='rigs'||x==='palette'))id='color';

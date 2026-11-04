@@ -63,6 +63,37 @@ async function main() {
     check(pr.final.join() === 'Locale 2,Solo TD' && pr.tdNames.join() === 'Solo TD,Locale 2', `nuovo, rinomina ed elimina valgono in tutte e due: Plancia ${pr.final.join(', ')} · TD ${pr.tdNames.join(', ')}`);
     check(pr.pub.join() === 'heads_preset_store,heads_preset_store,heads_preset_rename,heads_preset_remove', `comandi a DMX Master: ${pr.pub.join(', ')}`);
 
+    // colore che segue un gruppo (nota TD 64) e scene "solo colore" in TESTE POS. (OPS 47)
+    const fl = JSON.parse(await p.ev(`(async()=>{const T=window.__planciaTest,z=ms=>new Promise(r=>setTimeout(r,ms)),d=T.G.devices['td-dmx-win'],pub=[];
+      T.G.dxm['td-dmx-win'].heads.programmer.color_follow_groups=[{group:'rig_a',alias:'front',label:'Front'},{group:'rig_b',alias:'back',label:'Back'}];
+      d.params.heads_color_follow=null;d.params.show_scene_catalog=[{id:'teste_pubblico',index:0,label:'Teste pubblico',categories:['heads']}];let seq=0;
+      const was={ok:T.G.ok,client:T.G.client};T.G.ok=true;T.G.client={publish:(t,b)=>{const m=JSON.parse(b);pub.push(m.param||m.address||'');
+        if(m.param==='heads_color_follow')d.params.heads_color_follow=m.value;
+        if(m.param==='show_scene_capture'){const c=d.params.show_scene_catalog;c.push({id:m.value.name,index:c.length,label:m.value.label,categories:m.value.categories})}
+        d.params.heads_last_result={seq:++seq,ok:true}}};
+      await z(1200);const pg=T.L.pages.find(x=>x.name==='Teste mobili'),col=pg.widgets.find(w=>w.type==='color'&&w.addr==='/mh/color'),el=()=>document.querySelector('[data-id="'+col.id+'"]');
+      const btns=[...el().querySelectorAll('[data-fl]')].map(b=>b.textContent);
+      el().querySelector('[data-fl="rig_b"]').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));await z(900);
+      const on=[...el().querySelectorAll('[data-fl].on')].map(b=>b.textContent);
+      // senza la categoria heads_color le scelte rapide non ci sono
+      const lane=async()=>{const tl=T.L.pages.find(x=>x.name==='Timeline').widgets.find(x=>x.type==='timeline');
+        [...document.querySelectorAll('#groups > *')].find(b=>b.textContent==='Show').click();await z(200);
+        [...document.querySelectorAll('#tabs > *')].find(b=>b.textContent==='Timeline').click();await z(500);
+        const l=document.querySelector('[data-id="'+tl.id+'"] [data-trk="heads"]')||document.querySelector('[data-id="'+tl.id+'"] .tl-hlane');
+        const r=l.getBoundingClientRect();l.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,clientX:r.left+r.width*.3,clientY:r.top+5}));await z(300);
+        return[...document.querySelectorAll('.ui-choose button')].map(b=>b.textContent)};
+      const without=(await lane()).filter(x=>x.startsWith('🎨'));document.querySelector('.ui-choose [data-v="cancel"],.ui-choose .ghost')?.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));await z(200);
+      T.G.dxm['td-dmx-win'].show={...(T.G.dxm['td-dmx-win'].show||{}),categories:[{id:'heads',label:'Teste'},{id:'heads_color',label:'Colore teste'}]};
+      const withCat=(await lane()).filter(x=>x.startsWith('🎨'));
+      const b=[...document.querySelectorAll('.ui-choose button')].find(x=>x.textContent==='🎨 Colore: Rot');b.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));await z(1800);
+      const made=d.params.show_scene_catalog.find(s=>s.id==='teste_col_rot');
+      T.G.ok=was.ok;T.G.client=was.client;
+      return JSON.stringify({btns,on,without,withCat,made,pub:pub.filter(x=>/color|scene_capture/.test(x))})})()`));
+    check(fl.btns.join() === 'Fisso,segue Front,segue Back' && fl.on.join() === 'segue Back', `Colore teste: Fisso / segue… (${fl.btns.join(', ')}; acceso ${fl.on.join()})`);
+    check(fl.without.length === 0, 'TESTE POS.: senza la categoria solo colore, niente scelte rapide');
+    check(fl.withCat.includes('🎨 Colore: Rot') && fl.withCat.includes('🎨 Colore: segue Back'), `TESTE POS.: con la categoria, ${fl.withCat.join(', ')}`);
+    check(fl.made && JSON.stringify(fl.made.categories) === '["heads_color"]' && fl.pub.join() === 'heads_color_follow,show_scene_capture', `scena solo colore creata: ${JSON.stringify(fl.made)} · ${fl.pub.join(', ')}`);
+
     // pagina movimento: un layout uiRev 15 con i doppioni
     const mv = JSON.parse(await p.ev(`(()=>{const T=window.__planciaTest,W=(type,x,y,w,h,o={})=>({id:'m'+Math.random(),type,x,y,w,h,label:type,addr:'',...o});
       const pg={id:'tm',name:'Teste · movimento',widgets:[W('timeline',0,0,16,4,{addr:'/show',tracks:['heads','motion']}),W('headmotion',0,4,9,6),W('scenes',9,4,7,2,{addr:'/mh/select/heads',mode:'head-select'}),

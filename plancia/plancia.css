@@ -745,3 +745,7 @@ button{cursor:pointer}
 
 /* preset delle teste: dove sta ognuno (2026-11-04) */
 .pr-where{font:10.5px var(--mono);white-space:nowrap}.pr-sync{gap:8px;flex-wrap:wrap}
+
+/* colore teste: fisso o segue un gruppo (nota TD 64) */
+.cw-follow{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0}.cw-follow button{font:600 10.5px var(--mono);padding:3px 7px;border-radius:4px;border:1px solid var(--line);background:var(--bg);color:var(--dim)}
+.cw-follow button.on{color:var(--fg,#fff);border-color:var(--accent);background:color-mix(in srgb,var(--accent) 22%,transparent)}

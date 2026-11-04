@@ -105,8 +105,10 @@ registerWidget('color',{size:[4,4],label:'Colore',
   receive:(w,args)=>{if(args.length>2){const[h,s]=rgb2hsv(+args[0],+args[1],+args[2]);w.value={h,s}}return true},
   // teste a ruota: sotto la ruota gli slot del modello (/mh/colorwheel i); il pad resta, TD sceglie lo slot piu' vicino
   inner:w=>{const wh=(w.addr||'').startsWith('/mh')?headWheel():[];
-    return`<div class="cw"><div class="disc"><i class="mk"></i></div><div class="sws${wh.length?' whl':''}">${wh.length?wh.map((c,i)=>`<i data-wh="${i}" title="${esc(headSlotName(c.name))}" style="--s:${hex(c.rgb||[1,1,1])}"></i>`).join(''):SWC.map((c,i)=>`<i data-s="${i}" style="--s:${hex(c)}"></i>`).join('')}</div></div>`},
-  tick(el,w,{repaint}){if(repaint&&(w.addr||'').startsWith('/mh')&&headSigChanged(w,JSON.stringify(headWheel().map(c=>c.rgb))))refresh(w)},
+    const fg=(w.addr||'').startsWith('/mh')?headFollowGroups():null;
+    return`<div class="cw"><div class="disc"><i class="mk"></i></div>${fg?`<div class="cw-follow" title="Le teste prendono il colore di un gruppo di luci (DMX Master sceglie lo slot più vicino)"><button data-fl="">Fisso</button>${fg.map(g=>`<button data-fl="${esc(g.group)}">segue ${esc(g.label||g.group)}</button>`).join('')}</div>`:''}<div class="sws${wh.length?' whl':''}">${wh.length?wh.map((c,i)=>`<i data-wh="${i}" title="${esc(headSlotName(c.name))}" style="--s:${hex(c.rgb||[1,1,1])}"></i>`).join(''):SWC.map((c,i)=>`<i data-s="${i}" style="--s:${hex(c)}"></i>`).join('')}</div></div>`},
+  tick(el,w,{repaint}){if(!repaint||!(w.addr||'').startsWith('/mh'))return;if(headSigChanged(w,JSON.stringify([headWheel().map(c=>c.rgb),headFollowGroups()])))refresh(w);
+    const cur=headFollow()||'';el.querySelectorAll('[data-fl]').forEach(b=>b.classList.toggle('on',b.dataset.fl===cur))},
   paint(el,w){
     const h=w.value?.h??0,s=w.value?.s??0,mk=el.querySelector('.mk');
     mk.style.left=50+Math.cos(h*2*Math.PI)*s*50+'%';mk.style.top=50+Math.sin(h*2*Math.PI)*s*50+'%';
@@ -116,6 +118,8 @@ registerWidget('color',{size:[4,4],label:'Colore',
   args:w=>colorRGB(w).map(x=>+x.toFixed(4)),          // r g b 0..1
   // un campione sotto la ruota, oppure la ruota (tinta = angolo, saturazione = distanza dal centro)
   onPointer(e,el,w){
+    const fl=e.target.closest('[data-fl]');
+    if(fl){e.preventDefault();setHeadFollow(fl.dataset.fl);return}
     const wh=e.target.closest('[data-wh]');
     if(wh){e.preventDefault();const i=+wh.dataset.wh,c=headWheel()[i];if(c?.rgb){const [h,s]=rgb2hsv(...c.rgb);w.value={h,s};paint(el,w)}fire('/mh/colorwheel',[i],w.oscChannel);save();return}
     const end=startDrag(el,e),sw=e.target.closest('[data-s]');

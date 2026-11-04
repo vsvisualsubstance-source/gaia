@@ -237,7 +237,7 @@ function timelineToTD(w){
     const d={time:+c.t.toFixed(3),scene:c.sceneId!=null?c.sceneId:c.scene==null?null:known?known.id:c.scene,label:placeholder?'':c.name};
     if(c.fade!=null)d.fade=c.fade;
     // cue di sole teste su una traccia sua (nota TD 60): GO/BACK restano sulle luci
-    if(tdTimelineHas('track')&&known&&(known.categories||[]).length&&known.categories.every(x=>x==='heads'))d.track='teste';
+    if(tdTimelineHas('track')&&known&&(known.categories||[]).length&&known.categories.every(x=>x==='heads'||x==='heads_color'))d.track='teste';
     return d;
   });
   // traccia SEQUENZE: i chase diventano cue "⟳ …" (63-chase-ui.js), rigenerate a ogni invio

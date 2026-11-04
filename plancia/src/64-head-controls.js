@@ -71,3 +71,23 @@ function tdHeadsCmd(param,value){
     else if(++n>12){clearInterval(t);ok(null)}},250)});
 }
 const tdPresetSync=(what,p)=>p.catch(e=>showError(`Preset in DMX Master (${what}): ${e.message}`));
+// ---- colore delle teste: fisso o "segue un gruppo" (heads_color_follow, nota TD 64)
+function headFollowGroups(){const g=G.dxm['td-dmx-win']?.heads?.programmer?.color_follow_groups;return Array.isArray(g)&&g.length?g:null}
+function headFollow(){const p=tdParams();if('heads_color_follow' in p)return p.heads_color_follow||null;return headsList()[0]?.color_follow||null}
+const headFollowLabel=g=>headFollowGroups()?.find(x=>x.group===g||x.alias===g)?.label||g;
+function setHeadFollow(group){return tdHeadsCmd('heads_color_follow',group||null).catch(e=>showError('Colore teste: '+e.message))}
+// categoria "solo colore" delle scene teste (chiesta in OPS 47): scene che cambiano
+// colore/gobo/dimmer senza spostare le teste. Finche' TD non la offre, niente scelte rapide.
+function headColorCategory(){return sceneCategoriesFrom(G.dxm['td-dmx-win']).some(c=>c.id==='heads_color')?'heads_color':null}
+const slug=s=>String(s).toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
+// scena "solo colore" per uno slot della ruota o per un "segue": la riusa se c'e' gia'
+async function headColorScene(kind,v){
+  const cat=headColorCategory();if(!cat)throw new Error('DMX Master non offre ancora le scene solo colore delle teste.');
+  const slot=kind==='slot'?headWheel()[v]:null,id=kind==='slot'?`teste_col_${slug(slot?.name||v)}`:`teste_segue_${slug(v)}`;
+  if(tdSceneById(id))return id;
+  if(kind==='slot')fire('/mh/colorwheel',[v]);else await setHeadFollow(v);
+  await new Promise(ok=>setTimeout(ok,700));
+  const label=kind==='slot'?`Teste ${headSlotName(slot?.name||v)}`:`Teste segue ${headFollowLabel(v)}`;
+  await tdSceneCommand('show_scene_capture',{name:id,label,categories:[cat]},()=>!!tdSceneById(id));
+  return id;
+}

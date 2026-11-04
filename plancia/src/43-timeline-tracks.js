@@ -87,7 +87,8 @@ function headsLaneHtml(w,D){
 async function headsLaneTap(w,t,blk){
   const all=timelineCues(w),cue=blk?all[+blk.dataset.k]:null,at=tlSnap(w,t);
   const scenes=tdScenes().filter(s=>sceneKind(s.categories)?.id==='heads');
-  const items=[...scenes.map(s=>({label:s.label||s.id,value:s.id,on:cue?.sceneId===s.id})),{label:'＋ Posizione attuale delle teste (nuova scena)',value:'__new'},
+  const col=headColorCategory()?[...headWheel().map((c,i)=>({label:`🎨 Colore: ${headSlotName(c.name)}`,value:`__slot:${i}`})),...(headFollowGroups()||[]).map(g=>({label:`🎨 Colore: segue ${g.label||g.group}`,value:`__fl:${g.group}`}))]:[];
+  const items=[...scenes.map(s=>({label:s.label||s.id,value:s.id,on:cue?.sceneId===s.id})),...col,{label:'＋ Posizione attuale delle teste (nuova scena)',value:'__new'},
     ...(cue?[{label:`Ricattura "${cue.sceneId}" dalla posizione attuale`,value:'__re'},{label:'Togli questa cue',value:'__del',cls:'danger'}]:[])];
   const pick=await uiChoose(cue?`Cue a ${formatCueTime(cue.t)}: ${cue.name}`:`Da ${formatCueTime(at)} le teste vanno in…`,items);
   if(pick==null)return;
@@ -95,6 +96,8 @@ async function headsLaneTap(w,t,blk){
     let id=pick;
     if(pick==='__re'){await tdSceneCommand('show_scene_capture',{name:cue.sceneId,categories:['heads']},()=>true);showInfo(`Scena "${cue.sceneId}" ricatturata.`);return}
     if(pick==='__new')id=await captureHeadsScene();
+    else if(pick.startsWith('__slot:'))id=await headColorScene('slot',+pick.slice(7));
+    else if(pick.startsWith('__fl:'))id=await headColorScene('follow',pick.slice(5));
     const doc=isShowTimeline(w)&&showClock.authority?tdTimelineDoc():null;
     let list=doc?timelineFromTD(doc):parseCues(w).map(c=>({t:c.t,name:c.name,targets:cueTargets(c)}));
     const same=c=>cue&&Math.abs(c.t-cue.t)<.01;

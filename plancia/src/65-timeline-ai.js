@@ -7,7 +7,7 @@ const AUDIT_CHANNELS_HEADS=['dimmer','strobe'];
 function auditTimeline(d){
   const out=[],add=(level,track,t,msg)=>out.push({level,track,t,msg}),D=+d.duration||0,bpm=+d.bpm>0?+d.bpm:120;
   const has=(list,id)=>(list||[]).some(x=>x.id===id),scene=id=>(d.scenes||[]).find(s=>s.id===id);
-  const cats=id=>scene(id)?.categories||[],isHeads=id=>{const c=cats(id);return c.length>0&&c.every(x=>x==='heads')};
+  const cats=id=>scene(id)?.categories||[],isHeads=id=>{const c=cats(id);return c.length>0&&c.every(x=>x==='heads'||x==='heads_color')};
   const secs=h=>h?.unit==='s'?+h.value||0:(+h?.value||0)*60/bpm;
   const sorted=l=>[...(l||[])].filter(c=>Number.isFinite(+c.time)).sort((a,b)=>a.time-b.time);
   const past=(track,list)=>sorted(list).forEach(c=>{if(D&&c.time>=D)add('errore',track,c.time,`Cue oltre la fine della timeline (${D} s): non partirà mai.`)});
