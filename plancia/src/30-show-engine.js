@@ -324,63 +324,88 @@ function saveHeadPresets(w,presets){
 }
 function recallHeadPreset(w,index){
   const preset=w.headPresets?.[index];if(!preset)return;
+  // in DMX Master: richiama il suo (look vero di ogni testa), qui si aggiornano solo i controlli
+  const td=tdPresetId(preset.name);
   let recalled=0;
   for(const saved of preset.values||[]){
     const control=page().widgets.find(item=>item.id===saved.id&&item.addr?.startsWith('/mh/'));
     if(!control)continue;
     control.value=JSON.parse(JSON.stringify(saved.value));
     if(Number.isFinite(saved.valueY))control.valueY=saved.valueY;
-    paint(elOf(control.id),control);fire(control.addr,argsOf(control),control.oscChannel);recalled++;
+    paint(elOf(control.id),control);if(!td)fire(control.addr,argsOf(control),control.oscChannel);recalled++;
   }
+  if(td){tdPresetSync('richiamo',tdHeadsCmd('heads_preset_recall',{preset:td}));save();closeSheet();return}
   if(!recalled){showError(`Preset "${preset.name}" non contiene controlli PTZ presenti in questa pagina.`);return}
   save();closeSheet();
 }
 function renderHeadPresetEditor(w,presets){
   const s=$('#scrim');s.hidden=false;
+  const tdList=tdHeadPresets(),hasTd=tdList!==null,inTd=p=>!!tdPresetId(p.name);
+  const onlyTd=(tdList||[]).filter(x=>!presets.some(p=>presetKey(p.name)===presetKey(x.label)||presetKey(p.name)===presetKey(x.preset)));
+  const missing=presets.filter(p=>!inTd(p)&&(p.values||[]).length);
   const rows=presets.map((p,i)=>`<div class="preset-edit-row" data-preset-row="${i}">
     <input data-preset-name="${i}" value="${esc(p.name)}" aria-label="Nome preset ${i+1}">
+    ${hasTd?`<span class="hint pr-where">${inTd(p)?'✓ Plancia e DMX Master':(p.values||[]).length?'solo Plancia':'solo DMX Master'}</span>`:''}
     <div class="row">
       <button class="btn sm" data-preset-action="recall" data-preset-index="${i}">Richiama</button>
-      <button class="btn sm" data-preset-action="update" data-preset-index="${i}">Aggiorna</button>
+      <button class="btn sm" data-preset-action="update" data-preset-index="${i}" title="Salva di nuovo dai controlli e dalle teste selezionate">Aggiorna</button>
       <button class="btn sm" data-preset-action="up" data-preset-index="${i}" aria-label="Sposta preset su"${i===0?' disabled':''}>↑</button>
       <button class="btn sm" data-preset-action="down" data-preset-index="${i}" aria-label="Sposta preset giù"${i===presets.length-1?' disabled':''}>↓</button>
       <button class="btn sm danger" data-preset-action="delete" data-preset-index="${i}" aria-label="Elimina preset">×</button>
     </div>
   </div>`).join('');
   s.innerHTML=`<div class="sheet" role="dialog" aria-label="Preset teste mobili">
-    <div class="top"><h3>Preset PTZ · ${esc(w.label)}</h3><button class="btn ghost" id="presetClose">Chiudi</button></div>
-    <p class="hint">I preset salvati qui sono snapshot dei controlli PTZ di questa pagina, condivisi nel layout OPS. Il richiamo invia gli stessi controlli OSC alle teste attualmente selezionate; non salva un preset interno a TD.</p>
+    <div class="top"><h3>Preset teste · ${esc(w.label)}</h3><button class="btn ghost" id="presetClose">Chiudi</button></div>
+    <p class="hint">${hasTd?'Ogni preset si salva <b>in tutte e due le parti</b>: qui i controlli della pagina, in DMX Master il look vero delle teste selezionate. Rinomina ed elimina valgono per tutte e due.':'DMX Master non pubblica i suoi preset: per ora si salvano solo qui. Quando si collega, ⇪ TD li manda.'}</p>
     <div class="preset-edit-list">${rows||'<p class="hint">Nessun preset salvato.</p>'}</div>
+    ${hasTd&&(missing.length||onlyTd.length)?`<div class="row pr-sync">
+      ${missing.length?`<button class="btn" id="presetUp" title="Le teste vanno in ogni preset e DMX Master lo salva">⇪ TD · manda ${missing.length} preset</button>`:''}
+      ${onlyTd.length?`<button class="btn" id="presetDown" title="Preset salvati in DMX Master che qui non ci sono">⇩ TD · prendi ${onlyTd.length} preset</button>`:''}</div>`:''}
     <div class="row"><label style="flex:1">Nuovo preset<input id="presetNewName" placeholder="Es. Controluce alto"></label><button class="btn primary" id="presetAdd" style="align-self:flex-end">Salva preset corrente</button></div>
     <div class="cue-editor-actions"><button class="btn ghost" id="presetDone">Fine</button></div>
   </div>`;
-  const capture=()=>captureHeadControlValues();
+  const capture=()=>captureHeadControlValues(),again=()=>renderHeadPresetEditor(w,presets);
+  const tdStore=name=>hasTd?tdPresetSync('salvataggio',tdHeadsCmd('heads_preset_store',{preset:tdPresetId(name)||name,label:name})):Promise.resolve();
   s.querySelector('#presetClose').onclick=s.querySelector('#presetDone').onclick=closeSheet;
-  s.querySelector('#presetAdd').onclick=()=>{
+  s.querySelector('#presetAdd').onclick=async()=>{
     const name=s.querySelector('#presetNewName').value.trim(),values=capture();
-    if(!name){showError('Inserisci un nome per il preset PTZ.');return}
-    if(presets.some(p=>p.name.toLocaleLowerCase()===name.toLocaleLowerCase())){showError(`Esiste già un preset chiamato "${name}".`);return}
-    if(!values.length){showError('Questa pagina non contiene controlli PTZ da salvare.');return}
-    presets.push({name,values});saveHeadPresets(w,presets);renderHeadPresetEditor(w,presets);
+    if(!name){showError('Inserisci un nome per il preset.');return}
+    if(presets.some(p=>presetKey(p.name)===presetKey(name))){showError(`Esiste già un preset chiamato "${name}".`);return}
+    if(!values.length&&!hasTd){showError('Questa pagina non contiene controlli delle teste da salvare.');return}
+    presets.push({name,values});saveHeadPresets(w,presets);await tdStore(name);again();
   };
   s.querySelectorAll('[data-preset-name]').forEach(input=>input.onchange=()=>{
-    const i=+input.dataset.presetName,name=input.value.trim();
-    if(!name||presets.some((p,k)=>k!==i&&p.name.toLocaleLowerCase()===name.toLocaleLowerCase())){
-      showError('Il nome del preset deve essere presente e univoco.');input.value=presets[i].name;return;
+    const i=+input.dataset.presetName,name=input.value.trim(),old=presets[i].name;
+    if(!name||presets.some((p,k)=>k!==i&&presetKey(p.name)===presetKey(name))){
+      showError('Il nome del preset deve essere presente e univoco.');input.value=old;return;
     }
-    presets[i].name=name;saveHeadPresets(w,presets);
+    const td=tdPresetId(old);presets[i].name=name;saveHeadPresets(w,presets);
+    if(td)tdPresetSync('rinomina',tdHeadsCmd('heads_preset_rename',{preset:td,to:name,label:name}));
   });
-  s.querySelectorAll('[data-preset-action]').forEach(button=>button.onclick=()=>{
-    const i=+button.dataset.presetIndex,action=button.dataset.presetAction;
+  s.querySelectorAll('[data-preset-action]').forEach(button=>button.onclick=async()=>{
+    const i=+button.dataset.presetIndex,action=button.dataset.presetAction,p=presets[i];
     if(action==='recall'){w.headPresets=presets;recallHeadPreset(w,i);return}
     if(action==='update'){
-      const values=capture();if(!values.length){showError('Questa pagina non contiene controlli PTZ da salvare.');return}
-      presets[i].values=values;
-    }else if(action==='delete')presets.splice(i,1);
+      const values=capture();if(!values.length&&!hasTd){showError('Questa pagina non contiene controlli delle teste da salvare.');return}
+      p.values=values;saveHeadPresets(w,presets);await tdStore(p.name);
+    }else if(action==='delete'){const td=tdPresetId(p.name);presets.splice(i,1);saveHeadPresets(w,presets);if(td)await tdPresetSync('eliminazione',tdHeadsCmd('heads_preset_remove',td))}
     else if(action==='up'&&i>0)[presets[i-1],presets[i]]=[presets[i],presets[i-1]];
     else if(action==='down'&&i<presets.length-1)[presets[i+1],presets[i]]=[presets[i],presets[i+1]];
-    saveHeadPresets(w,presets);renderHeadPresetEditor(w,presets);
+    saveHeadPresets(w,presets);again();
   });
+  const up=s.querySelector('#presetUp');
+  if(up)up.onclick=async()=>{
+    if(!await uiConfirm(`Mandare ${missing.length} preset a DMX Master?\nLe teste selezionate vanno in ogni preset, uno dopo l'altro, e DMX Master lo salva.`,{ok:'Manda'}))return;
+    up.disabled=true;
+    for(const p of missing){
+      for(const saved of p.values){const c=page().widgets.find(x=>x.id===saved.id&&x.addr?.startsWith('/mh/'));if(!c)continue;
+        c.value=JSON.parse(JSON.stringify(saved.value));if(Number.isFinite(saved.valueY))c.valueY=saved.valueY;paint(elOf(c.id),c);fire(c.addr,argsOf(c),c.oscChannel)}
+      await new Promise(ok=>setTimeout(ok,600));await tdStore(p.name);
+    }
+    showInfo(`${missing.length} preset mandati a DMX Master.`);again();
+  };
+  const down=s.querySelector('#presetDown');
+  if(down)down.onclick=()=>{for(const x of onlyTd)presets.push({name:x.label||x.preset,values:[]});saveHeadPresets(w,presets);showInfo(`${onlyTd.length} preset presi da DMX Master: si richiamano dal look salvato là.`);again()};
 }
 function openHeadPresetEditor(w){
   renderHeadPresetEditor(w,JSON.parse(JSON.stringify(w.headPresets||[])));

@@ -56,3 +56,18 @@ function migrateUiHeadPages(){
   }
   L.uiRev=16;save();
 }
+// ---- preset delle teste da tutte e due le parti (Plancia e DMX Master), chiave = nome.
+// In TD un preset e' il look vero di ogni testa selezionata (nota TD 31); nella
+// Plancia sono i valori dei controlli della pagina. Si salvano insieme.
+function tdHeadPresets(){const p=tdParams().heads_presets;return Array.isArray(p)?p:null}   // null = TD non li pubblica
+const presetKey=s=>String(s??'').trim().toLocaleLowerCase();
+function tdPresetId(name){const k=presetKey(name),p=(tdHeadPresets()||[]).find(x=>presetKey(x.label)===k||presetKey(x.preset)===k);return p?p.preset:null}
+// comando teste a DMX Master con il suo esito (heads_last_result); senza esito in 3 s non blocca
+function tdHeadsCmd(param,value){
+  const before=tdParams().heads_last_result?.seq;
+  if(!devCmd('td-dmx-win',{action:'set',param,value}))return Promise.reject(new Error('Plancia non collegata a Gaia.'));
+  return new Promise((ok,ko)=>{let n=0;const t=setInterval(()=>{const r=tdParams().heads_last_result;
+    if(r&&r.seq!==before){clearInterval(t);if(r.ok===false)ko(new Error(r.message||'rifiutato da DMX Master'));else ok(r)}
+    else if(++n>12){clearInterval(t);ok(null)}},250)});
+}
+const tdPresetSync=(what,p)=>p.catch(e=>showError(`Preset in DMX Master (${what}): ${e.message}`));

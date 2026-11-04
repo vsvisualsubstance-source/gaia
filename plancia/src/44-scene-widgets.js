@@ -16,7 +16,7 @@ registerWidget('scenes',{oscAddress:w=>!['dmx-enum','head-presets'].includes(w.m
       ${w.mode==='dmx-enum'?`<label>Device DMX V8<select id="fTdDevice"><option value="">Automatico</option>${devIds('dmx').map(id=>`<option value="${esc(id)}"${id===w.device?' selected':''}>${esc(id)}</option>`).join('')}</select></label>
         <label>Parametro enum<select id="fTdParam"><option value="">Automatico · palette preferita</option>${[['Palette dei rig',availableEnums.filter(p=>/_palette$/.test(p.n))],['Altri parametri',availableEnums.filter(p=>!/_palette$/.test(p.n))]].filter(([,l])=>l.length).map(([g,l])=>`<optgroup label="${g}">${l.map(p=>`<option value="${esc(p.n)}"${p.n===w.param?' selected':''}>${esc(p.label)} · ${esc(p.n)}</option>`).join('')}</optgroup>`).join('')}</select></label>
         <p class="hint">Le voci arrivano dalla matrice <code>dmx_matrix</code>; il click invia al device il valore originale dell'enum via MQTT. Nessuna opzione o stato viene inventato.</p>`
-        :w.mode==='head-presets'?'<p class="hint">I preset PTZ si gestiscono dal widget in modalità normale. Sono snapshot locali condivisi nel layout; non sono preset interni al motore TD.</p>'
+        :w.mode==='head-presets'?'<p class="hint">I preset delle teste si gestiscono dal widget (＋ Gestisci): si salvano qui e in DMX Master, con lo stesso nome.</p>'
         :'<p class="hint">Invia l’indice della voce (0, 1, 2…) oppure, in selezione multipla, un elenco di 0 e 1.</p>'}`},
     bind:(w,{on,val})=>{val('#fItems',w.items);val('#fSMode',w.mode||'push');val('#fCols',w.cols||'');
     on('#fItems',v=>w.items=v);$('#fSMode').addEventListener('change',e=>{

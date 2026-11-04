@@ -742,3 +742,6 @@ button{cursor:pointer}
 /* teste: slot della ruota colori, canali che il modello non ha (2026-11-04) */
 .sws.whl{display:flex;flex-wrap:wrap;gap:6px}.sws.whl i{flex:0 0 auto;width:26px;height:26px;border-radius:50%}
 .na .box,.na .track{opacity:.25;pointer-events:none}.na::after{content:'non c\'è sul modello';position:absolute;left:8px;bottom:8px;font:10px var(--mono);color:var(--dim)}
+
+/* preset delle teste: dove sta ognuno (2026-11-04) */
+.pr-where{font:10.5px var(--mono);white-space:nowrap}.pr-sync{gap:8px;flex-wrap:wrap}
