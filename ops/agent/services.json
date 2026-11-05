@@ -147,6 +147,18 @@
         "PYTHONUNBUFFERED": "1"
       },
       "_nota": "2026-10-28: laser gateway, unico mittente verso i LaserCube WiFi (vedi ops/laser/README.md). Pubblica come device 'laser-ops'. MAI kill_tree: il gateway lancia laser_guard.py, che deve sopravvivergli per spegnere i cubi quando terminate() lo chiude senza cleanup."
+    },
+    "audio": {
+      "cmd": [
+        "C:\\gaia\\audio-engine\\target\\release\\gaia-audio.exe",
+        "serve",
+        "--cache",
+        "C:\\gaia\\audio-engine\\cache"
+      ],
+      "cwd": "C:\\gaia\\audio-engine",
+      "check_script": false,
+      "signature": "gaia-audio.exe serve",
+      "_nota": "2026-11-05: motore della Console Audio (docs/console-audio.md), WebSocket solo su 127.0.0.1:8790; il bridge della Plancia si collega da solo. Uscita = quella predefinita di Windows (aggiungere --device NOME per sceglierla). Senza scheda continua con clock interno e riprova ogni 5 s. Con il servizio acceso cargo build non puo' sovrascrivere il .exe: fermarlo prima di ricompilare."
     }
   },
   "camera_consumers": [

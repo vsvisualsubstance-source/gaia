@@ -6,6 +6,9 @@
 // console si prova gia' coi dati veri: tracce, BPM, griglie e forme d'onda
 // arrivano dall'analisi (bridge /api/audio/*, audio-lib.js).
 // Nessun suono nella pagina: l'audio esce solo dal motore, sull'impianto.
+// Col motore collegato (stato audio_state dal bridge, ~15/s) la pagina manda
+// i comandi e mostra lo stato che riceve; la testina si interpola tra uno
+// stato e l'altro. Senza stato per 2,5 s si torna al motore simulato.
 const AU_WAVE_RATE=50;                 // punti/s della forma d'onda di dettaglio
 const AU_RANGES=[.08,.16,.5];          // escursione del fader del tempo
 const AU_HOT=4;                        // hot cue mostrati per deck
@@ -14,7 +17,7 @@ const auDeck=()=>({track:null,wave:null,overImg:null,pos:0,playing:false,tempo:0
   cue:0,hot:Array(AU_HOT_SAVED).fill(null),nudge:0,preview:false,loading:false,zoom:8,snap:true,scrub:false});
 const AU_ZOOMS=[2,4,8,16,32];           // secondi visibili nella forma d'onda del deck
 const auCh=()=>({gain:1,hi:0,mid:0,lo:0,filter:0,fader:1,cue:false,meter:0});
-const AU={tracks:[],libState:'',live:false,last:0,master:'A',
+const AU={tracks:[],libState:'',live:false,liveAt:0,out:null,meterM:0,last:0,master:'A',
   decks:{A:auDeck(),B:auDeck()},mix:{A:auCh(),B:auCh(),xfader:0,master:.9,cue_mix:.5},
   lib:{q:'',folder:'',sort:'folder',dir:1,target:'A'}};
 
@@ -28,15 +31,33 @@ async function auLoadLibrary(refresh){
 function auB64(s){const b=atob(s),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u}
 async function auLoad(deck,id){
   const d=AU.decks[deck];if(d.playing){showError(`Deck ${deck} in onda: fermalo prima di caricare.`);return}
-  d.loading=true;
+  // col motore: carica lui (e legge i punti salvati); la pagina prende solo cio' che serve a disegnare
+  if(AU.live)emit({type:'audio',cmd:'deck.load',deck,track:id},true);
+  await auFetchTrack(deck,id);
+}
+async function auFetchTrack(deck,id){
+  const d=AU.decks[deck];d.loading=true;
   try{const r=await(await fetch('/api/audio/track?id='+encodeURIComponent(id))).json();if(!r.ok)throw new Error(r.error);
-    const t=r.track;Object.assign(d,{track:t,wave:{detail:auB64(t.wave.detail_b64),overview:t.wave.overview},overImg:null,
-      pos:0,cue:t.first_beat||0,hot:Array(AU_HOT_SAVED).fill(null),playing:false,preview:false,nudge:0});
-    // punti salvati con la traccia: si riparte dal cue
-    if(t.cues){d.cue=t.cues.cue??d.cue;d.hot=Array.from({length:AU_HOT_SAVED},(_,i)=>t.cues.hot?.[i]??null)}
-    d.pos=d.cue}
+    const t=r.track;Object.assign(d,{track:t,wave:{detail:auB64(t.wave.detail_b64),overview:t.wave.overview},overImg:null});
+    if(!AU.live){Object.assign(d,{pos:0,cue:t.first_beat||0,hot:Array(AU_HOT_SAVED).fill(null),playing:false,preview:false,nudge:0});
+      // punti salvati con la traccia: si riparte dal cue
+      if(t.cues){d.cue=t.cues.cue??d.cue;d.hot=Array.from({length:AU_HOT_SAVED},(_,i)=>t.cues.hot?.[i]??null)}
+      d.pos=d.cue}}
   catch(e){showError('Console Audio: traccia non caricata ('+e.message+').')}
   d.loading=false;
+}
+// stato dal motore vero: e' lui la fonte di verita'
+function auApplyState(s){
+  const now=performance.now();AU.liveAt=now;AU.live=true;AU.master=s.master==='B'?'B':'A';AU.out=s.outputs?.[0]||null;AU.meterM=+s.meters?.master||0;
+  for(const k of['A','B']){const sd=s.decks?.[k],d=AU.decks[k];if(!sd)continue;
+    for(const f of['playing','tempo','range','keylock','sync','cue','nudge','preview','scrub','snap'])if(sd[f]!=null)d[f]=sd[f];
+    d.hot=Array.from({length:AU_HOT_SAVED},(_,i)=>sd.hot?.[i]??null);
+    if(!d.localScrub)d.pos=sd.pos;d.basePos=sd.pos;d.baseAt=now;
+    // traccia caricata da un altro tablet (o tolta): la pagina prende forma d'onda e griglia
+    const id=sd.track||null;
+    if(id!==(d.track?.id||null)&&!d.loading){if(!id)Object.assign(d,{track:null,wave:null,overImg:null});else auFetchTrack(k,id)}
+    if(s.mix?.[k])Object.assign(AU.mix[k],s.mix[k])}
+  for(const f of['xfader','master','cue_mix'])if(s.mix?.[f]!=null)AU.mix[f]=s.mix[f];
 }
 
 // cue e hot cue salvati con la traccia (bridge -> <id>.cues.json): li ritrova chi la ricarica
@@ -68,7 +89,12 @@ function auSyncPhase(k){
 
 /* ----- motore simulato (solo finche' il motore vero non c'e') ----- */
 function auStep(now){
-  if(AU.live||now===AU.last)return;
+  if(AU.live){
+    if(now-AU.liveAt>2500){AU.live=false;AU.out=null}   // motore sparito: si torna alla simulazione
+    else{AU.last=now;for(const k of['A','B']){const d=AU.decks[k];
+      if(d.playing&&!d.scrub&&!d.localScrub&&d.track&&d.baseAt)d.pos=Math.min(d.track.seconds,d.basePos+(now-d.baseAt)/1000*auRate(d))}
+      return}}
+  if(now===AU.last)return;
   const dt=Math.min(.1,(now-(AU.last||now))/1000);AU.last=now;
   for(const k of['A','B']){const d=AU.decks[k],ch=AU.mix[k];
     if(d.sync)auSyncTempo(k);
@@ -82,7 +108,12 @@ function auXGain(k){const x=(AU.mix.xfader+1)/2;return k==='A'?Math.cos(x*Math.P
 
 /* ----- comandi: un posto solo, poi al motore vero o a quello simulato ----- */
 function auCmd(c){
-  if(AU.live){emit({type:'audio',...c},true);return}
+  if(AU.live){const d=c.deck&&AU.decks[c.deck];
+    if(c.cmd==='deck.zoom'){d.zoom=c.value;return}
+    if(c.cmd==='deck.scrub'&&d.track){d.localScrub=!!c.active;d.pos=Math.max(0,Math.min(d.track.seconds,c.pos))}
+    if(c.cmd==='deck.tempo')d.tempo=c.value;
+    if(c.cmd==='mix.set')Object.assign(c.ch?AU.mix[c.ch]:AU.mix,c.values);
+    emit({type:'audio',...c},true);return}
   const d=c.deck&&AU.decks[c.deck];
   switch(c.cmd){
     case'deck.play':{if(!d.track)return;d.playing=!d.playing;if(d.playing&&d.sync)auSyncPhase(c.deck);
@@ -214,7 +245,7 @@ function auMixerHtml(){
 function auPaintMixer(el){
   const box=el.querySelector('.au-mixer');if(!box)return;
   box.querySelectorAll('.au-meter').forEach(cv=>{const g=auCanvas(cv),W=cv.width,H=cv.height;if(!W)return;
-    const k=cv.dataset.ch,v=k==='M'?Math.min(1,Math.max(AU.mix.A.meter,AU.mix.B.meter)*AU.mix.master):AU.mix[k].meter;
+    const k=cv.dataset.ch,v=Math.min(1,k==='M'?(AU.live?AU.meterM:Math.max(AU.mix.A.meter,AU.mix.B.meter)*AU.mix.master):AU.mix[k].meter);
     g.clearRect(0,0,W,H);g.fillStyle='#272c35';g.fillRect(0,0,W,H);
     const h=v*H;const grd=g.createLinearGradient(0,H,0,0);grd.addColorStop(0,'#4fd18b');grd.addColorStop(.75,'#ffb23e');grd.addColorStop(1,'#ff5d5d');
     g.fillStyle=grd;g.fillRect(0,H-h,W,h)});
@@ -232,7 +263,7 @@ function auLibRows(){
   return list;
 }
 function auLibHtml(){
-  return`<div class="au au-lib"><div class="au-libbar">${AU.live?'':'<span class="au-sim" title="Il motore audio gaia-audio non è ancora collegato: i comandi si provano qui, ma non esce suono">SIMULAZIONE · NESSUN SUONO</span>'}
+  return`<div class="au au-lib"><div class="au-libbar"><span class="au-sim"></span>
     <input type="search" placeholder="Cerca titolo, artista, cartella" data-au-s="q">
     <select data-au-s="folder"></select>
     <span class="au-libn hint"></span>
@@ -243,6 +274,11 @@ function auPaintLib(el){
   const folders=[...new Set(AU.tracks.map(t=>t.folder))].sort();
   const fs=box.querySelector('[data-au-s=folder]'),fsig=folders.join('|');
   if(fs._sig!==fsig){fs._sig=fsig;fs.innerHTML=`<option value="">Tutte le cartelle</option>`+folders.map(f=>`<option>${esc(f)}</option>`).join('');fs.value=AU.lib.folder}
+  const sim=box.querySelector('.au-sim'),o=AU.out;
+  const [st,tip]=!AU.live?['SIMULAZIONE · NESSUN SUONO','Il motore audio gaia-audio non è collegato: i comandi si provano qui, ma non esce suono']
+    :o?.ok?['MOTORE · '+o.device,'Motore gaia-audio collegato: uscita '+o.device+(o.rate?' a '+o.rate+' Hz':'')]
+    :['MOTORE · NESSUNA USCITA','Motore collegato ma senza scheda audio: '+(o?.error||'uscita non aperta')+'. Riprova da solo ogni 5 s.'];
+  if(sim.textContent!==st){sim.textContent=st;sim.title=tip;sim.classList.toggle('live',!!(AU.live&&o?.ok))}
   const rows=auLibRows(),loaded=['A','B'].map(k=>AU.decks[k].track?.id||'');
   const sig=JSON.stringify([AU.libState,AU.lib,rows.length,rows[0]?.id,rows[rows.length-1]?.id,loaded]);
   const tab=box.querySelector('.au-libtab');if(tab._sig===sig)return;tab._sig=sig;

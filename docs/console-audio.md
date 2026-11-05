@@ -1,7 +1,39 @@
 # Console Audio — motore `gaia-audio` (Rust) + sezione in Plancia
 
-Stato: **progetto** (2026-10-30). Niente di questo e' in esercizio; non va
-in produzione in un giorno di show.
+Stato (2026-11-05): **fase 1 in prova su OPS**. Il motore suona (`gaia-audio
+serve`), il bridge lo collega e la console lo usa quando c'e'; manca la
+prova d'ascolto con l'operatore. Non va in produzione in un giorno di show.
+
+### Fase 1: com'e' fatta (2026-11-05)
+
+- `audio-engine/src/engine.rs`: due deck e mixer dentro la callback dell'uscita
+  (clock = scheda). Stessa logica del motore simulato della pagina: CUE stile
+  CDJ, hot cue (8), salto ai punti, SNAP, SYNC di tempo e fase, MASTER, nudge,
+  fine traccia. Lettura con interpolazione cubica (ricampiona 44,1 -> 48 kHz e
+  il tempo). Keylock: solo la scelta, l'algoritmo e' fase 2.
+- `audio-engine/src/dsp.rs`: EQ a 3 bande (shelf 250 Hz, campana 1,2 kHz,
+  shelf 3 kHz; +6 / -24 dB, tutto a sinistra = taglio), filtro unico (passa
+  basso 20 kHz -> 200 Hz, passa alto 20 Hz -> 6 kHz), guadagni inseguiti in
+  ~10 ms (niente click), fader al quadrato, crossfader a potenza costante,
+  limitatore sul master (tetto -0,2 dB, rilascio 250 ms).
+- `audio-engine/src/serve.rs`: WebSocket `127.0.0.1:8790` (tungstenite),
+  caricamento tracce in un thread a parte (decodifica intera in RAM),
+  `<id>.cues.json` scritto dal motore, stato `audio_state` ~15/s. Senza scheda
+  (o se sparisce) clock interno e nuovo tentativo ogni 5 s; `--no-audio` per le
+  prove, `--device NOME` per scegliere l'uscita.
+- `plancia/audio-engine-link.js`: il bridge si collega al motore (riprova ogni
+  3 s), inoltra `{type:'audio'}` e rimanda a tutte le pagine `audio_state` e
+  `audio_error`.
+- Pagina (`src/52-audio-console.js`): con stato fresco segue il motore e
+  interpola la testina; senza stato per 2,5 s torna al simulato. L'etichetta
+  della libreria dice SIMULAZIONE, MOTORE · <uscita> o MOTORE · NESSUNA USCITA.
+- Agent: servizio `audio` in `ops/agent/services.json` (spento finche' non lo
+  si accende).
+- Prove: `cargo test` (deck, cue, sync, limitatore, comandi) e
+  `plancia/test/audio-engine-live.js` (motore vero `--no-audio` + bridge +
+  pagina: tracce vere, play, SYNC in fase, crossfader, CUE, hot cue salvati).
+- Manca in fase 1: cuffia (cue) su una seconda uscita, piu' uscite insieme
+  (Dante + scheda), stato su MQTT.
 
 ## Cosa serve
 

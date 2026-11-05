@@ -1,7 +1,9 @@
 //! gaia-audio: motore della Console Audio (docs/console-audio.md).
-//! Per ora strumenti da riga di comando; il motore vero (deck, mixer, uscite,
-//! WebSocket) arriva nella fase 1.
 //!
+//!   gaia-audio serve                        il motore: deck, mixer, uscita, WebSocket
+//!       --port 8790      porta WebSocket (solo 127.0.0.1; ci si collega il bridge della Plancia)
+//!       --device NOME    parte del nome dell'uscita (default: quella predefinita di Windows)
+//!       --no-audio       senza scheda: clock interno, per le prove
 //!   gaia-audio list                         uscite audio viste
 //!   gaia-audio analyze [cartella|file ...]  BPM, griglia, forma d'onda (tutta la musica se vuoto)
 //!       --force          rianalizza anche quelle in cache
@@ -15,7 +17,10 @@
 
 mod analysis;
 mod decode;
+mod dsp;
+mod engine;
 mod library;
+mod serve;
 
 use analysis::BpmRange;
 use cpal::traits::{DeviceTrait, HostTrait};
@@ -49,6 +54,9 @@ struct Opts {
     cache: PathBuf,
     range: BpmRange,
     force: bool,
+    port: u16,
+    device: Option<String>,
+    no_audio: bool,
     rest: Vec<String>,
 }
 
@@ -58,6 +66,9 @@ fn parse(args: &[String]) -> Result<Opts, String> {
         cache: std::env::var_os("GAIA_AUDIO_CACHE").map(PathBuf::from).unwrap_or_else(|| "cache".into()),
         range: BpmRange::default(),
         force: false,
+        port: 8790,
+        device: None,
+        no_audio: false,
         rest: Vec::new(),
     };
     let mut it = args.iter();
@@ -66,6 +77,9 @@ fn parse(args: &[String]) -> Result<Opts, String> {
             "--root" => o.root = it.next().ok_or("--root senza cartella")?.into(),
             "--cache" => o.cache = it.next().ok_or("--cache senza cartella")?.into(),
             "--force" => o.force = true,
+            "--port" => o.port = it.next().and_then(|v| v.parse().ok()).ok_or("--port NUMERO")?,
+            "--device" => o.device = Some(it.next().ok_or("--device senza nome")?.clone()),
+            "--no-audio" => o.no_audio = true,
             "--range" => {
                 let v = it.next().ok_or("--range senza valori")?;
                 let (a, b) = v.split_once('-').ok_or("--range MIN-MAX")?;
@@ -149,7 +163,7 @@ fn grid(o: &Opts) -> Result<(), String> {
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let Some(cmd) = args.first().cloned() else {
-        eprintln!("uso: gaia-audio list | analyze [cartella|file ...] | grid FILE ... | index");
+        eprintln!("uso: gaia-audio serve | list | analyze [cartella|file ...] | grid FILE ... | index");
         return ExitCode::FAILURE;
     };
     let o = match parse(&args[1..]) {
@@ -165,6 +179,7 @@ fn main() -> ExitCode {
             Ok(())
         }
         "analyze" => return analyze(&o),
+        "serve" => serve::serve(serve::ServeOpts { root: o.root, cache: o.cache, port: o.port, device: o.device, no_audio: o.no_audio }),
         "grid" => grid(&o),
         "index" => {
             println!("{}", serde_json::to_string_pretty(&library::index(&o.root, &o.cache)).unwrap_or_default());

@@ -18,6 +18,8 @@ function connect(){
   if(m.type==='head_motion'){G.hmSt=m.state||null;return} // stato del motore del movimento teste
   if(m.type==='video'){VIDEO_ST=m.state||null;return} // stato della timeline video dal bridge
   if(m.type==='midi_in'){midiFromBridge(m);return}     // MIDI in ingresso (eseguito dal bridge)
+  if(m.type==='audio_state'){auApplyState(m);return}  // motore audio gaia-audio (Console Audio)
+  if(m.type==='audio_error'){showError('Console Audio: '+(m.message||'errore del motore'));return}
   if(m.type==='midi_ports'){MIDI_PORTS=Array.isArray(m.inputs)?m.inputs:[];return}
     if(m.type==='hello'){
       hello=m;status();

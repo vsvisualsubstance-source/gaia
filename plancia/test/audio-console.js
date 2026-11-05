@@ -22,6 +22,7 @@ async function main() {
   const tmpCache = fs.mkdtempSync(path.join(os.tmpdir(), 'plancia-audio-'));
   for (const n of fs.readdirSync(CACHE)) if (n.endsWith('.json') && !n.endsWith('.cues.json')) fs.copyFileSync(path.join(CACHE, n), path.join(tmpCache, n));
   process.env.AUDIO_CACHE = tmpCache;   // letto dal bridge della prova
+  process.env.AUDIO_ENGINE_URL = 'ws://127.0.0.1:9';   // nessun motore: questa prova e' col simulato
   const p = await startPlancia({ hooks: true });
   const fail = [];
   const check = (ok, msg) => { console.log(`${ok ? 'ok    ' : 'ERRORE'} ${msg}`); if (!ok) fail.push(msg); };

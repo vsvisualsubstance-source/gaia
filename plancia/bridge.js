@@ -298,6 +298,10 @@ function laserLive(address, args) {
   return true;
 }
 // Chase dal vivo (chase-engine.js): /dmx/fade + /dmx/scene verso DMX Master a ogni step.
+// Motore audio (gaia-audio, Rust): stato ed errori del motore a tutte le pagine, cosi' come arrivano
+const audioEngine = require('./audio-engine-link').startAudioEngineLink({
+  onMessage: s => { for (const c of wss.clients) if (c.readyState === 1) c.send(s); },
+});
 const chase = require('./chase-engine').startChase({ broadcast,
   sendOsc: (address, args) => { const to = routeOf(address, 'default'); if (to) udp.send(encode(address, args), to.port, to.host, () => {}); }
 });
@@ -346,6 +350,8 @@ wss.on('connection', ws => {
       if (m.action === 'play') headMotion.play(m.scene, m.bpm); else if (m.action === 'stop') headMotion.stop();
     } else if (m.type === 'chase') {
       if (m.action === 'play') chase.play(m.chase, m.bpm); else if (m.action === 'stop') chase.stop();
+    } else if (m.type === 'audio') {
+      if (!audioEngine.send(m) && ws.readyState === 1) ws.send(JSON.stringify({ type: 'audio_error', message: 'Motore audio non collegato.' }));
     } else if (m.type === 'tempo' && +m.bpm > 0) {
       headMotion.tempo(+m.bpm); chase.tempo(+m.bpm);
     } else if (m.type === 'osc' && typeof m.address === 'string' && m.address.startsWith('/')) {
