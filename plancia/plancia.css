@@ -741,7 +741,7 @@ button{cursor:pointer}
 
 /* teste: slot della ruota colori, canali che il modello non ha (2026-11-04) */
 .sws.whl{display:flex;flex-wrap:wrap;gap:6px}.sws.whl i{flex:0 0 auto;width:26px;height:26px;border-radius:50%}
-.na .box,.na .track{opacity:.25;pointer-events:none}.na::after{content:'non c\'è sul modello';position:absolute;left:8px;bottom:8px;font:10px var(--mono);color:var(--dim)}
+.t-fader.na .box,.t-fader.na .track{opacity:.25;pointer-events:none}.t-fader.na::after{content:'non c\'è sul modello';position:absolute;left:8px;bottom:8px;font:10px var(--mono);color:var(--dim)}
 
 /* preset delle teste: dove sta ognuno (2026-11-04) */
 .pr-where{font:10.5px var(--mono);white-space:nowrap}.pr-sync{gap:8px;flex-wrap:wrap}
@@ -749,3 +749,15 @@ button{cursor:pointer}
 /* colore teste: fisso o segue un gruppo (nota TD 64) */
 .cw-follow{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0}.cw-follow button{font:600 10.5px var(--mono);padding:3px 7px;border-radius:4px;border:1px solid var(--line);background:var(--bg);color:var(--dim)}
 .cw-follow button.on{color:var(--fg,#fff);border-color:var(--accent);background:color-mix(in srgb,var(--accent) 22%,transparent)}
+
+/* configurazione dei rig (nota TD 68) */
+.rc{display:flex;flex-direction:column;gap:8px;height:calc(100% - 24px);margin-top:24px;min-height:0}
+.rc-groups{display:flex;flex-wrap:wrap;gap:6px}.rc-g{display:flex;flex-direction:column;align-items:flex-start;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:inherit;min-width:92px}
+.rc-g b{font-size:13px}.rc-g small{font:10px var(--mono);color:var(--dim)}.rc-g.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 18%,transparent)}.rc-g.empty{opacity:.6}
+.rc-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.rc-st{margin-left:auto;font-family:var(--mono)}.rc-st.bad{color:var(--bad)}
+.rc-secs{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;overflow:auto;min-height:0;align-content:start}
+.rc-sec{border:1px solid var(--line);border-radius:6px;padding:6px 10px}.rc-sec h4{margin:0 0 6px;font:600 12px var(--mono);text-transform:uppercase;display:flex;align-items:center;gap:6px;cursor:pointer}.rc-sec h4 .btn{margin-left:auto}
+.rc-sec.closed h4{margin:0}
+.rc-fields{display:grid;gap:6px}.rc-f{display:grid;grid-template-columns:120px 1fr auto;align-items:center;gap:8px;font-size:12.5px}
+.rc-f input[type=range]{width:100%}.rc-f output{font:11px var(--mono);min-width:38px;text-align:right}.rc-f select{grid-column:2/4}.rc-f input[type=color]{width:56px;height:26px;padding:0;border:0;background:none}
+.rc-f.na{opacity:.45}.rc-f.na i{font-style:normal;color:var(--accent)}.rc-bool.on{border-color:var(--accent);color:var(--accent)}

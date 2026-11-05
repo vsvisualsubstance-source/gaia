@@ -395,6 +395,17 @@
    ],
    "probes": []
   },
+  "rigconfig": {
+   "label": "Config rig",
+   "size": [
+    16,
+    10
+   ],
+   "args": [
+    -1
+   ],
+   "probes": []
+  },
   "laser": {
    "label": "Laser",
    "size": [
@@ -1637,6 +1648,26 @@
     }
    ]
   },
+  "rigconfig": {
+   "name": "Config rig",
+   "pages": [
+    {
+     "name": "Config rig",
+     "widgets": [
+      [
+       "rigconfig",
+       0,
+       0,
+       16,
+       10,
+       "",
+       "push",
+       "Config rig"
+      ]
+     ]
+    }
+   ]
+  },
   "full": {
    "name": "Show completo",
    "pages": [
@@ -2077,6 +2108,21 @@
        "",
        "push",
        "Audio · reattività dei gruppi"
+      ]
+     ]
+    },
+    {
+     "name": "Config rig",
+     "widgets": [
+      [
+       "rigconfig",
+       0,
+       0,
+       16,
+       10,
+       "",
+       "push",
+       "Config rig"
       ]
      ]
     },
@@ -2877,9 +2923,13 @@
    [
     "migrateUiHeadPages",
     16
+   ],
+   [
+    "migrateUiRigConfig",
+    17
    ]
   ],
-  "uiRev": 16,
+  "uiRev": 17,
   "pages": [
    {
     "name": "Show",
@@ -2911,6 +2961,17 @@
       "",
       "push",
       "Audio · reattività dei gruppi"
+     ]
+    ]
+   },
+   {
+    "name": "Config rig",
+    "widgets": [
+     [
+      "rigconfig",
+      "",
+      "push",
+      "Config rig"
      ]
     ]
    },
@@ -3541,6 +3602,7 @@
     "gaia/devices/+/dmx_matrix",
     "gaia/devices/+/dmx_output",
     "gaia/devices/+/dmx_patch",
+    "gaia/devices/+/dmx_rig_config",
     "gaia/devices/+/dmx_rigs",
     "gaia/devices/+/heads_motion",
     "gaia/devices/+/heads_state",
@@ -3622,7 +3684,7 @@
  },
  "layout": {
   "idempotentOnReload": true,
-  "pages": 15
+  "pages": 16
  },
  "inspector": {
   "gaia": {
@@ -3810,6 +3872,16 @@
    "html": "<h3>Luci</h3> <label>Etichetta<input id=\"fLabel\"></label> <label>Indirizzo OSC<input id=\"fAddr\" class=\"mono\" spellcheck=\"false\" autocapitalize=\"off\"></label> <label>Canale OSC<select id=\"fOscChannel\"><option value=\"\">Predefinito · 192.168.1.73:7020</option></select></label> <p class=\"hint\">La famiglia e l’istanza identificano la destinazione; indirizzo e argomenti restano quelli definiti dal contratto del progetto TD.</p> <label>Colore</label><div class=\"sw\"><button class=\"swb\" data-c=\"#ffb23e\" style=\"--c:#ffb23e\" aria-label=\"Colore #ffb23e\" aria-pressed=\"true\"></button><button class=\"swb\" data-c=\"#3ec9ff\" style=\"--c:#3ec9ff\" aria-label=\"Colore #3ec9ff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#ff5fa2\" style=\"--c:#ff5fa2\" aria-label=\"Colore #ff5fa2\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#9be15d\" style=\"--c:#9be15d\" aria-label=\"Colore #9be15d\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#b18cff\" style=\"--c:#b18cff\" aria-label=\"Colore #b18cff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#e9ebef\" style=\"--c:#e9ebef\" aria-label=\"Colore #e9ebef\" aria-pressed=\"false\"></button></div> <div class=\"row\"><button class=\"btn\" id=\"fDup\">Duplica</button><button class=\"btn danger\" id=\"fDel\">Elimina</button></div>",
    "fields": {
     "fLabel": "Luci",
+    "fAddr": "",
+    "fOscChannel": "",
+    "fDup": "",
+    "fDel": ""
+   }
+  },
+  "rigconfig": {
+   "html": "<h3>Config rig</h3> <label>Etichetta<input id=\"fLabel\"></label> <label>Indirizzo OSC<input id=\"fAddr\" class=\"mono\" spellcheck=\"false\" autocapitalize=\"off\"></label> <label>Canale OSC<select id=\"fOscChannel\"><option value=\"\">Predefinito · 192.168.1.73:7020</option></select></label> <p class=\"hint\">La famiglia e l’istanza identificano la destinazione; indirizzo e argomenti restano quelli definiti dal contratto del progetto TD.</p> <label>Colore</label><div class=\"sw\"><button class=\"swb\" data-c=\"#ffb23e\" style=\"--c:#ffb23e\" aria-label=\"Colore #ffb23e\" aria-pressed=\"true\"></button><button class=\"swb\" data-c=\"#3ec9ff\" style=\"--c:#3ec9ff\" aria-label=\"Colore #3ec9ff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#ff5fa2\" style=\"--c:#ff5fa2\" aria-label=\"Colore #ff5fa2\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#9be15d\" style=\"--c:#9be15d\" aria-label=\"Colore #9be15d\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#b18cff\" style=\"--c:#b18cff\" aria-label=\"Colore #b18cff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#e9ebef\" style=\"--c:#e9ebef\" aria-label=\"Colore #e9ebef\" aria-pressed=\"false\"></button></div> <div class=\"row\"><button class=\"btn\" id=\"fDup\">Duplica</button><button class=\"btn danger\" id=\"fDel\">Elimina</button></div>",
+   "fields": {
+    "fLabel": "Config rig",
     "fAddr": "",
     "fOscChannel": "",
     "fDup": "",

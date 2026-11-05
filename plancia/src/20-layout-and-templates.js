@@ -121,8 +121,10 @@ TPL.sequenze={name:'Sequenze ed effetti',desc:'Chase a step con le scene di DMX 
   W('chase',0,4,8,6,{label:'Chase',color:SWATCH[4]}),
   W('lightfx',8,4,8,6,{label:'Effetti luci',color:SWATCH[1]})
 ])]};
+// configurazione avanzata dei gruppi di luci (widget in 96-rig-config.js, nota TD 68)
+TPL.rigconfig={name:'Config rig',desc:'Configurazione avanzata di ogni gruppo di luci: livello, dimmer, colore, audio e kick.',pages:()=>[P('Config rig',[W('rigconfig',0,0,16,10,{label:'Config rig'})])]};
 TPL.full={name:'Show completo',desc:'Tutte le pagine insieme: Gaia, PatchDeck, DMX V8, panoramica show, DMX, teste mobili, timeline, palco, mix.',
-  pages:()=>['gaia','show','regia','sequenze','luci','audio','laser','dmx','mh','teste','timeline','palco','mix'].flatMap(k=>TPL[k].pages())};
+  pages:()=>['gaia','show','regia','sequenze','luci','audio','rigconfig','laser','dmx','mh','teste','timeline','palco','mix'].flatMap(k=>TPL[k].pages())};
 const sample=()=>({pages:TPL.full.pages(),fixtures:defaultFixtures(),stage:stageDefaults()});
 
 let L=store.get(KEY)||sample();

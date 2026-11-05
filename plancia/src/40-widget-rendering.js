@@ -48,7 +48,7 @@ window.addEventListener('resize',()=>{
 function refresh(w){const o=elOf(w.id); if(o) o.replaceWith(build(w))}
 // Pagine a due livelli: i gruppi nella barra, le pagine del gruppo in una riga sotto
 // (solo se sono piu' di una). p.group sceglie il gruppo; senza, vale il nome; altrimenti "Altro".
-const PAGE_GROUPS=[['Show',['Show','Regia','Timeline']],['Luci',['Luci','Sequenze ed effetti','DMX','Audio']],['Teste',['Teste mobili','Teste · movimento']],
+const PAGE_GROUPS=[['Show',['Show','Regia','Timeline']],['Luci',['Luci','Sequenze ed effetti','DMX','Audio','Config rig']],['Teste',['Teste mobili','Teste · movimento']],
   ['Laser',['Laser']],['Video e audio',['PatchDeck','Console Audio','Mix']],['Sistema',['Gaia','DMX V8','Palco']]];
 const GROUP_LAST={};   // ultima pagina vista di ogni gruppo
 function pageGroup(p){return p?.group||PAGE_GROUPS.find(([,n])=>n.includes(p?.name))?.[0]||'Altro'}
