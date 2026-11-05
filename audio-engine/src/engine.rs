@@ -185,6 +185,9 @@ pub struct Snapshot {
     pub headphones: bool,
     pub headphones_meter: f32,
     pub master_meter: f32,
+    /// picchi del master per canale (meter stereo)
+    pub master_l: f32,
+    pub master_r: f32,
     pub limiter_db: f32,
 }
 
@@ -316,6 +319,8 @@ pub struct Engine {
     lim: f32,
     lim_min: f32,
     master_peak: f32,
+    master_pl: f32,
+    master_pr: f32,
     next_snapshot: u64,
     rx: Receiver<Msg>,
     tx: SyncSender<Out>,
@@ -346,6 +351,8 @@ impl Engine {
             lim: 1.0,
             lim_min: 1.0,
             master_peak: 0.0,
+            master_pl: 0.0,
+            master_pr: 0.0,
             next_snapshot: 0,
             rx,
             tx,
@@ -709,12 +716,16 @@ impl Engine {
             headphones: self.headphones,
             headphones_meter: self.hp_peak,
             master_meter: self.master_peak,
+            master_l: self.master_pl,
+            master_r: self.master_pr,
             limiter_db: 20.0 * self.lim_min.max(1e-4).log10(),
         };
         for st in &mut self.strips {
             st.peak = 0.0;
         }
         self.master_peak = 0.0;
+        self.master_pl = 0.0;
+        self.master_pr = 0.0;
         self.hp_peak = 0.0;
         self.lim_min = 1.0;
         s
@@ -854,6 +865,8 @@ impl Engine {
             self.lim_min = self.lim_min.min(self.lim);
             l *= self.lim;
             r *= self.lim;
+            self.master_pl = self.master_pl.max(l.abs());
+            self.master_pr = self.master_pr.max(r.abs());
             self.master_peak = self.master_peak.max(l.abs()).max(r.abs());
             let o = &mut out[f * ch..(f + 1) * ch];
             o.fill(0.0);

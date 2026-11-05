@@ -48,7 +48,7 @@ async function auFetchTrack(deck,id){
 }
 // stato dal motore vero: e' lui la fonte di verita'
 function auApplyState(s){
-  const now=performance.now();AU.liveAt=now;AU.live=true;AU.master=s.master==='B'?'B':'A';AU.out=s.outputs?.[0]||null;AU.cueOut=(s.outputs||[]).find(o=>o.role==='cue')||null;AU.phones=!!s.headphones;AU.meterM=+s.meters?.master||0;
+  const now=performance.now();AU.liveAt=now;AU.live=true;AU.master=s.master==='B'?'B':'A';AU.out=s.outputs?.[0]||null;AU.cueOut=(s.outputs||[]).find(o=>o.role==='cue')||null;AU.phones=!!s.headphones;AU.meterM=+s.meters?.master||0;AU.meterL=+(s.meters?.master_l??s.meters?.master)||0;AU.meterR=+(s.meters?.master_r??s.meters?.master)||0;
   for(const k of['A','B']){const sd=s.decks?.[k],d=AU.decks[k];if(!sd)continue;
     for(const f of['playing','tempo','range','keylock','sync','cue','nudge','preview','scrub','snap'])if(sd[f]!=null)d[f]=sd[f];
     d.hot=Array.from({length:AU_HOT_SAVED},(_,i)=>sd.hot?.[i]??null);
@@ -257,30 +257,44 @@ function auPaintDeck(el,w){
 }
 
 /* ----- widget: mixer ----- */
+// manopola rotativa: dentro c'e' l'input range di sempre (nascosto), la manopola lo muove
+// trascinando in verticale (su = destra); doppio tocco: torna al centro. bip = arco dal centro.
+const AU_ROT=135;
+function auRot(key,label,min,max,v,ch,title){
+  const bip=min<0||key==='gain';
+  return`<div class="au-rot${bip?' bip':''}" data-au="rot" title="${title||label} (trascina su/giù, doppio tocco: centro)">
+    <svg viewBox="0 0 40 40"><path class="tr" d="${auArc(-AU_ROT,AU_ROT)}"/><path class="val" d=""/><circle class="cap" cx="20" cy="20" r="10.5"/><line class="ptr" x1="20" y1="20" x2="20" y2="10.5"/></svg>
+    <span>${label}</span><input type="range" hidden min="${min}" max="${max}" step="0.01" value="${v}" data-au-r="mix" ${ch?`data-ch="${ch}" `:''}data-key="${key}"></div>`}
+function auArc(a1,a2){const R=16,p=a=>{const r=(a-90)*Math.PI/180;return`${(20+R*Math.cos(r)).toFixed(2)} ${(20+R*Math.sin(r)).toFixed(2)}`};
+  if(Math.abs(a2-a1)<.5)return'';return`M${p(a1)} A${R} ${R} 0 ${a2-a1>180?1:0} 1 ${p(a2)}`}
+function auPaintRot(box){
+  box.querySelectorAll('.au-rot').forEach(el=>{const r=el.querySelector('input'),f=(+r.value-+r.min)/(+r.max-+r.min);
+    if(el._f===f)return;el._f=f;const a=-AU_ROT+2*AU_ROT*f,b=el.classList.contains('bip')?0:-AU_ROT;
+    el.querySelector('.val').setAttribute('d',auArc(Math.min(a,b),Math.max(a,b)));
+    el.querySelector('.ptr').setAttribute('transform',`rotate(${a.toFixed(1)} 20 20)`)})}
 function auStripHtml(k){
-  const knob=(key,label,min,max,v)=>`<label class="au-k"><span>${label}</span><input type="range" min="${min}" max="${max}" step="0.01" value="${v}" data-au-r="mix" data-ch="${k}" data-key="${key}" title="${label} (doppio tocco: centro)"></label>`;
+  const knob=(key,label,min,max,v)=>auRot(key,label,min,max,v,k);
   return`<div class="au-strip" data-ch="${k}"><b class="au-letter">${k}</b>
-    ${knob('gain','GAIN',0,2,1)}${knob('hi','HI',-1,1,0)}${knob('mid','MID',-1,1,0)}${knob('lo','LOW',-1,1,0)}${knob('filter','FILTRO',-1,1,0)}
+    <div class="au-rots">${knob('gain','GAIN',0,2,1)}${knob('hi','HI',-1,1,0)}${knob('mid','MID',-1,1,0)}${knob('lo','LOW',-1,1,0)}${knob('filter','FILTRO',-1,1,0)}</div>
     <button class="au-btn" data-au="chcue" data-ch="${k}" title="Preascolto in cuffia">🎧</button>
     <div class="au-fadrow"><canvas class="au-meter" data-ch="${k}"></canvas><input class="au-vfader" type="range" min="0" max="1" step="0.01" value="1" data-au-r="mix" data-ch="${k}" data-key="fader"></div></div>`}
 function auMixerHtml(){
   return`<div class="au au-mixer"><div class="au-strips">${auStripHtml('A')}
     <div class="au-strip au-mid"><b class="au-letter">M</b>
-      <label class="au-k"><span>MASTER</span><input type="range" min="0" max="1" step="0.01" value=".9" data-au-r="mix" data-key="master"></label>
-      <label class="au-k"><span>CUE · MIX</span><input type="range" min="0" max="1" step="0.01" value=".5" data-au-r="mix" data-key="cue_mix" title="Cuffia: a sinistra solo i canali con 🎧, a destra solo il master"></label>
-      <label class="au-k"><span>CUE · VOL</span><input type="range" min="0" max="1" step="0.01" value=".8" data-au-r="mix" data-key="cue_level" title="Volume della cuffia"></label>
-      <div class="au-fadrow"><canvas class="au-meter" data-ch="M"></canvas></div></div>
+      <div class="au-rots">${auRot('master','MASTER',0,1,.9)}${auRot('cue_mix','CUE · MIX',0,1,.5,null,'Cuffia: a sinistra solo i canali con 🎧, a destra solo il master')}${auRot('cue_level','CUE · VOL',0,1,.8,null,'Volume della cuffia')}</div>
+      <div class="au-fadrow au-mst" title="Uscita master: sinistro e destro"><canvas class="au-meter" data-ch="L"></canvas><canvas class="au-meter" data-ch="R"></canvas><span>L</span><span>R</span></div></div>
     ${auStripHtml('B')}</div>
     <label class="au-xf"><span>A</span><input type="range" min="-1" max="1" step="0.01" value="0" data-au-r="mix" data-key="xfader" title="Crossfader (doppio tocco: centro)"><span>B</span></label></div>`}
 function auPaintMixer(el){
   const box=el.querySelector('.au-mixer');if(!box)return;
   box.querySelectorAll('.au-meter').forEach(cv=>{const g=auCanvas(cv),W=cv.width,H=cv.height;if(!W)return;
-    const k=cv.dataset.ch,v=Math.min(1,k==='M'?(AU.live?AU.meterM:Math.max(AU.mix.A.out||0,AU.mix.B.out||0)*AU.mix.master):AU.mix[k].meter);
+    const k=cv.dataset.ch,sim=()=>Math.max(AU.mix.A.out||0,AU.mix.B.out||0)*AU.mix.master,v=Math.min(1,k==='L'?(AU.live?AU.meterL:sim()):k==='R'?(AU.live?AU.meterR:sim()):AU.mix[k].meter);
     g.clearRect(0,0,W,H);g.fillStyle='#272c35';g.fillRect(0,0,W,H);
     const h=v*H;const grd=g.createLinearGradient(0,H,0,0);grd.addColorStop(0,'#4fd18b');grd.addColorStop(.75,'#ffb23e');grd.addColorStop(1,'#ff5d5d');
     g.fillStyle=grd;g.fillRect(0,H-h,W,h)});
-  box.querySelectorAll('[data-au-r=mix]').forEach(r=>{if(document.activeElement===r)return;
+  box.querySelectorAll('[data-au-r=mix]').forEach(r=>{if(document.activeElement===r||r.parentNode.classList.contains('drag'))return;
     const v=r.dataset.ch?AU.mix[r.dataset.ch][r.dataset.key]:AU.mix[r.dataset.key];if(+r.value!==v)r.value=v});
+  auPaintRot(box);
   // 🎧: senza canali cuffia sull'uscita del motore (scheda a 2 canali) il preascolto non si sente
   const noPh=AU.live&&AU.phones===false;
   box.querySelectorAll('[data-au=chcue]').forEach(b=>{b.classList.toggle('on',AU.mix[b.dataset.ch].cue);b.classList.toggle('na',noPh);
@@ -384,6 +398,10 @@ function auDown(e,el,w){
   if(e.target.closest('input,select'))return;
   const b=e.target.closest('[data-au]');if(!b)return;e.preventDefault();
   const a=b.dataset.au,k=b.closest('[data-deck]')?.dataset.deck||b.dataset.deck;
+  if(a==='rot'){const r=b.querySelector('input'),y0=e.clientY,v0=+r.value,span=+r.max-+r.min;b.classList.add('drag');
+    // 160 px = corsa intera; con Shift piu' fine
+    auHold={move:ev=>{const v=Math.max(+r.min,Math.min(+r.max,v0+(y0-ev.clientY)/(ev.shiftKey?640:160)*span));if(Math.abs(v-+r.value)<.004)return;
+        r.value=v;r.dispatchEvent(new Event('input',{bubbles:true}))},up:()=>b.classList.remove('drag')};return}
   if(a==='play')auCmd({cmd:'deck.play',deck:k});
   else if(a==='cue'){auCmd({cmd:'deck.cue_down',deck:k});auHold={up:()=>auCmd({cmd:'deck.cue_up',deck:k})}}
   else if(a==='sync')auCmd({cmd:'deck.sync',deck:k});
@@ -444,8 +462,8 @@ document.addEventListener('change',e=>{const t=e.target;if(!t.dataset)return;
   else if(t.dataset.auS==='view')AU.lib.view=t.value;
 });
 // doppio tocco su un controllo: torna al centro (tempo 0, EQ 0, crossfader al centro)
-document.addEventListener('dblclick',e=>{const t=e.target;if(!t.dataset||t.type!=='range')return;
-  const home={tempo:0,gain:1,hi:0,mid:0,lo:0,filter:0,xfader:0,cue_mix:.5}[t.dataset.auR==='tempo'?'tempo':t.dataset.key];if(home==null)return;
+document.addEventListener('dblclick',e=>{const t=e.target.closest?.('.au-rot')?.querySelector('input')||e.target;if(!t.dataset||t.type!=='range')return;
+  const home={tempo:0,gain:1,hi:0,mid:0,lo:0,filter:0,xfader:0,cue_mix:.5,master:.9,cue_level:.8}[t.dataset.auR==='tempo'?'tempo':t.dataset.key];if(home==null)return;
   t.value=home;t.dispatchEvent(new Event('input',{bubbles:true}))});
 
 /* ----- registrazione ----- */

@@ -456,7 +456,7 @@ fn state_json(s: crate::engine::Snapshot, out: &OutputInfo, cue: &Option<OutputI
         "type": "audio_state", "t": s.t, "master": s.master,
         "decks": {"A": da, "B": db},
         "mix": {"A": ma, "B": mb, "xfader": s.xfader, "master": s.master_level, "cue_mix": s.cue_mix, "cue_level": s.cue_level},
-        "meters": {"master": s.master_meter, "limiter_db": s.limiter_db, "headphones": s.headphones_meter},
+        "meters": {"master": s.master_meter, "master_l": s.master_l, "master_r": s.master_r, "limiter_db": s.limiter_db, "headphones": s.headphones_meter},
         "headphones": s.headphones,
         "outputs": std::iter::once(json!({"kind": if out.ok { "wasapi" } else { "none" }, "role": "master", "device": out.device, "rate": out.rate, "ok": out.ok, "error": out.error}))
             .chain(cue.iter().map(|c| json!({"kind": "wasapi", "role": "cue", "device": c.device, "rate": c.rate, "ok": c.ok, "error": c.error})))

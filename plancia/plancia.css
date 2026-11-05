@@ -630,6 +630,16 @@ button{cursor:pointer}
 .au-k{display:flex;flex-direction:column;font:10px var(--mono);color:var(--dim)}
 .au-k input{width:100%}
 .au-fadrow{flex:1;display:flex;gap:4px;min-height:60px}
+.au-rots{display:flex;flex-direction:column;align-items:center;gap:1px}
+.au-rot{display:flex;flex-direction:column;align-items:center;cursor:ns-resize;touch-action:none;user-select:none;font:10px var(--mono);color:var(--dim);line-height:1}
+.au-rot svg{width:clamp(28px,4.2vh,40px);height:auto;overflow:visible}
+.au-rot .tr{fill:none;stroke:var(--line2);stroke-width:3.5;stroke-linecap:round}
+.au-rot .val{fill:none;stroke:var(--c);stroke-width:3.5;stroke-linecap:round}
+.au-rot .cap{fill:var(--panel);stroke:var(--line2);stroke-width:1.5}
+.au-rot .ptr{stroke:var(--fg,#e8ecf2);stroke-width:2.5;stroke-linecap:round}
+.au-rot.drag .cap{stroke:var(--c)}
+.au-mst{display:grid;grid-template-columns:10px 10px;grid-template-rows:1fr auto;justify-content:center;column-gap:4px;font:10px var(--mono);color:var(--dim);text-align:center}
+.au-mst .au-meter{width:10px}
 .au-meter{width:8px;height:100%;border-radius:2px}
 .au-vfader{flex:1;writing-mode:vertical-lr;direction:rtl;min-height:0}
 .au-xf{display:flex;align-items:center;gap:6px;font:700 13px var(--display);color:var(--dim)}
