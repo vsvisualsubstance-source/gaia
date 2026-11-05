@@ -327,7 +327,12 @@ document.addEventListener('wheel',e=>{const cv=e.target.closest?.('.au-wave');if
   const k=cv.closest('[data-deck]').dataset.deck,d=AU.decks[k];if(!d.track)return;e.preventDefault();
   if(e.ctrlKey){const i=AU_ZOOMS.indexOf(d.zoom);auCmd({cmd:'deck.zoom',deck:k,value:AU_ZOOMS[Math.max(0,Math.min(AU_ZOOMS.length-1,(i<0?2:i)+Math.sign(e.deltaY)))]});return}
   if(d.playing)return;
-  auCmd({cmd:'deck.scrub',deck:k,active:false,pos:d.pos+Math.sign(e.deltaY)*d.zoom/80})},{passive:false});
+  // col motore la rotella si sente (scrub breve), poi lo scrub si chiude dove si e' arrivati
+  const to=Math.max(0,Math.min(d.track.seconds,d.pos+Math.sign(e.deltaY)*d.zoom/80));
+  if(!AU.live){auCmd({cmd:'deck.scrub',deck:k,active:false,pos:to});return}
+  auCmd({cmd:'deck.scrub',deck:k,active:true,pos:to});clearTimeout(auWheelT);
+  auWheelT=setTimeout(()=>auCmd({cmd:'deck.scrub',deck:k,active:false,pos:AU.decks[k].pos}),180)},{passive:false});
+let auWheelT=null;
 document.addEventListener('pointercancel',()=>{const h=auHold;auHold=null;h?.up?.()});
 document.addEventListener('input',e=>{const t=e.target;if(!t.dataset)return;
   if(t.dataset.auR==='tempo')auCmd({cmd:'deck.tempo',deck:t.dataset.deck,value:+t.value});

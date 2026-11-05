@@ -2,3 +2,4 @@
 /target
 /cache
 /cache-analyze.log
+/serve.log*

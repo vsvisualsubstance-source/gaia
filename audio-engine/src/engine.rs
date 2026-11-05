@@ -13,6 +13,10 @@ use std::sync::mpsc::{Receiver, SyncSender};
 
 pub const HOT: usize = 8;
 const SNAPSHOT_HZ: f64 = 15.0;
+/// scrub a mano: la testina insegue il dito con questo ritardo (s)...
+const SCRUB_TAU: f64 = 0.025;
+/// ...a non piu' di 8 volte la velocita' normale, avanti o indietro
+const SCRUB_MAX: f64 = 8.0;
 
 /// traccia decodificata, stereo interleaved alla sua frequenza
 pub struct TrackData {
@@ -168,11 +172,14 @@ struct Deck {
     preview: bool,
     scrub: bool,
     snap: bool,
+    /// scrub: dove sta il dito (s) e velocita' attuale della testina (s/s)
+    scrub_target: f64,
+    scrub_vel: f64,
 }
 
 impl Deck {
     fn new() -> Self {
-        Deck { track: None, pos: 0.0, playing: false, tempo: 0.0, range: 0.08, keylock: true, sync: false, cue: 0.0, hot: [None; HOT], nudge: 0.0, preview: false, scrub: false, snap: true }
+        Deck { track: None, pos: 0.0, playing: false, tempo: 0.0, range: 0.08, keylock: true, sync: false, cue: 0.0, hot: [None; HOT], nudge: 0.0, preview: false, scrub: false, snap: true, scrub_target: 0.0, scrub_vel: 0.0 }
     }
     fn rate(&self) -> f64 {
         1.0 + self.tempo * self.range + self.nudge
@@ -426,11 +433,19 @@ impl Engine {
                 }
             }
             Scrub(k, active, pos) => {
+                // trascinando la forma d'onda: la testina insegue il dito e si sente (come un vinile)
                 if self.decks[k].track.is_some() && pos.is_finite() {
                     let d = &mut self.decks[k];
-                    d.scrub = active;
-                    d.pos = d.clamp_pos(pos);
-                    if !active {
+                    if active {
+                        if !d.scrub {
+                            d.scrub_vel = 0.0;
+                        }
+                        d.scrub = true;
+                        d.scrub_target = d.clamp_pos(pos);
+                    } else {
+                        d.scrub = false;
+                        d.scrub_vel = 0.0;
+                        d.pos = d.clamp_pos(pos);
                         self.resync_if_playing(k);
                     }
                 }
@@ -627,6 +642,8 @@ impl Engine {
         let smooth = 1.0 - (-1.0 / (0.01 * self.fs)).exp() as f32;
         let release = 1.0 - (-1.0 / (0.25 * self.fs)).exp() as f32;
         let step: [f64; 2] = std::array::from_fn(|k| self.decks[k].rate() / self.fs);
+        let scrub_a = 1.0 - (-1.0 / (0.005 * self.fs)).exp();
+        let fs = self.fs;
         for f in 0..frames {
             let (mut l, mut r) = (0f32, 0f32);
             for k in 0..2 {
@@ -634,15 +651,27 @@ impl Engine {
                 let st = &mut self.strips[k];
                 st.g += (target[k] - st.g) * smooth;
                 let Some(t) = &d.track else { continue };
-                if !d.playing || d.scrub {
+                let (mut a, mut b);
+                if d.scrub {
+                    // velocita' che porta sul dito in SCRUB_TAU, poi morbida (niente scatti)
+                    let want = ((d.scrub_target - d.pos) / SCRUB_TAU).clamp(-SCRUB_MAX, SCRUB_MAX);
+                    d.scrub_vel += (want - d.scrub_vel) * scrub_a;
+                    d.pos = (d.pos + d.scrub_vel / fs).clamp(0.0, t.seconds);
+                    // fermo = silenzio: il volume sale con la velocita' (niente click ne' ronzio)
+                    let g = (d.scrub_vel.abs() / 0.05).min(1.0) as f32;
+                    (a, b) = t.at(d.pos);
+                    a *= g;
+                    b *= g;
+                } else if d.playing {
+                    (a, b) = t.at(d.pos);
+                    d.pos += step[k];
+                    if d.pos >= t.seconds {
+                        d.pos = t.seconds;
+                        d.playing = false;
+                        d.preview = false;
+                    }
+                } else {
                     continue;
-                }
-                let (mut a, mut b) = t.at(d.pos);
-                d.pos += step[k];
-                if d.pos >= t.seconds {
-                    d.pos = t.seconds;
-                    d.playing = false;
-                    d.preview = false;
                 }
                 for eq in st.eq.iter_mut() {
                     a = eq[0].run(a);
@@ -769,6 +798,34 @@ mod tests {
         let dp = (e.decks[0].phase() - e.decks[1].phase()).abs();
         assert!(dp.min(1.0 - dp) < 0.01, "fase {dp}");
         assert_eq!(e.master, 0);
+    }
+
+    #[test]
+    fn scrub_si_sente_e_segue_il_dito() {
+        let (mut e, tx, _o) = engine();
+        tx.send(Msg::Loaded { deck: 0, track: clicks("a", 120.0, 0.0, 20.0), cue: 0.0, hot: [None; HOT] }).unwrap();
+        run(&mut e, 0.01);
+        // fermo: il dito porta la traccia da 1 s a 2 s in mezzo secondo
+        e.command(Cmd::Seek(0, 1.0));
+        let mut buf = vec![0f32; 480 * 2];
+        let mut peak = 0f32;
+        for i in 0..50 {
+            e.command(Cmd::Scrub(0, true, 1.0 + (i as f64 + 1.0) / 50.0));
+            e.render(&mut buf, 2);
+            peak = buf.iter().fold(peak, |m, x| m.max(x.abs()));
+        }
+        assert!(peak > 0.05, "si sente: picco {peak}");
+        run(&mut e, 0.2);
+        assert!((e.decks[0].pos - 2.0).abs() < 0.01, "arriva sul dito: {}", e.decks[0].pos);
+        // dito fermo: silenzio
+        e.render(&mut buf, 2);
+        assert!(buf.iter().all(|x| x.abs() < 1e-3), "fermo = silenzio");
+        // indietro
+        e.command(Cmd::Scrub(0, true, 1.5));
+        run(&mut e, 0.3);
+        assert!((e.decks[0].pos - 1.5).abs() < 0.01);
+        e.command(Cmd::Scrub(0, false, 1.5));
+        assert!(!e.decks[0].scrub && !e.decks[0].playing);
     }
 
     #[test]
