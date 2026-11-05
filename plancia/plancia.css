@@ -761,3 +761,10 @@ button{cursor:pointer}
 .rc-fields{display:grid;gap:6px}.rc-f{display:grid;grid-template-columns:120px 1fr auto;align-items:center;gap:8px;font-size:12.5px}
 .rc-f input[type=range]{width:100%}.rc-f output{font:11px var(--mono);min-width:38px;text-align:right}.rc-f select{grid-column:2/4}.rc-f input[type=color]{width:56px;height:26px;padding:0;border:0;background:none}
 .rc-f.na{opacity:.45}.rc-f.na i{font-style:normal;color:var(--accent)}.rc-bool.on{border-color:var(--accent);color:var(--accent)}
+
+/* config rig: taratura e look (nota TD 69) */
+.rc-body{display:flex;flex-direction:column;gap:10px;overflow:auto;min-height:0}
+.rc-blk{border-top:1px solid var(--line);padding-top:6px}.rc-bh{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}.rc-bh b{font:700 11px var(--mono);letter-spacing:.08em}
+.rc-body .rc-secs{overflow:visible}
+.rc-banner{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 10px;border:1px solid var(--accent);border-radius:6px;background:color-mix(in srgb,var(--accent) 12%,transparent);font-size:12.5px}
+.rc-dot{color:var(--accent);font-style:normal;font-size:10px}
