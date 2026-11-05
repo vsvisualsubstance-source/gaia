@@ -83,4 +83,31 @@ async function saveCues(id, c) {
   return clean;
 }
 
-module.exports = { CACHE, library, track, cues, saveCues, fromFilename };
+// Playlist: globali (come la collezione di Traktor), non del progetto. Un file
+// accanto all'analisi: <cache>/playlists.json = {playlists: [{id, name, tracks: [id...], updated}]}
+const PL_FILE = () => path.join(CACHE, 'playlists.json');
+const MAX_PL = 200, MAX_PL_TRACKS = 2000;
+function cleanPlaylists(list) {
+  if (!Array.isArray(list) || list.length > MAX_PL) throw new Error('playlist: elenco non valido');
+  const seen = new Set();
+  return list.map(p => {
+    const id = String(p?.id || '');
+    if (!/^pl-[a-z0-9]{3,24}$/.test(id) || seen.has(id)) throw new Error('playlist: id non valido');
+    seen.add(id);
+    const name = String(p.name || '').trim().slice(0, 80) || 'Playlist';
+    const tracks = Array.isArray(p.tracks) ? p.tracks.filter(t => typeof t === 'string' && /^[0-9a-f]{16}$/.test(t)).slice(0, MAX_PL_TRACKS) : [];
+    return { id, name, tracks, updated: typeof p.updated === 'string' ? p.updated.slice(0, 30) : new Date().toISOString() };
+  });
+}
+async function playlists() {
+  try { return cleanPlaylists(JSON.parse(await fs.promises.readFile(PL_FILE(), 'utf8')).playlists || []); } catch { return []; }
+}
+async function savePlaylists(list) {
+  const clean = cleanPlaylists(list);
+  await fs.promises.mkdir(CACHE, { recursive: true });
+  await fs.promises.writeFile(PL_FILE() + '.tmp', JSON.stringify({ playlists: clean }, null, 1));
+  await fs.promises.rename(PL_FILE() + '.tmp', PL_FILE());
+  return clean;
+}
+
+module.exports = { CACHE, library, track, cues, saveCues, fromFilename, playlists, savePlaylists, cleanPlaylists };

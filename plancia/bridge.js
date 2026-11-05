@@ -338,6 +338,7 @@ const midiPorts = midiIn.startMidiIn({ onMessage: onMidi, onPorts: inputs => bro
 wss.on('connection', ws => {
   ws.send(hello());
   ws.send(JSON.stringify({ type: 'midi_ports', inputs: midiPorts.ports() }));
+  audioLib.playlists().then(playlists => { if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'audio_playlists', playlists })); });
   ws.on('message', data => {
     let m; try { m = JSON.parse(data); } catch { return; }
     if (m.type === 'shared_state') {
@@ -350,6 +351,10 @@ wss.on('connection', ws => {
       if (m.action === 'play') headMotion.play(m.scene, m.bpm); else if (m.action === 'stop') headMotion.stop();
     } else if (m.type === 'chase') {
       if (m.action === 'play') chase.play(m.chase, m.bpm); else if (m.action === 'stop') chase.stop();
+    } else if (m.type === 'audio_playlists_set') {
+      // playlist della Console Audio: salvate dal bridge, rimandate a tutti i tablet
+      audioLib.savePlaylists(m.playlists).then(playlists => broadcast({ type: 'audio_playlists', playlists }),
+        err => { if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'audio_error', message: err.message })); });
     } else if (m.type === 'audio') {
       if (!audioEngine.send(m) && ws.readyState === 1) ws.send(JSON.stringify({ type: 'audio_error', message: 'Motore audio non collegato.' }));
     } else if (m.type === 'tempo' && +m.bpm > 0) {

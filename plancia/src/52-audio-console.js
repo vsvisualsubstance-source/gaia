@@ -17,9 +17,9 @@ const auDeck=()=>({track:null,wave:null,overImg:null,pos:0,playing:false,tempo:0
   cue:0,hot:Array(AU_HOT_SAVED).fill(null),nudge:0,preview:false,loading:false,zoom:8,snap:true,scrub:false});
 const AU_ZOOMS=[2,4,8,16,32];           // secondi visibili nella forma d'onda del deck
 const auCh=()=>({gain:1,hi:0,mid:0,lo:0,filter:0,fader:1,cue:false,meter:0});
-const AU={tracks:[],libState:'',live:false,liveAt:0,out:null,meterM:0,phones:null,last:0,master:'A',
+const AU={tracks:[],playlists:[],libState:'',live:false,liveAt:0,out:null,meterM:0,phones:null,last:0,master:'A',
   decks:{A:auDeck(),B:auDeck()},mix:{A:auCh(),B:auCh(),xfader:0,master:.9,cue_mix:.5,cue_level:.8},
-  lib:{q:'',folder:'',sort:'folder',dir:1,target:'A'}};
+  lib:{q:'',folder:'',sort:'folder',dir:1,target:'A',view:'',lastPl:''}};
 
 /* ----- libreria (dal bridge) ----- */
 async function auLoadLibrary(refresh){
@@ -259,16 +259,60 @@ function auPaintMixer(el){
     const t=noPh?'Preascolto in cuffia: l\'uscita del motore non ha i canali 3-4 (cuffia)':'Preascolto in cuffia (canali 3-4 della scheda)';if(b.title!==t)b.title=t});
 }
 
-/* ----- widget: libreria ----- */
+/* ----- widget: libreria e playlist ----- */
+// Playlist globali (come la collezione di Traktor): le salva il bridge accanto
+// all'analisi (audio-lib.js, <cache>/playlists.json) e le rimanda a tutti i tablet.
+// AU.lib.view = '' (tutta la libreria) | id della playlist mostrata.
+function auPlaylist(id){return AU.playlists.find(p=>p.id===id)||null}
+function auSavePlaylists(list){
+  if(!bridgeOnline()){showError('Playlist: server OPS non connesso, modifica non salvata.');return false}
+  AU.playlists=list;emit({type:'audio_playlists_set',playlists:list},true);return true;
+}
+function auSetPlaylist(id,fn){const list=AU.playlists.map(p=>p.id===id?{...fn({...p,tracks:[...p.tracks]}),updated:new Date().toISOString()}:p);return auSavePlaylists(list)}
+async function auNewPlaylist(withTrack){
+  const name=(await uiPrompt('Nome della nuova playlist',''))?.trim();if(!name)return null;
+  const p={id:'pl-'+uid()+uid(),name:name.slice(0,80),tracks:withTrack?[withTrack]:[],updated:new Date().toISOString()};
+  if(!auSavePlaylists([...AU.playlists,p]))return null;
+  showInfo(`Playlist "${p.name}" creata${withTrack?' con il brano':''}.`);return p;
+}
+async function auAddToPlaylist(id){
+  const t=AU.tracks.find(x=>x.id===id);if(!t)return;
+  const pick=await uiChoose(`Aggiungi "${t.title}" a…`,[...AU.playlists.map(p=>({label:`${p.name} (${p.tracks.length})`,value:p.id,on:p.id===AU.lib.lastPl})),{label:'＋ Nuova playlist…',value:'__new'}]);
+  if(pick==null)return;
+  if(pick==='__new'){const p=await auNewPlaylist(id);if(p)AU.lib.lastPl=p.id;return}
+  const p=auPlaylist(pick);if(!p)return;AU.lib.lastPl=pick;
+  if(p.tracks.includes(id)){showInfo(`"${t.title}" è già in "${p.name}".`);return}
+  if(auSetPlaylist(pick,x=>({...x,tracks:[...x.tracks,id]})))showInfo(`"${t.title}" aggiunto a "${p.name}" (${p.tracks.length+1}).`);
+}
+async function auPlaylistMenu(){
+  const p=auPlaylist(AU.lib.view);if(!p)return;
+  const pick=await uiChoose(`Playlist "${p.name}"`,[{label:'Rinomina',value:'ren'},{label:'Duplica',value:'dup'},{label:'Svuota',value:'clr'},{label:'Elimina playlist',value:'del',cls:'danger'}]);
+  if(pick==='ren'){const n=(await uiPrompt('Nuovo nome',p.name))?.trim();if(n)auSetPlaylist(p.id,x=>({...x,name:n.slice(0,80)}))}
+  else if(pick==='dup'){const c={...p,id:'pl-'+uid()+uid(),name:(p.name+' (copia)').slice(0,80),tracks:[...p.tracks],updated:new Date().toISOString()};if(auSavePlaylists([...AU.playlists,c]))AU.lib.view=c.id}
+  else if(pick==='clr'){if(await uiConfirm(`Togliere tutti i ${p.tracks.length} brani da "${p.name}"?`,{ok:'Svuota'}))auSetPlaylist(p.id,x=>({...x,tracks:[]}))}
+  else if(pick==='del'){const used=auTimelineUses(p.id);
+    if(!await uiConfirm(`Eliminare la playlist "${p.name}"?${used?`\nÈ usata da ${used} cue della traccia AUDIO: resteranno senza playlist.`:''}\nI brani restano nella libreria.`,{ok:'Elimina'}))return;
+    if(auSavePlaylists(AU.playlists.filter(x=>x.id!==p.id))){AU.lib.view='';showInfo(`Playlist "${p.name}" eliminata.`)}}
+}
+// cue della timeline audio che usano una playlist (pagina Timeline): 0 se il modulo non c'e'
+function auTimelineUses(id){return(L.audioTimeline?.cues||[]).filter(c=>c.src?.kind==='playlist'&&c.src.id===id).length}
 function auLibRows(){
-  const q=AU.lib.q.trim().toLowerCase(),f=AU.lib.folder;
-  let list=AU.tracks.filter(t=>(!f||t.folder===f)&&(!q||(t.title+' '+t.artist+' '+t.folder).toLowerCase().includes(q)));
+  const q=AU.lib.q.trim().toLowerCase(),match=t=>!q||(t.title+' '+t.artist+' '+t.folder).toLowerCase().includes(q);
+  const pl=auPlaylist(AU.lib.view);
+  // playlist: nell'ordine della playlist (i brani tolti dalla libreria restano visibili, da togliere)
+  if(pl){const byId=new Map(AU.tracks.map(t=>[t.id,t]));
+    return pl.tracks.map((id,i)=>({...(byId.get(id)||{id,title:'(brano non più in libreria)',artist:'',folder:'',bpm:0,seconds:0,confidence:0,missing:true}),plIndex:i})).filter(match)}
+  const f=AU.lib.folder;
+  let list=AU.tracks.filter(t=>(!f||t.folder===f)&&match(t));
   const key=AU.lib.sort,dir=AU.lib.dir,val=t=>key==='bpm'?t.bpm:key==='seconds'?t.seconds:key==='confidence'?t.confidence:String(t[key]||'').toLowerCase();
   list=[...list].sort((a,b)=>{const x=val(a),y=val(b);return(x<y?-1:x>y?1:0)*dir});
   return list;
 }
 function auLibHtml(){
   return`<div class="au au-lib"><div class="au-libbar"><span class="au-sim"></span>
+    <select data-au-s="view" title="Tutta la libreria o una playlist"></select>
+    <button class="btn sm ghost" data-au="plnew" title="Nuova playlist">＋ Playlist</button>
+    <button class="btn sm ghost au-plmenu" data-au="plmenu" title="Rinomina, duplica, svuota o elimina la playlist">⋯</button>
     <input type="search" placeholder="Cerca titolo, artista, cartella" data-au-s="q">
     <select data-au-s="folder"></select>
     <span class="au-libn hint"></span>
@@ -276,24 +320,34 @@ function auLibHtml(){
     <div class="au-libtab"></div></div>`}
 function auPaintLib(el){
   const box=el.querySelector('.au-lib');if(!box)return;
+  if(AU.lib.view&&!auPlaylist(AU.lib.view))AU.lib.view='';   // playlist eliminata da un altro tablet
+  const pl=auPlaylist(AU.lib.view);
+  const vs=box.querySelector('[data-au-s=view]'),vsig=JSON.stringify([AU.lib.view,AU.playlists.map(p=>[p.id,p.name,p.tracks.length])]);
+  if(vs._sig!==vsig){vs._sig=vsig;vs.innerHTML=`<option value="">Tutta la libreria</option>`+AU.playlists.map(p=>`<option value="${esc(p.id)}">▶ ${esc(p.name)} (${p.tracks.length})</option>`).join('');vs.value=AU.lib.view}
+  box.querySelector('.au-plmenu').hidden=!pl;
   const folders=[...new Set(AU.tracks.map(t=>t.folder))].sort();
   const fs=box.querySelector('[data-au-s=folder]'),fsig=folders.join('|');
   if(fs._sig!==fsig){fs._sig=fsig;fs.innerHTML=`<option value="">Tutte le cartelle</option>`+folders.map(f=>`<option>${esc(f)}</option>`).join('');fs.value=AU.lib.folder}
+  fs.hidden=!!pl;
   const sim=box.querySelector('.au-sim'),o=AU.out;
   const [st,tip]=!AU.live?['SIMULAZIONE · NESSUN SUONO','Il motore audio gaia-audio non è collegato: i comandi si provano qui, ma non esce suono']
     :o?.ok?['MOTORE · '+o.device,'Motore gaia-audio collegato: uscita '+o.device+(o.rate?' a '+o.rate+' Hz':'')]
     :['MOTORE · NESSUNA USCITA','Motore collegato ma senza scheda audio: '+(o?.error||'uscita non aperta')+'. Riprova da solo ogni 5 s.'];
   if(sim.textContent!==st){sim.textContent=st;sim.title=tip;sim.classList.toggle('live',!!(AU.live&&o?.ok))}
   const rows=auLibRows(),loaded=['A','B'].map(k=>AU.decks[k].track?.id||'');
-  const sig=JSON.stringify([AU.libState,AU.lib,rows.length,rows[0]?.id,rows[rows.length-1]?.id,loaded]);
+  const sig=JSON.stringify([AU.libState,AU.lib,rows.length,rows.map(r=>r.id).join().length,rows[0]?.id,rows[rows.length-1]?.id,loaded,pl?.tracks]);
   const tab=box.querySelector('.au-libtab');if(tab._sig===sig)return;tab._sig=sig;
-  box.querySelector('.au-libn').textContent=AU.libState||`${rows.length} di ${AU.tracks.length} tracce`;
-  const th=(k,l)=>`<th data-au="sort" data-k="${k}"${AU.lib.sort===k?` class="on"`:''}>${l}${AU.lib.sort===k?(AU.lib.dir>0?' ▲':' ▼'):''}</th>`;
-  tab.innerHTML=`<table><thead><tr><th></th>${th('title','Titolo')}${th('artist','Artista')}${th('bpm','BPM')}${th('seconds','Durata')}${th('confidence','Griglia')}${th('folder','Cartella')}</tr></thead><tbody>
-    ${rows.slice(0,400).map(t=>`<tr${loaded.includes(t.id)?' class="on"':''}><td class="au-load"><button class="au-btn" data-au="load" data-deck="A" data-id="${t.id}">A</button><button class="au-btn" data-au="load" data-deck="B" data-id="${t.id}">B</button></td>
-      <td>${esc(t.title)}</td><td class="dim">${esc(t.artist)}</td><td class="num">${t.bpm?t.bpm.toFixed(2):'—'}</td><td class="num">${auFmt(t.seconds)}</td>
-      <td>${t.locked?'<span class="au-gr ok">a mano</span>':t.confidence>=.4?'<span class="au-gr ok">ok</span>':'<span class="au-gr bad">incerta</span>'}</td><td class="dim">${esc(t.folder)}</td></tr>`).join('')}
-    </tbody></table>${rows.length>400?`<p class="hint">Prime 400 di ${rows.length}: cerca o scegli una cartella.</p>`:''}`;
+  const tot=pl?pl.tracks.reduce((s,id)=>s+(AU.tracks.find(t=>t.id===id)?.seconds||0),0):0;
+  box.querySelector('.au-libn').textContent=AU.libState||(pl?`${pl.tracks.length} brani · ${auFmt(tot)}`:`${rows.length} di ${AU.tracks.length} tracce`);
+  const th=(k,l)=>pl?`<th>${l}</th>`:`<th data-au="sort" data-k="${k}"${AU.lib.sort===k?` class="on"`:''}>${l}${AU.lib.sort===k?(AU.lib.dir>0?' ▲':' ▼'):''}</th>`;
+  const n=pl?pl.tracks.length:0;
+  const ctl=t=>pl?`<td class="au-plctl"><button class="au-btn" data-au="plup" data-i="${t.plIndex}"${t.plIndex?'':' disabled'} title="Su">▲</button><button class="au-btn" data-au="pldown" data-i="${t.plIndex}"${t.plIndex<n-1?'':' disabled'} title="Giù">▼</button><button class="au-btn" data-au="plrm" data-i="${t.plIndex}" title="Togli dalla playlist">✕</button></td>`
+    :`<td class="au-plctl"><button class="au-btn" data-au="pladd" data-id="${t.id}" title="Aggiungi a una playlist">＋</button></td>`;
+  tab.innerHTML=`<table><thead><tr><th></th>${pl?'<th>#</th>':''}${th('title','Titolo')}${th('artist','Artista')}${th('bpm','BPM')}${th('seconds','Durata')}${th('confidence','Griglia')}${pl?'':th('folder','Cartella')}<th></th></tr></thead><tbody>
+    ${rows.slice(0,400).map(t=>`<tr${loaded.includes(t.id)?' class="on"':''}${t.missing?' class="au-miss"':''}><td class="au-load">${t.missing?'':`<button class="au-btn" data-au="load" data-deck="A" data-id="${t.id}">A</button><button class="au-btn" data-au="load" data-deck="B" data-id="${t.id}">B</button>`}</td>
+      ${pl?`<td class="num dim">${t.plIndex+1}</td>`:''}<td>${esc(t.title)}</td><td class="dim">${esc(t.artist)}</td><td class="num">${t.bpm?t.bpm.toFixed(2):'—'}</td><td class="num">${t.missing?'—':auFmt(t.seconds)}</td>
+      <td>${t.missing?'':t.locked?'<span class="au-gr ok">a mano</span>':t.confidence>=.4?'<span class="au-gr ok">ok</span>':'<span class="au-gr bad">incerta</span>'}</td>${pl?'':`<td class="dim">${esc(t.folder)}</td>`}${ctl(t)}</tr>`).join('')}
+    </tbody></table>${pl&&!n?'<p class="hint">Playlist vuota: torna a "Tutta la libreria" e aggiungi i brani con ＋.</p>':''}${rows.length>400?`<p class="hint">Prime 400 di ${rows.length}: cerca o scegli una cartella.</p>`:''}`;
 }
 
 /* ----- tocco ----- */
@@ -324,6 +378,12 @@ function auDown(e,el,w){
   else if(a==='load')auLoad(b.dataset.deck,b.dataset.id);
   else if(a==='sort'){const s=b.dataset.k;if(AU.lib.sort===s)AU.lib.dir*=-1;else{AU.lib.sort=s;AU.lib.dir=s==='bpm'||s==='confidence'?-1:1}}
   else if(a==='libreload')auLoadLibrary(true);
+  else if(a==='plnew')auNewPlaylist().then(p=>{if(p)AU.lib.view=p.id});
+  else if(a==='plmenu')auPlaylistMenu();
+  else if(a==='pladd')auAddToPlaylist(b.dataset.id);
+  else if(a==='plup'||a==='pldown'){const i=+b.dataset.i,j=a==='plup'?i-1:i+1;
+    auSetPlaylist(AU.lib.view,x=>{if(j<0||j>=x.tracks.length)return x;[x.tracks[i],x.tracks[j]]=[x.tracks[j],x.tracks[i]];return x})}
+  else if(a==='plrm'){const i=+b.dataset.i;auSetPlaylist(AU.lib.view,x=>{x.tracks.splice(i,1);return x})}
 }
 document.addEventListener('pointerup',()=>{const h=auHold;auHold=null;h?.up?.()});
 document.addEventListener('pointermove',e=>auHold?.move?.(e));
@@ -347,6 +407,7 @@ document.addEventListener('input',e=>{const t=e.target;if(!t.dataset)return;
 document.addEventListener('change',e=>{const t=e.target;if(!t.dataset)return;
   if(t.dataset.auS==='range')auCmd({cmd:'deck.range',deck:t.dataset.deck,value:+t.value});
   else if(t.dataset.auS==='folder')AU.lib.folder=t.value;
+  else if(t.dataset.auS==='view')AU.lib.view=t.value;
 });
 // doppio tocco su un controllo: torna al centro (tempo 0, EQ 0, crossfader al centro)
 document.addEventListener('dblclick',e=>{const t=e.target;if(!t.dataset||t.type!=='range')return;
