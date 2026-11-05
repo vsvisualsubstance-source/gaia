@@ -77,6 +77,7 @@ pub struct MixVals {
     pub xfader: Option<f64>,
     pub master: Option<f64>,
     pub cue_mix: Option<f64>,
+    pub cue_level: Option<f64>,
 }
 
 #[derive(Clone, Debug)]
@@ -154,6 +155,10 @@ pub struct Snapshot {
     pub xfader: f64,
     pub master_level: f64,
     pub cue_mix: f64,
+    pub cue_level: f64,
+    /// l'uscita ha i canali 3-4 per la cuffia
+    pub headphones: bool,
+    pub headphones_meter: f32,
     pub master_meter: f32,
     pub limiter_db: f32,
 }
@@ -221,12 +226,14 @@ struct Strip {
     filt_on: bool,
     /// guadagno lineare attuale (inseguimento morbido, niente click)
     g: f32,
+    /// guadagno verso la cuffia (gain se 🎧 acceso), inseguito come g
+    gc: f32,
     peak: f32,
 }
 
 impl Strip {
     fn new(fs: f64) -> Self {
-        let mut s = Strip { gain: 1.0, hi: 0.0, mid: 0.0, lo: 0.0, filter: 0.0, fader: 1.0, cue: false, eq: [[Biquad::unity(); 2]; 3], filt: [Biquad::unity(); 2], filt_on: false, g: 0.0, peak: 0.0 };
+        let mut s = Strip { gain: 1.0, hi: 0.0, mid: 0.0, lo: 0.0, filter: 0.0, fader: 1.0, cue: false, eq: [[Biquad::unity(); 2]; 3], filt: [Biquad::unity(); 2], filt_on: false, g: 0.0, gc: 0.0, peak: 0.0 };
         s.update_eq(fs);
         s
     }
@@ -261,6 +268,12 @@ pub struct Engine {
     xfader: f64,
     master_level: f64,
     cue_mix: f64,
+    cue_level: f64,
+    ghp_cue: f32,
+    ghp_mst: f32,
+    hp_lim: f32,
+    hp_peak: f32,
+    headphones: bool,
     gm: f32,
     lim: f32,
     lim_min: f32,
@@ -283,6 +296,12 @@ impl Engine {
             xfader: 0.0,
             master_level: 0.9,
             cue_mix: 0.5,
+            cue_level: 0.8,
+            ghp_cue: 0.0,
+            ghp_mst: 0.0,
+            hp_lim: 1.0,
+            hp_peak: 0.0,
+            headphones: false,
             gm: 0.0,
             lim: 1.0,
             lim_min: 1.0,
@@ -385,6 +404,7 @@ impl Engine {
         if let Some(x) = f(v.xfader, -1.0, 1.0) { self.xfader = x }
         if let Some(x) = f(v.master, 0.0, 1.0) { self.master_level = x }
         if let Some(x) = f(v.cue_mix, 0.0, 1.0) { self.cue_mix = x }
+        if let Some(x) = f(v.cue_level, 0.0, 1.0) { self.cue_level = x }
     }
 
     pub fn command(&mut self, c: Cmd) {
@@ -601,6 +621,9 @@ impl Engine {
             xfader: self.xfader,
             master_level: self.master_level,
             cue_mix: self.cue_mix,
+            cue_level: self.cue_level,
+            headphones: self.headphones,
+            headphones_meter: self.hp_peak,
             master_meter: self.master_peak,
             limiter_db: 20.0 * self.lim_min.max(1e-4).log10(),
         };
@@ -608,6 +631,7 @@ impl Engine {
             st.peak = 0.0;
         }
         self.master_peak = 0.0;
+        self.hp_peak = 0.0;
         self.lim_min = 1.0;
         s
     }
@@ -638,6 +662,13 @@ impl Engine {
             let s = &self.strips[k];
             (s.gain * s.fader * s.fader * self.xgain(k)) as f32
         });
+        let target_c: [f32; 2] = std::array::from_fn(|k| {
+            let s = &self.strips[k];
+            if s.cue { s.gain as f32 } else { 0.0 }
+        });
+        // CUE · MIX a potenza costante: 0 = solo cue, 1 = solo master; poi volume cuffia
+        let hm = (self.cue_mix * std::f64::consts::FRAC_PI_2) as f32;
+        let (hp_cue, hp_mst) = (hm.cos() * self.cue_level as f32, hm.sin() * self.cue_level as f32);
         let target_m = self.master_level as f32;
         let smooth = 1.0 - (-1.0 / (0.01 * self.fs)).exp() as f32;
         let release = 1.0 - (-1.0 / (0.25 * self.fs)).exp() as f32;
@@ -646,6 +677,7 @@ impl Engine {
         let fs = self.fs;
         for f in 0..frames {
             let (mut l, mut r) = (0f32, 0f32);
+            let (mut cl, mut cr) = (0f32, 0f32);
             for k in 0..2 {
                 let d = &mut self.decks[k];
                 let st = &mut self.strips[k];
@@ -681,6 +713,10 @@ impl Engine {
                     a = st.filt[0].run(a);
                     b = st.filt[1].run(b);
                 }
+                // cuffia: prima del fader e del crossfader (si sente anche a fader chiuso)
+                st.gc += (target_c[k] - st.gc) * smooth;
+                cl += a * st.gc;
+                cr += b * st.gc;
                 a *= st.g;
                 b *= st.g;
                 st.peak = st.peak.max(a.abs()).max(b.abs());
@@ -708,7 +744,26 @@ impl Engine {
             if ch > 1 {
                 o[1] = r;
             }
+            if ch >= 4 {
+                // cuffia sui canali 3-4 (Traktor Z1 e schede DJ): CUE · MIX tra cue e master, poi volume
+                self.ghp_cue += (hp_cue - self.ghp_cue) * smooth;
+                self.ghp_mst += (hp_mst - self.ghp_mst) * smooth;
+                let mut hl = cl * self.ghp_cue + l * self.ghp_mst;
+                let mut hr = cr * self.ghp_cue + r * self.ghp_mst;
+                let p = hl.abs().max(hr.abs());
+                if p * self.hp_lim > CEIL {
+                    self.hp_lim = CEIL / p;
+                } else {
+                    self.hp_lim += (1.0 - self.hp_lim) * release;
+                }
+                hl *= self.hp_lim;
+                hr *= self.hp_lim;
+                self.hp_peak = self.hp_peak.max(hl.abs()).max(hr.abs());
+                o[2] = hl;
+                o[3] = hr;
+            }
         }
+        self.headphones = ch >= 4;
         self.frames += frames as u64;
         if self.frames >= self.next_snapshot {
             self.next_snapshot = self.frames + (self.fs / SNAPSHOT_HZ) as u64;
@@ -826,6 +881,36 @@ mod tests {
         assert!((e.decks[0].pos - 1.5).abs() < 0.01);
         e.command(Cmd::Scrub(0, false, 1.5));
         assert!(!e.decks[0].scrub && !e.decks[0].playing);
+    }
+
+    #[test]
+    fn cuffia_sui_canali_3_4() {
+        let (mut e, tx, _o) = engine();
+        let tone = Arc::new(TrackData { id: "t".into(), samples: vec![0.5; 44100 * 2 * 4], rate: 44100.0, seconds: 4.0, bpm: 0.0, first_beat: 0.0, confidence: 0.0, locked: false });
+        tx.send(Msg::Loaded { deck: 1, track: tone, cue: 0.0, hot: [None; HOT] }).unwrap();
+        // B in onda con fader chiuso e 🎧 acceso, CUE · MIX tutto su cue
+        tx.send(Msg::Cmd(Cmd::MixCh(1, MixVals { fader: Some(0.0), cue: Some(true), ..Default::default() }))).unwrap();
+        tx.send(Msg::Cmd(Cmd::Mix(MixVals { cue_mix: Some(0.0), cue_level: Some(1.0), ..Default::default() }))).unwrap();
+        tx.send(Msg::Cmd(Cmd::Play(1))).unwrap();
+        let mut buf = vec![0f32; 480 * 4];
+        for _ in 0..30 {
+            e.render(&mut buf, 4);
+        }
+        let last = &buf[buf.len() - 4..];
+        assert!(last[0].abs() < 1e-3 && last[1].abs() < 1e-3, "master muto: {last:?}");
+        assert!((last[2] - 0.5).abs() < 0.02 && (last[3] - 0.5).abs() < 0.02, "cuffia sente B: {last:?}");
+        assert!(e.headphones);
+        // 🎧 spento e CUE · MIX su master: cuffia = master (muto)
+        e.command(Cmd::MixCh(1, MixVals { cue: Some(false), ..Default::default() }));
+        e.command(Cmd::Mix(MixVals { cue_mix: Some(1.0), ..Default::default() }));
+        for _ in 0..30 {
+            e.render(&mut buf, 4);
+        }
+        assert!(buf[buf.len() - 2].abs() < 1e-3);
+        // scheda a 2 canali: niente cuffia
+        let mut b2 = vec![0f32; 480 * 2];
+        e.render(&mut b2, 2);
+        assert!(!e.headphones);
     }
 
     #[test]

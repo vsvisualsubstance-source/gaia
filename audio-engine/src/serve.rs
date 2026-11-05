@@ -65,6 +65,7 @@ fn mix_vals(v: &Value) -> MixVals {
         xfader: n("xfader"),
         master: n("master"),
         cue_mix: n("cue_mix"),
+        cue_level: n("cue_level"),
     }
 }
 
@@ -337,8 +338,9 @@ fn state_json(s: crate::engine::Snapshot, out: &OutputInfo) -> String {
     json!({
         "type": "audio_state", "t": s.t, "master": s.master,
         "decks": {"A": da, "B": db},
-        "mix": {"A": ma, "B": mb, "xfader": s.xfader, "master": s.master_level, "cue_mix": s.cue_mix},
-        "meters": {"master": s.master_meter, "limiter_db": s.limiter_db},
+        "mix": {"A": ma, "B": mb, "xfader": s.xfader, "master": s.master_level, "cue_mix": s.cue_mix, "cue_level": s.cue_level},
+        "meters": {"master": s.master_meter, "limiter_db": s.limiter_db, "headphones": s.headphones_meter},
+        "headphones": s.headphones,
         "outputs": [{"kind": if out.ok { "wasapi" } else { "none" }, "device": out.device, "rate": out.rate, "ok": out.ok, "error": out.error}],
     })
     .to_string()

@@ -17,8 +17,8 @@ const auDeck=()=>({track:null,wave:null,overImg:null,pos:0,playing:false,tempo:0
   cue:0,hot:Array(AU_HOT_SAVED).fill(null),nudge:0,preview:false,loading:false,zoom:8,snap:true,scrub:false});
 const AU_ZOOMS=[2,4,8,16,32];           // secondi visibili nella forma d'onda del deck
 const auCh=()=>({gain:1,hi:0,mid:0,lo:0,filter:0,fader:1,cue:false,meter:0});
-const AU={tracks:[],libState:'',live:false,liveAt:0,out:null,meterM:0,last:0,master:'A',
-  decks:{A:auDeck(),B:auDeck()},mix:{A:auCh(),B:auCh(),xfader:0,master:.9,cue_mix:.5},
+const AU={tracks:[],libState:'',live:false,liveAt:0,out:null,meterM:0,phones:null,last:0,master:'A',
+  decks:{A:auDeck(),B:auDeck()},mix:{A:auCh(),B:auCh(),xfader:0,master:.9,cue_mix:.5,cue_level:.8},
   lib:{q:'',folder:'',sort:'folder',dir:1,target:'A'}};
 
 /* ----- libreria (dal bridge) ----- */
@@ -48,7 +48,7 @@ async function auFetchTrack(deck,id){
 }
 // stato dal motore vero: e' lui la fonte di verita'
 function auApplyState(s){
-  const now=performance.now();AU.liveAt=now;AU.live=true;AU.master=s.master==='B'?'B':'A';AU.out=s.outputs?.[0]||null;AU.meterM=+s.meters?.master||0;
+  const now=performance.now();AU.liveAt=now;AU.live=true;AU.master=s.master==='B'?'B':'A';AU.out=s.outputs?.[0]||null;AU.phones=!!s.headphones;AU.meterM=+s.meters?.master||0;
   for(const k of['A','B']){const sd=s.decks?.[k],d=AU.decks[k];if(!sd)continue;
     for(const f of['playing','tempo','range','keylock','sync','cue','nudge','preview','scrub','snap'])if(sd[f]!=null)d[f]=sd[f];
     d.hot=Array.from({length:AU_HOT_SAVED},(_,i)=>sd.hot?.[i]??null);
@@ -57,7 +57,7 @@ function auApplyState(s){
     const id=sd.track||null;
     if(id!==(d.track?.id||null)&&!d.loading){if(!id)Object.assign(d,{track:null,wave:null,overImg:null});else auFetchTrack(k,id)}
     if(s.mix?.[k])Object.assign(AU.mix[k],s.mix[k])}
-  for(const f of['xfader','master','cue_mix'])if(s.mix?.[f]!=null)AU.mix[f]=s.mix[f];
+  for(const f of['xfader','master','cue_mix','cue_level'])if(s.mix?.[f]!=null)AU.mix[f]=s.mix[f];
 }
 
 // cue e hot cue salvati con la traccia (bridge -> <id>.cues.json): li ritrova chi la ricarica
@@ -238,7 +238,8 @@ function auMixerHtml(){
   return`<div class="au au-mixer"><div class="au-strips">${auStripHtml('A')}
     <div class="au-strip au-mid"><b class="au-letter">M</b>
       <label class="au-k"><span>MASTER</span><input type="range" min="0" max="1" step="0.01" value=".9" data-au-r="mix" data-key="master"></label>
-      <label class="au-k"><span>CUE · MIX</span><input type="range" min="0" max="1" step="0.01" value=".5" data-au-r="mix" data-key="cue_mix"></label>
+      <label class="au-k"><span>CUE · MIX</span><input type="range" min="0" max="1" step="0.01" value=".5" data-au-r="mix" data-key="cue_mix" title="Cuffia: a sinistra solo i canali con 🎧, a destra solo il master"></label>
+      <label class="au-k"><span>CUE · VOL</span><input type="range" min="0" max="1" step="0.01" value=".8" data-au-r="mix" data-key="cue_level" title="Volume della cuffia"></label>
       <div class="au-fadrow"><canvas class="au-meter" data-ch="M"></canvas></div></div>
     ${auStripHtml('B')}</div>
     <label class="au-xf"><span>A</span><input type="range" min="-1" max="1" step="0.01" value="0" data-au-r="mix" data-key="xfader" title="Crossfader (doppio tocco: centro)"><span>B</span></label></div>`}
@@ -251,7 +252,10 @@ function auPaintMixer(el){
     g.fillStyle=grd;g.fillRect(0,H-h,W,h)});
   box.querySelectorAll('[data-au-r=mix]').forEach(r=>{if(document.activeElement===r)return;
     const v=r.dataset.ch?AU.mix[r.dataset.ch][r.dataset.key]:AU.mix[r.dataset.key];if(+r.value!==v)r.value=v});
-  box.querySelectorAll('[data-au=chcue]').forEach(b=>b.classList.toggle('on',AU.mix[b.dataset.ch].cue));
+  // 🎧: senza canali cuffia sull'uscita del motore (scheda a 2 canali) il preascolto non si sente
+  const noPh=AU.live&&AU.phones===false;
+  box.querySelectorAll('[data-au=chcue]').forEach(b=>{b.classList.toggle('on',AU.mix[b.dataset.ch].cue);b.classList.toggle('na',noPh);
+    const t=noPh?'Preascolto in cuffia: l\'uscita del motore non ha i canali 3-4 (cuffia)':'Preascolto in cuffia (canali 3-4 della scheda)';if(b.title!==t)b.title=t});
 }
 
 /* ----- widget: libreria ----- */
@@ -345,7 +349,7 @@ document.addEventListener('change',e=>{const t=e.target;if(!t.dataset)return;
 });
 // doppio tocco su un controllo: torna al centro (tempo 0, EQ 0, crossfader al centro)
 document.addEventListener('dblclick',e=>{const t=e.target;if(!t.dataset||t.type!=='range')return;
-  const home={tempo:0,gain:1,hi:0,mid:0,lo:0,filter:0,xfader:0}[t.dataset.auR==='tempo'?'tempo':t.dataset.key];if(home==null)return;
+  const home={tempo:0,gain:1,hi:0,mid:0,lo:0,filter:0,xfader:0,cue_mix:.5}[t.dataset.auR==='tempo'?'tempo':t.dataset.key];if(home==null)return;
   t.value=home;t.dispatchEvent(new Event('input',{bubbles:true}))});
 
 /* ----- registrazione ----- */

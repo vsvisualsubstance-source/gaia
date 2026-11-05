@@ -620,7 +620,7 @@ button{cursor:pointer}
 .au-ctl .au-btn{flex:1}.au-hot .au-btn{flex:1}
 .au-btn.play{font-size:16px}.au-btn.play.on{border-color:var(--ok);color:var(--ok);background:color-mix(in srgb,var(--ok) 16%,var(--panel))}
 .au-btn.cue{border-color:#ff5d5d55}
-.au-hot .au-btn.on{border-color:var(--ok);color:var(--ok)}
+.au-hot .au-btn.on{border-color:var(--ok);color:var(--ok)}.au-btn.na{opacity:.4}
 .au-tempo{display:flex;align-items:center;gap:6px}
 .au-tempo input{flex:1;min-width:60px}
 .au-mixer{gap:8px}
