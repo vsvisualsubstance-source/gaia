@@ -12,6 +12,17 @@
 //   MASTER e HP VOLUME della Z1 sono analogici: non mandano MIDI.
 // Con la traccia AUDIO in TIMELINE fader e crossfader li comanda la timeline:
 // quelli della Z1 si ignorano (gain, EQ, filtro e cuffia restano a mano).
+//
+// Akai LPD8 mk2 (porta "LPD8 mk2"), programma di fabbrica, letta dal vivo il
+// 2026-11-05: riga di sopra = deck A, riga di sotto = deck B.
+//   pad modo NOTE (note 40-43 sopra, 36-39 sotto, qualsiasi canale):
+//     1° ▶/❚❚, 2° CUE (stile CDJ, tenuto = preascolto), 3° SYNC, 4° STOP (ferma e torna al cue)
+//   pad modo CC (canale 10, CC 16-19 sopra, 12-15 sotto; valore = forza, 0 = rilascio):
+//     hot cue 1-4 del deck (vuoto = salva, pieno = salta)
+//   manopole K1-K8 (canale 1, CC 70-77): K1 tempo A, K2 nudge A, K3 tempo B,
+//     K4 nudge B, K5 volume cuffia, K6 master; K7-K8 libere
+// Con la traccia AUDIO in TIMELINE i comandi dei deck dell'LPD8 si ignorano
+// (li comanda la timeline); cuffia e master restano a mano.
 
 const Z1_PORT = /kontrol z1/i;
 const DECK_CH = { 1: 'A', 2: 'B' };
@@ -57,6 +68,43 @@ function z1Commands(m, st) {
   return [];
 }
 
+const LPD8_PORT = /lpd8/i;
+const LPD_ROWS = { 40: ['A', 0], 41: ['A', 1], 42: ['A', 2], 43: ['A', 3], 36: ['B', 0], 37: ['B', 1], 38: ['B', 2], 39: ['B', 3] };
+const LPD_CC_PADS = { 16: ['A', 0], 17: ['A', 1], 18: ['A', 2], 19: ['A', 3], 12: ['B', 0], 13: ['B', 1], 14: ['B', 2], 15: ['B', 3] };
+
+// messaggio dell'LPD8 -> comandi. st: {timeline, eng (stato del motore), pads: {chiave: premuto}}
+function lpd8Commands(m, st) {
+  // pad: pressione e rilascio (in CC il valore e' la forza, 0 = rilascio)
+  let pad = null, down = false;
+  if (m.kind === 'note' && LPD_ROWS[m.n]) { pad = ['n', ...LPD_ROWS[m.n]]; down = m.v > 0; }
+  else if (m.kind === 'cc' && m.ch === 10 && LPD_CC_PADS[m.n]) { pad = ['c', ...LPD_CC_PADS[m.n]]; down = m.v > 0; }
+  if (pad) {
+    const key = pad.join(':'), was = !!st.pads[key];
+    st.pads[key] = down;
+    if (st.timeline) return [];
+    const [mode, deck, i] = pad;
+    if (down === was) return [];      // forza che cambia mentre il pad e' tenuto
+    if (mode === 'c') return down ? [{ cmd: 'deck.hotcue', deck, n: i, op: 'go' }] : [];
+    if (i === 1) return [{ cmd: down ? 'deck.cue_down' : 'deck.cue_up', deck }];
+    if (!down) return [];
+    if (i === 0) return [{ cmd: 'deck.play', deck }];
+    if (i === 2) return [{ cmd: 'deck.sync', deck }];
+    const cue = st.eng?.decks?.[deck]?.cue;
+    return [{ cmd: 'deck.play', deck, value: false }, ...(Number.isFinite(cue) ? [{ cmd: 'deck.seek', deck, pos: cue }] : [])];
+  }
+  if (m.kind === 'cc' && m.ch === 1 && m.n >= 70 && m.n <= 77) {
+    const k = m.n - 69, x = m.v / 127;
+    switch (k) {
+      case 1: case 3: return st.timeline ? [] : [{ cmd: 'deck.tempo', deck: k === 1 ? 'A' : 'B', value: round(bipolar(m.v)) }];
+      // nudge: al centro 0, ai lati spinge o frena fino al 4%
+      case 2: case 4: return st.timeline ? [] : [{ cmd: 'deck.nudge', deck: k === 2 ? 'A' : 'B', value: round(bipolar(m.v) * 0.04) }];
+      case 5: return [{ cmd: 'mix.set', values: { cue_level: round(x) } }];
+      case 6: return [{ cmd: 'mix.set', values: { master: round(x) } }];
+    }
+  }
+  return [];
+}
+
 // livello (picco lineare) -> 0..127 per i LED: scala in dB da -36 a 0
 const meterLed = p => { const db = 20 * Math.log10(Math.max(1e-6, +p || 0)); return Math.max(0, Math.min(127, Math.round((db + 36) / 36 * 127))); };
 
@@ -75,6 +123,7 @@ function z1Leds(state, st) {
 
 function startAudioMidi({ engine, isTimeline = () => false, log = console.log }) {
   const st = { fx: { A: true, B: true }, filter: { A: 0, B: 0 }, cue: { A: false, B: false }, timeline: false };
+  const lpd = { timeline: false, eng: null, pads: {} };
   let out = null, outTried = 0, sent = {};
   const openOut = () => {
     if (out || Date.now() - outTried < 10000) return out;
@@ -103,15 +152,23 @@ function startAudioMidi({ engine, isTimeline = () => false, log = console.log })
     } catch { try { out.close(); } catch { /* gia' chiusa */ } out = null; }
   }, 66);
   return {
-    // messaggio MIDI normalizzato (midi-in.js) dalla porta `port`; true = era della Z1
+    // messaggio MIDI normalizzato (midi-in.js) dalla porta `port`; true = era di un controller della console
     onMidi(m, port) {
-      if (!Z1_PORT.test(port || '')) return false;
-      st.timeline = !!isTimeline();
-      for (const c of z1Commands(m, st)) engine.send(c);
-      return true;
+      if (Z1_PORT.test(port || '')) {
+        st.timeline = !!isTimeline();
+        for (const c of z1Commands(m, st)) engine.send(c);
+        return true;
+      }
+      if (LPD8_PORT.test(port || '')) {
+        lpd.timeline = !!isTimeline();
+        lpd.eng = engine.state();
+        for (const c of lpd8Commands(m, lpd)) engine.send(c);
+        return true;
+      }
+      return false;
     },
     stop() { clearInterval(leds); try { out?.close(); } catch { /* niente */ } },
   };
 }
 
-module.exports = { z1Commands, z1Leds, meterLed, startAudioMidi };
+module.exports = { z1Commands, z1Leds, meterLed, lpd8Commands, startAudioMidi };

@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { z1Commands, z1Leds, meterLed } = require('../audio-midi');
+const { z1Commands, z1Leds, meterLed, lpd8Commands } = require('../audio-midi');
 
 const fresh = () => ({ fx: { A: true, B: true }, filter: { A: 0, B: 0 }, cue: { A: false, B: false }, timeline: false });
 const cc = (ch, n, v) => ({ kind: 'cc', ch, n, v, on: v >= 64 });
@@ -44,4 +44,38 @@ test('Z1: LED dallo stato del motore', () => {
   const l = z1Leds({ mix: { A: { cue: true, meter: 1 }, B: { cue: false, meter: 0 } } }, st);
   assert.deepEqual(l, { '1:5': 127, '2:5': 0, '3:1': 127, '3:2': 0, '3:3': 127, '3:4': 0 });
   assert.equal(meterLed(10 ** (-18 / 20)), 64, '-18 dB a meta\'');
+});
+
+const lp = () => ({ timeline: false, eng: { decks: { A: { cue: 12.5 }, B: { cue: 3 } } }, pads: {} });
+const note = (n, v) => ({ kind: 'note', ch: 10, n, v, on: v > 0 });
+
+test('LPD8 NOTE: play, CUE tenuto, SYNC, STOP per riga', () => {
+  const st = lp();
+  assert.deepEqual(lpd8Commands(note(40, 100), st), [{ cmd: 'deck.play', deck: 'A' }]);
+  assert.deepEqual(lpd8Commands(note(40, 0), st), []);
+  assert.deepEqual(lpd8Commands(note(37, 90), st), [{ cmd: 'deck.cue_down', deck: 'B' }]);
+  assert.deepEqual(lpd8Commands(note(37, 0), st), [{ cmd: 'deck.cue_up', deck: 'B' }]);
+  assert.deepEqual(lpd8Commands(note(42, 60), st), [{ cmd: 'deck.sync', deck: 'A' }]);
+  assert.deepEqual(lpd8Commands(note(43, 60), st), [{ cmd: 'deck.play', deck: 'A', value: false }, { cmd: 'deck.seek', deck: 'A', pos: 12.5 }]);
+});
+
+test('LPD8 CC: hot cue, la forza che cambia non ripete', () => {
+  const st = lp();
+  assert.deepEqual(lpd8Commands(cc(10, 16, 4), st), [{ cmd: 'deck.hotcue', deck: 'A', n: 0, op: 'go' }]);
+  assert.deepEqual(lpd8Commands(cc(10, 16, 9), st), [], 'stesso pad ancora premuto');
+  assert.deepEqual(lpd8Commands(cc(10, 16, 0), st), []);
+  assert.deepEqual(lpd8Commands(cc(10, 15, 1), st), [{ cmd: 'deck.hotcue', deck: 'B', n: 3, op: 'go' }]);
+});
+
+test('LPD8 manopole e timeline', () => {
+  const st = lp();
+  assert.deepEqual(lpd8Commands(cc(1, 70, 127), st), [{ cmd: 'deck.tempo', deck: 'A', value: 1 }]);
+  assert.deepEqual(lpd8Commands(cc(1, 73, 0), st), [{ cmd: 'deck.nudge', deck: 'B', value: -0.04 }]);
+  assert.deepEqual(lpd8Commands(cc(1, 71, 64), st), [{ cmd: 'deck.nudge', deck: 'A', value: 0 }]);
+  assert.deepEqual(lpd8Commands(cc(1, 74, 127), st), [{ cmd: 'mix.set', values: { cue_level: 1 } }]);
+  assert.deepEqual(lpd8Commands(cc(1, 76, 0), st), [], 'K7 libera');
+  st.timeline = true;
+  assert.deepEqual(lpd8Commands(note(40, 100), st), [], 'timeline: niente play');
+  assert.deepEqual(lpd8Commands(cc(1, 70, 10), st), [], 'timeline: niente tempo');
+  assert.equal(lpd8Commands(cc(1, 75, 50), st).length, 1, 'timeline: master a mano');
 });
