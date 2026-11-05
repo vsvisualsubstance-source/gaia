@@ -449,7 +449,8 @@ impl Engine {
                     return;
                 }
                 let d = &mut self.decks[k];
-                d.playing = v.unwrap_or(!d.playing);
+                // CUE tenuto (preascolto) + PLAY: la traccia continua e lasciando CUE non si ferma (come i CDJ)
+                d.playing = if d.preview && v != Some(false) { true } else { v.unwrap_or(!d.playing) };
                 d.preview = false;
                 if d.playing && d.sync {
                     self.sync_phase(k);
@@ -1020,6 +1021,21 @@ mod tests {
         e.command(Cmd::Play(0, Some(true)));
         e.command(Cmd::Play(0, Some(true)));
         assert!(e.decks[0].playing);
+    }
+
+    #[test]
+    fn cue_tenuto_poi_play_continua() {
+        let (mut e, tx, _o) = engine();
+        tx.send(Msg::Loaded { deck: 0, track: clicks("a", 120.0, 0.0, 20.0), cue: 2.0, hot: [None; HOT], start: None, play: false, force: false }).unwrap();
+        run(&mut e, 0.01);
+        e.command(Cmd::CueDown(0)); // sul cue: preascolto
+        assert!(e.decks[0].playing && e.decks[0].preview);
+        run(&mut e, 0.5);
+        e.command(Cmd::Play(0, None)); // PLAY con CUE tenuto
+        e.command(Cmd::CueUp(0)); // lascio CUE
+        assert!(e.decks[0].playing && !e.decks[0].preview, "continua");
+        run(&mut e, 0.5);
+        assert!((e.decks[0].pos - 3.0).abs() < 0.02, "non e' tornato al cue: {}", e.decks[0].pos);
     }
 
     #[test]

@@ -117,7 +117,8 @@ function auCmd(c){
     emit({type:'audio',...c},true);return}
   const d=c.deck&&AU.decks[c.deck];
   switch(c.cmd){
-    case'deck.play':{if(!d.track)return;d.playing=!d.playing;if(d.playing&&d.sync)auSyncPhase(c.deck);
+    // CUE tenuto (preascolto) + PLAY: continua, e lasciando CUE non si ferma (come i CDJ)
+    case'deck.play':{if(!d.track)return;d.playing=d.preview?true:!d.playing;d.preview=false;if(d.playing&&d.sync)auSyncPhase(c.deck);
       // diventa master solo se il master attuale non e' un altro deck in onda
       const cur=AU.decks[AU.master];if(d.playing&&!(AU.master!==c.deck&&cur.playing&&cur.track))AU.master=c.deck;break}
     case'deck.cue_down':if(!d.track)return;
