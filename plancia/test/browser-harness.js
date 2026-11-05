@@ -74,7 +74,9 @@ async function startPlancia({ hooks = false, state = process.env.PLANCIA_STATE |
     ...process.env, NODE_PATH: path.join(ROOT, 'node_modules'),
     PORT: String(port), OSC_IN: String(oscIn), PLANCIA_STATE_FILE: stateFile,
     OSC_HOST: '127.0.0.1', OSC_PORT: '9', GAIA_OSC_HOST: '127.0.0.1', GAIA_OSC_PORT: '9',
-    PATCHDECK_ID: 'smoke-nessuno', LASER_ID: 'smoke-nessuno', PLANCIA_MQTT: 'mqtt://127.0.0.1:9' } });
+    PATCHDECK_ID: 'smoke-nessuno', LASER_ID: 'smoke-nessuno', PLANCIA_MQTT: 'mqtt://127.0.0.1:9',
+    // il motore audio vero di OPS no: solo le prove che lo chiedono (AUDIO_ENGINE_URL) ne usano uno
+    AUDIO_ENGINE_URL: process.env.AUDIO_ENGINE_URL || 'ws://127.0.0.1:9' } });
   procs.push(bridge);
   await waitHttp(`http://127.0.0.1:${port}/`, 15000);
   procs.push(spawn(browser, ['--headless=new', '--disable-gpu', `--remote-debugging-port=${cdp}`,

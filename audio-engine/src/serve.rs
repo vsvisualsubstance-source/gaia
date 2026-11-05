@@ -8,7 +8,8 @@
 //! (niente suono, stato e comandi funzionano) e riprova ad aprirla ogni 5 s.
 
 use crate::decode;
-use crate::engine::{Cmd, Engine, HOT, HotOp, Msg, MixVals, Out, TrackData};
+use crate::engine::{Cmd, Engine, GridOp, HOT, HotOp, Msg, MixVals, Out, TrackData};
+use crate::library::{self, GridEdit};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use serde_json::{Value, json};
 use std::net::{TcpListener, TcpStream};
@@ -100,6 +101,20 @@ pub fn parse_cmd(v: &Value) -> Result<Option<Cmd>, String> {
         "deck.master" => Cmd::Master(d()?),
         "deck.keylock" => Cmd::Keylock(d()?),
         "deck.eject" => Cmd::Eject(d()?),
+        // griglia: bpm (value), move (value in s), double, half, anchor (qui), lock, unlock
+        "grid.edit" => {
+            let op = match v.get("op").and_then(Value::as_str).unwrap_or("") {
+                "bpm" => GridOp::Bpm(num("value")?),
+                "move" => GridOp::Move(num("value")?.clamp(-1.0, 1.0)),
+                "double" => GridOp::Double,
+                "half" => GridOp::Half,
+                "anchor" => GridOp::AnchorHere,
+                "lock" => GridOp::Lock(true),
+                "unlock" => GridOp::Lock(false),
+                o => return Err(format!("grid.edit: operazione sconosciuta {o}")),
+            };
+            Cmd::Grid(d()?, op)
+        }
         "mix.ramp" => {
             let k = match v.get("ch").and_then(Value::as_str) {
                 Some("A") => 0,
@@ -144,7 +159,8 @@ fn load_track(root: &Path, cache: &Path, id: &str) -> Result<(TrackData, f64, [O
     let seconds = samples.len() as f64 / 2.0 / d.rate as f64;
     let track = TrackData {
         id: id.to_string(),
-        samples,
+        rel: rel.to_string(),
+        samples: Arc::new(samples),
         rate: d.rate as f64,
         seconds,
         bpm: g("bpm"),
@@ -538,6 +554,23 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
                 }
             }
             Ok(Out::Drop(t)) => drop(t),
+            Ok(Out::Grid { id, rel, op, pos }) => {
+                let edit = match op {
+                    GridOp::Bpm(b) => GridEdit::SetBpm(b),
+                    GridOp::Move(s) => GridEdit::Move(s),
+                    GridOp::Double => GridEdit::Double,
+                    GridOp::Half => GridEdit::Half,
+                    GridOp::AnchorHere => GridEdit::Anchor(pos),
+                    GridOp::Lock(l) => GridEdit::Lock(l),
+                };
+                match library::edit_grid(&o.cache, &rel, edit) {
+                    Ok(t) => {
+                        let _ = ctx.tx.send(Msg::GridSet { id: id.clone(), bpm: t.grid.bpm, first_beat: t.grid.first_beat, confidence: t.grid.confidence, locked: t.locked });
+                        broadcast(&clients, &json!({"type": "audio_grid", "id": id, "bpm": t.grid.bpm, "first_beat": t.grid.first_beat, "confidence": t.grid.confidence, "locked": t.locked}).to_string());
+                    }
+                    Err(e) => error_msg(&clients, &format!("griglia non corretta: {e}")),
+                }
+            }
             Ok(Out::Error(e)) => error_msg(&clients, &e),
             Err(mpsc::RecvTimeoutError::Timeout) => {}
             Err(mpsc::RecvTimeoutError::Disconnected) => return Err("motore fermo".into()),
@@ -593,6 +626,9 @@ mod tests {
         assert!(matches!(p(r#"{"cmd":"mix.set","ch":"A","values":{"lo":-1,"cue":true}}"#), Ok(Some(Cmd::MixCh(0, MixVals { lo: Some(-1.0), cue: Some(true), .. })))));
         assert!(matches!(p(r#"{"cmd":"mix.set","values":{"xfader":0.5}}"#), Ok(Some(Cmd::Mix(MixVals { xfader: Some(0.5), .. })))));
         assert!(matches!(p(r#"{"cmd":"deck.zoom","deck":"A","value":4}"#), Ok(None)));
+        assert!(matches!(p(r#"{"cmd":"grid.edit","deck":"B","op":"move","value":0.005}"#), Ok(Some(Cmd::Grid(1, GridOp::Move(_))))));
+        assert!(matches!(p(r#"{"cmd":"grid.edit","deck":"A","op":"anchor"}"#), Ok(Some(Cmd::Grid(0, GridOp::AnchorHere)))));
+        assert!(p(r#"{"cmd":"grid.edit","deck":"A","op":"rm"}"#).is_err());
         assert!(p(r#"{"cmd":"deck.play","deck":"C"}"#).is_err());
         assert!(p(r#"{"cmd":"rm -rf"}"#).is_err());
     }

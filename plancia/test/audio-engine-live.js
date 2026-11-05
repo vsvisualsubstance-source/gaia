@@ -90,6 +90,21 @@ async function main() {
       const saved = path.join(tmpCache, pick[1] + '.cues.json');
       const cues = fs.existsSync(saved) ? JSON.parse(fs.readFileSync(saved, 'utf8')) : null;
       check(cues && Math.abs(cues.hot[0] - s.hot) < 0.001 && cues.hot.length === 8, `hot cue salvato dal motore in ${pick[1]}.cues.json`);
+      // GRID su A (fermo al cue): il battito 1 qui, poi BPM a meta' -> deck, libreria e cache aggiornati
+      await down('.au-deck[data-deck=A] [data-au=grid]');
+      await p.ev(`(()=>{window.__planciaTest.auCmd({cmd:'deck.seek',deck:'A',pos:30.123});return 1})()`);
+      await sleep(400);
+      const gridShown = await p.ev("!document.querySelector('.au-deck[data-deck=A] .au-grid').hidden && document.querySelector('.au-deck[data-deck=A] .au-hot').hidden");
+      await down('.au-deck[data-deck=A] [data-au=gop][data-op=anchor]');
+      await sleep(600);
+      await down('.au-deck[data-deck=A] [data-au=gop][data-op=half]');
+      await sleep(600);
+      const g = JSON.parse(await p.ev(`(()=>{const T=window.__planciaTest.AU,t=T.decks.A.track,l=T.tracks.find(x=>x.id===t.id);return JSON.stringify({bpm:t.bpm,fb:t.first_beat,locked:t.locked,lib:l?.bpm})})()`));
+      const disk = JSON.parse(fs.readFileSync(path.join(tmpCache, pick[0] + '.json'), 'utf8'));
+      const p4 = 4 * 60 / g.bpm, off = ((30.123 - g.fb) % p4 + p4) % p4;
+      check(gridShown && g.locked && Math.abs(g.bpm - pick[2] / 2) < 1e-6 && g.lib === g.bpm, `GRID: BPM a meta' (${g.bpm}), bloccata, libreria aggiornata`);
+      check(Math.min(off, p4 - off) < 0.002, `GRID: battito 1 sulla testina (scarto ${(Math.min(off, p4 - off) * 1000).toFixed(1)} ms su una battuta)`);
+      check(disk.locked && Math.abs(disk.grid.bpm - g.bpm) < 1e-9 && Math.abs(disk.grid.first_beat - g.fb) < 1e-9, 'GRID: salvata nella cache dal motore');
     }
     check(!p.problems.length, `nessun errore nella pagina ${p.problems.join(' ').slice(0, 300)}`);
   } finally {

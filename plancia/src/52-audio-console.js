@@ -65,6 +65,21 @@ function auSaveCues(k){const d=AU.decks[k];if(!d.track)return;
   fetch('/api/audio/cues?id='+encodeURIComponent(d.track.id),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({cue:d.cue,hot:d.hot})})
     .then(r=>r.json()).then(r=>{if(!r.ok)throw new Error(r.error)}).catch(e=>showError('Console Audio: punti non salvati ('+e.message+').'))}
 
+/* ----- correzione della griglia (GRID): la fa il motore e la salva nella cache ----- */
+const auTaps={A:[],B:[]};
+function auGridEdit(k,op,value){
+  const d=AU.decks[k];if(!d.track)return;
+  if(!AU.live){showError('Correggere la griglia richiede il motore audio collegato.');return}
+  emit({type:'audio',cmd:'grid.edit',deck:k,op,...(value!=null?{value}:{})},true);
+}
+// griglia corretta (audio_grid dal motore): vale per i deck e la libreria
+function auGridUpdate(m){
+  const g={bpm:+m.bpm||0,first_beat:+m.first_beat||0,confidence:+m.confidence||0,locked:!!m.locked};
+  for(const k of['A','B']){const d=AU.decks[k];if(d.track?.id===m.id)Object.assign(d.track,g)}
+  const t=AU.tracks.find(x=>x.id===m.id);if(t)Object.assign(t,g);
+  showInfo(`Griglia: ${g.bpm.toFixed(2)} BPM, battito 1 a ${g.first_beat.toFixed(3)} s${g.locked?' (bloccata: una nuova analisi non la cambia)':''}.`);
+}
+
 /* ----- tempo, griglia, sync ----- */
 const auRate=d=>1+d.tempo*d.range+d.nudge;                     // velocita' di riproduzione
 const auBpm=d=>(d.track?.bpm||0)*(1+d.tempo*d.range);           // BPM in uscita (senza nudge)
@@ -203,8 +218,18 @@ function auDeckHtml(w){
   <div class="au-ctl">
     <button class="au-btn cue" data-au="cue">CUE</button><button class="au-btn play" data-au="play">▶</button>
     <button class="au-btn" data-au="sync">SYNC</button><button class="au-btn" data-au="master">MASTER</button><button class="au-btn" data-au="keylock">KEY</button>
+    <button class="au-btn" data-au="grid" title="Correggi la griglia dei battiti di questa traccia (BPM e battito 1)">GRID</button>
   </div>
   <div class="au-hot">${Array.from({length:AU_HOT},(_,i)=>`<button class="au-btn" data-au="hot" data-n="${i}" title="Vuoto: salva qui. Pieno: salta. Tieni premuto: cancella.">${i+1}</button>`).join('')}</div>
+  <div class="au-grid" hidden>
+    <button class="au-btn" data-au="gop" data-op="anchor" title="Il battito 1 della battuta (la cassa) è dove sta la testina: porta la testina sul colpo (trascina la forma d'onda) e tocca qui">⌖ 1 QUI</button>
+    <button class="au-btn" data-au="gop" data-op="move" data-v="-0.005" title="Griglia 5 ms prima">‹ 5ms</button>
+    <button class="au-btn" data-au="gop" data-op="move" data-v="0.005" title="Griglia 5 ms dopo">5ms ›</button>
+    <button class="au-btn" data-au="gop" data-op="half" title="BPM a metà">÷2</button>
+    <button class="au-btn" data-au="gop" data-op="double" title="BPM doppio">×2</button>
+    <button class="au-btn" data-au="gbpm" title="Scrivi il BPM esatto">BPM</button>
+    <button class="au-btn" data-au="gtap" title="Batti a tempo (almeno 4 colpi): diventa il BPM della traccia">TAP</button>
+  </div>
   <div class="au-tempo"><button class="au-btn" data-au="nudge" data-v="-1" title="Tieni premuto: rallenta">‹‹</button>
     <input type="range" min="-1" max="1" step="0.001" value="0" data-au-r="tempo" data-deck="${k}" title="Tempo (doppio tocco: 0)">
     <button class="au-btn" data-au="nudge" data-v="1" title="Tieni premuto: accelera">››</button>
@@ -220,8 +245,10 @@ function auPaintDeck(el,w){
   set('.au-bpm i',`${d.tempo*d.range>=0?'+':''}${(d.tempo*d.range*100).toFixed(1)}%`);
   set('.au-time .el',d.playing?auFmt(d.pos):auFmtFine(d.pos));set('.au-time .zm',d.zoom+' s');
   box.querySelector('[data-au=snap]')?.classList.toggle('on',d.snap);set('.au-time .rem','-'+auFmt((d.track?.seconds||0)-d.pos));
-  set('.au-time .st',audioDoc().active&&G.audioTlSt?.engine?'TIMELINE: comanda la traccia AUDIO':!d.track?'':!auGridOk(d)?'griglia incerta: sync solo tempo':d.sync&&!auMasterOf(k)?'sync: nessun master in onda':AU.live?'':'simulazione');
+  set('.au-time .st',d.gridEdit&&d.track?`GRID · ${d.track.bpm?d.track.bpm.toFixed(2):'—'} BPM${d.track.locked?' · bloccata':''}${AU.live?'':' · serve il motore'}`:audioDoc().active&&G.audioTlSt?.engine?'TIMELINE: comanda la traccia AUDIO':!d.track?'':!auGridOk(d)?'griglia incerta: sync solo tempo':d.sync&&!auMasterOf(k)?'sync: nessun master in onda':AU.live?'':'simulazione');
   const on=(sel,v)=>box.querySelector(sel)?.classList.toggle('on',!!v);
+  on('[data-au=grid]',d.gridEdit);
+  const hotRow=box.querySelector('.au-hot'),gridRow=box.querySelector('.au-grid');if(gridRow&&gridRow.hidden===!!d.gridEdit){gridRow.hidden=!d.gridEdit;hotRow.hidden=!!d.gridEdit}
   on('[data-au=play]',d.playing);on('[data-au=sync]',d.sync);on('[data-au=master]',AU.master===k&&d.playing);on('[data-au=keylock]',d.keylock);
   box.querySelector('[data-au=play]').textContent=d.playing?'❚❚':'▶';
   box.querySelectorAll('[data-au=hot]').forEach(b=>b.classList.toggle('on',d.hot[+b.dataset.n]!=null));
@@ -373,6 +400,12 @@ function auDown(e,el,w){
       up:()=>auCmd({cmd:'deck.scrub',deck:k,active:false,pos:AU.decks[k].pos})}}
   else if(a==='zoom'){const d=AU.decks[k],i=AU_ZOOMS.indexOf(d.zoom);auCmd({cmd:'deck.zoom',deck:k,value:AU_ZOOMS[Math.max(0,Math.min(AU_ZOOMS.length-1,(i<0?2:i)-(+b.dataset.v)))]})}
   else if(a==='snap')auCmd({cmd:'deck.snap',deck:k});
+  else if(a==='grid'){const d=AU.decks[k];d.gridEdit=!d.gridEdit;auTaps[k]=[]}
+  else if(a==='gop')auGridEdit(k,b.dataset.op,b.dataset.v!=null?+b.dataset.v:undefined);
+  else if(a==='gbpm'){const d=AU.decks[k];if(!d.track)return;uiPrompt(`BPM esatto di "${d.track.title}"`,d.track.bpm?d.track.bpm.toFixed(2):'').then(v=>{const b=parseFloat(String(v||'').replace(',','.'));if(b>20&&b<400)auGridEdit(k,'bpm',b);else if(v)showError('BPM tra 20 e 400.')})}
+  else if(a==='gtap'){const t=performance.now(),list=(auTaps[k]=(auTaps[k]||[]).filter(x=>t-x<3000).concat(t));
+    if(list.length>=4){const iv=(list[list.length-1]-list[0])/(list.length-1)/1000,b=Math.round(60/iv*100)/100;showInfo(`TAP: ${b} BPM (${list.length} colpi)`);
+      if(list.length>=6)auGridEdit(k,'bpm',b)}else showInfo(`TAP: ${list.length} colp${list.length===1?'o':'i'}… continua`)}
   else if(a==='jump')auCmd({cmd:'deck.jump',deck:k,dir:+b.dataset.v});
   else if(a==='seek'){const d=AU.decks[k],r=b.getBoundingClientRect();if(d.track)auCmd({cmd:'deck.seek',deck:k,pos:(e.clientX-r.left)/r.width*d.track.seconds})}
   else if(a==='chcue'){const ch=b.dataset.ch;auCmd({cmd:'mix.set',ch,values:{cue:!AU.mix[ch].cue}})}

@@ -213,8 +213,9 @@ pub fn edit_grid(cache: &Path, rel: &str, edit: GridEdit) -> Result<TrackInfo, S
             return Ok(t);
         }
     }
+    // l'ancora resta il battito 1 della battuta (4/4): il conteggio della cassa non si perde
     if g.bpm > 0.0 {
-        g.first_beat = g.first_beat.rem_euclid(period(g.bpm));
+        g.first_beat = g.first_beat.rem_euclid(4.0 * period(g.bpm));
     }
     t.locked = true;
     save(cache, &t)?;

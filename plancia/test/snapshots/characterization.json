@@ -2977,9 +2977,13 @@
    [
     "migrateUiChannelTest",
     18
+   ],
+   [
+    "migrateUiAudioTrack",
+    19
    ]
   ],
-  "uiRev": 18,
+  "uiRev": 19,
   "pages": [
    {
     "name": "Show",

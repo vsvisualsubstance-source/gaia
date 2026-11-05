@@ -90,3 +90,11 @@ function openAudioCueEditor(w,cues,meta={}){
     save();refreshShowTimelines();closeSheet();showInfo(`Timeline audio salvata: ${cur.length} cue.${audioDoc().active?'':' Metti AUDIO in TIMELINE per farla suonare.'}`);
   };
 }
+// 2026-11-05: traccia AUDIO visibile nella pagina Timeline (uiRev 19); le tracce vuote
+// si vedono solo se scelte in ☰ → Tracce da vedere, e la scelta salvata era di prima dell'audio
+function migrateUiAudioTrack(){
+  if((L.uiRev||0)>=19)return;
+  for(const p of L.pages)if(p.name==='Timeline')for(const w of p.widgets)
+    if(w.type==='timeline'&&!Array.isArray(w.onlyTracks)&&Array.isArray(w.tracks)&&!w.tracks.includes('audio'))w.tracks=[...w.tracks,'audio'];
+  L.uiRev=19;save();
+}

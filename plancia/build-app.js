@@ -74,7 +74,7 @@ window.__planciaTest={
   migrations:[['migrateLegacyHeadSelectors',migrateLegacyHeadSelectors],['migrateHeadPresetWidgets',migrateHeadPresetWidgets],
     ['migrateUiShowTimeline',migrateUiShowTimeline],['migrateUiConsolePages',migrateUiConsolePages],['migrateUiAudioPage',migrateUiAudioPage],
     ['migrateUiNoChase',migrateUiNoChase],['migrateUiOneDmxV8',migrateUiOneDmxV8],['migrateUiLaserPage',migrateUiLaserPage],
-    ['migrateUiLaserScenes',migrateUiLaserScenes],['migrateUiHeadMotion',migrateUiHeadMotion],['migrateUiChase',migrateUiChase],['migrateUiLaserFx',migrateUiLaserFx],['migrateUiLightFx',migrateUiLightFx],['migrateUiTracks',migrateUiTracks],['migrateUiPageGroups',migrateUiPageGroups],['migrateUiTimelinePage',migrateUiTimelinePage],['migrateUiHeadPages',migrateUiHeadPages],['migrateUiRigConfig',migrateUiRigConfig],['migrateUiChannelTest',migrateUiChannelTest]]};`;
+    ['migrateUiLaserScenes',migrateUiLaserScenes],['migrateUiHeadMotion',migrateUiHeadMotion],['migrateUiChase',migrateUiChase],['migrateUiLaserFx',migrateUiLaserFx],['migrateUiLightFx',migrateUiLightFx],['migrateUiTracks',migrateUiTracks],['migrateUiPageGroups',migrateUiPageGroups],['migrateUiTimelinePage',migrateUiTimelinePage],['migrateUiHeadPages',migrateUiHeadPages],['migrateUiRigConfig',migrateUiRigConfig],['migrateUiChannelTest',migrateUiChannelTest],['migrateUiAudioTrack',migrateUiAudioTrack]]};`;
 
 function buildAppBundle(sourceDir = path.join(__dirname, 'src'), { testHooks = false } = {}) {
   const modules = appModules.map(file => {

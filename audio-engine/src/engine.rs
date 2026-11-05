@@ -21,7 +21,10 @@ const SCRUB_MAX: f64 = 8.0;
 /// traccia decodificata, stereo interleaved alla sua frequenza
 pub struct TrackData {
     pub id: String,
-    pub samples: Vec<f32>,
+    /// percorso relativo alla cartella musica (per correggere la griglia nella cache)
+    pub rel: String,
+    /// condivisi: una griglia corretta crea una TrackData nuova senza copiare l'audio
+    pub samples: Arc<Vec<f32>>,
     pub rate: f64,
     pub seconds: f64,
     pub bpm: f64,
@@ -57,6 +60,19 @@ impl TrackData {
         let (a, b, c, d) = (self.frame(i - 1), self.frame(i), self.frame(i + 1), self.frame(i + 2));
         (dsp::hermite(a.0, b.0, c.0, d.0, f), dsp::hermite(a.1, b.1, c.1, d.1, f))
     }
+}
+
+/// correzione della griglia chiesta dalla console (la esegue fuori dalla callback chi legge Out::Grid)
+#[derive(Clone, Copy, Debug)]
+pub enum GridOp {
+    Bpm(f64),
+    /// sposta la griglia di questi secondi (+ = piu' tardi)
+    Move(f64),
+    Double,
+    Half,
+    /// il battito 1 della battuta e' dove si trova ora la testina
+    AnchorHere,
+    Lock(bool),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -98,6 +114,7 @@ pub enum Cmd {
     Master(usize),
     Keylock(usize),
     Eject(usize),
+    Grid(usize, GridOp),
     /// fader del canale verso `to` in `seconds`, poi pausa del deck se richiesto (dissolvenze della timeline)
     Ramp(usize, f64, f64, bool),
     MixCh(usize, MixVals),
@@ -108,6 +125,8 @@ pub enum Msg {
     Cmd(Cmd),
     /// `start`: posizione di partenza (None = il cue); `play`: parte subito; `force`: anche se il deck e' in onda (timeline)
     Loaded { deck: usize, track: Arc<TrackData>, cue: f64, hot: [Option<f64>; HOT], start: Option<f64>, play: bool, force: bool },
+    /// griglia corretta e salvata: vale subito per la traccia caricata (se e' ancora quella)
+    GridSet { id: String, bpm: f64, first_beat: f64, confidence: f64, locked: bool },
 }
 
 /// dal motore al resto del programma (fuori dalla callback)
@@ -116,6 +135,8 @@ pub enum Out {
     SaveCues { id: String, cue: f64, hot: [Option<f64>; HOT] },
     /// traccia sostituita: la si libera fuori dalla callback
     Drop(Arc<TrackData>),
+    /// da salvare nella cache: id e percorso della traccia, correzione con la posizione gia' risolta
+    Grid { id: String, rel: String, op: GridOp, pos: f64 },
     Error(String),
 }
 
@@ -622,6 +643,12 @@ impl Engine {
                     s.ramp = Some(FaderRamp { from: s.fader, to, total, done: 0, pause });
                 }
             }
+            Grid(k, op) => {
+                let d = &self.decks[k];
+                if let Some(t) = &d.track {
+                    self.send(Out::Grid { id: t.id.clone(), rel: t.rel.clone(), op, pos: d.pos });
+                }
+            }
             MixCh(k, v) => self.apply_mix(Some(k), v),
             Mix(v) => self.apply_mix(None, v),
         }
@@ -705,6 +732,18 @@ impl Engine {
             match m {
                 Msg::Cmd(c) => self.command(c),
                 Msg::Loaded { deck, track, cue, hot, start, play, force } => self.loaded(deck, track, cue, hot, start, play, force),
+                Msg::GridSet { id, bpm, first_beat, confidence, locked } => {
+                    for k in 0..2 {
+                        let Some(t) = &self.decks[k].track else { continue };
+                        if t.id != id {
+                            continue;
+                        }
+                        let nt = Arc::new(TrackData { id: t.id.clone(), rel: t.rel.clone(), samples: t.samples.clone(), rate: t.rate, seconds: t.seconds, bpm, first_beat, confidence, locked });
+                        if let Some(old) = self.decks[k].track.replace(nt) {
+                            self.send(Out::Drop(old));
+                        }
+                    }
+                }
             }
         }
         for k in 0..2 {
@@ -883,7 +922,7 @@ mod tests {
             }
             t += p;
         }
-        Arc::new(TrackData { id: id.into(), samples: s, rate, seconds: secs, bpm, first_beat: fb, confidence: 0.9, locked: false })
+        Arc::new(TrackData { id: id.into(), rel: String::new(), samples: Arc::new(s), rate, seconds: secs, bpm, first_beat: fb, confidence: 0.9, locked: false })
     }
 
     fn run(e: &mut Engine, secs: f64) {
@@ -970,7 +1009,7 @@ mod tests {
     #[test]
     fn cuffia_sui_canali_3_4() {
         let (mut e, tx, _o) = engine();
-        let tone = Arc::new(TrackData { id: "t".into(), samples: vec![0.5; 44100 * 2 * 4], rate: 44100.0, seconds: 4.0, bpm: 0.0, first_beat: 0.0, confidence: 0.0, locked: false });
+        let tone = Arc::new(TrackData { id: "t".into(), rel: String::new(), samples: Arc::new(vec![0.5; 44100 * 2 * 4]), rate: 44100.0, seconds: 4.0, bpm: 0.0, first_beat: 0.0, confidence: 0.0, locked: false });
         tx.send(Msg::Loaded { deck: 1, track: tone, cue: 0.0, hot: [None; HOT], start: None, play: false, force: false }).unwrap();
         // B in onda con fader chiuso e 🎧 acceso, CUE · MIX tutto su cue
         tx.send(Msg::Cmd(Cmd::MixCh(1, MixVals { fader: Some(0.0), cue: Some(true), ..Default::default() }))).unwrap();
@@ -1039,6 +1078,22 @@ mod tests {
     }
 
     #[test]
+    fn griglia_corretta_vale_subito() {
+        let (mut e, tx, o) = engine();
+        tx.send(Msg::Loaded { deck: 0, track: clicks("a", 120.0, 0.0, 20.0), cue: 0.0, hot: [None; HOT], start: Some(3.21), play: false, force: false }).unwrap();
+        run(&mut e, 0.01);
+        e.command(Cmd::Grid(0, GridOp::AnchorHere));
+        let g = o.try_iter().find_map(|x| if let Out::Grid { id, op, pos, .. } = x { Some((id, op, pos)) } else { None });
+        let (id, op, pos) = g.expect("richiesta di correzione");
+        assert!(id == "a" && matches!(op, GridOp::AnchorHere) && (pos - 3.21).abs() < 1e-9);
+        tx.send(Msg::GridSet { id: "a".into(), bpm: 128.0, first_beat: 0.4, confidence: 0.9, locked: true }).unwrap();
+        run(&mut e, 0.01);
+        let t = e.decks[0].track.as_ref().unwrap();
+        assert!(t.bpm == 128.0 && t.first_beat == 0.4 && t.locked);
+        assert_eq!(t.samples.len(), 20 * 44100 * 2, "stesso audio");
+    }
+
+    #[test]
     fn hot_cue_e_fine_traccia() {
         let (mut e, tx, _o) = engine();
         tx.send(Msg::Loaded { deck: 1, track: clicks("b", 120.0, 0.0, 3.0), cue: 0.0, hot: [None; HOT], start: None, play: false, force: false }).unwrap();
@@ -1056,7 +1111,7 @@ mod tests {
     #[test]
     fn limitatore_e_crossfader() {
         let (mut e, tx, _o) = engine();
-        let loud = Arc::new(TrackData { id: "x".into(), samples: vec![0.9; 44100 * 2 * 4], rate: 44100.0, seconds: 4.0, bpm: 0.0, first_beat: 0.0, confidence: 0.0, locked: false });
+        let loud = Arc::new(TrackData { id: "x".into(), rel: String::new(), samples: Arc::new(vec![0.9; 44100 * 2 * 4]), rate: 44100.0, seconds: 4.0, bpm: 0.0, first_beat: 0.0, confidence: 0.0, locked: false });
         tx.send(Msg::Loaded { deck: 0, track: loud.clone(), cue: 0.0, hot: [None; HOT], start: None, play: false, force: false }).unwrap();
         tx.send(Msg::Loaded { deck: 1, track: loud, cue: 0.0, hot: [None; HOT], start: None, play: false, force: false }).unwrap();
         tx.send(Msg::Cmd(Cmd::Mix(MixVals { master: Some(1.0), ..Default::default() }))).unwrap();

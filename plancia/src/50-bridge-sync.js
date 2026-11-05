@@ -22,6 +22,7 @@ function connect(){
   if(m.type==='midi_in'){midiFromBridge(m);return}     // MIDI in ingresso (eseguito dal bridge)
   if(m.type==='audio_state'){auApplyState(m);return}  // motore audio gaia-audio (Console Audio)
   if(m.type==='audio_tl'){G.audioTlSt=m.state||null;return}  // timeline audio eseguita dal bridge
+  if(m.type==='audio_grid'){auGridUpdate(m);return}  // griglia corretta dal motore
   if(m.type==='audio_playlists'){AU.playlists=Array.isArray(m.playlists)?m.playlists:[];return}  // playlist globali dal bridge
   if(m.type==='audio_error'){showError('Console Audio: '+(m.message||'errore del motore'));return}
   if(m.type==='midi_ports'){MIDI_PORTS=Array.isArray(m.inputs)?m.inputs:[];return}

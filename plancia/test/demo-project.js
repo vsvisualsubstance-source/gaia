@@ -88,7 +88,7 @@ async function main() {
     for (let i = 0; i < names.length; i++) { await p.ev(`document.querySelectorAll('#tabs > *')[${i}].click()`); await sleep(250); }
     check(names.length >= 15, `${names.length} pagine aperte`);
     const kinds = await p.ev(`(async()=>{[...document.querySelectorAll('#tabs > *')].find(x=>x.textContent==='Timeline').click();await new Promise(z=>setTimeout(z,300));return [...document.querySelectorAll('.tl-tracks .tl-trk .k')].map(k=>k.textContent)})()`);
-    check(kinds.length === 7, `pagina Timeline, tutte le tracce: ${kinds.join(', ')}`);
+    check(kinds.length === 8 && kinds.includes('AUDIO'), `pagina Timeline, tutte le tracce: ${kinds.join(', ')}`);
     check(!p.problems.length, `nessun errore nella pagina ${p.problems.join(' ').slice(0, 300)}`);
   } finally { p.close(); }
   if (fail.length) { console.error(`demo-project: ${fail.length} errori`); process.exit(1); }
