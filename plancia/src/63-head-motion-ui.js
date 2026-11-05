@@ -95,7 +95,7 @@ function hmPadNow(){
 }
 function openHeadMotionEditor(orig){
   const sc=JSON.parse(JSON.stringify(orig)),s=$('#scrim');s.hidden=false;
-  sc.center=sc.center||[0,0];sc.size=sc.size||[.4,.3];sc.period={value:8,unit:'beats',...sc.period};sc.spread={mode:'same',phase:0,...sc.spread};
+  const here=sc.center===null;const lastC=Array.isArray(sc.center)?sc.center:[0,0];sc.size=sc.size||[.4,.3];sc.period={value:8,unit:'beats',...sc.period};sc.spread={mode:'same',phase:0,...sc.spread};
   let drawing=null,follow=false;const bpm=hmBpm();
   const sl=(id,label,v,min,max,step)=>`<label class="ar-sl"><span>${label}<b id="${id}V">${(+v).toFixed(2)}</b></span><input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${v}"></label>`;
   const opt=(list,cur)=>list.map(([k,t])=>`<option value="${k}"${k===cur?' selected':''}>${esc(t)}</option>`).join('');
@@ -108,8 +108,9 @@ function openHeadMotionEditor(orig){
         <p class="hint" id="hmPadHint">Pad pan/tilt: destra = pan +, alto = tilt su. Un pallino per testa.</p></div><div>
       <label>Nome<input id="hmName" value="${esc(sc.name)}"></label>
       <label>Figura<select id="hmShape">${opt(shapes,'')}</select></label>
-      <div class="two">${sl('hmCx','Centro pan',sc.center[0],-1,1,.01)}${sl('hmCy','Centro tilt',sc.center[1],-1,1,.01)}</div>
-      <div class="row"><button class="btn sm ghost" id="hmFromPad" title="Il centro diventa la posizione attuale del pad Pan / Tilt">Centro dal pad</button></div>
+      <div class="two">${sl('hmCx','Centro pan',lastC[0],-1,1,.01)}${sl('hmCy','Centro tilt',lastC[1],-1,1,.01)}</div>
+      <div class="row"><button class="btn sm ghost" id="hmFromPad" title="Il centro diventa la posizione attuale del pad Pan / Tilt">Centro dal pad</button>
+        <label class="chk" title="Ogni testa gira intorno alla posizione in cui si trova quando parte la scena (motore DMX Master). Con il motore OPS gira intorno al centro del pad."><input id="hmHere" type="checkbox"${here?' checked':''}> Intorno a dove si trova ogni testa</label></div>
       <div class="two">${sl('hmSx','Ampiezza pan',sc.size[0],0,1,.01)}${sl('hmSy','Ampiezza tilt',sc.size[1],0,1,.01)}</div>
     </div></div>
     <div class="two"><label>Un giro dura<span class="row"><input id="hmPer" type="number" min="0.25" step="0.25" value="${sc.period.value}" style="flex:1"><select id="hmUnit">${opt([['beats',`battiti (${bpm} BPM)`],['s','secondi']],sc.period.unit)}</select></span></label>
@@ -123,15 +124,18 @@ function openHeadMotionEditor(orig){
   </div>`;
   const q=x=>s.querySelector(x);
   const read=()=>{
-    sc.name=q('#hmName').value.trim()||'Movimento';sc.center=[+q('#hmCx').value,+q('#hmCy').value];sc.size=[+q('#hmSx').value,+q('#hmSy').value];
+    sc.name=q('#hmName').value.trim()||'Movimento';sc.center=q('#hmHere').checked?null:[+q('#hmCx').value,+q('#hmCy').value];hereUi();sc.size=[+q('#hmSx').value,+q('#hmSy').value];
     sc.period={value:Math.max(.25,+q('#hmPer').value||8),unit:q('#hmUnit').value};sc.easing=q('#hmEase').value;
     sc.pingpong=q('#hmPing').checked;sc.reverse=q('#hmRev').checked;sc.spread={mode:q('#hmSpread').value,phase:+q('#hmPhase').value};
     sc.motor=q('#hmMotorOn').checked?+q('#hmMotor').value:null;return sc};
+  // centro null: i cursori del centro non contano (grigi), il riquadro mostra la figura nel mezzo
+  function hereUi(){const on=q('#hmHere').checked;['hmCx','hmCy','hmFromPad'].forEach(id=>{const x=q('#'+id);x.disabled=on;(x.closest('.ar-sl')||x).classList.toggle('na',on)})}
   const setSl=(id,v)=>{q('#'+id).value=v;q('#'+id+'V').textContent=(+v).toFixed(2)};
   s.querySelectorAll('input[type=range]').forEach(r=>r.oninput=()=>{q('#'+r.id+'V').textContent=(+r.value).toFixed(2);read()});
   s.querySelectorAll('select,input[type=checkbox],input[type=number],#hmName').forEach(x=>x.addEventListener('input',read));
   q('#hmShape').onchange=e=>{if(e.target.value){sc.path=hmShape(e.target.value);read()}};
   q('#hmFromPad').onclick=()=>{const p=hmPadNow();if(!p){showError('Nessun pad Pan / Tilt (/mh/pantilt) nelle pagine.');return}setSl('hmCx',p[0].toFixed(2));setSl('hmCy',p[1].toFixed(2));read()};
+  hereUi();
   q('#hmFollow').onchange=e=>{follow=e.target.checked};
   // disegno e REC sul riquadro: punti assoluti del pad, poi figura + centro + ampiezza
   const cv=q('#hmPrev'),padAt=ev=>{const r=cv.getBoundingClientRect();return[clamp((ev.clientX-r.left)/r.width)*2-1,1-clamp((ev.clientY-r.top)/r.height)*2]};

@@ -760,7 +760,7 @@ button{cursor:pointer}
 .rc-sec.closed h4{margin:0}
 .rc-fields{display:grid;gap:6px}.rc-f{display:grid;grid-template-columns:120px 1fr auto;align-items:center;gap:8px;font-size:12.5px}
 .rc-f input[type=range]{width:100%}.rc-f output{font:11px var(--mono);min-width:38px;text-align:right}.rc-f select{grid-column:2/4}.rc-f input[type=color]{width:56px;height:26px;padding:0;border:0;background:none}
-.rc-f.na{opacity:.45}.rc-f.na i{font-style:normal;color:var(--accent)}.rc-bool.on{border-color:var(--accent);color:var(--accent)}
+.ar-sl.na,#hmFromPad.na{opacity:.4}.rc-f.na{opacity:.45}.rc-f.na i{font-style:normal;color:var(--accent)}.rc-bool.on{border-color:var(--accent);color:var(--accent)}
 
 /* config rig: taratura e look (nota TD 69) */
 .rc-body{display:flex;flex-direction:column;gap:10px;overflow:auto;min-height:0}

@@ -9,7 +9,9 @@
 //
 // Scena (L.headMotions[]):
 //   {id, name, template?, path: {pts: [[x, y]...], closed},  x, y in -1..1, y in alto
-//    center: [pan, tilt], size: [pan, tilt]      unita' di /mh/pantilt: -1..1 = escursione intera
+//    center: [pan, tilt] | null, size: [pan, tilt]   unita' di /mh/pantilt: -1..1 = escursione intera
+//      center null = ogni testa gira intorno a dove si trova all'avvio (motore DMX Master, nota TD 55);
+//      il motore OPS non conosce le posizioni e gira intorno al centro [0, 0]
 //    period: {value, unit: 'beats'|'s'}          durata di un giro
 //    easing: 'linear'|'easeIn'|'easeOut'|'easeInOut'|'sine', pingpong, reverse
 //    spread: {mode: 'same'|'phase'|'mirror'|'phase_mirror', phase}   testa k: +k*phase di giro, dispari a specchio
