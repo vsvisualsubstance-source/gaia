@@ -43,7 +43,7 @@ function demoProjectLayout(){
   fx.push({id:'fx-teste-respiro',name:'Teste: respiro',template:true,target:{group:'mh'},channel:'dimmer',shape:'sine',period:{value:8,unit:'beats'},spread:{phase:.25,mirror:false},min:.2,max:1});
   const models=Object.fromEntries(tdModels().filter(m=>['D+RGB 4CH','Dimmer 1CH','Haze 2CH','Wecam Moving Head 30W 11ch'].includes(m.model)).map(m=>[m.model,modelPayload(m)]));
   const S=(id,...steps)=>steps.map(s=>({scene:s})),colors=['colore_rosso','colore_blu','pal_magenta_cyan','pal_forest','pal_deep_purple'];
-  return{pages,fixtures:demoRig(),stage:{...stageDefaults(),width:12,depth:8},models,uiRev:17,tlTdDirty:true,
+  return{pages,fixtures:demoRig(),stage:{...stageDefaults(),width:12,depth:8},models,uiRev:18,tlTdDirty:true,
     groups:[{group:'front',kind:'chase',label:'Front',bind:'rig_a'},{group:'back',kind:'chase',label:'Back',bind:'rig_b'},{group:'mh',kind:'heads',label:'Teste',bind:'heads'},
       {group:'ledbar',kind:'chase',label:'LED bar'},{group:'haze',kind:'level',label:'Haze'},{group:'blinder',kind:'level',label:'Strobo'}],
     showBpm:120,

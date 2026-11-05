@@ -768,3 +768,12 @@ button{cursor:pointer}
 .rc-body .rc-secs{overflow:visible}
 .rc-banner{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 10px;border:1px solid var(--accent);border-radius:6px;background:color-mix(in srgb,var(--accent) 12%,transparent);font-size:12.5px}
 .rc-dot{color:var(--accent);font-style:normal;font-size:10px}
+
+/* test canali (nota TD 71) */
+.ct{display:flex;flex-direction:column;gap:8px;height:calc(100% - 24px);margin-top:24px;min-height:0}
+.ct-top{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:flex-end}.ct-top label{display:flex;flex-direction:column;gap:3px;font-size:12px}.ct-top input{width:80px}
+.ct-act{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.ct-st{font-family:var(--mono)}.ct-st.on{color:var(--accent)}
+.ct-faders{display:flex;gap:6px;flex:1;min-height:0;overflow-x:auto;padding-bottom:4px}
+.ct-ch{flex:1 0 54px;max-width:90px;display:flex;flex-direction:column;align-items:center;gap:4px;border:1px solid var(--line);border-radius:6px;padding:6px 2px;min-height:0}
+.ct-ch input[type=range]{writing-mode:vertical-lr;direction:rtl;flex:1;min-height:80px;width:32px}
+.ct-ch b{font:700 13px var(--mono)}.ct-ch small{font:10px var(--mono);color:var(--dim);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ct-ch output{font:11px var(--mono)}

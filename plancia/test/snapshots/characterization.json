@@ -406,6 +406,17 @@
    ],
    "probes": []
   },
+  "chtest": {
+   "label": "Test canali",
+   "size": [
+    16,
+    10
+   ],
+   "args": [
+    -1
+   ],
+   "probes": []
+  },
   "laser": {
    "label": "Laser",
    "size": [
@@ -1668,6 +1679,26 @@
     }
    ]
   },
+  "chtest": {
+   "name": "Test canali",
+   "pages": [
+    {
+     "name": "Test canali",
+     "widgets": [
+      [
+       "chtest",
+       0,
+       0,
+       16,
+       10,
+       "",
+       "push",
+       "Test canali"
+      ]
+     ]
+    }
+   ]
+  },
   "full": {
    "name": "Show completo",
    "pages": [
@@ -2627,6 +2658,21 @@
      ]
     },
     {
+     "name": "Test canali",
+     "widgets": [
+      [
+       "chtest",
+       0,
+       0,
+       16,
+       10,
+       "",
+       "push",
+       "Test canali"
+      ]
+     ]
+    },
+    {
      "name": "Mix",
      "widgets": [
       [
@@ -2927,9 +2973,13 @@
    [
     "migrateUiRigConfig",
     17
+   ],
+   [
+    "migrateUiChannelTest",
+    18
    ]
   ],
-  "uiRev": 17,
+  "uiRev": 18,
   "pages": [
    {
     "name": "Show",
@@ -3133,6 +3183,17 @@
       "",
       "push",
       "Device TD"
+     ]
+    ]
+   },
+   {
+    "name": "Test canali",
+    "widgets": [
+     [
+      "chtest",
+      "",
+      "push",
+      "Test canali"
      ]
     ]
    }
@@ -3684,7 +3745,7 @@
  },
  "layout": {
   "idempotentOnReload": true,
-  "pages": 16
+  "pages": 17
  },
  "inspector": {
   "gaia": {
@@ -3947,6 +4008,16 @@
    "html": "<h3>Movimento teste</h3> <label>Etichetta<input id=\"fLabel\"></label> <label>Indirizzo OSC<input id=\"fAddr\" class=\"mono\" spellcheck=\"false\" autocapitalize=\"off\"></label> <label>Canale OSC<select id=\"fOscChannel\"><option value=\"\">Predefinito · 192.168.1.73:7020</option></select></label> <p class=\"hint\">La famiglia e l’istanza identificano la destinazione; indirizzo e argomenti restano quelli definiti dal contratto del progetto TD.</p> <label>Colore</label><div class=\"sw\"><button class=\"swb\" data-c=\"#ffb23e\" style=\"--c:#ffb23e\" aria-label=\"Colore #ffb23e\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#3ec9ff\" style=\"--c:#3ec9ff\" aria-label=\"Colore #3ec9ff\" aria-pressed=\"true\"></button><button class=\"swb\" data-c=\"#ff5fa2\" style=\"--c:#ff5fa2\" aria-label=\"Colore #ff5fa2\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#9be15d\" style=\"--c:#9be15d\" aria-label=\"Colore #9be15d\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#b18cff\" style=\"--c:#b18cff\" aria-label=\"Colore #b18cff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#e9ebef\" style=\"--c:#e9ebef\" aria-label=\"Colore #e9ebef\" aria-pressed=\"false\"></button></div> <div class=\"row\"><button class=\"btn\" id=\"fDup\">Duplica</button><button class=\"btn danger\" id=\"fDel\">Elimina</button></div>",
    "fields": {
     "fLabel": "Movimento teste",
+    "fAddr": "",
+    "fOscChannel": "",
+    "fDup": "",
+    "fDel": ""
+   }
+  },
+  "chtest": {
+   "html": "<h3>Test canali</h3> <label>Etichetta<input id=\"fLabel\"></label> <label>Indirizzo OSC<input id=\"fAddr\" class=\"mono\" spellcheck=\"false\" autocapitalize=\"off\"></label> <label>Canale OSC<select id=\"fOscChannel\"><option value=\"\">Predefinito · 192.168.1.73:7020</option></select></label> <p class=\"hint\">La famiglia e l’istanza identificano la destinazione; indirizzo e argomenti restano quelli definiti dal contratto del progetto TD.</p> <label>Colore</label><div class=\"sw\"><button class=\"swb\" data-c=\"#ffb23e\" style=\"--c:#ffb23e\" aria-label=\"Colore #ffb23e\" aria-pressed=\"true\"></button><button class=\"swb\" data-c=\"#3ec9ff\" style=\"--c:#3ec9ff\" aria-label=\"Colore #3ec9ff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#ff5fa2\" style=\"--c:#ff5fa2\" aria-label=\"Colore #ff5fa2\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#9be15d\" style=\"--c:#9be15d\" aria-label=\"Colore #9be15d\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#b18cff\" style=\"--c:#b18cff\" aria-label=\"Colore #b18cff\" aria-pressed=\"false\"></button><button class=\"swb\" data-c=\"#e9ebef\" style=\"--c:#e9ebef\" aria-label=\"Colore #e9ebef\" aria-pressed=\"false\"></button></div> <div class=\"row\"><button class=\"btn\" id=\"fDup\">Duplica</button><button class=\"btn danger\" id=\"fDel\">Elimina</button></div>",
+   "fields": {
+    "fLabel": "Test canali",
     "fAddr": "",
     "fOscChannel": "",
     "fDup": "",
