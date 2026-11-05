@@ -4,6 +4,8 @@
 //!       --port 8790      porta WebSocket (solo 127.0.0.1; ci si collega il bridge della Plancia)
 //!       --device NOME    parte del nome dell'uscita (default: quella predefinita di Windows)
 //!       --no-audio       senza scheda: clock interno, per le prove
+//!       --cue-device NOME  cuffia su un'uscita a parte (es. "Headphone" della Z1 col driver NI);
+//!                        senza, la cuffia va sui canali 3-4 se l'uscita ne ha almeno 4
 //!   gaia-audio list                         uscite audio viste
 //!   gaia-audio analyze [cartella|file ...]  BPM, griglia, forma d'onda (tutta la musica se vuoto)
 //!       --force          rianalizza anche quelle in cache
@@ -57,6 +59,7 @@ struct Opts {
     port: u16,
     device: Option<String>,
     no_audio: bool,
+    cue_device: Option<String>,
     rest: Vec<String>,
 }
 
@@ -69,6 +72,7 @@ fn parse(args: &[String]) -> Result<Opts, String> {
         port: 8790,
         device: None,
         no_audio: false,
+        cue_device: None,
         rest: Vec::new(),
     };
     let mut it = args.iter();
@@ -80,6 +84,7 @@ fn parse(args: &[String]) -> Result<Opts, String> {
             "--port" => o.port = it.next().and_then(|v| v.parse().ok()).ok_or("--port NUMERO")?,
             "--device" => o.device = Some(it.next().ok_or("--device senza nome")?.clone()),
             "--no-audio" => o.no_audio = true,
+            "--cue-device" => o.cue_device = Some(it.next().ok_or("--cue-device senza nome")?.clone()),
             "--range" => {
                 let v = it.next().ok_or("--range senza valori")?;
                 let (a, b) = v.split_once('-').ok_or("--range MIN-MAX")?;
@@ -179,7 +184,7 @@ fn main() -> ExitCode {
             Ok(())
         }
         "analyze" => return analyze(&o),
-        "serve" => serve::serve(serve::ServeOpts { root: o.root, cache: o.cache, port: o.port, device: o.device, no_audio: o.no_audio }),
+        "serve" => serve::serve(serve::ServeOpts { root: o.root, cache: o.cache, port: o.port, device: o.device, no_audio: o.no_audio, cue_device: o.cue_device }),
         "grid" => grid(&o),
         "index" => {
             println!("{}", serde_json::to_string_pretty(&library::index(&o.root, &o.cache)).unwrap_or_default());

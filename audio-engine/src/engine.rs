@@ -287,6 +287,9 @@ pub struct Engine {
     ghp_mst: f32,
     hp_lim: f32,
     hp_peak: f32,
+    /// cuffia su un'uscita separata: ogni blocco la lascia in hp_buf (stereo interleaved)
+    hp_ext: bool,
+    pub hp_buf: Vec<f32>,
     headphones: bool,
     gm: f32,
     lim: f32,
@@ -315,6 +318,8 @@ impl Engine {
             ghp_mst: 0.0,
             hp_lim: 1.0,
             hp_peak: 0.0,
+            hp_ext: false,
+            hp_buf: Vec::new(),
             headphones: false,
             gm: 0.0,
             lim: 1.0,
@@ -327,6 +332,18 @@ impl Engine {
     }
 
     /// uscita riaperta con un'altra frequenza: filtri e clock dello stato seguono
+    /// cuffia su un'uscita a parte (es. "Headphone" della Traktor Z1 col driver NI)
+    pub fn set_hp_ext(&mut self, on: bool) {
+        self.hp_ext = on;
+        if on {
+            self.hp_buf.reserve(32768); // nessuna allocazione nella callback
+        }
+    }
+
+    pub fn hp_ext(&self) -> bool {
+        self.hp_ext
+    }
+
     pub fn set_rate(&mut self, fs: f64) {
         if (fs - self.fs).abs() > 0.5 {
             self.fs = fs;
@@ -696,6 +713,7 @@ impl Engine {
         }
         let ch = channels.max(1);
         let frames = out.len() / ch;
+        self.hp_buf.clear();
         // dissolvenze dei fader (timeline): avanzano a blocchi, il guadagno poi si insegue per campione
         for k in 0..2 {
             if let Some(mut r) = self.strips[k].ramp {
@@ -803,8 +821,8 @@ impl Engine {
             if ch > 1 {
                 o[1] = r;
             }
-            if ch >= 4 {
-                // cuffia sui canali 3-4 (Traktor Z1 e schede DJ): CUE · MIX tra cue e master, poi volume
+            if ch >= 4 || self.hp_ext {
+                // cuffia sui canali 3-4 (schede DJ a 4 canali) o su un'uscita a parte: CUE · MIX tra cue e master, poi volume
                 self.ghp_cue += (hp_cue - self.ghp_cue) * smooth;
                 self.ghp_mst += (hp_mst - self.ghp_mst) * smooth;
                 let mut hl = cl * self.ghp_cue + l * self.ghp_mst;
@@ -818,11 +836,17 @@ impl Engine {
                 hl *= self.hp_lim;
                 hr *= self.hp_lim;
                 self.hp_peak = self.hp_peak.max(hl.abs()).max(hr.abs());
-                o[2] = hl;
-                o[3] = hr;
+                if ch >= 4 {
+                    o[2] = hl;
+                    o[3] = hr;
+                }
+                if self.hp_ext {
+                    self.hp_buf.push(hl);
+                    self.hp_buf.push(hr);
+                }
             }
         }
-        self.headphones = ch >= 4;
+        self.headphones = ch >= 4 || self.hp_ext;
         self.frames += frames as u64;
         if self.frames >= self.next_snapshot {
             self.next_snapshot = self.frames + (self.fs / SNAPSHOT_HZ) as u64;

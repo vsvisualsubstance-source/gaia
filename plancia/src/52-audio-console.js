@@ -48,7 +48,7 @@ async function auFetchTrack(deck,id){
 }
 // stato dal motore vero: e' lui la fonte di verita'
 function auApplyState(s){
-  const now=performance.now();AU.liveAt=now;AU.live=true;AU.master=s.master==='B'?'B':'A';AU.out=s.outputs?.[0]||null;AU.phones=!!s.headphones;AU.meterM=+s.meters?.master||0;
+  const now=performance.now();AU.liveAt=now;AU.live=true;AU.master=s.master==='B'?'B':'A';AU.out=s.outputs?.[0]||null;AU.cueOut=(s.outputs||[]).find(o=>o.role==='cue')||null;AU.phones=!!s.headphones;AU.meterM=+s.meters?.master||0;
   for(const k of['A','B']){const sd=s.decks?.[k],d=AU.decks[k];if(!sd)continue;
     for(const f of['playing','tempo','range','keylock','sync','cue','nudge','preview','scrub','snap'])if(sd[f]!=null)d[f]=sd[f];
     d.hot=Array.from({length:AU_HOT_SAVED},(_,i)=>sd.hot?.[i]??null);
@@ -331,7 +331,7 @@ function auPaintLib(el){
   fs.hidden=!!pl;
   const sim=box.querySelector('.au-sim'),o=AU.out;
   const [st,tip]=!AU.live?['SIMULAZIONE · NESSUN SUONO','Il motore audio gaia-audio non è collegato: i comandi si provano qui, ma non esce suono']
-    :o?.ok?['MOTORE · '+o.device,'Motore gaia-audio collegato: uscita '+o.device+(o.rate?' a '+o.rate+' Hz':'')]
+    :o?.ok?['MOTORE · '+o.device,'Motore gaia-audio collegato: uscita '+o.device+(o.rate?' a '+o.rate+' Hz':'')+(AU.cueOut?(AU.cueOut.ok?' · cuffia: '+AU.cueOut.device:' · cuffia NON aperta ('+(AU.cueOut.device||'')+': '+(AU.cueOut.error||'?')+')'):'')]
     :['MOTORE · NESSUNA USCITA','Motore collegato ma senza scheda audio: '+(o?.error||'uscita non aperta')+'. Riprova da solo ogni 5 s.'];
   if(sim.textContent!==st){sim.textContent=st;sim.title=tip;sim.classList.toggle('live',!!(AU.live&&o?.ok))}
   const rows=auLibRows(),loaded=['A','B'].map(k=>AU.decks[k].track?.id||'');

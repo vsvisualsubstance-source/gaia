@@ -12,6 +12,7 @@ use crate::engine::{Cmd, Engine, HOT, HotOp, Msg, MixVals, Out, TrackData};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use serde_json::{Value, json};
 use std::net::{TcpListener, TcpStream};
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -27,6 +28,8 @@ pub struct ServeOpts {
     /// parte del nome della scheda; None = uscita predefinita di Windows
     pub device: Option<String>,
     pub no_audio: bool,
+    /// uscita separata per la cuffia (parte del nome), es. "Headphone"
+    pub cue_device: Option<String>,
 }
 
 type Clients = Arc<Mutex<Vec<Sender<String>>>>;
@@ -290,7 +293,87 @@ fn find_device(want: &Option<String>) -> Result<cpal::Device, String> {
     }
 }
 
-fn open_output(want: &Option<String>, engine: &Arc<Mutex<Engine>>, err_tx: Sender<String>) -> Result<(cpal::Stream, OutputInfo), String> {
+/// cuffia tra la callback del master e quella dell'uscita cuffia: le due uscite
+/// della stessa scheda hanno lo stesso clock, basta un piccolo buffer (~25 ms)
+struct HpRing {
+    q: VecDeque<f32>,
+    primed: bool,
+}
+type Hp = Arc<Mutex<HpRing>>;
+const HP_TARGET: usize = 2 * 1024;
+const HP_MAX: usize = 2 * 8192;
+
+impl HpRing {
+    fn new() -> Self {
+        HpRing { q: VecDeque::with_capacity(HP_MAX + 4096), primed: false }
+    }
+    fn push(&mut self, s: &[f32]) {
+        self.q.extend(s.iter().copied());
+        while self.q.len() > HP_MAX {
+            self.q.pop_front();
+        }
+    }
+    /// riempie l'uscita cuffia (stereo sui primi due canali); a vuoto silenzio e si riparte dal livello giusto
+    fn pull(&mut self, out: &mut [f32], ch: usize) {
+        let frames = out.len() / ch.max(1);
+        out.fill(0.0);
+        if !self.primed {
+            if self.q.len() < HP_TARGET + 2 * frames {
+                return;
+            }
+            self.primed = true;
+        }
+        if self.q.len() < 2 * frames {
+            self.primed = false;
+            return;
+        }
+        for f in 0..frames {
+            let (l, r) = (self.q.pop_front().unwrap_or(0.0), self.q.pop_front().unwrap_or(0.0));
+            out[f * ch] = l;
+            if ch > 1 {
+                out[f * ch + 1] = r;
+            }
+        }
+    }
+}
+
+fn f32_config(dev: &cpal::Device, rate: Option<u32>) -> Result<cpal::StreamConfig, String> {
+    let sup = dev.default_output_config().map_err(|e| e.to_string())?;
+    if sup.sample_format() == cpal::SampleFormat::F32 && rate.is_none_or(|r| r == sup.sample_rate()) {
+        return Ok(sup.config());
+    }
+    let r = rate.unwrap_or(sup.sample_rate());
+    dev.supported_output_configs()
+        .map_err(|e| e.to_string())?
+        .find(|c| c.sample_format() == cpal::SampleFormat::F32 && c.min_sample_rate() <= r && r <= c.max_sample_rate())
+        .map(|c| c.with_sample_rate(r).config())
+        .ok_or_else(|| format!("nessun formato F32 a {r} Hz"))
+}
+
+/// uscita cuffia separata alla stessa frequenza del master
+fn open_cue(want: &str, rate: f64, hp: Hp, err_tx: Sender<String>) -> Result<(cpal::Stream, OutputInfo), String> {
+    let dev = find_device(&Some(want.to_string()))?;
+    let name = dev.description().map(|n| n.to_string()).unwrap_or_else(|_| "?".into());
+    let cfg = f32_config(&dev, Some(rate as u32)).map_err(|e| format!("{name}: {e}"))?;
+    let ch = cfg.channels as usize;
+    let stream = dev
+        .build_output_stream(
+            cfg,
+            move |data: &mut [f32], _: &cpal::OutputCallbackInfo| match hp.lock() {
+                Ok(mut q) => q.pull(data, ch),
+                Err(_) => data.fill(0.0),
+            },
+            move |e| {
+                let _ = err_tx.send(e.to_string());
+            },
+            None,
+        )
+        .map_err(|e| format!("{name}: {e}"))?;
+    stream.play().map_err(|e| format!("{name}: {e}"))?;
+    Ok((stream, OutputInfo { device: name, rate, ok: true, error: None }))
+}
+
+fn open_output(want: &Option<String>, engine: &Arc<Mutex<Engine>>, err_tx: Sender<String>, hp: Hp) -> Result<(cpal::Stream, OutputInfo), String> {
     let dev = find_device(want)?;
     let name = dev.description().map(|n| n.to_string()).unwrap_or_else(|_| "?".into());
     let sup = dev.default_output_config().map_err(|e| e.to_string())?;
@@ -307,7 +390,14 @@ fn open_output(want: &Option<String>, engine: &Arc<Mutex<Engine>>, err_tx: Sende
         .build_output_stream(
             cfg,
             move |data: &mut [f32], _: &cpal::OutputCallbackInfo| match eng.try_lock() {
-                Ok(mut e) => e.render(data, ch),
+                Ok(mut e) => {
+                    e.render(data, ch);
+                    if e.hp_ext() {
+                        if let Ok(mut q) = hp.lock() {
+                            q.push(&e.hp_buf);
+                        }
+                    }
+                }
                 Err(_) => data.fill(0.0),
             },
             move |e| {
@@ -343,7 +433,7 @@ fn null_clock(engine: Arc<Mutex<Engine>>, run: Arc<AtomicBool>) {
     });
 }
 
-fn state_json(s: crate::engine::Snapshot, out: &OutputInfo) -> String {
+fn state_json(s: crate::engine::Snapshot, out: &OutputInfo, cue: &Option<OutputInfo>) -> String {
     let [da, db] = s.decks;
     let [ma, mb] = s.mix;
     json!({
@@ -352,7 +442,9 @@ fn state_json(s: crate::engine::Snapshot, out: &OutputInfo) -> String {
         "mix": {"A": ma, "B": mb, "xfader": s.xfader, "master": s.master_level, "cue_mix": s.cue_mix, "cue_level": s.cue_level},
         "meters": {"master": s.master_meter, "limiter_db": s.limiter_db, "headphones": s.headphones_meter},
         "headphones": s.headphones,
-        "outputs": [{"kind": if out.ok { "wasapi" } else { "none" }, "device": out.device, "rate": out.rate, "ok": out.ok, "error": out.error}],
+        "outputs": std::iter::once(json!({"kind": if out.ok { "wasapi" } else { "none" }, "role": "master", "device": out.device, "rate": out.rate, "ok": out.ok, "error": out.error}))
+            .chain(cue.iter().map(|c| json!({"kind": "wasapi", "role": "cue", "device": c.device, "rate": c.rate, "ok": c.ok, "error": c.error})))
+            .collect::<Vec<_>>(),
     })
     .to_string()
 }
@@ -381,12 +473,18 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
     let mut info = OutputInfo { device: String::new(), rate: 48000.0, ok: false, error: None };
     let null_run = Arc::new(AtomicBool::new(false));
     let mut retry_at = Instant::now();
+    let hp: Hp = Arc::new(Mutex::new(HpRing::new()));
+    // cuffia separata: errori a parte, si riapre da sola
+    let (cue_err_tx, cue_err_rx) = mpsc::channel::<String>();
+    let mut cue_stream: Option<cpal::Stream> = None;
+    let mut cue_info: Option<OutputInfo> = o.cue_device.as_ref().map(|d| OutputInfo { device: d.clone(), rate: 0.0, ok: false, error: Some("non aperta".into()) });
+    let mut cue_retry_at = Instant::now();
     let try_open = |stream: &mut Option<cpal::Stream>, info: &mut OutputInfo| {
         if o.no_audio {
             info.error = Some("senza audio (--no-audio)".into());
             return;
         }
-        match open_output(&o.device, &engine, err_tx.clone()) {
+        match open_output(&o.device, &engine, err_tx.clone(), hp.clone()) {
             Ok((s, i)) => {
                 null_run.store(false, Ordering::Relaxed);
                 println!("uscita: {} ({} Hz)", i.device, i.rate);
@@ -403,6 +501,28 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
         }
     };
     try_open(&mut stream, &mut info);
+    let open_cue_now = |cue_stream: &mut Option<cpal::Stream>, cue_info: &mut Option<OutputInfo>, rate: f64| {
+        let Some(want) = &o.cue_device else { return };
+        match open_cue(want, rate, hp.clone(), cue_err_tx.clone()) {
+            Ok((s, i)) => {
+                println!("cuffia: {} ({} Hz)", i.device, i.rate);
+                if let Ok(mut e) = engine.lock() {
+                    e.set_hp_ext(true);
+                }
+                *cue_stream = Some(s);
+                *cue_info = Some(i);
+            }
+            Err(e) => {
+                if cue_info.as_ref().and_then(|c| c.error.as_deref()) != Some(e.as_str()) {
+                    eprintln!("cuffia: {e} (riprovo ogni 5 s)");
+                }
+                *cue_info = Some(OutputInfo { device: want.clone(), rate, ok: false, error: Some(e) });
+            }
+        }
+    };
+    if stream.is_some() {
+        open_cue_now(&mut cue_stream, &mut cue_info, info.rate);
+    }
     if stream.is_none() {
         null_run.store(true, Ordering::Relaxed);
         null_clock(engine.clone(), null_run.clone());
@@ -411,7 +531,7 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
 
     loop {
         match orx.recv_timeout(Duration::from_millis(200)) {
-            Ok(Out::State(s)) => broadcast(&clients, &state_json(s, &info)),
+            Ok(Out::State(s)) => broadcast(&clients, &state_json(s, &info, &cue_info)),
             Ok(Out::SaveCues { id, cue, hot }) => {
                 if let Err(e) = save_cues(&o.cache, &id, cue, &hot) {
                     error_msg(&clients, &format!("punti della traccia non salvati: {e}"));
@@ -435,6 +555,26 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
         if stream.is_none() && !o.no_audio && Instant::now() >= retry_at {
             retry_at = Instant::now() + Duration::from_secs(5);
             try_open(&mut stream, &mut info);
+            if stream.is_some() {
+                cue_stream = None;
+                cue_retry_at = Instant::now();
+            }
+        }
+        if let Ok(e) = cue_err_rx.try_recv() {
+            eprintln!("cuffia: {e}");
+            cue_stream = None;
+            if let Ok(mut en) = engine.lock() {
+                en.set_hp_ext(false);
+            }
+            if let Some(c) = cue_info.as_mut() {
+                c.ok = false;
+                c.error = Some(e);
+            }
+            cue_retry_at = Instant::now() + Duration::from_secs(5);
+        }
+        if o.cue_device.is_some() && cue_stream.is_none() && stream.is_some() && Instant::now() >= cue_retry_at {
+            cue_retry_at = Instant::now() + Duration::from_secs(5);
+            open_cue_now(&mut cue_stream, &mut cue_info, info.rate);
         }
     }
 }
@@ -455,6 +595,23 @@ mod tests {
         assert!(matches!(p(r#"{"cmd":"deck.zoom","deck":"A","value":4}"#), Ok(None)));
         assert!(p(r#"{"cmd":"deck.play","deck":"C"}"#).is_err());
         assert!(p(r#"{"cmd":"rm -rf"}"#).is_err());
+    }
+
+    #[test]
+    fn buffer_cuffia() {
+        let mut r = HpRing::new();
+        let mut out = vec![1f32; 512 * 2];
+        r.push(&vec![0.5; 512 * 2]);
+        r.pull(&mut out, 2);
+        assert!(out.iter().all(|x| *x == 0.0), "prima di riempirsi: silenzio");
+        r.push(&vec![0.5; HP_TARGET + 1024]);
+        r.pull(&mut out, 2);
+        assert!(out.iter().all(|x| *x == 0.5), "pieno: suona");
+        let mut out4 = vec![1f32; 256 * 4];
+        r.pull(&mut out4, 4);
+        assert!(out4[0] == 0.5 && out4[1] == 0.5 && out4[2] == 0.0 && out4[3] == 0.0, "stereo sui primi due canali");
+        r.push(&vec![0.1; HP_MAX * 2]);
+        assert!(r.q.len() <= HP_MAX, "non cresce oltre il massimo");
     }
 
     #[test]
