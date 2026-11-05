@@ -662,6 +662,7 @@ impl Engine {
             let s = &self.strips[k];
             (s.gain * s.fader * s.fader * self.xgain(k)) as f32
         });
+        let gains: [f32; 2] = std::array::from_fn(|k| self.strips[k].gain as f32);
         let target_c: [f32; 2] = std::array::from_fn(|k| {
             let s = &self.strips[k];
             if s.cue { s.gain as f32 } else { 0.0 }
@@ -713,13 +714,16 @@ impl Engine {
                     a = st.filt[0].run(a);
                     b = st.filt[1].run(b);
                 }
+                // meter del canale prima del fader (dopo gain, EQ e filtro), come sui mixer DJ:
+                // si vede il livello del brano in preascolto anche a fader chiuso
+                let gain = gains[k];
+                st.peak = st.peak.max((a * gain).abs()).max((b * gain).abs());
                 // cuffia: prima del fader e del crossfader (si sente anche a fader chiuso)
                 st.gc += (target_c[k] - st.gc) * smooth;
                 cl += a * st.gc;
                 cr += b * st.gc;
                 a *= st.g;
                 b *= st.g;
-                st.peak = st.peak.max(a.abs()).max(b.abs());
                 l += a;
                 r += b;
             }
@@ -900,6 +904,7 @@ mod tests {
         assert!(last[0].abs() < 1e-3 && last[1].abs() < 1e-3, "master muto: {last:?}");
         assert!((last[2] - 0.5).abs() < 0.02 && (last[3] - 0.5).abs() < 0.02, "cuffia sente B: {last:?}");
         assert!(e.headphones);
+        assert!(e.strips[1].peak > 0.4, "meter di B a fader chiuso: {}", e.strips[1].peak);
         // 🎧 spento e CUE · MIX su master: cuffia = master (muto)
         e.command(Cmd::MixCh(1, MixVals { cue: Some(false), ..Default::default() }));
         e.command(Cmd::Mix(MixVals { cue_mix: Some(1.0), ..Default::default() }));

@@ -76,11 +76,12 @@ async function main() {
       check(s.sync && Math.abs(s.bpmA - s.bpmB) < 0.05, `SYNC: B a ${s.bpmB.toFixed(2)} BPM come A (${s.bpmA.toFixed(2)})`);
       check(dp < 0.06, `B in fase con A (scarto ${dp.toFixed(3)} di battito, testine interpolate)`);
       check(s.hot != null && s.master === 'A', `hot cue 1 di B a ${s.hot?.toFixed(2)} s, master A`);
-      // mixer: crossfader tutto su B -> il meter di A si spegne
-      await p.ev(`(()=>{const r=document.querySelector('.au-xf input');r.value=1;r.dispatchEvent(new Event('input',{bubbles:true}));return 1})()`);
+      // mixer: crossfader tutto su B e fader B chiuso -> master muto, ma i meter dei canali (prima del fader) restano
+      await p.ev(`(()=>{const r=document.querySelector('.au-xf input');r.value=1;r.dispatchEvent(new Event('input',{bubbles:true}));
+        const f=document.querySelector('.au-vfader[data-ch=B]');f.value=0;f.dispatchEvent(new Event('input',{bubbles:true}));return 1})()`);
       await sleep(600);
-      const m = JSON.parse(await p.ev(`JSON.stringify({a:window.__planciaTest.AU.mix.A.meter,b:window.__planciaTest.AU.mix.B.meter,x:window.__planciaTest.AU.mix.xfader})`));
-      check(m.x === 1 && m.a < 0.001 && m.b > 0.01, `crossfader su B: meter A ${m.a.toFixed(4)}, B ${m.b.toFixed(3)}`);
+      const m = JSON.parse(await p.ev(`JSON.stringify({a:window.__planciaTest.AU.mix.A.meter,b:window.__planciaTest.AU.mix.B.meter,x:window.__planciaTest.AU.mix.xfader,m:window.__planciaTest.AU.meterM})`));
+      check(m.x === 1 && m.m < 0.001 && m.a > 0.01 && m.b > 0.01, `crossfader su B e fader B chiuso: master ${m.m.toFixed(4)}, meter A ${m.a.toFixed(3)} e B ${m.b.toFixed(3)} (prima del fader)`);
       // CUE in onda: A torna al cue e si ferma
       await down('.au-deck[data-deck=A] [data-au=cue]'); await up(); await sleep(400);
       const c = JSON.parse(await p.ev(`JSON.stringify((({playing,pos,cue})=>({playing,pos,cue}))(window.__planciaTest.AU.decks.A))`));

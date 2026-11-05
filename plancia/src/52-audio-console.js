@@ -101,7 +101,8 @@ function auStep(now){
     if(d.playing&&d.track&&!d.scrub){d.pos+=dt*auRate(d);if(d.pos>=d.track.seconds){d.pos=d.track.seconds;d.playing=false}}
     // livello dal dettaglio della forma d'onda, per i meter
     let lv=0;if(d.playing&&d.wave){const i=Math.floor(d.pos*AU_WAVE_RATE)*3,w=d.wave.detail;lv=Math.max(w[i]||0,w[i+1]||0,w[i+2]||0)/255}
-    ch.meter=Math.max(lv*ch.gain*auXGain(k)*ch.fader,ch.meter*.86)}
+    // meter del canale prima del fader (come sui mixer DJ e nel motore); in uscita conta anche fader e crossfader
+    ch.meter=Math.max(lv*ch.gain,ch.meter*.86);ch.out=lv*ch.gain*auXGain(k)*ch.fader}
 }
 // crossfader a potenza costante: -1 = tutto A, +1 = tutto B
 function auXGain(k){const x=(AU.mix.xfader+1)/2;return k==='A'?Math.cos(x*Math.PI/2):Math.sin(x*Math.PI/2)}
@@ -246,7 +247,7 @@ function auMixerHtml(){
 function auPaintMixer(el){
   const box=el.querySelector('.au-mixer');if(!box)return;
   box.querySelectorAll('.au-meter').forEach(cv=>{const g=auCanvas(cv),W=cv.width,H=cv.height;if(!W)return;
-    const k=cv.dataset.ch,v=Math.min(1,k==='M'?(AU.live?AU.meterM:Math.max(AU.mix.A.meter,AU.mix.B.meter)*AU.mix.master):AU.mix[k].meter);
+    const k=cv.dataset.ch,v=Math.min(1,k==='M'?(AU.live?AU.meterM:Math.max(AU.mix.A.out||0,AU.mix.B.out||0)*AU.mix.master):AU.mix[k].meter);
     g.clearRect(0,0,W,H);g.fillStyle='#272c35';g.fillRect(0,0,W,H);
     const h=v*H;const grd=g.createLinearGradient(0,H,0,0);grd.addColorStop(0,'#4fd18b');grd.addColorStop(.75,'#ffb23e');grd.addColorStop(1,'#ff5d5d');
     g.fillStyle=grd;g.fillRect(0,H-h,W,h)});
@@ -361,7 +362,7 @@ registerWidget('audiodeck',{size:[6,6],label:'Deck',showsValue:false,showsAddr:f
   help:()=>['Deck','Forma d\'onda della traccia (basse blu, medie ambra, alte bianche) con la griglia dei battiti: linee forti = inizio battuta, rosse = griglia incerta. Trascina la forma d\'onda per portare il punto preciso sotto la testina (− + per lo zoom, rotella per scorrere), poi CUE o un hot cue lo salvano: con SNAP acceso sul battito, spento esattamente lì. ⏮ ⏭ portano al punto precedente o successivo (inizio traccia, cue, hot cue). La panoramica sotto: tocca per saltare. CUE: da fermo salva il punto (sul battito), tenuto lo fa sentire; in onda torna al cue. SYNC segue il tempo e la fase del MASTER. Il fader del tempo cambia il BPM (±8/16/50%), ‹‹ ›› tenuti spingono o frenano per rimettere a tempo a orecchio. Hot cue 1-4: tocca per salvare o saltare, tieni premuto per cancellare.']});
 registerWidget('audiomixer',{size:[4,6],label:'Mixer',showsValue:false,showsAddr:false,oscAddress:false,
   inner:auMixerHtml,onPointer:auDown,tick:auTick(auPaintMixer),
-  help:()=>['Mixer','Per canale: gain, EQ alti/medi/bassi (tutto a sinistra = taglio), filtro (sinistra passa basso, destra passa alto), 🎧 preascolto in cuffia, fader di volume. Al centro master e mix della cuffia (cue ↔ master). Sotto il crossfader. Doppio tocco su un controllo: torna al centro.']});
+  help:()=>['Mixer','Per canale: gain, EQ alti/medi/bassi (tutto a sinistra = taglio), filtro (sinistra passa basso, destra passa alto), 🎧 preascolto in cuffia, fader di volume. Il meter del canale misura prima del fader: si vede il livello anche del brano in preascolto; il meter M è l\'uscita master. Al centro master e mix della cuffia (cue ↔ master). Sotto il crossfader. Doppio tocco su un controllo: torna al centro.']});
 registerWidget('audiolib',{size:[16,4],label:'Libreria',showsValue:false,showsAddr:false,oscAddress:false,
   inner:auLibHtml,onPointer:auDown,tick:auTick(auPaintLib),
   mounted:()=>{if(!AU.tracks.length&&!AU.libState)auLoadLibrary()},
