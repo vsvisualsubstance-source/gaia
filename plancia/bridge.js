@@ -304,6 +304,8 @@ const audioEngine = require('./audio-engine-link').startAudioEngineLink({
 });
 // Timeline AUDIO: brani e playlist sui deck del motore, seguendo l'orologio dello show (layout.audioTimeline)
 require('./audio-timeline').startAudioTimeline({ getDoc: () => persistedState?.layout?.audioTimeline, engine: audioEngine, lib: audioLib, broadcast });
+// Controller DJ (Traktor Kontrol Z1) sulla Console Audio: comandi al motore, LED dallo stato
+const audioMidi = require('./audio-midi').startAudioMidi({ engine: audioEngine, isTimeline: () => !!persistedState?.layout?.audioTimeline?.active });
 const chase = require('./chase-engine').startChase({ broadcast,
   sendOsc: (address, args) => { const to = routeOf(address, 'default'); if (to) udp.send(encode(address, args), to.port, to.host, () => {}); }
 });
@@ -321,6 +323,8 @@ try {
 } catch { /* pacchetto mqtt mancante: PANIC/GO/BACK solo OSC */ }
 function onMidi(m, port) {
   broadcast({ type: 'midi_in', port, ...m });
+  // la Z1 comanda la Console Audio; le sue mappature "Impara MIDI" restano possibili
+  audioMidi.onMidi(m, port);
   const r = midiIn.midiActions(m, persistedState?.layout, midiState, { laserId: process.env.LASER_ID || 'laser-ops' });
   for (const o of r.osc) {
     if (laserLive(o.address, o.args)) { broadcast({ type: 'osc', address: o.address, args: o.args, channel: o.channel, echo: true }); continue; }
