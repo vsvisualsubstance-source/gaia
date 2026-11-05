@@ -219,7 +219,7 @@ function auPaintDeck(el,w){
   set('.au-bpm i',`${d.tempo*d.range>=0?'+':''}${(d.tempo*d.range*100).toFixed(1)}%`);
   set('.au-time .el',d.playing?auFmt(d.pos):auFmtFine(d.pos));set('.au-time .zm',d.zoom+' s');
   box.querySelector('[data-au=snap]')?.classList.toggle('on',d.snap);set('.au-time .rem','-'+auFmt((d.track?.seconds||0)-d.pos));
-  set('.au-time .st',!d.track?'':!auGridOk(d)?'griglia incerta: sync solo tempo':d.sync&&!auMasterOf(k)?'sync: nessun master in onda':AU.live?'':'simulazione');
+  set('.au-time .st',audioDoc().active&&G.audioTlSt?.engine?'TIMELINE: comanda la traccia AUDIO':!d.track?'':!auGridOk(d)?'griglia incerta: sync solo tempo':d.sync&&!auMasterOf(k)?'sync: nessun master in onda':AU.live?'':'simulazione');
   const on=(sel,v)=>box.querySelector(sel)?.classList.toggle('on',!!v);
   on('[data-au=play]',d.playing);on('[data-au=sync]',d.sync);on('[data-au=master]',AU.master===k&&d.playing);on('[data-au=keylock]',d.keylock);
   box.querySelector('[data-au=play]').textContent=d.playing?'❚❚':'▶';

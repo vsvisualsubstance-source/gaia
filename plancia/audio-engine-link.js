@@ -9,15 +9,21 @@
 const { WebSocket } = require('ws');
 
 function startAudioEngineLink({ url = process.env.AUDIO_ENGINE_URL || 'ws://127.0.0.1:8790', onMessage, log = console.log } = {}) {
-  let ws = null, up = false, timer = null, stopped = false;
+  let ws = null, up = false, timer = null, stopped = false, last = null, lastAt = 0;
   const connect = () => {
     if (stopped) return;
     ws = new WebSocket(url);
     ws.on('open', () => { up = true; log(`Motore audio collegato (${url})`); });
-    ws.on('message', data => onMessage(String(data)));
+    ws.on('message', data => {
+      const s = String(data);
+      // ultimo stato del motore: serve alla timeline audio del bridge
+      // (le chiavi del JSON del motore sono in ordine alfabetico: "type" non e' in testa)
+      try { const m = JSON.parse(s); if (m.type === 'audio_state') { last = m; lastAt = Date.now(); } } catch { /* ignora */ }
+      onMessage(s);
+    });
     ws.on('close', () => {
       if (up) log('Motore audio scollegato');
-      up = false; ws = null;
+      up = false; ws = null; last = null;
       if (!stopped) timer = setTimeout(connect, 3000);
     });
     ws.on('error', () => { /* motore spento: si riprova alla chiusura */ });
@@ -32,6 +38,8 @@ function startAudioEngineLink({ url = process.env.AUDIO_ENGINE_URL || 'ws://127.
       return true;
     },
     up: () => up,
+    state: () => (up && Date.now() - lastAt < 2000 ? last : null),
+    stateAt: () => lastAt,
     stop() { stopped = true; clearTimeout(timer); ws?.close(); },
   };
 }

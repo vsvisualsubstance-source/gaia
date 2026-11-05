@@ -75,7 +75,7 @@ pub fn parse_cmd(v: &Value) -> Result<Option<Cmd>, String> {
     let num = |k: &str| v.get(k).and_then(Value::as_f64).ok_or_else(|| format!("{cmd}: manca {k}"));
     let d = || deck(v).ok_or_else(|| format!("{cmd}: deck A o B"));
     Ok(Some(match cmd {
-        "deck.play" => Cmd::Play(d()?),
+        "deck.play" => Cmd::Play(d()?, v.get("value").and_then(Value::as_bool)),
         "deck.cue_down" => Cmd::CueDown(d()?),
         "deck.cue_up" => Cmd::CueUp(d()?),
         "deck.scrub" => Cmd::Scrub(d()?, v.get("active").and_then(Value::as_bool).unwrap_or(false), num("pos")?),
@@ -93,10 +93,18 @@ pub fn parse_cmd(v: &Value) -> Result<Option<Cmd>, String> {
         "deck.tempo" => Cmd::Tempo(d()?, num("value")?),
         "deck.range" => Cmd::Range(d()?, num("value")?),
         "deck.nudge" => Cmd::Nudge(d()?, num("value")?),
-        "deck.sync" => Cmd::Sync(d()?),
+        "deck.sync" => Cmd::Sync(d()?, v.get("value").and_then(Value::as_bool)),
         "deck.master" => Cmd::Master(d()?),
         "deck.keylock" => Cmd::Keylock(d()?),
         "deck.eject" => Cmd::Eject(d()?),
+        "mix.ramp" => {
+            let k = match v.get("ch").and_then(Value::as_str) {
+                Some("A") => 0,
+                Some("B") => 1,
+                _ => return Err("mix.ramp: ch A o B".into()),
+            };
+            Cmd::Ramp(k, num("fader")?, num("seconds")?, v.get("pause").and_then(Value::as_bool).unwrap_or(false))
+        }
         "mix.set" => {
             let vals = mix_vals(v.get("values").unwrap_or(&Value::Null));
             match v.get("ch").and_then(Value::as_str) {
@@ -204,10 +212,13 @@ fn handle_text(ctx: &Arc<Ctx>, text: &str) {
             error_msg(&ctx.clients, "deck.load: servono deck e track");
             return;
         };
+        let start = v.get("pos").and_then(Value::as_f64);
+        let play = v.get("play").and_then(Value::as_bool).unwrap_or(false);
+        let force = v.get("force").and_then(Value::as_bool).unwrap_or(false);
         let (ctx, id) = (ctx.clone(), id.to_string());
         thread::spawn(move || match load_track(&ctx.root, &ctx.cache, &id) {
             Ok((track, cue, hot)) => {
-                let _ = ctx.tx.send(Msg::Loaded { deck: k, track: Arc::new(track), cue, hot });
+                let _ = ctx.tx.send(Msg::Loaded { deck: k, track: Arc::new(track), cue, hot, start, play, force });
             }
             Err(e) => error_msg(&ctx.clients, &format!("Deck {}: traccia non caricata ({e}).", if k == 0 { "A" } else { "B" })),
         });
@@ -435,7 +446,9 @@ mod tests {
     #[test]
     fn comandi_della_pagina() {
         let p = |s: &str| parse_cmd(&serde_json::from_str(s).unwrap());
-        assert!(matches!(p(r#"{"cmd":"deck.play","deck":"B"}"#), Ok(Some(Cmd::Play(1)))));
+        assert!(matches!(p(r#"{"cmd":"deck.play","deck":"B"}"#), Ok(Some(Cmd::Play(1, None)))));
+        assert!(matches!(p(r#"{"cmd":"deck.play","deck":"A","value":false}"#), Ok(Some(Cmd::Play(0, Some(false))))));
+        assert!(matches!(p(r#"{"cmd":"mix.ramp","ch":"B","fader":0,"seconds":4,"pause":true}"#), Ok(Some(Cmd::Ramp(1, _, _, true)))));
         assert!(matches!(p(r#"{"cmd":"deck.hotcue","deck":"A","n":3,"op":"clear"}"#), Ok(Some(Cmd::HotCue(0, 3, HotOp::Clear)))));
         assert!(matches!(p(r#"{"cmd":"mix.set","ch":"A","values":{"lo":-1,"cue":true}}"#), Ok(Some(Cmd::MixCh(0, MixVals { lo: Some(-1.0), cue: Some(true), .. })))));
         assert!(matches!(p(r#"{"cmd":"mix.set","values":{"xfader":0.5}}"#), Ok(Some(Cmd::Mix(MixVals { xfader: Some(0.5), .. })))));

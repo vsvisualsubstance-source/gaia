@@ -82,7 +82,8 @@ pub struct MixVals {
 
 #[derive(Clone, Debug)]
 pub enum Cmd {
-    Play(usize),
+    /// None = interruttore (pulsante), Some = acceso/spento esplicito (timeline)
+    Play(usize, Option<bool>),
     CueDown(usize),
     CueUp(usize),
     Scrub(usize, bool, f64),
@@ -93,17 +94,20 @@ pub enum Cmd {
     Tempo(usize, f64),
     Range(usize, f64),
     Nudge(usize, f64),
-    Sync(usize),
+    Sync(usize, Option<bool>),
     Master(usize),
     Keylock(usize),
     Eject(usize),
+    /// fader del canale verso `to` in `seconds`, poi pausa del deck se richiesto (dissolvenze della timeline)
+    Ramp(usize, f64, f64, bool),
     MixCh(usize, MixVals),
     Mix(MixVals),
 }
 
 pub enum Msg {
     Cmd(Cmd),
-    Loaded { deck: usize, track: Arc<TrackData>, cue: f64, hot: [Option<f64>; HOT] },
+    /// `start`: posizione di partenza (None = il cue); `play`: parte subito; `force`: anche se il deck e' in onda (timeline)
+    Loaded { deck: usize, track: Arc<TrackData>, cue: f64, hot: [Option<f64>; HOT], start: Option<f64>, play: bool, force: bool },
 }
 
 /// dal motore al resto del programma (fuori dalla callback)
@@ -212,6 +216,15 @@ impl Deck {
     }
 }
 
+#[derive(Clone, Copy)]
+struct FaderRamp {
+    from: f64,
+    to: f64,
+    total: u64,
+    done: u64,
+    pause: bool,
+}
+
 /// parametri e stato dei filtri di un canale del mixer
 struct Strip {
     gain: f64,
@@ -228,12 +241,13 @@ struct Strip {
     g: f32,
     /// guadagno verso la cuffia (gain se 🎧 acceso), inseguito come g
     gc: f32,
+    ramp: Option<FaderRamp>,
     peak: f32,
 }
 
 impl Strip {
     fn new(fs: f64) -> Self {
-        let mut s = Strip { gain: 1.0, hi: 0.0, mid: 0.0, lo: 0.0, filter: 0.0, fader: 1.0, cue: false, eq: [[Biquad::unity(); 2]; 3], filt: [Biquad::unity(); 2], filt_on: false, g: 0.0, gc: 0.0, peak: 0.0 };
+        let mut s = Strip { gain: 1.0, hi: 0.0, mid: 0.0, lo: 0.0, filter: 0.0, fader: 1.0, cue: false, eq: [[Biquad::unity(); 2]; 3], filt: [Biquad::unity(); 2], filt_on: false, g: 0.0, gc: 0.0, ramp: None, peak: 0.0 };
         s.update_eq(fs);
         s
     }
@@ -397,7 +411,10 @@ impl Engine {
             if let Some(x) = f(v.mid, -1.0, 1.0) { s.mid = x }
             if let Some(x) = f(v.lo, -1.0, 1.0) { s.lo = x }
             if let Some(x) = f(v.filter, -1.0, 1.0) { s.filter = x }
-            if let Some(x) = f(v.fader, 0.0, 1.0) { s.fader = x }
+            if let Some(x) = f(v.fader, 0.0, 1.0) {
+                s.fader = x;
+                s.ramp = None; // il fader mosso a mano vince sulla dissolvenza
+            }
             if let Some(x) = v.cue { s.cue = x }
             s.update_eq(self.fs);
         }
@@ -410,12 +427,12 @@ impl Engine {
     pub fn command(&mut self, c: Cmd) {
         use Cmd::*;
         match c {
-            Play(k) => {
+            Play(k, v) => {
                 if self.decks[k].track.is_none() {
                     return;
                 }
                 let d = &mut self.decks[k];
-                d.playing = !d.playing;
+                d.playing = v.unwrap_or(!d.playing);
                 d.preview = false;
                 if d.playing && d.sync {
                     self.sync_phase(k);
@@ -547,8 +564,8 @@ impl Engine {
                     self.decks[k].nudge = v.clamp(-0.2, 0.2);
                 }
             }
-            Sync(k) => {
-                self.decks[k].sync = !self.decks[k].sync;
+            Sync(k, v) => {
+                self.decks[k].sync = v.unwrap_or(!self.decks[k].sync);
                 if self.decks[k].sync {
                     self.sync_tempo(k);
                     if self.decks[k].playing {
@@ -569,13 +586,32 @@ impl Engine {
                     self.decks[k].pos = 0.0;
                 }
             }
+            Ramp(k, to, secs, pause) => {
+                if !to.is_finite() || !secs.is_finite() {
+                    return;
+                }
+                let s = &mut self.strips[k];
+                let to = to.clamp(0.0, 1.0);
+                let total = (secs.clamp(0.0, 120.0) * self.fs) as u64;
+                if total == 0 {
+                    s.fader = to;
+                    s.ramp = None;
+                    if pause {
+                        self.decks[k].playing = false;
+                        self.decks[k].preview = false;
+                    }
+                } else {
+                    s.ramp = Some(FaderRamp { from: s.fader, to, total, done: 0, pause });
+                }
+            }
             MixCh(k, v) => self.apply_mix(Some(k), v),
             Mix(v) => self.apply_mix(None, v),
         }
     }
 
-    fn loaded(&mut self, k: usize, track: Arc<TrackData>, cue: f64, hot: [Option<f64>; HOT]) {
-        if self.decks[k].playing {
+    #[allow(clippy::too_many_arguments)]
+    fn loaded(&mut self, k: usize, track: Arc<TrackData>, cue: f64, hot: [Option<f64>; HOT], start: Option<f64>, play: bool, force: bool) {
+        if self.decks[k].playing && !force {
             self.send(Out::Error(format!("Deck {} in onda: fermalo prima di caricare.", LETTER[k])));
             self.send(Out::Drop(track));
             return;
@@ -586,13 +622,16 @@ impl Engine {
         let d = &mut self.decks[k];
         d.cue = d.clamp_pos(cue);
         d.hot = hot;
-        d.pos = d.cue;
+        d.pos = start.filter(|x| x.is_finite()).map(|x| d.clamp_pos(x)).unwrap_or(d.cue);
         d.playing = false;
         d.preview = false;
         d.nudge = 0.0;
         d.scrub = false;
         if d.sync {
             self.sync_tempo(k);
+        }
+        if play {
+            self.command(Cmd::Play(k, Some(true)));
         }
     }
 
@@ -647,7 +686,7 @@ impl Engine {
         while let Ok(m) = self.rx.try_recv() {
             match m {
                 Msg::Cmd(c) => self.command(c),
-                Msg::Loaded { deck, track, cue, hot } => self.loaded(deck, track, cue, hot),
+                Msg::Loaded { deck, track, cue, hot, start, play, force } => self.loaded(deck, track, cue, hot, start, play, force),
             }
         }
         for k in 0..2 {
@@ -657,6 +696,22 @@ impl Engine {
         }
         let ch = channels.max(1);
         let frames = out.len() / ch;
+        // dissolvenze dei fader (timeline): avanzano a blocchi, il guadagno poi si insegue per campione
+        for k in 0..2 {
+            if let Some(mut r) = self.strips[k].ramp {
+                r.done = (r.done + frames as u64).min(r.total);
+                self.strips[k].fader = r.from + (r.to - r.from) * r.done as f64 / r.total.max(1) as f64;
+                if r.done >= r.total {
+                    self.strips[k].ramp = None;
+                    if r.pause {
+                        self.decks[k].playing = false;
+                        self.decks[k].preview = false;
+                    }
+                } else {
+                    self.strips[k].ramp = Some(r);
+                }
+            }
+        }
         // guadagni di arrivo per il blocco; dentro il blocco si insegue (~10 ms)
         let target: [f32; 2] = std::array::from_fn(|k| {
             let s = &self.strips[k];
@@ -816,8 +871,8 @@ mod tests {
     #[test]
     fn suona_e_avanza_alla_velocita_giusta() {
         let (mut e, tx, _o) = engine();
-        tx.send(Msg::Loaded { deck: 0, track: clicks("a", 120.0, 0.1, 20.0), cue: 0.0, hot: [None; HOT] }).unwrap();
-        tx.send(Msg::Cmd(Cmd::Play(0))).unwrap();
+        tx.send(Msg::Loaded { deck: 0, track: clicks("a", 120.0, 0.1, 20.0), cue: 0.0, hot: [None; HOT], start: None, play: false, force: false }).unwrap();
+        tx.send(Msg::Cmd(Cmd::Play(0, None))).unwrap();
         run(&mut e, 2.0);
         assert!((e.decks[0].pos - 2.0).abs() < 0.02, "pos {}", e.decks[0].pos);
         assert!(e.strips[0].peak > 0.1 || e.master_peak >= 0.0);
@@ -829,7 +884,7 @@ mod tests {
     #[test]
     fn cue_stile_cdj() {
         let (mut e, tx, o) = engine();
-        tx.send(Msg::Loaded { deck: 0, track: clicks("a", 120.0, 0.1, 20.0), cue: 0.1, hot: [None; HOT] }).unwrap();
+        tx.send(Msg::Loaded { deck: 0, track: clicks("a", 120.0, 0.1, 20.0), cue: 0.1, hot: [None; HOT], start: None, play: false, force: false }).unwrap();
         tx.send(Msg::Cmd(Cmd::Seek(0, 2.26))).unwrap();
         tx.send(Msg::Cmd(Cmd::CueDown(0))).unwrap(); // da fermo lontano dal cue: salva sul battito
         run(&mut e, 0.01);
@@ -845,13 +900,13 @@ mod tests {
     #[test]
     fn sync_tempo_e_fase() {
         let (mut e, tx, _o) = engine();
-        tx.send(Msg::Loaded { deck: 0, track: clicks("a", 128.0, 0.2, 60.0), cue: 0.2, hot: [None; HOT] }).unwrap();
-        tx.send(Msg::Loaded { deck: 1, track: clicks("b", 124.0, 0.05, 60.0), cue: 0.05, hot: [None; HOT] }).unwrap();
-        tx.send(Msg::Cmd(Cmd::Play(0))).unwrap();
+        tx.send(Msg::Loaded { deck: 0, track: clicks("a", 128.0, 0.2, 60.0), cue: 0.2, hot: [None; HOT], start: None, play: false, force: false }).unwrap();
+        tx.send(Msg::Loaded { deck: 1, track: clicks("b", 124.0, 0.05, 60.0), cue: 0.05, hot: [None; HOT], start: None, play: false, force: false }).unwrap();
+        tx.send(Msg::Cmd(Cmd::Play(0, None))).unwrap();
         run(&mut e, 3.0);
-        tx.send(Msg::Cmd(Cmd::Sync(1))).unwrap();
+        tx.send(Msg::Cmd(Cmd::Sync(1, None))).unwrap();
         tx.send(Msg::Cmd(Cmd::Seek(1, 10.3))).unwrap();
-        tx.send(Msg::Cmd(Cmd::Play(1))).unwrap();
+        tx.send(Msg::Cmd(Cmd::Play(1, None))).unwrap();
         run(&mut e, 5.0);
         assert!((e.decks[1].bpm() - 128.0).abs() < 0.01, "bpm {}", e.decks[1].bpm());
         let dp = (e.decks[0].phase() - e.decks[1].phase()).abs();
@@ -862,7 +917,7 @@ mod tests {
     #[test]
     fn scrub_si_sente_e_segue_il_dito() {
         let (mut e, tx, _o) = engine();
-        tx.send(Msg::Loaded { deck: 0, track: clicks("a", 120.0, 0.0, 20.0), cue: 0.0, hot: [None; HOT] }).unwrap();
+        tx.send(Msg::Loaded { deck: 0, track: clicks("a", 120.0, 0.0, 20.0), cue: 0.0, hot: [None; HOT], start: None, play: false, force: false }).unwrap();
         run(&mut e, 0.01);
         // fermo: il dito porta la traccia da 1 s a 2 s in mezzo secondo
         e.command(Cmd::Seek(0, 1.0));
@@ -891,11 +946,11 @@ mod tests {
     fn cuffia_sui_canali_3_4() {
         let (mut e, tx, _o) = engine();
         let tone = Arc::new(TrackData { id: "t".into(), samples: vec![0.5; 44100 * 2 * 4], rate: 44100.0, seconds: 4.0, bpm: 0.0, first_beat: 0.0, confidence: 0.0, locked: false });
-        tx.send(Msg::Loaded { deck: 1, track: tone, cue: 0.0, hot: [None; HOT] }).unwrap();
+        tx.send(Msg::Loaded { deck: 1, track: tone, cue: 0.0, hot: [None; HOT], start: None, play: false, force: false }).unwrap();
         // B in onda con fader chiuso e 🎧 acceso, CUE · MIX tutto su cue
         tx.send(Msg::Cmd(Cmd::MixCh(1, MixVals { fader: Some(0.0), cue: Some(true), ..Default::default() }))).unwrap();
         tx.send(Msg::Cmd(Cmd::Mix(MixVals { cue_mix: Some(0.0), cue_level: Some(1.0), ..Default::default() }))).unwrap();
-        tx.send(Msg::Cmd(Cmd::Play(1))).unwrap();
+        tx.send(Msg::Cmd(Cmd::Play(1, None))).unwrap();
         let mut buf = vec![0f32; 480 * 4];
         for _ in 0..30 {
             e.render(&mut buf, 4);
@@ -919,14 +974,39 @@ mod tests {
     }
 
     #[test]
+    fn carica_e_parte_poi_dissolvenza() {
+        let (mut e, tx, _o) = engine();
+        tx.send(Msg::Loaded { deck: 0, track: clicks("a", 120.0, 0.0, 20.0), cue: 0.0, hot: [None; HOT], start: Some(5.0), play: true, force: false }).unwrap();
+        run(&mut e, 1.0);
+        assert!(e.decks[0].playing && (e.decks[0].pos - 6.0).abs() < 0.02, "parte da 5 s: {}", e.decks[0].pos);
+        // in onda: un caricamento normale e' rifiutato, uno della timeline (force) no
+        tx.send(Msg::Loaded { deck: 0, track: clicks("b", 120.0, 0.0, 20.0), cue: 0.0, hot: [None; HOT], start: Some(1.0), play: true, force: false }).unwrap();
+        run(&mut e, 0.01);
+        assert_eq!(e.decks[0].track.as_ref().unwrap().id, "a");
+        tx.send(Msg::Loaded { deck: 0, track: clicks("b", 120.0, 0.0, 20.0), cue: 0.0, hot: [None; HOT], start: Some(1.0), play: true, force: true }).unwrap();
+        run(&mut e, 0.01);
+        assert_eq!(e.decks[0].track.as_ref().unwrap().id, "b");
+        // dissolvenza a 0 in 1 s con pausa
+        e.command(Cmd::Ramp(0, 0.0, 1.0, true));
+        run(&mut e, 0.5);
+        assert!((e.strips[0].fader - 0.5).abs() < 0.03 && e.decks[0].playing, "a meta': {}", e.strips[0].fader);
+        run(&mut e, 0.6);
+        assert!(e.strips[0].fader == 0.0 && !e.decks[0].playing, "fine: fader 0 e in pausa");
+        // play esplicito non fa da interruttore
+        e.command(Cmd::Play(0, Some(true)));
+        e.command(Cmd::Play(0, Some(true)));
+        assert!(e.decks[0].playing);
+    }
+
+    #[test]
     fn hot_cue_e_fine_traccia() {
         let (mut e, tx, _o) = engine();
-        tx.send(Msg::Loaded { deck: 1, track: clicks("b", 120.0, 0.0, 3.0), cue: 0.0, hot: [None; HOT] }).unwrap();
+        tx.send(Msg::Loaded { deck: 1, track: clicks("b", 120.0, 0.0, 3.0), cue: 0.0, hot: [None; HOT], start: None, play: false, force: false }).unwrap();
         run(&mut e, 0.01);
         e.command(Cmd::Seek(1, 1.02));
         e.command(Cmd::HotCue(1, 2, HotOp::Go));
         assert_eq!(e.decks[1].hot[2], Some(1.0));
-        e.command(Cmd::Play(1));
+        e.command(Cmd::Play(1, None));
         run(&mut e, 2.5);
         assert!(!e.decks[1].playing && e.decks[1].pos == 3.0, "si ferma a fine traccia");
         e.command(Cmd::HotCue(1, 2, HotOp::Go));
@@ -937,12 +1017,12 @@ mod tests {
     fn limitatore_e_crossfader() {
         let (mut e, tx, _o) = engine();
         let loud = Arc::new(TrackData { id: "x".into(), samples: vec![0.9; 44100 * 2 * 4], rate: 44100.0, seconds: 4.0, bpm: 0.0, first_beat: 0.0, confidence: 0.0, locked: false });
-        tx.send(Msg::Loaded { deck: 0, track: loud.clone(), cue: 0.0, hot: [None; HOT] }).unwrap();
-        tx.send(Msg::Loaded { deck: 1, track: loud, cue: 0.0, hot: [None; HOT] }).unwrap();
+        tx.send(Msg::Loaded { deck: 0, track: loud.clone(), cue: 0.0, hot: [None; HOT], start: None, play: false, force: false }).unwrap();
+        tx.send(Msg::Loaded { deck: 1, track: loud, cue: 0.0, hot: [None; HOT], start: None, play: false, force: false }).unwrap();
         tx.send(Msg::Cmd(Cmd::Mix(MixVals { master: Some(1.0), ..Default::default() }))).unwrap();
         tx.send(Msg::Cmd(Cmd::MixCh(0, MixVals { gain: Some(2.0), ..Default::default() }))).unwrap();
-        tx.send(Msg::Cmd(Cmd::Play(0))).unwrap();
-        tx.send(Msg::Cmd(Cmd::Play(1))).unwrap();
+        tx.send(Msg::Cmd(Cmd::Play(0, None))).unwrap();
+        tx.send(Msg::Cmd(Cmd::Play(1, None))).unwrap();
         let mut buf = vec![0f32; 480 * 2];
         let mut peak = 0f32;
         for _ in 0..100 {

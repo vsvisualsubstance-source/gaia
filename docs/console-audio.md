@@ -35,6 +35,33 @@ prova d'ascolto con l'operatore. Non va in produzione in un giorno di show.
 - Manca in fase 1: cuffia (cue) su una seconda uscita, piu' uscite insieme
   (Dante + scheda), stato su MQTT.
 
+### Playlist e traccia AUDIO della timeline (2026-11-05)
+
+- **Playlist** globali (come la collezione di Traktor, non del progetto): le
+  salva il bridge in `audio-engine/cache/playlists.json` (`audio-lib.js`) e le
+  rimanda a tutti i tablet (`audio_playlists`). Nella libreria: vista "Tutta la
+  libreria / playlist", ＋ per aggiungere un brano, ▲ ▼ ✕, menu ⋯ (rinomina,
+  duplica, svuota, elimina).
+- **Traccia AUDIO** nella timeline dello show (`src/53-audio-timeline.js`,
+  `layout.audioTimeline = {active, cues: [{time, label, fade, src: {kind:
+  'track'|'playlist'|'stop', id}}]}`). La esegue il bridge (`audio-timeline.js`)
+  seguendo `gaia/show/clock/state`, come laser e video:
+  - una playlist diventa brani in fila con dissolvenza incrociata di `fade`
+    secondi; una cue nuova interrompe la precedente con la sua dissolvenza;
+    "stop" sfuma e ferma; i brani si alternano su A e B;
+  - a ogni passo (100 ms) il bridge confronta cosa dovrebbe suonare con lo
+    stato del motore e corregge (carica, riposiziona oltre 0,3 s, play/pausa,
+    fader con rampe brevi, tempo naturale, crossfader al centro): salti nella
+    timeline, show in pausa e motore riavviato si sistemano da soli; il brano
+    dopo si carica fermo sull'altro deck 30 s prima;
+  - LIVE / TIMELINE come per il laser: in TIMELINE il bridge comanda deck e mixer.
+- Motore: `deck.load` con `pos`, `play`, `force`; `deck.play` e `deck.sync`
+  con `value` esplicito; `mix.ramp` (fader verso un valore in N secondi, con
+  pausa alla fine).
+- Prove: `test/audio-timeline.test.js` (segmenti, dissolvenze, comandi),
+  `test/audio-playlists.js`, `test/audio-timeline-live.js` (motore vero,
+  orologio finto su un topic MQTT di prova).
+
 ## Cosa serve
 
 Una console stile Traktor/Serato per la libreria musicale di Gaia:

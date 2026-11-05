@@ -77,7 +77,7 @@ registerWidget('timeline',{addrLabel:'Indirizzo base OSC',
       const snd=el.querySelector('.tl-send');if(snd)snd.classList.toggle('dirty',!!L.tlTdDirty);
       el.querySelectorAll('.tl-vst').forEach(s=>{const on=s.textContent.startsWith('▶');if(s.classList.contains('run')!==on)s.classList.toggle('run',on)});
       const tap=el.querySelector('.tl-tap b');if(tap&&tap.textContent!==String(liveBpm()))tap.textContent=liveBpm();
-      el.querySelectorAll('.tl-lane>.tl-ph').forEach(p=>p.style.left=r.t/D*100+'%');paintChaseLane(el,w,D,r.t);paintFxLane(el,w,D,r.t);paintHeadMotionLane(el,w,D,r.t);paintVideoLane(el,w,D,r.t);paintLaserLane(el,w,D,r.t);el.querySelector('.tl-tc').textContent=tc(r.t);
+      el.querySelectorAll('.tl-lane>.tl-ph').forEach(p=>p.style.left=r.t/D*100+'%');paintChaseLane(el,w,D,r.t);paintFxLane(el,w,D,r.t);paintHeadMotionLane(el,w,D,r.t);paintVideoLane(el,w,D,r.t);paintLaserLane(el,w,D,r.t);paintAudioLane(el,w,D,r.t);el.querySelector('.tl-tc').textContent=tc(r.t);
       const sample=isShowTimeline(w)&&showClock.authority?showClockSample():null;
       const controlled=isShowTimeline(w)&&showClock.authority,locked=controlled&&(!sample||!showClockFresh(sample));
       el.querySelector('[data-act="start"]').disabled=locked;

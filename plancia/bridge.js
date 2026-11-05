@@ -302,6 +302,8 @@ function laserLive(address, args) {
 const audioEngine = require('./audio-engine-link').startAudioEngineLink({
   onMessage: s => { for (const c of wss.clients) if (c.readyState === 1) c.send(s); },
 });
+// Timeline AUDIO: brani e playlist sui deck del motore, seguendo l'orologio dello show (layout.audioTimeline)
+require('./audio-timeline').startAudioTimeline({ getDoc: () => persistedState?.layout?.audioTimeline, engine: audioEngine, lib: audioLib, broadcast });
 const chase = require('./chase-engine').startChase({ broadcast,
   sendOsc: (address, args) => { const to = routeOf(address, 'default'); if (to) udp.send(encode(address, args), to.port, to.host, () => {}); }
 });

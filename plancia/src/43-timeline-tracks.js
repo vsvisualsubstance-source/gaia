@@ -26,6 +26,9 @@ function tlTrackDefs(){
     {id:'video',label:'Video',html:videoLaneHtml,count:()=>videoDoc().cues.length,edit:openVideoCueEditor,
       list:()=>videoDoc().cues,store:cues=>{L.videoTimeline={...videoDoc(),cues}},
       fresh:t=>({time:t,label:'Video',deck:'A',patch:null,show:null,fx:{}}),copy:c=>({...c,fx:{...(c.fx||{})}})},
+    {id:'audio',label:'Audio',html:audioLaneHtml,count:()=>audioDoc().cues.length,edit:openAudioCueEditor,
+      list:()=>audioDoc().cues,store:cues=>{L.audioTimeline={...audioDoc(),cues}},
+      fresh:t=>({time:t,label:'',fade:4,src:{kind:'track',id:''}}),copy:c=>({...c,src:{...(c.src||{})}})},
     {id:'laser',label:'Laser',html:laserLaneHtml,count:()=>laserDoc().cues.length,edit:openLaserCueEditor,
       list:()=>laserDoc().cues,store:cues=>{L.laserTimeline={...laserDoc(),cues}},
       fresh:t=>({time:t,label:'Laser',cube:'all',mode:'scene',scene:laserScenes()[0]?.id||''}),copy:c=>({...c})}
