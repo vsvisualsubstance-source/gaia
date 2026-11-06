@@ -204,7 +204,8 @@ button{cursor:pointer}
 
 /* render palco */
 .t-stage .box{background:#05060a}
-.t-stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.t-stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+.sv-zoom{position:absolute;right:6px;bottom:6px;display:flex;gap:2px;background:#0009;border:1px solid var(--line2);border-radius:6px;padding:2px;z-index:3}.sv-zoom button{min-width:30px;height:28px;font:600 15px var(--mono);color:var(--fg);background:none;border:0;border-radius:4px;cursor:pointer}.sv-zoom button:active{background:var(--line2)}
 .seg{position:absolute;top:6px;right:6px;display:flex;background:#0009;border:1px solid var(--line2);border-radius:6px;padding:2px;z-index:3}
 .seg button{background:none;border:0;border-radius:4px;padding:3px 9px;font-family:var(--display);font-weight:600;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
 .seg button[aria-pressed="true"]{background:var(--panel2);color:var(--fg)}

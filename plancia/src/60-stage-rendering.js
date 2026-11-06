@@ -364,7 +364,10 @@ function plotProjection(W,H,stage,fixtures){
 function drawPlot(g,W,H,t,w){
   g.globalCompositeOperation='source-over';g.fillStyle='#0b0d11';g.fillRect(0,0,W,H);
   const geom=L.stage;
-  const sproj=plotProjection(W,H,geom,L.fixtures||[]),{s,cx,oy}=sproj;
+  const sproj=plotProjection(W,H,geom,L.fixtures||[]);
+  // vista del tablet (zoom e spostamento, 61-stage-fixtures.js): punto = base * z + (x, y)
+  if(w){const v=stageViewOf(w);sproj.s*=v.z;sproj.cx=sproj.cx*v.z+v.x;sproj.oy=sproj.oy*v.z+v.y}
+  const{s,cx,oy}=sproj;
   const ui=w&&(_stageUI[w.id]||(_stageUI[w.id]={}));
   if(ui)ui.proj=sproj;
   g.strokeStyle='#161a20';g.lineWidth=1;

@@ -92,6 +92,50 @@ async function syncTypesToTD(){
   };
   setTimeout(check,500);
 }
+/* ---------- zoom e spostamento della vista (Pianta e Render) ---------- */
+// Per tablet e per sessione (in _stageUI, mai nel layout salvato): ognuno guarda
+// dove vuole senza muovere gli altri. Punto a schermo = punto di base * z + (x, y).
+// Render: mai piu' piccolo dell'inquadratura intera (z >= 1, senza bordi vuoti).
+const SV_MIN={plot:.3,render:1},SV_MAX=12;
+const svKind=w=>w.view==='plot'?'plot':'render';
+function stageViewOf(w){const ui=_stageUI[w.id]||(_stageUI[w.id]={});ui.views=ui.views||{};const k=svKind(w);return ui.views[k]||(ui.views[k]={z:1,x:0,y:0})}
+function svClamp(v,k,W,H){v.z=clamp(v.z,SV_MIN[k],SV_MAX);if(k==='render'){v.x=clamp(v.x,W*(1-v.z),0);v.y=clamp(v.y,H*(1-v.z),0)}}
+function svZoomAt(w,px,py,f,W,H){
+  const k=svKind(w),v=stageViewOf(w),z2=clamp(v.z*f,SV_MIN[k],SV_MAX);
+  v.x=px-(px-v.x)*z2/v.z;v.y=py-(py-v.y)*z2/v.z;v.z=z2;svClamp(v,k,W,H);
+}
+function svCanvas(el){const c=el.querySelector('canvas'),r=c.getBoundingClientRect();
+  return{c,r,W:c.width/(c._d||1),H:c.height/(c._d||1),local:ev=>({x:(ev.clientX-r.left)*(c.width/(c._d||1))/r.width,y:(ev.clientY-r.top)*(c.height/(c._d||1))/r.height})}}
+// trascinare = spostare la vista (vuoto della Pianta, qualsiasi punto del Render)
+function svPanStart(e,el,w,onTap){
+  const ui=_stageUI[w.id]||(_stageUI[w.id]={}),{W,H,local}=svCanvas(el),v=stageViewOf(w),p0=local(e),o={x:v.x,y:v.y};
+  const start={x:e.clientX,y:e.clientY};let moved=false;
+  e.preventDefault();el.setPointerCapture(e.pointerId);
+  el.onpointermove=ev=>{if(ui.pinch)return;if(!moved&&Math.hypot(ev.clientX-start.x,ev.clientY-start.y)>6)moved=true;
+    if(moved){const p=local(ev);v.x=o.x+p.x-p0.x;v.y=o.y+p.y-p0.y;svClamp(v,svKind(w),W,H)}};
+  el.onpointerup=el.onpointercancel=()=>{el.onpointermove=null;el.onpointerup=el.onpointercancel=null;
+    if(!moved&&!ui.pinchDone)onTap?.();ui.pinchDone=false};
+}
+// rotella e due dita: si collegano una volta sola al canvas del widget
+function svBind(el,w){
+  // sul widget (non sul canvas): dopo il primo tocco gli eventi del dito vanno al widget
+  const c=el.querySelector('canvas');if(!c||el._svBound)return;el._svBound=true;
+  c.addEventListener('wheel',e=>{e.preventDefault();const{W,H,local}=svCanvas(el),p=local(e);svZoomAt(w,p.x,p.y,Math.exp(-e.deltaY*.0015),W,H)},{passive:false});
+  const ptrs=new Map();let pin=null;
+  const ui=()=>_stageUI[w.id]||(_stageUI[w.id]={});
+  el.addEventListener('pointerdown',e=>{if(e.target!==c)return;ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(ptrs.size===2){const[a,b]=[...ptrs.values()],{local}=svCanvas(el),v=stageViewOf(w);
+      pin={d:Math.hypot(a.x-b.x,a.y-b.y)||1,m:local({clientX:(a.x+b.x)/2,clientY:(a.y+b.y)/2}),v:{...v}};ui().pinch=true;ui().pinchDone=true}},true);
+  el.addEventListener('pointermove',e=>{if(!ptrs.has(e.pointerId))return;ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(!pin||ptrs.size<2)return;const[a,b]=[...ptrs.values()],{W,H,local}=svCanvas(el),k=svKind(w),v=stageViewOf(w);
+    const m=local({clientX:(a.x+b.x)/2,clientY:(a.y+b.y)/2}),z2=clamp(pin.v.z*Math.hypot(a.x-b.x,a.y-b.y)/pin.d,SV_MIN[k],SV_MAX);
+    // il punto sotto le dita resta sotto le dita (zoom) e le segue (spostamento)
+    v.z=z2;v.x=m.x-(pin.m.x-pin.v.x)*z2/pin.v.z;v.y=m.y-(pin.m.y-pin.v.y)*z2/pin.v.z;svClamp(v,k,W,H)},true);
+  const end=e=>{ptrs.delete(e.pointerId);if(ptrs.size<2&&pin){pin=null;ui().pinch=false}};
+  el.addEventListener('pointerup',end,true);el.addEventListener('pointercancel',end,true);
+}
+function svButton(el,w,a){const{W,H}=svCanvas(el);if(a==='fit'){const v=stageViewOf(w);v.z=1;v.x=0;v.y=0}else svZoomAt(w,W/2,H/2,a==='in'?1.4:1/1.4,W,H)}
+
 function stageDown(e,el,w){
   const ui=_stageUI[w.id]; const c=el.querySelector('canvas'),r=c.getBoundingClientRect();
   if(!r.width||!ui||!ui.proj)return;
@@ -101,11 +145,13 @@ function stageDown(e,el,w){
   const p0=toLocal(e);
   const hit=(ui.hits||[]).find(h=>Math.hypot(p0.x-h.x,p0.y-h.y)<=h.r);
   const tdHit=!hit&&(ui.tdHits||[]).find(h=>Math.hypot(p0.x-h.x,p0.y-h.y)<=h.r);
+  if(!hit&&!tdHit){svPanStart(e,el,w,()=>openFixAdd(w,toM(p0)));return}   // vuoto: trascina = sposta la vista, tocca = aggiungi
   const start={x:e.clientX,y:e.clientY}; let moved=false; const dragF=hit&&hit.f;
   // blocco: le luci con lo stesso f.block si spostano insieme (colonne, file di barre)
   const mates=dragF?.block?(L.fixtures||[]).filter(x=>x.block===dragF.block).map(x=>({f:x,x:x.x,y:x.y})):null;
   e.preventDefault(); el.setPointerCapture(e.pointerId);
   const mv=ev=>{
+    if(ui.pinch)return;   // due dita: zoom, non si sposta la luce
     if(!moved&&Math.hypot(ev.clientX-start.x,ev.clientY-start.y)>6)moved=true;
     if(dragF&&moved){const m=toM(toLocal(ev)),o=toM(p0);
       if(mates){for(const k of mates){k.f.x=clamp(k.x+m.x-o.x,-150,150);k.f.y=clamp(k.y+m.y-o.y,-150,150)}}
@@ -113,6 +159,7 @@ function stageDown(e,el,w){
   };
   const up=()=>{
     el.onpointermove=null;el.onpointerup=el.onpointercancel=null;
+    if(ui.pinchDone){ui.pinchDone=false;if(dragF&&moved)save();return}
     if(dragF&&moved)save();
     else if(dragF&&!moved)openFixEditor(w,dragF);
     else if(!moved&&tdHit)openTdInfo(tdHit.tf);
@@ -436,11 +483,12 @@ registerWidget('stage',{oscAddress:false,
     }
   }},
   size:[8,6],label:'Palco',showsValue:false,showsAddr:false,
-  inner:w=>`<canvas></canvas><div class="seg"><button data-v="render" aria-pressed="${w.view!=='plot'}">Render</button><button data-v="plot" aria-pressed="${w.view==='plot'}">Pianta</button><button data-act="syncall" title="Invia a DMX Master solo le fixture patchabili DMX. È un invio separato dall'autosalvataggio del layout; LED wall escluse.">⇪ TD</button><button data-act="importtd" title="Importa da DMX Master la patch delle sole fixture DMX; le fixture non-DMX restano in Plancia.">⇩ TD</button><button data-act="more" title="Scene, modelli, gruppi, lampade, spazio, AI e pulizia">☰ Strumenti</button><span class="seg-more" hidden><button data-act="replacepatch">⇪ Sostituisci tutta la patch</button><button data-act="resolve" title="Pulisce i doppioni DMX in TD e reimporta la patch; le fixture non-DMX restano in Plancia.">🧹 TD</button><button data-act="scenes" title="Scene di DMX Master: cattura dal vivo con categorie, richiama, ricattura, rinomina, elimina">▣ Scene</button><button data-act="stage-ai" title="Palco da descrizione: lo descrivi a parole, Ollama prepara le fixture nella Pianta">✨ AI</button><button data-act="space" title="Misure di palco, platea, regia e sala: ingombro totale dello show">📐 Spazio</button><button data-act="lamps" title="Lampade a scarica delle teste (iSpot...): accendi e spegni da DMX Master">💡 Lampade</button><button data-act="models" title="Modelli di fixture di DMX Master: canali, colore lampada, ruota colori e gobo delle teste">▤ Modelli</button><button data-act="groups" title="Gruppi DMX (rig di DMX Master): front, back, teste, LED bar, haze, blinder e rig nuovi">▦ Gruppi</button><button data-act="types" title="Invia la tassonomia dei tipi di Plancia a DMX Master (sostituisce quella attuale).">📋 TD</button></span></div><div class="hud"></div>`,
-  mounted:el=>sizeCanvas(el),
+  inner:w=>`<canvas></canvas><div class="seg"><button data-v="render" aria-pressed="${w.view!=='plot'}">Render</button><button data-v="plot" aria-pressed="${w.view==='plot'}">Pianta</button><button data-act="syncall" title="Invia a DMX Master solo le fixture patchabili DMX. È un invio separato dall'autosalvataggio del layout; LED wall escluse.">⇪ TD</button><button data-act="importtd" title="Importa da DMX Master la patch delle sole fixture DMX; le fixture non-DMX restano in Plancia.">⇩ TD</button><button data-act="more" title="Scene, modelli, gruppi, lampade, spazio, AI e pulizia">☰ Strumenti</button><span class="seg-more" hidden><button data-act="replacepatch">⇪ Sostituisci tutta la patch</button><button data-act="resolve" title="Pulisce i doppioni DMX in TD e reimporta la patch; le fixture non-DMX restano in Plancia.">🧹 TD</button><button data-act="scenes" title="Scene di DMX Master: cattura dal vivo con categorie, richiama, ricattura, rinomina, elimina">▣ Scene</button><button data-act="stage-ai" title="Palco da descrizione: lo descrivi a parole, Ollama prepara le fixture nella Pianta">✨ AI</button><button data-act="space" title="Misure di palco, platea, regia e sala: ingombro totale dello show">📐 Spazio</button><button data-act="lamps" title="Lampade a scarica delle teste (iSpot...): accendi e spegni da DMX Master">💡 Lampade</button><button data-act="models" title="Modelli di fixture di DMX Master: canali, colore lampada, ruota colori e gobo delle teste">▤ Modelli</button><button data-act="groups" title="Gruppi DMX (rig di DMX Master): front, back, teste, LED bar, haze, blinder e rig nuovi">▦ Gruppi</button><button data-act="types" title="Invia la tassonomia dei tipi di Plancia a DMX Master (sostituisce quella attuale).">📋 TD</button></span></div><div class="sv-zoom"><button data-zoom="out" title="Allontana (anche rotella o due dita)">−</button><button data-zoom="in" title="Avvicina (anche rotella o due dita)">+</button><button data-zoom="fit" title="Vista intera">⤢</button></div><div class="hud"></div>`,
+  mounted:(el,w)=>{sizeCanvas(el);svBind(el,w)},
   // barra in alto: vista e strumenti; nella Pianta trascina e tocca le fixture;
   // nel Render un tocco riprova le anteprime video bloccate dei LED wall
-  onPointer(e,el,w){const b=e.target.closest('[data-v]');if(b){w.view=b.dataset.v;el.querySelectorAll('.seg button').forEach(x=>x.setAttribute('aria-pressed',x===b));save()}
+  onPointer(e,el,w){svBind(el,w);const zb=e.target.closest('[data-zoom]');if(zb){svButton(el,w,zb.dataset.zoom);return}
+      const b=e.target.closest('[data-v]');if(b){w.view=b.dataset.v;el.querySelectorAll('.seg button').forEach(x=>x.setAttribute('aria-pressed',x===b));save()}
       else if(e.target.closest('[data-act="more"]'))stageTools(el);
       else if(e.target.closest('[data-act="replacepatch"]'))replacePatchInTD();
       else if(e.target.closest('[data-act="syncall"]'))syncAllFixtures();
@@ -454,14 +502,15 @@ registerWidget('stage',{oscAddress:false,
       else if(e.target.closest('[data-act="space"]'))openSpaceEditor();
       else if(e.target.closest('[data-act="stage-ai"]'))openStageAI();
       else if(w.view==='plot')stageDown(e,el,w);
-      else if(e.target.closest('canvas'))(L.fixtures||[]).forEach(f=>{
+      else if(e.target.closest('canvas'))svPanStart(e,el,w,()=>(L.fixtures||[]).forEach(f=>{
         const state=wallVideoPlayers.get(f.id);
         if(f.type==='wall'&&state&&['blocked','error'].includes(state.status))retryWallVideo(f);
-      });
+      }));
 },
   // ogni fotogramma: Render (luci, a tempo con level) o Pianta, e la riga di stato
   tick(el,w,{now,level}){const c=el.querySelector('canvas'),g=c.getContext('2d');if(!c._d)return;g.setTransform(c._d,0,0,c._d,0,0);
-      const W=c.width/c._d,H=c.height/c._d;if(w.view==='plot')drawPlot(g,W,H,now,w);else drawRender(g,W,H,now,level);
+      const W=c.width/c._d,H=c.height/c._d;if(w.view==='plot')drawPlot(g,W,H,now,w);
+      else{const v=stageViewOf(w);svClamp(v,'render',W,H);g.setTransform(c._d*v.z,0,0,c._d*v.z,c._d*v.x,c._d*v.y);drawRender(g,W,H,now,level);g.setTransform(c._d,0,0,c._d,0,0)}
       const hud=w.view==='plot'?'':`${SH.blackout?'<b>BLACKOUT</b> · ':''}SC ${SH.scene+1} ${esc((tdScenes().length?tdScenes().find(s=>s.index===SH.scene)?.label:dmxOutputFresh()?'':LOOKS[SH.scene]?.n)||'')} · fade ${SH.fade.toFixed(1)}s · chase ${CHASE[SH.chase]||'Off'}${SH.strobe?' · <b>STROBO</b>':''} · ${esc(dmxOutputSummary())}`;
       const h=el.querySelector('.hud');if(h._v!==hud){h.innerHTML=hud;h._v=hud}},
   help:w=>['Palco','Render: come escono le luci (colori reali da DMX Master). Pianta: posizioni e patch, tocca una luce per nome, indirizzo, modello e colore. In alto: 📐 Spazio = misure di palco, platea, regia e sala; ⇪/⇩ TD scambiano la patch, ▣ Scene, ▤ Modelli (libreria), ▦ Gruppi, 💡 Lampade, ✨ AI.']});
