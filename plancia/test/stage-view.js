@@ -82,6 +82,25 @@ async function main() {
     await drag({ x: R.x, y: R.y }, { x: R.x + 5000, y: R.y });
     const r2 = await view('render');
     check(r2.x === 0, `Render: trascinando oltre il bordo si ferma al bordo (x ${r2.x.toFixed(1)})`);
+    // --- telecamera del Render: viste rapide, girare, Shift + trascina, ritorno al pubblico
+    const cam = () => p.ev(`(()=>{const t=window.__planciaTest,w=t.L.pages[t.L.pages.length-1].widgets[0];return t.stageUI[w.id]?.cam||{yaw:0,elev:0}})()`);
+    const camBtn = async c => { await p.ev(`(()=>{document.querySelector('.t-stage [data-cam="${c}"]').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));return 1})()`); await sleep(250); };
+    check(await p.ev(`getComputedStyle(document.querySelector('.t-stage .sv-cam')).display!=='none'`), 'Render: comandi della telecamera visibili');
+    await camBtn('sl');
+    let cm = await cam();
+    check(cm.yaw === -70 && cm.elev === 4, `vista "Sx": telecamera dal lato sinistro (${cm.yaw}°, ${cm.elev}°)`);
+    await camBtn('right'); await camBtn('up');
+    cm = await cam();
+    check(cm.yaw === -50 && cm.elev === 14, `⟳ e △: gira di 20° e sale di 10° (${cm.yaw}°, ${cm.elev}°)`);
+    await mouse('mousePressed', R.x, R.y, { modifiers: 8 });
+    for (let i = 1; i <= 5; i++) await mouse('mouseMoved', R.x - i * 20, R.y, { buttons: 1, modifiers: 8 });
+    await mouse('mouseReleased', R.x - 100, R.y, { modifiers: 8 }); await sleep(150);
+    cm = await cam();
+    check(Math.abs(cm.yaw - (-50 + 40)) < 1, `Shift + trascina: la telecamera gira (${cm.yaw.toFixed(1)}°)`);
+    await camBtn('front');
+    cm = await cam();
+    check(cm.yaw === 0 && cm.elev === 0, '"Pubblico": torna la vista di sempre');
+
     // --- due dita (tocchi veri): allargare = avvicina, nessuna luce si sposta
     await btn('fit');
     await p.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });

@@ -36,7 +36,8 @@ function aimBeam(project,f,z,H){
   if(v[2]<-.05&&z>0){const t=z/-v[2];if(t<12){L=t;hit={x:f.x+v[0]*t,y:f.y+v[1]*t,r:Math.max(.15,t*Math.tan(half))}}}
   const p=project(f.x,f.y,z),q=project(f.x+v[0]*L,f.y+v[1]*L,z+v[2]*L);
   const dx=q.x-p.x,dy=q.y-p.y,len=hit?Math.hypot(dx,dy):clamp(Math.hypot(dx,dy)*1.3,H*.1,H*.6);
-  return{p,ang:Math.atan2(dx,dy),len:Math.max(4,len),toward:Math.max(0,v[1]),v,hit,wd:Math.max(3,len*Math.tan(half)*.9)};
+  const cd=project.camDir||[0,1,0];
+  return{p,ang:Math.atan2(dx,dy),len:Math.max(4,len),toward:Math.max(0,v[0]*cd[0]+v[1]*cd[1]+v[2]*cd[2]),v,hit,wd:Math.max(3,len*Math.tan(half)*.9)};
 }
 // pozza di luce sul pavimento (ellisse schiacciata dalla prospettiva)
 function floorPool(g,project,hit,col,a){
@@ -181,7 +182,36 @@ function drawVideoCover(g,video,x,y,w,h,alpha){
   g.drawImage(video,sx,sy,sw,sh,x,y,w,h);g.restore();
   return true;
 }
-function drawRender(g,W,H,t,level){
+// ---- telecamera del Render: prospettiva vera attorno al palco ----
+// cam = {yaw, elev} in gradi (0, 0 = la vista di sempre dal pubblico, proiezione invariata).
+// Coordinate: x destra, y verso il pubblico, z in alto. La telecamera guarda il centro
+// del palco da una distanza che contiene tutto; yaw gira attorno, elev sale.
+// pannello piatto (LED wall, schermo) in prospettiva: dopo questa trasformazione si
+// disegna nel rettangolo locale 0..Wl x 0..Hl (y=0 in alto), che finisce sui quattro
+// angoli veri del pannello nello spazio (rot = rotazione in pianta, come nella Pianta)
+function panelTransform(g,project,f,z,wM,hM,Wl=360){
+  const r=(f.rot||0)*Math.PI/180,ax=Math.cos(r)*wM/2,ay=Math.sin(r)*wM/2,Hl=Wl*hM/wM;
+  const bl=project(f.x-ax,f.y-ay,z),br=project(f.x+ax,f.y+ay,z),tl=project(f.x-ax,f.y-ay,z+hM);
+  g.transform((br.x-bl.x)/Wl,(br.y-bl.y)/Wl,(bl.x-tl.x)/Hl,(bl.y-tl.y)/Hl,tl.x,tl.y);
+  return{Wl,Hl};
+}
+function makeCamProject(W,H,geom,cam,halfStage,depth){
+  const T=[0,depth*.45,Math.min(2,geom.trussHeight*.3)],D=Math.max(halfStage*2,depth)*1.25+5;
+  const yaw=cam.yaw*Math.PI/180,ph=clamp(14+cam.elev,-5,85)*Math.PI/180;
+  const pos=[T[0]+D*Math.sin(yaw)*Math.cos(ph),T[1]+D*Math.cos(yaw)*Math.cos(ph),T[2]+D*Math.sin(ph)];
+  const sub=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]],dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+  const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]],norm=a=>{const l=Math.hypot(...a)||1;return a.map(v=>v/l)};
+  const fw=norm(sub(T,pos)),up=Math.abs(fw[2])>.98?[0,1,0]:[0,0,1],rt=norm(cross(up,fw)),u=cross(fw,rt);
+  const F=Math.min(W,H*1.7)*.95,cy=H*.56;
+  const project=(x,y,z=0)=>{
+    const v=[x-pos[0],y-pos[1],z-pos[2]],zc=Math.max(.3,dot(v,fw)),k=F/zc;
+    const g0=[x-pos[0],y-pos[1],-pos[2]],zg=Math.max(.3,dot(g0,fw));
+    return{x:W/2+dot(v,rt)*k,y:cy-dot(v,u)*k,groundY:cy-dot(g0,u)*F/zg,scale:k,zs:k};
+  };
+  project.camDir=norm(sub(pos,T));project.cam3d=true;
+  return project;
+}
+function drawRender(g,W,H,t,level,w){
   const fixtures=(L.fixtures||[]).filter(f=>f.enabled!==false);
   const fixturesOf=type=>fixtures.filter(f=>f.type===type);
   // uscita reale di DMX Master per fixture (null = simulazione locale)
@@ -195,19 +225,22 @@ function drawRender(g,W,H,t,level){
   g.globalCompositeOperation='source-over';
   const bg=g.createLinearGradient(0,0,0,H);bg.addColorStop(0,'#04050a');bg.addColorStop(1,'#090b10');g.fillStyle=bg;g.fillRect(0,0,W,H);
   const fb=H*.66,ff=H*.86,zScale=H*.48/Math.max(1,geom.trussHeight);
-  const project=(x,y,z=0)=>{
+  const cam=w?_stageUI[w.id]?.cam:null;
+  const project=cam&&(cam.yaw||cam.elev)?makeCamProject(W,H,geom,cam,halfStage,depth):(x,y,z=0)=>{
     const d=clamp(y/depth,-.2,1.8),halfWidth=W*(.34+.13*d);
-    return{x:W/2+x/halfStage*halfWidth,y:fb+(ff-fb)*d-z*zScale,groundY:fb+(ff-fb)*d,scale:halfWidth/halfStage};
+    return{x:W/2+x/halfStage*halfWidth,y:fb+(ff-fb)*d-z*zScale,groundY:fb+(ff-fb)*d,scale:halfWidth/halfStage,zs:zScale};
   };
+  if(!project.camDir)project.camDir=[0,1,0];   // vista dal pubblico
   const fixtureZ=f=>f.mountToTruss?geom.trussHeight:f.z;
   g.globalCompositeOperation='lighter';
   glow(g,W/2,H*.35,W*.6,SH.back.c,.12*hz*M*SH.g.back);
   drawScreensRender(g,project,zScale,t);drawProjectorsRender(g,project,zScale);g.globalCompositeOperation='lighter';
   for(const wallF of wallFixtures){
     const wp=project(wallF.x,wallF.y,wallF.z),rot=(wallF.rot||0)*Math.PI/180;
-    const wallWidth=(wallF.w||6)*wp.scale*Math.max(.08,Math.abs(Math.cos(rot)));
-    const wallHeight=(wallF.h||3.5)*zScale;
-    const wx0=wp.x-wallWidth/2,wx1=wp.x+wallWidth/2,wy1=wp.y,wy0=wy1-wallHeight;
+    let wx0,wx1,wy0,wy1,panel=false;
+    if(project.cam3d){g.save();const P=panelTransform(g,project,wallF,wallF.z||0,wallF.w||6,wallF.h||3.5);wx0=0;wx1=P.Wl;wy0=0;wy1=P.Hl;panel=true}
+    else{const wallWidth=(wallF.w||6)*wp.scale*Math.max(.08,Math.abs(Math.cos(rot))),wallHeight=(wallF.h||3.5)*wp.zs;
+      wx0=wp.x-wallWidth/2;wx1=wp.x+wallWidth/2;wy1=wp.y;wy0=wy1-wallHeight}
     g.globalCompositeOperation='source-over';g.fillStyle='#07080b';g.fillRect(wx0-4,wy0-4,wx1-wx0+8,wy1-wy0+8);
     const cols=36,rows=Math.max(8,Math.round(cols*(wy1-wy0)/(wx1-wx0))),pw=(wx1-wx0)/cols,ph=(wy1-wy0)/rows;
     const live=outputOf(wallF),b=live?live.level:SH.led.bright*SH.g.ledwall*(SH.blackout?0:SH.master);
@@ -242,8 +275,9 @@ function drawRender(g,W,H,t,level){
         k*=b;avg+=k;if(k<.02)continue;
         g.fillStyle=rgba(col,1,k);g.fillRect(wx0+x*pw+.5,wy0+y*ph+.5,Math.max(1,pw-1.2),Math.max(1,ph-1.2));
       }
-      avg/=cols*rows;glow(g,wp.x,wp.y,W*.42,c,.35*avg*hz);
+      avg/=cols*rows;if(panel){g.restore();panel=false}glow(g,wp.x,wp.y,W*.42,c,.35*avg*hz);
     }
+    if(panel)g.restore();
     g.globalCompositeOperation='lighter';
   }
   // pavimento
@@ -259,7 +293,8 @@ function drawRender(g,W,H,t,level){
   // front wash
   const fw=SH.wash.c,fk=SH.g.front*M*(SH.chase===5?.4+.6*level:1);
   if(fk>.01){g.save();g.beginPath();g.moveTo(frontL.x,frontL.y);g.lineTo(frontR.x,frontR.y);g.lineTo(rearR.x,rearR.y);g.lineTo(rearL.x,rearL.y);g.closePath();g.clip();
-    const pg=g.createRadialGradient(W/2,(fb+ff)/2,0,W/2,(fb+ff)/2,W*.42);pg.addColorStop(0,rgba(fw,.55*fk));pg.addColorStop(1,rgba(fw,0));g.fillStyle=pg;g.fillRect(0,fb,W,ff-fb);g.restore()}
+    if(project.cam3d){const c0=project(0,depth/2,0),rr=Math.max(40,halfStage*1.4*c0.scale),pg=g.createRadialGradient(c0.x,c0.y,0,c0.x,c0.y,rr);pg.addColorStop(0,rgba(fw,.55*fk));pg.addColorStop(1,rgba(fw,0));g.fillStyle=pg;g.fillRect(0,0,W,H);g.restore()}
+    else{const pg=g.createRadialGradient(W/2,(fb+ff)/2,0,W/2,(fb+ff)/2,W*.42);pg.addColorStop(0,rgba(fw,.55*fk));pg.addColorStop(1,rgba(fw,0));g.fillStyle=pg;g.fillRect(0,fb,W,ff-fb);g.restore()}}
   // uplight
   for(let i=0;i<uplights.length;i++){
     const f=uplights[i],group=f.group==='back'||f.group==='rig_b'?'back':'front',p=project(f.x,f.y,f.z);
@@ -299,12 +334,19 @@ function drawRender(g,W,H,t,level){
     if(k>.01){
       if(feedback&&!real)glow(g,x,y,size,col,.95*k);
       else{
-        let ang,len; if(tl>=0){ang=pan*1.15;len=H*(.42+.45*tl)}else{ang=Math.PI-pan*1.15;len=H*(.3+.4*-tl)}
+        let ang,len,floorAt=null; if(tl>=0){ang=pan*1.15;len=H*(.42+.45*tl)}else{ang=Math.PI-pan*1.15;len=H*(.3+.4*-tl)}
+        if(project.cam3d){   // stessa direzione della vista dal pubblico, ma nello spazio
+          const hf=headsF[heads.findIndex(hd=>hd[0]===x&&hd[1]===y)],hz0=hf?fixtureZ(hf):geom.trussHeight,a=pan*1.15;
+          let v=tl>=0?[Math.sin(a),.25+.6*tl,-Math.cos(a)*(.4+.6*tl)]:[Math.sin(a),.2,Math.cos(a)*(.4+.6*-tl)];const l=Math.hypot(...v);v=v.map(c=>c/l);
+          let Lb=hz0*1.6;if(v[2]<-.05)Lb=Math.min(Lb,hz0/-v[2]);
+          const q=project((hf?.x||0)+v[0]*Lb,(hf?.y||0)+v[1]*Lb,hz0+v[2]*Lb);ang=Math.atan2(q.x-x,q.y-y);len=Math.max(8,Math.hypot(q.x-x,q.y-y));
+          if(v[2]<-.05)floorAt=q}
         const gobo=feedback?0:h.gobo,wd=len*(.035+z*.22), subs=gobo===3?[0,1,2].map(j=>[Math.sin(t*.0012+j*2.1)*.06,.35+.2*j,.7]):GOBO[gobo]||GOBO[0];
         for(const [o,wf,a] of subs)beam(g,x,y,ang+o*(.6+z*2.2),len,wd*wf*(.8+soft*.4),col,.42*k*hz*a);
         glow(g,x,y,size,col,.95*k);
         const ex=x+Math.sin(ang)*len,ey=y+Math.cos(ang)*len;
-        if(tl>=0&&ey>fb&&ey<ff+H*.05){g.save();g.translate(ex,ey);g.scale(1,.32);glow(g,0,0,wd*1.1,col,.5*k);g.restore()}
+        if(floorAt){g.save();g.translate(floorAt.x,floorAt.y);g.scale(1,.32);glow(g,0,0,wd*1.1,col,.5*k);g.restore()}
+        else if(!project.cam3d&&tl>=0&&ey>fb&&ey<ff+H*.05){g.save();g.translate(ex,ey);g.scale(1,.32);glow(g,0,0,wd*1.1,col,.5*k);g.restore()}
       }
     }
     if(feedback){
@@ -353,14 +395,14 @@ function drawRender(g,W,H,t,level){
       for(let j=0;j<px;j++){const idx=i*px+j,color=col||chaseCol(SH.bar.c,idx,bars.length*px,t),k=live?fixtureLevel:SH.g.ledbar*M*chaseK(SH.chase===2?idx:i,SH.chase===2?bars.length*px:bars.length,t,level);
         kSum+=k;cSum=cSum||color;const kv=k*vis;
         // in piedi (f.vertical): i pixel salgono da f.z verso l'alto, una colonna di luce
-        if(f.vertical){const p=project(f.x,f.y,(f.z||0)+(j+.5)*span/px),x=p.x,y=p.y,hh=Math.max(1,zScale*span/px-1);
+        if(f.vertical){const p=project(f.x,f.y,(f.z||0)+(j+.5)*span/px),x=p.x,y=p.y,hh=Math.max(1,p.zs*span/px-1);
           g.fillStyle=kv>.02?rgba(color,1,kv):'#15171c';g.fillRect(x-2,y-hh/2,4,hh);
           if(kv>.02)glow(g,x,y,10,color,.5*kv);continue}
         const o=(j+.5-px/2)*span/px,p=project(f.x+ux*o,f.y+uy*o,f.z),x=p.x,y=p.y,sw=Math.max(1,p.scale*span/px*Math.abs(ux)-1);
         g.fillStyle=kv>.02?rgba(color,1,kv):'#15171c';g.fillRect(x-sw/2,y-2,Math.max(2,sw),4);
         if(kv>.02)glow(g,x,y,10,color,.5*kv)}
       const kAvg=kSum/px,pw=fixturePower(f);
-      if(kAvg>.02&&ab.toward<.9)beam(g,ab.p.x,ab.p.y,ab.ang,ab.len,ab.wd+zScale*span*.25,cSum,.16*kAvg*pw*hz*(1-ab.toward));
+      if(kAvg>.02&&ab.toward<.9)beam(g,ab.p.x,ab.p.y,ab.ang,ab.len,ab.wd+ab.p.zs*span*.25,cSum,.16*kAvg*pw*hz*(1-ab.toward));
       floorPool(g,project,ab.hit,cSum,.35*kAvg*pw);
     }
   }

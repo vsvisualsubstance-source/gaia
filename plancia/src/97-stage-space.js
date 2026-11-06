@@ -148,13 +148,16 @@ function drawProjectorPlot(g,f,x,y,s,col,selected,X,Y){
 function drawScreensRender(g,project,zScale,t){
   for(const sc of (L.fixtures||[]).filter(f=>f.type==='screen'&&f.enabled!==false)){
     const p=project(sc.x,sc.y,sc.z||0),rot=(sc.rot||0)*Math.PI/180;
-    const w=(sc.w||5)*p.scale*Math.max(.08,Math.abs(Math.cos(rot))),h=(sc.h||2.8)*zScale;
-    const x0=p.x-w/2,y1=p.y,y0=y1-h,lit=screenLit(sc);
+    // in 3D lo schermo e' un pannello in prospettiva (panelTransform), dal pubblico come sempre
+    let w,h,x0,y0,y1,cx=p.x;const lit=screenLit(sc),panel=!!project.cam3d;
+    if(panel){g.save();const P=panelTransform(g,project,sc,sc.z||0,sc.w||5,sc.h||2.8);w=P.Wl;h=P.Hl;x0=0;y0=0;y1=h;cx=w/2}
+    else{w=(sc.w||5)*p.scale*Math.max(.08,Math.abs(Math.cos(rot)));h=(sc.h||2.8)*(p.zs??zScale);x0=p.x-w/2;y1=p.y;y0=y1-h}
     g.globalCompositeOperation='source-over';g.fillStyle='#0a0c10';g.fillRect(x0-3,y0-3,w+6,h+6);
     if(lit){const gr=g.createLinearGradient(x0,y0,x0+w,y1);gr.addColorStop(0,'#9fb4cf');gr.addColorStop(.5+.2*Math.sin(t*.0004),'#e7ecf3');gr.addColorStop(1,'#7f93ad');
       g.globalAlpha=.85;g.fillStyle=gr;g.fillRect(x0,y0,w,h);g.globalAlpha=1}
     else{g.fillStyle='#2a2f38';g.fillRect(x0,y0,w,h)}
-    g.fillStyle=lit?'#20262f':'#6b7480';g.font='10px JetBrains Mono, monospace';g.textAlign='center';g.fillText(sc.name||'SCHERMO',p.x,y0+12);
+    g.fillStyle=lit?'#20262f':'#6b7480';g.font='10px JetBrains Mono, monospace';g.textAlign='center';g.fillText(sc.name||'SCHERMO',cx,y0+12);
+    if(panel)g.restore();
   }
 }
 // inviluppo convesso (monotone chain) di pochi punti [x,y]
@@ -171,11 +174,17 @@ function drawProjectorsRender(g,project,zScale){
     g.globalCompositeOperation='source-over';g.fillStyle='#1c2027';g.strokeStyle='#9fe0ff';g.lineWidth=1;g.fillRect(p.x-7,p.y-5,14,10);g.strokeRect(p.x-7,p.y-5,14,10);
     if(!info)continue;
     const sc=info.screen,sp=project(sc.x,sc.y,sc.z||0),rot=(sc.rot||0)*Math.PI/180;
-    const w=(sc.w||5)*sp.scale*Math.max(.08,Math.abs(Math.cos(rot))),h=(sc.h||2.8)*zScale,x0=sp.x-w/2,y1=sp.y,y0=y1-h;
-    g.globalCompositeOperation='lighter';const gr=g.createLinearGradient(p.x,p.y,sp.x,(y0+y1)/2);
+    // quattro angoli dello schermo: veri nello spazio in 3D, come sempre dal pubblico
+    let corners;
+    if(project.cam3d){const sw=sc.w||5,sh=sc.h||2.8,ax=Math.cos(rot)*sw/2,ay=Math.sin(rot)*sw/2,z0=sc.z||0;
+      corners=[[-1,0],[1,0],[1,sh],[-1,sh]].map(([s,dz])=>{const q=project(sc.x+s*ax,sc.y+s*ay,z0+dz);return[q.x,q.y]})}
+    else{const w=(sc.w||5)*sp.scale*Math.max(.08,Math.abs(Math.cos(rot))),h=(sc.h||2.8)*(sp.zs??zScale),x0=sp.x-w/2,y1=sp.y,y0=y1-h;
+      corners=[[x0,y0],[x0+w,y0],[x0+w,y1],[x0,y1]]}
+    const mid=corners.reduce((a,c)=>[a[0]+c[0]/4,a[1]+c[1]/4],[0,0]);
+    g.globalCompositeOperation='lighter';const gr=g.createLinearGradient(p.x,p.y,mid[0],mid[1]);
     gr.addColorStop(0,'rgba(220,235,255,.35)');gr.addColorStop(1,'rgba(220,235,255,.04)');g.fillStyle=gr;
     // fascio = inviluppo convesso di obiettivo + 4 angoli (qualunque posizione del proiettore)
-    const hull=convexHull([[p.x,p.y],[x0,y0],[x0+w,y0],[x0+w,y1],[x0,y1]]);
+    const hull=convexHull([[p.x,p.y],...corners]);
     g.beginPath();hull.forEach(([hx,hy],i)=>i?g.lineTo(hx,hy):g.moveTo(hx,hy));g.closePath();g.fill();
     g.globalCompositeOperation='source-over';
   }

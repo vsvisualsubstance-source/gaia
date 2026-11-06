@@ -109,6 +109,9 @@ function svCanvas(el){const c=el.querySelector('canvas'),r=c.getBoundingClientRe
 // trascinare = spostare la vista (vuoto della Pianta, qualsiasi punto del Render)
 function svPanStart(e,el,w,onTap){
   const ui=_stageUI[w.id]||(_stageUI[w.id]={}),{W,H,local}=svCanvas(el),v=stageViewOf(w),p0=local(e),o={x:v.x,y:v.y};
+  if(e.shiftKey&&w.view!=='plot'){const c=camOf(w),c0={...c};e.preventDefault();el.setPointerCapture(e.pointerId);
+    el.onpointermove=ev=>{const p=local(ev);c.yaw=((c0.yaw-(p.x-p0.x)*.4+540)%360)-180;c.elev=clamp(c0.elev+(p.y-p0.y)*.25,-15,70);v.z=1;v.x=0;v.y=0};
+    el.onpointerup=el.onpointercancel=()=>{el.onpointermove=null;el.onpointerup=el.onpointercancel=null};return}
   const start={x:e.clientX,y:e.clientY};let moved=false;
   e.preventDefault();el.setPointerCapture(e.pointerId);
   el.onpointermove=ev=>{if(ui.pinch)return;if(!moved&&Math.hypot(ev.clientX-start.x,ev.clientY-start.y)>6)moved=true;
@@ -133,6 +136,14 @@ function svBind(el,w){
     v.z=z2;v.x=m.x-(pin.m.x-pin.v.x)*z2/pin.v.z;v.y=m.y-(pin.m.y-pin.v.y)*z2/pin.v.z;svClamp(v,k,W,H)},true);
   const end=e=>{ptrs.delete(e.pointerId);if(ptrs.size<2&&pin){pin=null;ui().pinch=false}};
   el.addEventListener('pointerup',end,true);el.addEventListener('pointercancel',end,true);
+}
+// telecamera del Render (per tablet, non salvata): gira attorno, sali/scendi, viste rapide
+function camOf(w){const ui=_stageUI[w.id]||(_stageUI[w.id]={});return ui.cam||(ui.cam={yaw:0,elev:0})}
+function camAction(w,a){const c=camOf(w);
+  if(a==='left')c.yaw-=20;else if(a==='right')c.yaw+=20;else if(a==='up')c.elev=clamp(c.elev+10,-15,70);else if(a==='down')c.elev=clamp(c.elev-10,-15,70);
+  else if(a==='front'){c.yaw=0;c.elev=0}else if(a==='sl'){c.yaw=-70;c.elev=4}else if(a==='sr'){c.yaw=70;c.elev=4}else if(a==='top'){c.yaw=0;c.elev=62}
+  c.yaw=((c.yaw+540)%360)-180;
+  const v=stageViewOf(w);v.z=1;v.x=0;v.y=0;   // la nuova vista si vede intera
 }
 function svButton(el,w,a){const{W,H}=svCanvas(el);if(a==='fit'){const v=stageViewOf(w);v.z=1;v.x=0;v.y=0}else svZoomAt(w,W/2,H/2,a==='in'?1.4:1/1.4,W,H)}
 
@@ -608,11 +619,12 @@ registerWidget('stage',{oscAddress:false,
     }
   }},
   size:[8,6],label:'Palco',showsValue:false,showsAddr:false,
-  inner:w=>`<canvas></canvas><div class="seg"><button data-v="render" aria-pressed="${w.view!=='plot'}">Render</button><button data-v="plot" aria-pressed="${w.view==='plot'}">Pianta</button><button data-act="syncall" title="Invia a DMX Master solo le fixture patchabili DMX. È un invio separato dall'autosalvataggio del layout; LED wall escluse.">⇪ TD</button><button data-act="importtd" title="Importa da DMX Master la patch delle sole fixture DMX; le fixture non-DMX restano in Plancia.">⇩ TD</button><button data-act="more" title="Scene, modelli, gruppi, lampade, spazio, AI e pulizia">☰ Strumenti</button><span class="seg-more" hidden><button data-act="replacepatch">⇪ Sostituisci tutta la patch</button><button data-act="resolve" title="Pulisce i doppioni DMX in TD e reimporta la patch; le fixture non-DMX restano in Plancia.">🧹 TD</button><button data-act="scenes" title="Scene di DMX Master: cattura dal vivo con categorie, richiama, ricattura, rinomina, elimina">▣ Scene</button><button data-act="stage-ai" title="Palco da descrizione: lo descrivi a parole, Ollama prepara le fixture nella Pianta">✨ AI</button><button data-act="space" title="Misure di palco, platea, regia e sala: ingombro totale dello show">📐 Spazio</button><button data-act="lamps" title="Lampade a scarica delle teste (iSpot...): accendi e spegni da DMX Master">💡 Lampade</button><button data-act="models" title="Modelli di fixture di DMX Master: canali, colore lampada, ruota colori e gobo delle teste">▤ Modelli</button><button data-act="groups" title="Gruppi DMX (rig di DMX Master): front, back, teste, LED bar, haze, blinder e rig nuovi">▦ Gruppi</button><button data-act="types" title="Invia la tassonomia dei tipi di Plancia a DMX Master (sostituisce quella attuale).">📋 TD</button></span></div><div class="sel-bar" hidden></div><div class="sv-zoom"><button data-selmode title="Selezione: tocca più luci o trascina un riquadro (anche Shift + clic)">⬚</button><button data-zoom="out" title="Allontana (anche rotella o due dita)">−</button><button data-zoom="in" title="Avvicina (anche rotella o due dita)">+</button><button data-zoom="fit" title="Vista intera">⤢</button></div><div class="hud"></div>`,
+  inner:w=>`<canvas></canvas><div class="seg"><button data-v="render" aria-pressed="${w.view!=='plot'}">Render</button><button data-v="plot" aria-pressed="${w.view==='plot'}">Pianta</button><button data-act="syncall" title="Invia a DMX Master solo le fixture patchabili DMX. È un invio separato dall'autosalvataggio del layout; LED wall escluse.">⇪ TD</button><button data-act="importtd" title="Importa da DMX Master la patch delle sole fixture DMX; le fixture non-DMX restano in Plancia.">⇩ TD</button><button data-act="more" title="Scene, modelli, gruppi, lampade, spazio, AI e pulizia">☰ Strumenti</button><span class="seg-more" hidden><button data-act="replacepatch">⇪ Sostituisci tutta la patch</button><button data-act="resolve" title="Pulisce i doppioni DMX in TD e reimporta la patch; le fixture non-DMX restano in Plancia.">🧹 TD</button><button data-act="scenes" title="Scene di DMX Master: cattura dal vivo con categorie, richiama, ricattura, rinomina, elimina">▣ Scene</button><button data-act="stage-ai" title="Palco da descrizione: lo descrivi a parole, Ollama prepara le fixture nella Pianta">✨ AI</button><button data-act="space" title="Misure di palco, platea, regia e sala: ingombro totale dello show">📐 Spazio</button><button data-act="lamps" title="Lampade a scarica delle teste (iSpot...): accendi e spegni da DMX Master">💡 Lampade</button><button data-act="models" title="Modelli di fixture di DMX Master: canali, colore lampada, ruota colori e gobo delle teste">▤ Modelli</button><button data-act="groups" title="Gruppi DMX (rig di DMX Master): front, back, teste, LED bar, haze, blinder e rig nuovi">▦ Gruppi</button><button data-act="types" title="Invia la tassonomia dei tipi di Plancia a DMX Master (sostituisce quella attuale).">📋 TD</button></span></div><div class="sel-bar" hidden></div><div class="sv-cam"><button data-cam="left" title="Gira attorno al palco (anche Shift + trascina)">⟲</button><button data-cam="right" title="Gira attorno al palco">⟳</button><button data-cam="up" title="Più in alto">△</button><button data-cam="down" title="Più in basso">▽</button><button data-cam="front" title="Vista dal pubblico">Pubblico</button><button data-cam="sl" title="Dal lato sinistro">Sx</button><button data-cam="sr" title="Dal lato destro">Dx</button><button data-cam="top" title="Dall'alto">Alto</button></div><div class="sv-zoom"><button data-selmode title="Selezione: tocca più luci o trascina un riquadro (anche Shift + clic)">⬚</button><button data-zoom="out" title="Allontana (anche rotella o due dita)">−</button><button data-zoom="in" title="Avvicina (anche rotella o due dita)">+</button><button data-zoom="fit" title="Vista intera">⤢</button></div><div class="hud"></div>`,
   mounted:(el,w)=>{sizeCanvas(el);svBind(el,w)},
   // barra in alto: vista e strumenti; nella Pianta trascina e tocca le fixture;
   // nel Render un tocco riprova le anteprime video bloccate dei LED wall
   onPointer(e,el,w){svBind(el,w);const zb=e.target.closest('[data-zoom]');if(zb){svButton(el,w,zb.dataset.zoom);return}
+      const cb=e.target.closest('[data-cam]');if(cb){e.preventDefault();camAction(w,cb.dataset.cam);return}
       const sb=e.target.closest('[data-sel],[data-selmode]');if(sb){e.preventDefault();plotLastW=w;if(w.view!=='plot'&&sb.dataset.selmode!=null){w.view='plot';el.querySelectorAll('.seg [data-v]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.v==='plot'));save()}
         selAction(w,sb.dataset.selmode!=null?'mode':sb.dataset.sel);return}
       const b=e.target.closest('[data-v]');if(b){w.view=b.dataset.v;el.querySelectorAll('.seg button').forEach(x=>x.setAttribute('aria-pressed',x===b));save()}
@@ -637,7 +649,8 @@ registerWidget('stage',{oscAddress:false,
   // ogni fotogramma: Render (luci, a tempo con level) o Pianta, e la riga di stato
   tick(el,w,{now,level}){const c=el.querySelector('canvas'),g=c.getContext('2d');if(!c._d)return;g.setTransform(c._d,0,0,c._d,0,0);
       const W=c.width/c._d,H=c.height/c._d;if(w.view==='plot')drawPlot(g,W,H,now,w);
-      else{const v=stageViewOf(w);svClamp(v,'render',W,H);g.setTransform(c._d*v.z,0,0,c._d*v.z,c._d*v.x,c._d*v.y);drawRender(g,W,H,now,level);g.setTransform(c._d,0,0,c._d,0,0)}
+      else{const v=stageViewOf(w);svClamp(v,'render',W,H);g.setTransform(c._d*v.z,0,0,c._d*v.z,c._d*v.x,c._d*v.y);drawRender(g,W,H,now,level,w);g.setTransform(c._d,0,0,c._d,0,0)}
+      el.classList.toggle('cam-on',w.view!=='plot');
       const hud=w.view==='plot'?'':`${SH.blackout?'<b>BLACKOUT</b> · ':''}SC ${SH.scene+1} ${esc((tdScenes().length?tdScenes().find(s=>s.index===SH.scene)?.label:dmxOutputFresh()?'':LOOKS[SH.scene]?.n)||'')} · fade ${SH.fade.toFixed(1)}s · chase ${CHASE[SH.chase]||'Off'}${SH.strobe?' · <b>STROBO</b>':''} · ${esc(dmxOutputSummary())}`;
       const h=el.querySelector('.hud');if(h._v!==hud){h.innerHTML=hud;h._v=hud}
       paintSelBar(el,w)},
