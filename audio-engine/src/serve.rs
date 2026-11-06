@@ -297,16 +297,32 @@ struct OutputInfo {
     error: Option<String>,
 }
 
+/// "Main (Traktor Kontrol Z1|MOTU": schede in ordine di preferenza, separate da |,
+/// ognuna come parte del nome. Vale la prima che c'e' (e che non e' in avoid,
+/// cioe' gia' usata da un'altra uscita del motore). Restituisce l'indice in names.
+fn pick_device(names: &[String], want: &str, avoid: Option<&str>) -> Option<usize> {
+    for alt in want.split('|').map(|a| a.trim().to_lowercase()).filter(|a| !a.is_empty()) {
+        if let Some(i) = names.iter().position(|n| n.to_lowercase().contains(&alt) && Some(n.as_str()) != avoid) {
+            return Some(i);
+        }
+    }
+    None
+}
+
 fn find_device(want: &Option<String>) -> Result<cpal::Device, String> {
+    find_device_avoid(want, None)
+}
+
+fn find_device_avoid(want: &Option<String>, avoid: Option<&str>) -> Result<cpal::Device, String> {
     let host = cpal::default_host();
     match want {
         None => host.default_output_device().ok_or_else(|| "nessuna uscita audio predefinita".to_string()),
         Some(w) => {
-            let w = w.to_lowercase();
-            host.output_devices()
-                .map_err(|e| e.to_string())?
-                .find(|d| d.description().map(|n| n.to_string().to_lowercase().contains(&w)).unwrap_or(false))
-                .ok_or_else(|| format!("uscita \"{w}\" non trovata"))
+            let devs: Vec<cpal::Device> = host.output_devices().map_err(|e| e.to_string())?.collect();
+            let names: Vec<String> = devs.iter().map(|d| d.description().map(|n| n.to_string()).unwrap_or_default()).collect();
+            pick_device(&names, w, avoid)
+                .map(|i| devs[i].clone())
+                .ok_or_else(|| format!("uscita \"{}\" non trovata", w.replace('|', "\" o \"")))
         }
     }
 }
@@ -414,8 +430,8 @@ fn f32_config(dev: &cpal::Device, rate: Option<u32>) -> Result<cpal::StreamConfi
 }
 
 /// uscita cuffia separata alla stessa frequenza del master
-fn open_cue(want: &str, rate: f64, hp: Hp, err_tx: Sender<String>) -> Result<(cpal::Stream, OutputInfo), String> {
-    let dev = find_device(&Some(want.to_string()))?;
+fn open_cue(want: &str, rate: f64, hp: Hp, err_tx: Sender<String>, master: &str) -> Result<(cpal::Stream, OutputInfo), String> {
+    let dev = find_device_avoid(&Some(want.to_string()), Some(master))?;
     let name = dev.description().map(|n| n.to_string()).unwrap_or_else(|_| "?".into());
     let cfg = f32_config(&dev, Some(rate as u32)).map_err(|e| format!("{name}: {e}"))?;
     let ch = cfg.channels as usize;
@@ -437,8 +453,8 @@ fn open_cue(want: &str, rate: f64, hp: Hp, err_tx: Sender<String>) -> Result<(cp
 }
 
 /// uscita per le luci (cavo virtuale): alla frequenza del dispositivo, il buffer adatta
-fn open_tap(want: &str, rate: f64, tap: Hp, err_tx: Sender<String>) -> Result<(cpal::Stream, OutputInfo), String> {
-    let dev = find_device(&Some(want.to_string()))?;
+fn open_tap(want: &str, rate: f64, tap: Hp, err_tx: Sender<String>, master: &str) -> Result<(cpal::Stream, OutputInfo), String> {
+    let dev = find_device_avoid(&Some(want.to_string()), Some(master))?;
     let name = dev.description().map(|n| n.to_string()).unwrap_or_else(|_| "?".into());
     let cfg = f32_config(&dev, Some(rate as u32)).or_else(|_| f32_config(&dev, None)).map_err(|e| format!("{name}: {e}"))?;
     let (ch, fs) = (cfg.channels as usize, cfg.sample_rate as f64);
@@ -602,9 +618,9 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
         }
     };
     try_open(&mut stream, &mut info);
-    let open_cue_now = |cue_stream: &mut Option<cpal::Stream>, cue_info: &mut Option<OutputInfo>, rate: f64| {
+    let open_cue_now = |cue_stream: &mut Option<cpal::Stream>, cue_info: &mut Option<OutputInfo>, rate: f64, master: &str| {
         let Some(want) = &o.cue_device else { return };
-        match open_cue(want, rate, hp.clone(), cue_err_tx.clone()) {
+        match open_cue(want, rate, hp.clone(), cue_err_tx.clone(), master) {
             Ok((s, i)) => {
                 println!("cuffia: {} ({} Hz)", i.device, i.rate);
                 if let Ok(mut e) = engine.lock() {
@@ -621,9 +637,9 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
             }
         }
     };
-    let open_tap_now = |tap_stream: &mut Option<cpal::Stream>, tap_info: &mut Option<OutputInfo>, rate: f64| {
+    let open_tap_now = |tap_stream: &mut Option<cpal::Stream>, tap_info: &mut Option<OutputInfo>, rate: f64, master: &str| {
         let Some(want) = &o.tap_device else { return };
-        match open_tap(want, rate, tap.clone(), tap_err_tx.clone()) {
+        match open_tap(want, rate, tap.clone(), tap_err_tx.clone(), master) {
             Ok((s, i)) => {
                 println!("luci: {} ({} Hz)", i.device, i.rate);
                 if let Ok(mut e) = engine.lock() {
@@ -641,8 +657,8 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
         }
     };
     if stream.is_some() {
-        open_cue_now(&mut cue_stream, &mut cue_info, info.rate);
-        open_tap_now(&mut tap_stream, &mut tap_info, info.rate);
+        open_cue_now(&mut cue_stream, &mut cue_info, info.rate, &info.device);
+        open_tap_now(&mut tap_stream, &mut tap_info, info.rate, &info.device);
     }
     if stream.is_none() {
         null_run.store(true, Ordering::Relaxed);
@@ -714,7 +730,7 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
         }
         if o.cue_device.is_some() && cue_stream.is_none() && stream.is_some() && Instant::now() >= cue_retry_at {
             cue_retry_at = Instant::now() + Duration::from_secs(5);
-            open_cue_now(&mut cue_stream, &mut cue_info, info.rate);
+            open_cue_now(&mut cue_stream, &mut cue_info, info.rate, &info.device);
         }
         if let Ok(e) = tap_err_rx.try_recv() {
             eprintln!("luci: {e}");
@@ -730,7 +746,7 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
         }
         if o.tap_device.is_some() && tap_stream.is_none() && stream.is_some() && Instant::now() >= tap_retry_at {
             tap_retry_at = Instant::now() + Duration::from_secs(5);
-            open_tap_now(&mut tap_stream, &mut tap_info, info.rate);
+            open_tap_now(&mut tap_stream, &mut tap_info, info.rate, &info.device);
         }
     }
 }
@@ -787,6 +803,16 @@ mod tests {
         let last = out[out.len() - 2];
         r.pull(&mut out, 2);
         assert!((out[0] - last - 0.91875).abs() < 1e-3, "continua tra un blocco e l'altro");
+    }
+
+    #[test]
+    fn scheda_preferita_o_alternativa() {
+        let names: Vec<String> = ["Speakers (Realtek)", "Out 1-2 (MOTU M Series)", "CABLE Input (VB-Audio Virtual Cable) [Speaker]"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(pick_device(&names, "Main (Traktor Kontrol Z1|MOTU", None), Some(1), "senza Z1: la MOTU");
+        let z1: Vec<String> = ["Main (Traktor Kontrol Z1 WDM Audio)", "Out 1-2 (MOTU M Series)"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(pick_device(&z1, "Main (Traktor Kontrol Z1|MOTU", None), Some(0), "con la Z1: la Z1, prima nell'elenco");
+        assert_eq!(pick_device(&names, "Headphone (Traktor Kontrol Z1|MOTU", Some("Out 1-2 (MOTU M Series)")), None, "cuffia: non la stessa uscita del master");
+        assert_eq!(pick_device(&names, " cable input (vb-audio ", None), Some(2), "spazi e maiuscole non contano");
     }
 
     #[test]

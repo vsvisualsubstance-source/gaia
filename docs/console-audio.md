@@ -179,6 +179,13 @@ cercata per parte del nome (`gaia-audio list` mostra i nomi che vede):
 | `--cue-device` | cuffia | `Headphone (Traktor Kontrol Z1` |
 | `--tap-device` | **luci**: copia del mix dopo fader e crossfader, *prima* del volume master | `CABLE Input (VB-Audio` |
 
+Ogni opzione accetta piu' schede in ordine di preferenza, separate da `|`:
+vale la prima collegata, mai la stessa del master per cuffia e luci. Sulla
+touring: `--device "Main (Traktor Kontrol Z1|MOTU"`, cioe' la Z1 se c'e',
+altrimenti la MOTU M2. La M2 ha due uscite e la sua presa cuffie ripete il
+master: con la sola M2 il preascolto separato non c'e' (🎧 grigio nella
+console), serve una seconda uscita (Z1, altra scheda) per `--cue-device`.
+
 L'uscita luci serve a DMX Master sulla stessa macchina: la DMX legge un
 ingresso audio, e la Z1 non ne ha. Con **VB-Audio Virtual Cable** il motore
 suona su "CABLE Input" e la DMX ascolta "CABLE Output" (sorgente
