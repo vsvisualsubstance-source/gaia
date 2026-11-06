@@ -158,7 +158,7 @@ function drawRender(g,W,H,t,level){
   const outputOf=f=>fixtureOutput(f,{model:f.type==='mh'?tdModelFor(f):null});
   const wallFixtures=fixturesOf('wall'), uplights=fixturesOf('par'), bars=fixturesOf('bar');
   const headsF=fixturesOf('mh'), blinderF=fixturesOf('blinder'), speakers=fixturesOf('speaker'), lasers=fixturesOf('laser');
-  const geom=L.stage, depth=Math.max(1,geom.depth), halfStage=Math.max(1,geom.width/2);
+  const geom=L.stage, depth=Math.max(1,geom.depth), halfStage=Math.max(1,geom.width/2,...fixtures.filter(f=>f.type!=='speaker'&&Number.isFinite(+f.x)).map(f=>Math.abs(+f.x)+(f.type==='wall'||f.type==='screen'?(f.w||5)/2:.6)));  // anche le luci fuori dal palco restano in vista
   // nebbia: con il feedback, l'uscita reale della macchina haze (nota 33)
   const hazeOut=fixturesOf('haze').map(outputOf).find(o=>o?.record.sent&&o.record.intensity!=null)?.record;
   const gate=SH.strobe?(((t/1000*SH.rate)%1)<.22?1:0):1, M=(SH.blackout?0:SH.master)*gate, hz=.3+.9*(hazeOut?hazeOut.intensity:SH.g.haze);
@@ -315,7 +315,12 @@ function drawRender(g,W,H,t,level){
     for(let i=0;i<bars.length;i++){const f=bars[i];
       const live=outputOf(f),col=live?live.color:null,fixtureLevel=live?live.level:0;
       for(let j=0;j<px;j++){const idx=i*px+j,color=col||chaseCol(SH.bar.c,idx,bars.length*px,t),k=live?fixtureLevel:SH.g.ledbar*M*chaseK(SH.chase===2?idx:i,SH.chase===2?bars.length*px:bars.length,t,level);
-        const span=f.w||1.8,p=project(f.x+(j+.5-px/2)*span/px,f.y,f.z),x=p.x,y=p.y;
+        // in piedi (f.vertical): i pixel salgono da f.z verso l'alto, una colonna di luce
+        const span=f.w||(f.vertical?1:1.8);
+        if(f.vertical){const p=project(f.x,f.y,(f.z||0)+(j+.5)*span/px),x=p.x,y=p.y,hh=Math.max(1,zScale*span/px-1);
+          g.fillStyle=k>.02?rgba(color,1,k):'#15171c';g.fillRect(x-2,y-hh/2,4,hh);
+          if(k>.02)glow(g,x,y,10,color,.5*k);continue}
+        const p=project(f.x+(j+.5-px/2)*span/px,f.y,f.z),x=p.x,y=p.y;
         g.fillStyle=k>.02?rgba(color,1,k):'#15171c';g.fillRect(x-p.scale*span/px/2+.5,y-2,Math.max(1,p.scale*span/px-1),4);
         if(k>.02)glow(g,x,y,10,color,.5*k)}}
   }
@@ -404,7 +409,11 @@ function drawPlot(g,W,H,t,w){
   // fixture vere (patch editabile) -- ogni fixture ha una posizione propria
   // in L.fixtures, non piu' un conteggio con disposizione automatica.
   const hits=[],sel=ui&&ui.selFix;
+  // blocco impilato (stesso blocco, stesso punto: colonna di barre in piedi): un segno e un'etichetta sola
+  const stacked=new Map();for(const f of (L.fixtures||[]))if(f.block){const k=f.block+'@'+(+f.x||0).toFixed(2)+','+(+f.y||0).toFixed(2);stacked.set(k,[...(stacked.get(k)||[]),f])}
+  const stackOf=f=>f.block?stacked.get(f.block+'@'+(+f.x||0).toFixed(2)+','+(+f.y||0).toFixed(2)):null;
   for(const f of (L.fixtures||[])){
+    const st=stackOf(f);if(st&&st.length>1&&st[0]!==f)continue;   // gia' disegnata col primo del blocco
     const x=X(f.x),y=Y(f.y),col=FIX_COLOR[f.type]||'#c9ced8',r=s*.26,on=f.enabled!==false;
     g.globalAlpha=on?1:.35;
     if(f.type==='wall'){
@@ -418,6 +427,8 @@ function drawPlot(g,W,H,t,w){
     }
     else if(f.type==='screen')drawScreenPlot(g,f,x,y,s,col,f.id===sel);
     else if(f.type==='projector')drawProjectorPlot(g,f,x,y,s,col,f.id===sel,X,Y);
+    else if(f.type==='bar'&&f.vertical){g.fillStyle='#1c2027';g.strokeStyle=col;g.lineWidth=st?.some(x=>x.id===sel)?2.6:1.5;g.fillRect(x-s*.17,y-s*.17,s*.34,s*.34);g.strokeRect(x-s*.17,y-s*.17,s*.34,s*.34);
+      g.fillStyle=col;g.fillRect(x-s*.06,y-s*.06,s*.12,s*.12)}
     else if(f.type==='bar'){g.fillStyle=col;g.fillRect(x-.9*s,y-.08*s,1.8*s,.16*s)}
     else if(f.type==='speaker'){g.fillStyle='#1b1f26';g.strokeStyle=col;g.lineWidth=1.2;g.fillRect(x-s*.32,y-s*.4,s*.64,s*.8);g.strokeRect(x-s*.32,y-s*.4,s*.64,s*.8)}
     else{g.fillStyle='#1c2027';g.strokeStyle=col;g.lineWidth=f.id===sel?2.6:1.3;g.beginPath();g.arc(x,y,r,0,Math.PI*2);g.fill();g.stroke();
@@ -425,8 +436,9 @@ function drawPlot(g,W,H,t,w){
     if(f.id===sel&&f.type!=='wall'&&f.type!=='screen'){g.strokeStyle='#00ffcc';g.lineWidth=1.5;g.beginPath();g.arc(x,y,r+5,0,Math.PI*2);g.stroke()}
     g.globalAlpha=1;
     const flat=f.type==='wall'||f.type==='screen',labelR=flat?.18*s:r,fw=f.w||(f.type==='wall'?6:5),fh=f.h||(f.type==='wall'?3.5:2.8);
-    txt(flat?`${f.name} · ${fw}×${fh}m`:f.type==='projector'&&projectorInfo(f)?`${f.name} · ${projectorInfo(f).dist.toFixed(1)} m`:f.name,x,y-labelR-6,'#e9ebef');
-    if(FIX_TYPES[f.type].ch)txt(f.universe+'.'+String(f.address).padStart(3,'0'),x,y+r+12,'#5d6573');
+    if(st&&st.length>1){const a=st.map(x=>x.address).sort((p,q)=>p-q);txt(`${f.block} · ${st.length}×`,x,y-labelR-6,'#e9ebef');txt(`${f.universe}.${String(a[0]).padStart(3,'0')}–${String(a[a.length-1]).padStart(3,'0')}`,x,y+r+12,'#5d6573')}
+    else{txt(flat?`${f.name} · ${fw}×${fh}m`:f.type==='projector'&&projectorInfo(f)?`${f.name} · ${projectorInfo(f).dist.toFixed(1)} m`:f.name,x,y-labelR-6,'#e9ebef');
+    if(FIX_TYPES[f.type].ch)txt(f.universe+'.'+String(f.address).padStart(3,'0'),x,y+r+12,'#5d6573')}
     if(f.type==='laser'&&f.cube){const c=laserCubeState(f.cube);txt(`${f.cube} · ${laserStateText(c)}`,x,y+r+12,laserStateColor(c))}
     hits.push({f,x,y,r:flat?Math.max(fw*s/2,s*.4):Math.max(r,s*.4)});
   }

@@ -102,10 +102,14 @@ function stageDown(e,el,w){
   const hit=(ui.hits||[]).find(h=>Math.hypot(p0.x-h.x,p0.y-h.y)<=h.r);
   const tdHit=!hit&&(ui.tdHits||[]).find(h=>Math.hypot(p0.x-h.x,p0.y-h.y)<=h.r);
   const start={x:e.clientX,y:e.clientY}; let moved=false; const dragF=hit&&hit.f;
+  // blocco: le luci con lo stesso f.block si spostano insieme (colonne, file di barre)
+  const mates=dragF?.block?(L.fixtures||[]).filter(x=>x.block===dragF.block).map(x=>({f:x,x:x.x,y:x.y})):null;
   e.preventDefault(); el.setPointerCapture(e.pointerId);
   const mv=ev=>{
     if(!moved&&Math.hypot(ev.clientX-start.x,ev.clientY-start.y)>6)moved=true;
-    if(dragF&&moved){const m=toM(toLocal(ev));dragF.x=clamp(m.x,-150,150);dragF.y=clamp(m.y,-150,150)/* con la mappa del locale le luci stanno ovunque */}
+    if(dragF&&moved){const m=toM(toLocal(ev)),o=toM(p0);
+      if(mates){for(const k of mates){k.f.x=clamp(k.x+m.x-o.x,-150,150);k.f.y=clamp(k.y+m.y-o.y,-150,150)}}
+      else{dragF.x=clamp(m.x,-150,150);dragF.y=clamp(m.y,-150,150)}/* con la mappa del locale le luci stanno ovunque */}
   };
   const up=()=>{
     el.onpointermove=null;el.onpointerup=el.onpointercancel=null;
@@ -202,6 +206,9 @@ function openFixEditor(w,f){
     <p class="hint" id="feUnitMsg"></p>`:''}
     ${fixtureHasPalette(f)?`<label>Colore <em>palette propria: cambia solo il colore, livello e audio restano quelli del rig</em></label>${paletteChipsHtml(fixturePaletteOf(f),'fePal')}<p class="hint" id="fePalMsg"></p>
     <label>Audio <em>come segue la musica questa luce; livello e colore restano del gruppo</em></label>${audioControlsHtml(fixtureAudioOf(f),fixtureGainOf(f),'feAud')}<p class="hint" id="feAudMsg"></p>`:''}
+    <label>Blocco <em>luci con lo stesso blocco si spostano insieme nella Pianta (es. COL1)</em><input id="feBlock" spellcheck="false" autocapitalize="characters"></label>
+    ${f.type==='bar'?`<label class="chk"><input id="feVert" type="checkbox"> In piedi (verticale): nel Render la barra sale da "altezza" verso l'alto</label>
+    <div class="two"><label>Lunghezza barra (m)<input id="feLen" type="number" min=".2" max="4" step=".05"></label><div class="row"><button class="btn sm ghost" id="feStack" title="Le barre del blocco, in piedi una sopra l'altra in questo punto, a partire dall'altezza di questa">⇕ Impila il blocco</button></div></div>`:''}
     <label class="chk"><input id="feOn" type="checkbox"> Attiva</label>
     ${FIX_TYPES[f.type].ch?`<div class="row"><button class="btn" id="feSync">${f._synced?'Aggiorna su DMX Master':'Manda a DMX Master'}</button></div>
     <p class="hint" id="feSyncMsg"></p>`:'<p class="hint">Tipo non patchabile via DMX -- DMX Master lo salta (confermato da TD).</p>'}
@@ -270,6 +277,7 @@ function openFixEditor(w,f){
   // modifica: se diverge e la fixture era gia' sincronizzata, avviso
   // subito -- non solo dopo aver premuto "Aggiorna" e aspettato l'esito.
   if($('#feUnit'))val2('#feUnit',f.unit??'');
+  val2('#feBlock',f.block||'');if($('#feVert')){$('#feVert').checked=!!f.vertical;val2('#feLen',f.w||(f.vertical?1:1.8))}
   let syncedSnap=f._synced?JSON.stringify({group:f.group,model:f.model,universe:f.universe,address:f.address,unit:f.unit??null}):null;
   const checkDirty=()=>{
     if(!syncedSnap||!$('#feSyncMsg'))return;
@@ -290,8 +298,17 @@ function openFixEditor(w,f){
     }
     if($('#feAngle')){f.angle=clamp(+$('#feAngle').value||0,-180,180);f.spread=clamp(+$('#feSpread').value||28,1,120)}
     if($('#feCube')){f.cube=$('#feCube').value||undefined;laserFixtureStatus(f)}
+    {const b=$('#feBlock').value.trim().toUpperCase().slice(0,24);if(b)f.block=b;else delete f.block}
+    if($('#feVert')){f.vertical=$('#feVert').checked||undefined;if(!f.vertical)delete f.vertical;const w=+$('#feLen').value;if(w>0)f.w=clamp(w,.2,4)}
     f.enabled=$('#feOn').checked; save(); checkDirty()};
   ['feName','feZ','feGroup','feAddr','feUnit','feW','feH','feRot','feSource','feSourceRef','feAngle','feSpread','feCube','fePrTarget','fePrThrow'].forEach(id=>{const n=$('#'+id);if(n){n.addEventListener('input',upd);n.addEventListener('change',upd)}});
+  ['feBlock','feVert','feLen'].forEach(id=>{const n=$('#'+id);if(n){n.addEventListener('input',upd);n.addEventListener('change',upd)}});
+  if($('#feStack'))$('#feStack').onclick=()=>{upd();if(!f.block){showError('Prima dai un nome al blocco.');return}
+    // in ordine di indirizzo: la prima in basso
+    const list=(L.fixtures||[]).filter(x=>x.block===f.block&&x.type==='bar').sort((a,b)=>(a.universe-b.universe)||(a.address-b.address));
+    const z0=Number.isFinite(+f.z)?+f.z:0,len=f.w||1;
+    list.forEach((x,i)=>{x.x=f.x;x.y=f.y;x.vertical=true;x.w=len;x.mountToTruss=false;x.z=+(Math.min(...list.map(y=>+y.z||0),z0)+i*len).toFixed(2)});
+    save();showInfo(`${f.block}: ${list.length} barre in piedi, una sopra l'altra.`)};
   $('#feOn').addEventListener('change',upd);if($('#feTruss'))$('#feTruss').addEventListener('change',upd);
   if($('#feNdiSearch'))$('#feNdiSearch').onclick=()=>pickNdiSource(f);
   // unità di tutto il gruppo, poi a DMX Master le luci gia' mandate
