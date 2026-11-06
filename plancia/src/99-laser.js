@@ -209,6 +209,19 @@ function drawRealLaser(g,f,origin,z0,spread,base,distance,project){
   }
   g.fillStyle=col;g.beginPath();g.arc(origin.x,origin.y,c?.armed?4:3,0,Math.PI*2);g.fill();
   if(c?.armed&&!c.streaming){g.strokeStyle=col;g.lineWidth=1;g.beginPath();g.arc(origin.x,origin.y,8,0,Math.PI*2);g.stroke()}
+  return!!pts?.length;   // false = niente raggi veri: il Render simula
+}
+// laser senza raggi veri (nessun cubo, gateway assente, cubo spento o non in uscita):
+// ventaglio animato che spazza e cambia colore, alla sua altezza e nella sua direzione
+function drawSimLaser(g,f,origin,z0,spread,base,distance,project,t,M){
+  if(M<.02)return;
+  const n=9,sweep=Math.sin(t*.0011)*spread*.35,hue=(t*.00012)%1,tilt=Math.sin(t*.0007)*.12;
+  g.save();g.globalCompositeOperation='lighter';g.lineWidth=1.3;g.shadowBlur=9;
+  for(let i=0;i<n;i++){const a=base+sweep+(i/(n-1)-.5)*spread,col=hsv2rgb((hue+i*.03)%1,1,1);
+    const tg=project(f.x+Math.sin(a)*distance,f.y+Math.cos(a)*distance,Math.max(0,z0+tilt*distance*(i%2?1:-1)));
+    g.strokeStyle=rgba(col,.75*M);g.shadowColor=rgba(col,1);g.beginPath();g.moveTo(origin.x,origin.y);g.lineTo(tg.x,tg.y);g.stroke()}
+  g.restore();
+  g.save();g.fillStyle='#ff365c';g.font='8px JetBrains Mono, monospace';g.textAlign='center';g.fillText('SIM',origin.x,origin.y-7);g.restore();
 }
 function bindLaserFixtureEditor(f){
   const sel=$('#feCube'),cubes=lzDev()?.laser.cubes||[];

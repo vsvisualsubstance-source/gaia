@@ -24,11 +24,24 @@ function fixtureAim(f){const d=AIM_DEFAULT[f.type]||{aim:0,pitch:0},a=+f.aim,p=+
   return{aim:f.aim!=null&&Number.isFinite(a)?a:d.aim,pitch:f.pitch!=null&&Number.isFinite(p)?p:d.pitch,set:f.aim!=null||f.pitch!=null}}
 // vettore 3D (x destra, y verso il pubblico, z in alto)
 function aimVec(a){const h=a.aim*Math.PI/180,v=a.pitch*Math.PI/180;return[Math.sin(h)*Math.cos(v),Math.cos(h)*Math.cos(v),Math.sin(v)]}
-// fascio nel Render (vista dal pubblico) da una luce orientata: angolo e lunghezza a schermo
+// apertura del fascio (gradi) e intensita' nel Render (0..3, 1 = normale) di ogni luce
+const BEAM_DEFAULT={par:25,bar:40,blinder:60};
+const fixtureBeamDeg=f=>clamp(Number.isFinite(+f.beamDeg)&&f.beamDeg!=null?+f.beamDeg:BEAM_DEFAULT[f.type]||30,2,120);
+const fixturePower=f=>clamp(Number.isFinite(+f.power)&&f.power!=null?+f.power:1,0,3);
+// fascio nel Render da una luce orientata: angolo e lunghezza a schermo; se punta in
+// basso finisce sul pavimento (hit = punto in metri, r = raggio della pozza di luce)
 function aimBeam(project,f,z,H){
-  const v=aimVec(fixtureAim(f)),L=4,p=project(f.x,f.y,z),q=project(f.x+v[0]*L,f.y+v[1]*L,z+v[2]*L);
-  const dx=q.x-p.x,dy=q.y-p.y;
-  return{p,ang:Math.atan2(dx,dy),len:clamp(Math.hypot(dx,dy)*1.3,H*.1,H*.6),toward:Math.max(0,v[1]),v};
+  const v=aimVec(fixtureAim(f)),half=fixtureBeamDeg(f)*Math.PI/360;
+  let L=4,hit=null;
+  if(v[2]<-.05&&z>0){const t=z/-v[2];if(t<12){L=t;hit={x:f.x+v[0]*t,y:f.y+v[1]*t,r:Math.max(.15,t*Math.tan(half))}}}
+  const p=project(f.x,f.y,z),q=project(f.x+v[0]*L,f.y+v[1]*L,z+v[2]*L);
+  const dx=q.x-p.x,dy=q.y-p.y,len=hit?Math.hypot(dx,dy):clamp(Math.hypot(dx,dy)*1.3,H*.1,H*.6);
+  return{p,ang:Math.atan2(dx,dy),len:Math.max(4,len),toward:Math.max(0,v[1]),v,hit,wd:Math.max(3,len*Math.tan(half)*.9)};
+}
+// pozza di luce sul pavimento (ellisse schiacciata dalla prospettiva)
+function floorPool(g,project,hit,col,a){
+  if(!hit||a<.01)return;const c=project(hit.x,hit.y,0),rx=Math.max(4,hit.r*c.scale),ry=rx*.32;
+  g.save();g.translate(c.x,c.y);g.scale(1,ry/rx);glow(g,0,0,rx,col,a);g.restore();
 }
 function glow(g,x,y,r,col,a){const gr=g.createRadialGradient(x,y,0,x,y,r);gr.addColorStop(0,rgba(col,a));gr.addColorStop(1,rgba(col,0));g.fillStyle=gr;g.fillRect(x-r,y-r,r*2,r*2)}
 const wallVideoPlayers=new Map();
@@ -254,8 +267,9 @@ function drawRender(g,W,H,t,level){
     const k=live?live.level:SH.g[group]*M*chaseK(i,uplights.length,t,level);
     if(k<.01)continue;
     // fascio nella direzione vera della luce; rivolta al pubblico: si vede la sorgente piu' forte
-    const ab=aimBeam(project,f,f.z||0,H);
-    beam(g,p.x,p.y,ab.ang,ab.len,H*.07,col,.22*k*hz*(1-.6*ab.toward));glow(g,p.x,p.y,10+18*ab.toward,col,.9*k);
+    const ab=aimBeam(project,f,f.z||0,H),pw=fixturePower(f);
+    beam(g,p.x,p.y,ab.ang,ab.len,ab.wd,col,.22*k*pw*hz*(1-.6*ab.toward));glow(g,p.x,p.y,10+18*ab.toward,col,.9*Math.min(1,k*pw));
+    floorPool(g,project,ab.hit,col,.45*k*pw);
   }
   // truss
   g.globalCompositeOperation='source-over';g.strokeStyle='#30353f';g.lineWidth=1.5;
@@ -318,15 +332,12 @@ function drawRender(g,W,H,t,level){
   g.fillRect(fohP.x-fohW/2,fohP.y-fohH/2,fohW,fohH);g.strokeRect(fohP.x-fohW/2,fohP.y-fohH/2,fohW,fohH);
   for(const f of lasers){
     const origin=project(f.x,f.y,fixtureZ(f)),spread=(f.spread||28)*Math.PI/180,base=(f.angle||0)*Math.PI/180;
-    // collegata a un LaserCube: raggi veri (anteprima dal gateway), o solo lo stato
-    if(f.cube){drawRealLaser(g,f,origin,fixtureZ(f),spread,base,depth*1.8,project);continue}
-    g.strokeStyle='rgba(255,54,92,.72)';g.lineWidth=1.2;g.shadowColor='#ff365c';g.shadowBlur=8;
-    for(let ray=-2;ray<=2;ray++){
-      const angle=base+ray*spread/4,distance=depth*1.8;
-      const target=project(f.x+Math.sin(angle)*distance,f.y+Math.cos(angle)*distance,0);
-      g.beginPath();g.moveTo(origin.x,origin.y);g.lineTo(target.x,target.y);g.stroke();
-    }
-    g.shadowBlur=0;g.fillStyle='#ff365c';g.beginPath();g.arc(origin.x,origin.y,3,0,Math.PI*2);g.fill();
+    // collegata a un LaserCube che proietta: raggi veri dal gateway. Altrimenti (nessun
+    // cubo, gateway assente, cubo spento o fermo) simulazione animata; lo stato del cubo
+    // (puntino colorato) lo disegna drawRealLaser
+    if(f.cube&&drawRealLaser(g,f,origin,fixtureZ(f),spread,base,depth*1.8,project))continue;
+    drawSimLaser(g,f,origin,fixtureZ(f),spread,base,depth*1.8,project,t,M);
+    if(!f.cube){g.fillStyle='#ff365c';g.beginPath();g.arc(origin.x,origin.y,3,0,Math.PI*2);g.fill()}
   }
   // barre LED
   g.globalCompositeOperation='lighter';
@@ -348,8 +359,9 @@ function drawRender(g,W,H,t,level){
         const o=(j+.5-px/2)*span/px,p=project(f.x+ux*o,f.y+uy*o,f.z),x=p.x,y=p.y,sw=Math.max(1,p.scale*span/px*Math.abs(ux)-1);
         g.fillStyle=kv>.02?rgba(color,1,kv):'#15171c';g.fillRect(x-sw/2,y-2,Math.max(2,sw),4);
         if(kv>.02)glow(g,x,y,10,color,.5*kv)}
-      const kAvg=kSum/px;
-      if(kAvg>.02&&ab.toward<.9)beam(g,ab.p.x,ab.p.y,ab.ang,ab.len,H*.05+zScale*span*.3,cSum,.16*kAvg*hz*(1-ab.toward));
+      const kAvg=kSum/px,pw=fixturePower(f);
+      if(kAvg>.02&&ab.toward<.9)beam(g,ab.p.x,ab.p.y,ab.ang,ab.len,ab.wd+zScale*span*.25,cSum,.16*kAvg*pw*hz*(1-ab.toward));
+      floorPool(g,project,ab.hit,cSum,.35*kAvg*pw);
     }
   }
   // pubblico e blinder
@@ -357,9 +369,10 @@ function drawRender(g,W,H,t,level){
   if(bl>.01||blinderF.some(f=>outputOf(f)?.record.sent)){
     for(const f of blinderF){const live=outputOf(f),actual=live?live.level:bl;
       if(actual<=.01)continue;
-      const ab=aimBeam(project,f,f.z||0,H),c=live?live.color:[1,.85,.6];
-      glow(g,ab.p.x,ab.p.y,Math.max(12,ab.p.scale*1.5)*(.5+.5*ab.toward),c,.55*actual*(.3+.7*ab.toward));
-      if(ab.toward<.9)beam(g,ab.p.x,ab.p.y,ab.ang,ab.len,H*.06,c,.25*actual*(1-ab.toward))}
+      const ab=aimBeam(project,f,f.z||0,H),c=live?live.color:[1,.85,.6],pw=fixturePower(f);
+      glow(g,ab.p.x,ab.p.y,Math.max(12,ab.p.scale*1.5)*(.5+.5*ab.toward),c,.55*Math.min(1,actual*pw)*(.3+.7*ab.toward));
+      if(ab.toward<.9)beam(g,ab.p.x,ab.p.y,ab.ang,ab.len,ab.wd,c,.25*actual*pw*(1-ab.toward));
+      floorPool(g,project,ab.hit,c,.4*actual*pw)}
     if(!blinderF.length)glow(g,W/2,H*1.05,W*.7,[1,.85,.6],.55*bl);
   }
   g.globalCompositeOperation='source-over';

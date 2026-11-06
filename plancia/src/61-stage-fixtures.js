@@ -232,6 +232,8 @@ function openFixEditor(w,f){
       <label>Inclinazione (gradi) <em>90 = in alto · 0 = orizzontale · −90 = in basso</em><input id="fePitch" type="number" min="-90" max="90" step="5" placeholder="non impostata"></label></div>
       <div class="row"><button class="btn sm ghost" data-aim="0">↓ Pubblico</button><button class="btn sm ghost" data-aim="180">↑ Fondo</button><button class="btn sm ghost" data-aim="-90">← Sinistra</button><button class="btn sm ghost" data-aim="90">→ Destra</button>
         <button class="btn sm ghost" data-pitch="90">Su</button><button class="btn sm ghost" data-pitch="0">Orizzontale</button><button class="btn sm ghost" data-pitch="-45">Giù</button></div>
+      <div class="two"><label>Apertura del fascio (gradi) <em>stretto 5-15 · medio 25 · largo 60+</em><input id="feBeam" type="number" min="2" max="120" step="1" placeholder="${BEAM_DEFAULT[f.type]||30}"></label>
+      <label>Intensità nel Render (%) <em>solo disegno: 100 = normale</em><input id="fePower" type="number" min="0" max="300" step="10" placeholder="100"></label></div>
       ${f.block?`<label class="chk"><input id="feAimBlock" type="checkbox" checked> Vale per tutto il blocco ${esc(f.block)}</label>`:''}
       <p class="hint" id="feAimMsg">Serve al Render e alla freccia nella Pianta. Non impostata = freccia tratteggiata con "?" (il Render usa ${f.type==='par'?'"in alto"':'"verso il pubblico"'}).</p></div>`:''}
     ${f.type==='screen'?`<div class="two"><label>Larghezza (m)<input id="feW" type="number" min="0.5" max="40" step="0.1"></label><label>Altezza (m)<input id="feH" type="number" min="0.3" max="20" step="0.1"></label></div>
@@ -274,6 +276,10 @@ function openFixEditor(w,f){
       val2('#feAim',f.aim??'');val2('#fePitch',f.pitch??'')};
     const onNum=(id,key)=>$('#'+id).addEventListener('change',e=>{const s=e.target.value.trim();if(s!==''&&!Number.isFinite(+s))return;setAim(key,s)});
     onNum('feAim','aim');onNum('fePitch','pitch');
+    // apertura e intensita' (percentuale nel campo, 0..3 nella luce)
+    val2('#feBeam',f.beamDeg??'');val2('#fePower',f.power!=null?Math.round(f.power*100):'');
+    $('#feBeam').addEventListener('change',e=>{const s=e.target.value.trim();for(const x of aimTargets()){if(s==='')delete x.beamDeg;else if(Number.isFinite(+s))x.beamDeg=clamp(+s,2,120)}save()});
+    $('#fePower').addEventListener('change',e=>{const s=e.target.value.trim();for(const x of aimTargets()){if(s==='')delete x.power;else if(Number.isFinite(+s))x.power=clamp(+s/100,0,3)}save()});
     document.querySelectorAll('.fe-aim [data-aim]').forEach(b=>b.onclick=()=>setAim('aim',b.dataset.aim));
     document.querySelectorAll('.fe-aim [data-pitch]').forEach(b=>b.onclick=()=>setAim('pitch',b.dataset.pitch));
   }

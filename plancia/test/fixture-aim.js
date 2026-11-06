@@ -44,6 +44,12 @@ async function main() {
     v = JSON.parse(await fx());
     check(v.c1[0] === null && v.c2[0] === null, 'campo svuotato: direzione di nuovo "non impostata"');
     await p.ev(`(()=>{const i=document.querySelector('#feAim');i.value='180';i.dispatchEvent(new Event('change',{bubbles:true}));return 1})()`);
+    await p.ev(`(()=>{for(const [id,v] of [['feBeam','12'],['fePower','250']]){const i=document.querySelector('#'+id);i.value=v;i.dispatchEvent(new Event('change',{bubbles:true}))}return 1})()`);
+    await sleep(100);
+    const bp = await p.ev(`JSON.stringify(window.__planciaTest.L.fixtures.filter(f=>f.block==='COL1').map(f=>[f.beamDeg,f.power]))`);
+    check(bp === '[[12,2.5],[12,2.5]]', `apertura 12 gradi e intensità 250% su tutto il blocco: ${bp}`);
+    // laser senza cubo e PAR inclinato verso il basso (pozza di luce) per lo screenshot
+    await p.ev(`(()=>{const t=window.__planciaTest;t.L.fixtures.push({id:'l1',type:'laser',name:'LASER',x:0,y:-2,z:3,angle:0,spread:40,enabled:true},{id:'p3',type:'par',name:'PAR3',group:'front',universe:1,address:70,x:-1,y:1,z:4,pitch:-60,aim:0,beamDeg:30,enabled:true});return 1})()`);
     await p.ev(`(()=>{document.querySelector('#scrim').hidden=true;return 1})()`);
     await sleep(400);
     const shot = arg('--shot');
