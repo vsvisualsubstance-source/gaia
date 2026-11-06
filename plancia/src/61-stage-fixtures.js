@@ -72,7 +72,7 @@ async function resolveDuplicates(){
 // qui scrive sopra quello che TD ha gia').
 async function syncTypesToTD(){
   if(!await uiConfirm('Manda la tassonomia di Plancia (tipi di fixture) a DMX Master: SOSTITUISCE tutti i tipi già definiti lì. Continuare?'))return;
-  const types=Object.entries(FIX_TYPES).filter(([k])=>k!=='laser').map(([type,ft])=>({
+  const types=Object.entries(FIX_TYPES).filter(([k,ft])=>k!=='laser'&&!ft.struct).map(([type,ft])=>({
     type,label:ft.label,group:ft.group,kind:ft.kind||'none',model:ft.model
   }));
   const ok=devCmd(dmxId(),{action:'set',param:'dmx_types',value:types});
@@ -262,7 +262,10 @@ function stageDown(e,el,w){
   const start={x:e.clientX,y:e.clientY}; let moved=false; const dragF=hit&&hit.f;
   // si spostano insieme: la selezione (se la luce ne fa parte) o il blocco (f.block)
   const group=dragF&&sel.has(dragF.id)&&sel.size>1?[...new Set(selFixtures(w).flatMap(withBlock))]:dragF?.block?withBlock(dragF):null;
-  const mates=group?group.map(x=>({f:x,x:x.x,y:x.y})):null;
+  // le americane si portano dietro le luci appese
+  const withMounted=list=>{const set=new Set(list);for(const x of list)if(x.type==='truss')mountedOn(x).forEach(m=>set.add(m));return[...set]};
+  const group2=dragF?.type==='truss'||group?.some(x=>x.type==='truss')?withMounted(group||[dragF]):group;
+  const mates=group2?group2.map(x=>({f:x,x:x.x,y:x.y})):null;
   e.preventDefault(); el.setPointerCapture(e.pointerId);
   const mv=ev=>{
     if(ui.pinch)return;   // due dita: zoom, non si sposta la luce
@@ -274,6 +277,7 @@ function stageDown(e,el,w){
   const up=()=>{
     el.onpointermove=null;el.onpointerup=el.onpointercancel=null;
     if(ui.pinchDone){ui.pinchDone=false;if(dragF&&moved)save();return}
+    if(dragF&&moved&&dragF.mount&&!mates){const t=trusses().find(x=>x.id===dragF.mount);if(t)snapToTruss(dragF,t)}   // appesa: scorre lungo l'americana
     if(dragF&&moved)save();
     else if(dragF&&!moved&&multi){const fx=withBlock(dragF),on=fx.every(f=>sel.has(f.id));fx.forEach(f=>on?sel.delete(f.id):sel.add(f.id))}   // aggiunge/toglie dalla selezione
     else if(dragF&&!moved)openFixEditor(w,dragF);
@@ -315,7 +319,8 @@ function openFixAdd(w,pos){
     // Fallback al calcolo solo-locale se non ancora collegata/sincronizzata.
     const fp=footprintFor(type);
     const addr=ft.ch?(freeAddressTD(universe,fp)??nextAddress(type,universe)):0;
-    const f=mkFix(type,ft.label.slice(0,3).toUpperCase()+count,clamp(pos.x,-L.stage.width/2-4,L.stage.width/2+4),clamp(pos.y,-2,L.stage.depth+20),universe,addr);
+    const f=mkFix(type,(ft.prefix||ft.label.slice(0,3).toUpperCase())+count,clamp(pos.x,-L.stage.width/2-4,L.stage.width/2+4),clamp(pos.y,-2,L.stage.depth+20),universe,addr);
+    if(ft.struct)Object.assign(f,structDefaults(type));   // strutture: misure di partenza
     f.model=typeDefaultModel(type)||f.model; // preferisce il modello che TD ha davvero per questo tipo (nota 19)
     L.fixtures.push(f); (_stageUI[w.id]||(_stageUI[w.id]={})).selFix=f.id; save(); closeSheet();
     // Manda subito con on_conflict:"auto" (nota 20, "per gli inserimenti
@@ -341,7 +346,13 @@ function openFixEditor(w,f){
   s.innerHTML=`<div class="sheet" role="dialog" aria-label="Fixture">
     <div class="top"><h3>${esc(FIX_TYPES[f.type].label)}</h3><button class="btn ghost" id="feClose">Chiudi</button></div>
     <label>Nome<input id="feName"></label>
-    <label>Altezza dal piano palco (m)<input id="feZ" type="number" min="-5" max="30" step="0.1"></label>
+    <label${isStruct(f)&&f.type!=='truss'?' hidden':''}>${f.type==='truss'?'Altezza dal piano (m) <em>le luci appese la seguono</em>':'Altezza dal piano palco (m)'}<input id="feZ" type="number" min="-5" max="30" step="0.1"></label>
+    ${isStruct(f)?`<div class="two"><label>${f.type==='column'?'Diametro':f.type==='riser'?'Larghezza':'Lunghezza'} (m)<input id="feSW" type="number" min=".1" max="60" step=".1"></label>
+      ${f.type==='riser'?'<label>Profondità (m)<input id="feSD" type="number" min=".1" max="40" step=".1"></label>':''}
+      ${f.type!=='truss'?'<label>Altezza (m)<input id="feSH" type="number" min=".05" max="20" step=".05"></label>':''}
+      ${f.type!=='column'?'<label>Rotazione (gradi) <em>in pianta</em><input id="feSRot" type="number" min="-180" max="180" step="5"></label>':''}</div>
+      ${f.type==='truss'?`<p class="hint">${mountedOn(f).length} luci appese: si spostano con l'americana. Per appendere una luce: aprila e scegli "Appesa a".</p>`:''}`:''}
+    ${!isStruct(f)&&!['wall','screen','projector','speaker'].includes(f.type)&&trusses().length?`<label>Appesa a <em>prende la quota dell'americana e scorre lungo la sua linea</em><select id="feMount"><option value="">— no (altezza come sopra) —</option>${trusses().map(t=>`<option value="${esc(t.id)}"${f.mount===t.id?' selected':''}>${esc(t.name)} · +${(+t.z||0).toFixed(1)} m</option>`).join('')}</select></label>`:''}
     ${f.type==='mh'||f.type==='laser'?`<label class="chk"><input id="feTruss" type="checkbox"> Segue altezza del truss</label>`:''}
     ${AIM_TYPES.has(f.type)?`<div class="fe-aim"><div class="two"><label>Direzione in pianta (gradi) <em>0 = verso il pubblico · 180 = verso il fondo · 90 = destra · −90 = sinistra</em><input id="feAim" type="number" min="-180" max="180" step="5" placeholder="non impostata"></label>
       <label>Inclinazione (gradi) <em>90 = in alto · 0 = orizzontale · −90 = in basso</em><input id="fePitch" type="number" min="-90" max="90" step="5" placeholder="non impostata"></label></div>
@@ -472,6 +483,8 @@ function openFixEditor(w,f){
     if($('#feTruss')){f.mountToTruss=$('#feTruss').checked;$('#feZ').disabled=f.mountToTruss}
     if($('#feGroup')){f.group=$('#feGroup').value.trim();f.universe=+$('#feUni').value||0;f.address=clamp(+$('#feAddr').value||1,1,512)}
     if($('#feUnit')){const u=Math.round(+$('#feUnit').value);if(u>=1)f.unit=Math.min(64,u);else delete f.unit}
+    if($('#feSW')){f.w=clamp(+$('#feSW').value||f.w||1,.1,60);if($('#feSD'))f.d=clamp(+$('#feSD').value||f.d||1,.1,40);if($('#feSH'))f.h=clamp(+$('#feSH').value||f.h||1,.05,20);if($('#feSRot'))f.rot=clamp(+$('#feSRot').value||0,-180,180)}
+    if(f.type==='truss')resnapMounted(f);   // luci appese: seguono quota, lunghezza e rotazione
     if($('#feW')){f.w=clamp(+$('#feW').value||6,f.type==='screen'?.5:1,f.type==='screen'?40:20);f.h=clamp(+$('#feH').value||3.5,f.type==='screen'?.3:.5,f.type==='screen'?20:10);f.rot=clamp(+$('#feRot').value||0,-180,180)}
     if($('#fePrTarget')){f.target=$('#fePrTarget').value;f.throw=clamp(+$('#fePrThrow').value||1.5,.2,10);f.rot=clamp(+$('#feRot').value||0,-180,180);prInfo()}
     if($('#feSource')){
@@ -484,7 +497,9 @@ function openFixEditor(w,f){
     {const b=$('#feBlock').value.trim().toUpperCase().slice(0,24);if(b)f.block=b;else delete f.block}
     if($('#feVert')){f.vertical=$('#feVert').checked||undefined;if(!f.vertical)delete f.vertical;const w=+$('#feLen').value;if(w>0)f.w=clamp(w,.2,4)}
     f.enabled=$('#feOn').checked; save(); checkDirty()};
-  ['feName','feZ','feGroup','feAddr','feUnit','feW','feH','feRot','feSource','feSourceRef','feAngle','feSpread','feCube','fePrTarget','fePrThrow'].forEach(id=>{const n=$('#'+id);if(n){n.addEventListener('input',upd);n.addEventListener('change',upd)}});
+  if(isStruct(f)){val2('#feSW',f.w);val2('#feSD',f.d);val2('#feSH',f.h);val2('#feSRot',f.rot||0)}
+  if($('#feMount'))$('#feMount').onchange=e=>{const t=trusses().find(x=>x.id===e.target.value);if(t)snapToTruss(f,t);else delete f.mount;val2('#feZ',f.z);save()};
+  ['feSW','feSD','feSH','feSRot','feSource','feSourceRef','feAngle','feSpread','feCube','fePrTarget','fePrThrow'].forEach(id=>{const n=$('#'+id);if(n){n.addEventListener('input',upd);n.addEventListener('change',upd)}});
   ['feBlock','feVert','feLen'].forEach(id=>{const n=$('#'+id);if(n){n.addEventListener('input',upd);n.addEventListener('change',upd)}});
   if($('#feStack'))$('#feStack').onclick=()=>{upd();if(!f.block){showError('Prima dai un nome al blocco.');return}
     // in ordine di indirizzo: la prima in basso

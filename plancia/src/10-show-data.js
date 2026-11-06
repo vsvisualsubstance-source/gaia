@@ -53,9 +53,14 @@ const FIX_TYPES={
   laser:  {label:'Laser',group:'',   ch:0},
   speaker:{label:'Cassa',        group:'',        ch:0,  kind:'none'},
   screen: {label:'Schermo proiezione',group:'',   ch:0,  kind:'none'},
-  projector:{label:'Proiettore', group:'',        ch:0,  kind:'none'}
+  projector:{label:'Proiettore', group:'',        ch:0,  kind:'none'},
+  // strutture di scena (2026-11-06): niente DMX, servono alla Pianta e al Render
+  truss:  {label:'Americana',    group:'',        ch:0,  kind:'none', prefix:'TRUSS', struct:true},
+  riser:  {label:'Pedana',       group:'',        ch:0,  kind:'none', prefix:'PEDANA', struct:true},
+  column: {label:'Pilastro',     group:'',        ch:0,  kind:'none', prefix:'PILASTRO', struct:true},
+  flat:   {label:'Quinta / pannello',group:'',    ch:0,  kind:'none', prefix:'QUINTA', struct:true}
 };
-const FIX_COLOR={mh:'#58a6ff',par:'#ffb23e',bar:'#3fb950',wall:'#ff6fae',blinder:'#f85149',haze:'#8a92a0',laser:'#ff365c',speaker:'#c9ced8',screen:'#dfe6f0',projector:'#9fe0ff'};
+const FIX_COLOR={mh:'#58a6ff',par:'#ffb23e',bar:'#3fb950',wall:'#ff6fae',blinder:'#f85149',haze:'#8a92a0',laser:'#ff365c',speaker:'#c9ced8',screen:'#dfe6f0',projector:'#9fe0ff',truss:'#a8b0bd',riser:'#7d8696',column:'#9aa3b2',flat:'#6f7889'};
 // DMX Master risolve i gruppi "live" (mh/front/back) negli ALIAS fisici
 // del rig (heads/rig_a/rig_b) prima di salvarli in dmx_fixtures (nota TD
 // 19/20) -- per ricostruire il "type" di Plancia da li' serve la mappa

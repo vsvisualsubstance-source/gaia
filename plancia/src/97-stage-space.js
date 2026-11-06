@@ -248,4 +248,72 @@ function openSpaceEditor(){
   paint();
 }
 
-if(typeof module==='object'&&module.exports){module.exports={showFootprint,venueRect,convexHull,parsePlanLength,planBounds};}
+/* ---------- strutture di scena: americane, pedane, pilastri, quinte ---------- */
+// Oggetti senza DMX (FIX_TYPES[...].struct). Misure in metri: w = lunghezza/larghezza
+// (pilastro: diametro), d = profondita' (pedana), h = altezza (pedana, pilastro, quinta),
+// z = quota (americana: altezza dal piano), rot = gradi in pianta come LED wall e schermi.
+// Una luce APPESA (f.mount = id dell'americana) sta sulla sua linea alla sua quota e la
+// segue quando l'americana si sposta o ruota. Con almeno un'americana nel progetto
+// l'americana fissa di sempre (stage.trussHeight) non si disegna piu'.
+const STRUCT_DEFAULT={truss:{w:6,rot:0},riser:{w:2,d:1,h:.4,rot:0},column:{w:.4,h:3},flat:{w:2,h:3,rot:0}};
+const isStruct=f=>!!FIX_TYPES[f?.type]?.struct;
+function structDefaults(type,st=L.stage){const d={...(STRUCT_DEFAULT[type]||{})};if(type==='truss')d.z=+(st?.trussHeight||5);return d}
+const trusses=()=>(L.fixtures||[]).filter(f=>f.type==='truss');
+// estremi dell'americana in pianta
+function trussEnds(t){const r=(t.rot||0)*Math.PI/180,ax=Math.cos(r)*(t.w||6)/2,ay=Math.sin(r)*(t.w||6)/2;return[[t.x-ax,t.y-ay],[t.x+ax,t.y+ay]]}
+// luce sulla linea dell'americana (punto piu' vicino), alla sua quota
+function snapToTruss(f,t){
+  const [[x0,y0],[x1,y1]]=trussEnds(t),dx=x1-x0,dy=y1-y0,L2=dx*dx+dy*dy||1;
+  const k=clamp(((f.x-x0)*dx+(f.y-y0)*dy)/L2,0,1);
+  f.x=+(x0+dx*k).toFixed(2);f.y=+(y0+dy*k).toFixed(2);f.z=+(+t.z||0).toFixed(2);f.mount=t.id;f.mountToTruss=false;
+}
+// dopo aver cambiato misure, quota o rotazione dell'americana: le luci appese la seguono
+function resnapMounted(t){for(const f of L.fixtures||[])if(f.mount===t.id)snapToTruss(f,t)}
+const mountedOn=t=>(L.fixtures||[]).filter(f=>f.mount===t.id);
+
+// ---- Pianta ----
+function drawStructPlot(g,f,x,y,s,col,selected){
+  const r=(f.rot||0)*Math.PI/180;g.save();g.translate(x,y);g.rotate(r);
+  g.strokeStyle=selected?'#00ffcc':col;g.fillStyle=col+'30';g.lineWidth=selected?2.2:1.3;
+  if(f.type==='truss'){const w=(f.w||6)*s,hh=Math.max(4,.3*s);g.strokeRect(-w/2,-hh/2,w,hh);g.beginPath();
+    for(let k=0,n=Math.max(2,Math.round(w/(hh*1.2)));k<n;k++){const a=-w/2+k*w/n,b=-w/2+(k+1)*w/n;g.moveTo(a,-hh/2);g.lineTo((a+b)/2,hh/2);g.lineTo(b,-hh/2)}g.stroke()}
+  else if(f.type==='riser'){const w=(f.w||2)*s,d=(f.d||1)*s;g.fillRect(-w/2,-d/2,w,d);g.strokeRect(-w/2,-d/2,w,d)}
+  else if(f.type==='column'){g.beginPath();g.arc(0,0,Math.max(4,(f.w||.4)*s/2),0,Math.PI*2);g.fill();g.stroke()}
+  else if(f.type==='flat'){const w=(f.w||2)*s;g.fillStyle=col;g.fillRect(-w/2,-Math.max(2,.08*s),w,Math.max(4,.16*s));g.strokeRect(-w/2,-Math.max(2,.08*s),w,Math.max(4,.16*s))}
+  g.restore();
+}
+function structLabel(f){
+  if(f.type==='truss')return`${f.name} · ${(+f.w||6).toFixed(1)} m +${(+f.z||0).toFixed(1)}`;
+  if(f.type==='riser')return`${f.name} · ${(+f.w||2).toFixed(1)}×${(+f.d||1).toFixed(1)} h${(+f.h||.4).toFixed(1)}`;
+  if(f.type==='column')return`${f.name} · h${(+f.h||3).toFixed(1)}`;
+  return`${f.name} · ${(+f.w||2).toFixed(1)}×${(+f.h||3).toFixed(1)}`;
+}
+
+// ---- Render (proiezione qualsiasi: vista dal pubblico o telecamera 3D) ----
+function drawStructuresRender(g,project){
+  const list=(L.fixtures||[]).filter(f=>isStruct(f)&&f.enabled!==false);if(!list.length)return;
+  const P=(x,y,z)=>project(x,y,z),poly=(pts,fill,stroke)=>{g.beginPath();pts.forEach((p,i)=>i?g.lineTo(p.x,p.y):g.moveTo(p.x,p.y));g.closePath();if(fill){g.fillStyle=fill;g.fill()}if(stroke){g.strokeStyle=stroke;g.stroke()}};
+  g.save();g.globalCompositeOperation='source-over';g.lineWidth=1;
+  // le piu' lontane prima (y piccola = fondo palco)
+  for(const f of [...list].sort((a,b)=>(a.y||0)-(b.y||0))){
+    const r=(f.rot||0)*Math.PI/180,c=Math.cos(r),sn=Math.sin(r);
+    if(f.type==='riser'){const w=(f.w||2)/2,d=(f.d||1)/2,h=+f.h||.4;
+      const pt=(u,v,z)=>P(f.x+c*u-sn*v,f.y+sn*u+c*v,z),B=[pt(-w,-d,0),pt(w,-d,0),pt(w,d,0),pt(-w,d,0)],T=[pt(-w,-d,h),pt(w,-d,h),pt(w,d,h),pt(-w,d,h)];
+      for(let i=0;i<4;i++){const j=(i+1)%4;poly([B[i],B[j],T[j],T[i]],'#101217','#2a2f39')}
+      poly(T,'#1b1f27','#3a414d')}
+    else if(f.type==='column'){const rr=(f.w||.4)/2,h=+f.h||3,b=P(f.x,f.y,0),t=P(f.x,f.y,h),wb=Math.max(2,rr*b.scale),wt=Math.max(2,rr*t.scale);
+      const gr=g.createLinearGradient(b.x-wb,0,b.x+wb,0);gr.addColorStop(0,'#14171d');gr.addColorStop(.45,'#2c323d');gr.addColorStop(1,'#0e1014');
+      poly([{x:b.x-wb,y:b.y},{x:b.x+wb,y:b.y},{x:t.x+wt,y:t.y},{x:t.x-wt,y:t.y}],gr,'#3a414d')}
+    else if(f.type==='flat'){const w=(f.w||2)/2,h=+f.h||3,pt=(u,z)=>P(f.x+c*u,f.y+sn*u,z);
+      poly([pt(-w,0),pt(w,0),pt(w,h),pt(-w,h)],'#15181e','#3a414d')}
+    else if(f.type==='truss'){const [[x0,y0],[x1,y1]]=trussEnds(f),z=+f.z||0,n=Math.max(4,Math.round((f.w||6)*2.5));
+      const top=[P(x0,y0,z),P(x1,y1,z)],bot=[P(x0,y0,z-.3),P(x1,y1,z-.3)];
+      g.strokeStyle='#4a515e';g.lineWidth=1.4;g.beginPath();g.moveTo(top[0].x,top[0].y);g.lineTo(top[1].x,top[1].y);g.moveTo(bot[0].x,bot[0].y);g.lineTo(bot[1].x,bot[1].y);
+      for(let k=0;k<n;k++){const a=k/n,b=(k+.5)/n,e=(k+1)/n,L0=(p,q,t)=>({x:p.x+(q.x-p.x)*t,y:p.y+(q.y-p.y)*t});
+        const A=L0(top[0],top[1],a),Bm=L0(bot[0],bot[1],b),E=L0(top[0],top[1],e);g.moveTo(A.x,A.y);g.lineTo(Bm.x,Bm.y);g.lineTo(E.x,E.y)}
+      g.stroke()}
+  }
+  g.restore();
+}
+
+if(typeof module==='object'&&module.exports){module.exports={showFootprint,venueRect,convexHull,parsePlanLength,planBounds,snapToTruss,trussEnds,structDefaults,STRUCT_DEFAULT};}

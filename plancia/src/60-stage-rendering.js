@@ -289,6 +289,7 @@ function drawRender(g,W,H,t,level,w){
   const fascia=Math.min(H*.08,Math.max(0,geom.floorHeight)*zScale*.35);
   if(fascia>0){g.fillStyle='#090a0d';g.beginPath();g.moveTo(frontL.x,frontL.y);g.lineTo(frontR.x,frontR.y);g.lineTo(frontR.x,frontR.y+fascia);g.lineTo(frontL.x,frontL.y+fascia);g.closePath();g.fill()}
   g.strokeStyle='#2a2e37';g.lineWidth=1;g.beginPath();g.moveTo(frontL.x,frontL.y+.5);g.lineTo(frontR.x,frontR.y+.5);g.stroke();
+  drawStructuresRender(g,project);   // americane, pedane, pilastri, quinte
   g.globalCompositeOperation='lighter';
   // front wash
   const fw=SH.wash.c,fk=SH.g.front*M*(SH.chase===5?.4+.6*level:1);
@@ -306,12 +307,12 @@ function drawRender(g,W,H,t,level,w){
     beam(g,p.x,p.y,ab.ang,ab.len,ab.wd,col,.22*k*pw*hz*(1-.6*ab.toward));glow(g,p.x,p.y,10+18*ab.toward,col,.9*Math.min(1,k*pw));
     floorPool(g,project,ab.hit,col,.45*k*pw);
   }
-  // truss
+  // truss fisso di sempre, solo se il progetto non ha americane sue
   g.globalCompositeOperation='source-over';g.strokeStyle='#30353f';g.lineWidth=1.5;
-  const trussL=project(-halfStage*.92,0,geom.trussHeight),trussR=project(halfStage*.92,0,geom.trussHeight);
+  if(!trusses().length){const trussL=project(-halfStage*.92,0,geom.trussHeight),trussR=project(halfStage*.92,0,geom.trussHeight);
   g.beginPath();g.moveTo(trussL.x,trussL.y);g.lineTo(trussR.x,trussR.y);
   g.moveTo(trussL.x,trussL.y+8);g.lineTo(trussR.x,trussR.y+8);
-  for(let x=trussL.x;x<trussR.x;x+=12){g.moveTo(x,trussL.y);g.lineTo(x+6,trussL.y+8);g.lineTo(x+12,trussL.y)}g.stroke();
+  for(let x=trussL.x;x<trussR.x;x+=12){g.moveTo(x,trussL.y);g.lineTo(x+6,trussL.y+8);g.lineTo(x+12,trussL.y)}g.stroke()}
   // teste mobili
   const n=headsF.length;ensureHeadPool(n);const heads=[];
   for(let i=0;i<n;i++){const f=headsF[i],h=SH.heads[i],p=h.T.c,pos=project(f.x,f.y,fixtureZ(f)),x=pos.x,y=pos.y,size=clamp(pos.scale*.7,8,18),live=outputOf(f);heads.push([x,y,h,p,size,live,f]);
@@ -479,8 +480,8 @@ function drawPlot(g,W,H,t,w){
   g.strokeStyle='#5d6573';g.lineWidth=1;g.beginPath();g.moveTo(X(stageX),Y(stageD+.35));g.lineTo(X(-stageX),Y(stageD+.35));g.stroke();
   txt(`${stageW.toFixed(2)} m`,cx,Y(stageD+.35)-4,'#868e9b');
   const trussY=stageD*.25;
-  g.setLineDash([5,4]);g.strokeStyle='#6b7280';g.beginPath();g.moveTo(X(stageX*.92),Y(trussY));g.lineTo(X(-stageX*.92),Y(trussY));g.stroke();g.setLineDash([]);
-  txt(`TRUSS +${geom.trussHeight.toFixed(1)} m`,X(-stageX*.92),Y(trussY)-3,'#5d6573','left',9);
+  if(!trusses().length){g.setLineDash([5,4]);g.strokeStyle='#6b7280';g.beginPath();g.moveTo(X(stageX*.92),Y(trussY));g.lineTo(X(-stageX*.92),Y(trussY));g.stroke();g.setLineDash([]);
+  txt(`TRUSS +${geom.trussHeight.toFixed(1)} m`,X(-stageX*.92),Y(trussY)-3,'#5d6573','left',9)}
   // Fixture già in TD, non create da Plancia -- SOLO LETTURA (tratteggio
   // grigio, nessun drag/edit): evita di ricrearle per sbaglio (vedi
   // tdFixtures()). Posizione reale (x/y pubblicati da TD).
@@ -518,6 +519,7 @@ function drawPlot(g,W,H,t,w){
     else if(f.type==='bar'&&f.vertical){g.fillStyle='#1c2027';g.strokeStyle=col;g.lineWidth=st?.some(x=>x.id===sel)?2.6:1.5;g.fillRect(x-s*.17,y-s*.17,s*.34,s*.34);g.strokeRect(x-s*.17,y-s*.17,s*.34,s*.34);
       g.fillStyle=col;g.fillRect(x-s*.06,y-s*.06,s*.12,s*.12)}
     else if(f.type==='bar'){const bl=(f.w||1.8)*s;g.save();g.translate(x,y);g.rotate(-fixtureAim(f).aim*Math.PI/180);g.fillStyle=col;g.fillRect(-bl/2,-.08*s,bl,.16*s);g.restore()}
+    else if(isStruct(f))drawStructPlot(g,f,x,y,s,col,f.id===sel||!!ui?.sel?.has(f.id));
     else if(f.type==='speaker'){g.fillStyle='#1b1f26';g.strokeStyle=col;g.lineWidth=1.2;g.fillRect(x-s*.32,y-s*.4,s*.64,s*.8);g.strokeRect(x-s*.32,y-s*.4,s*.64,s*.8)}
     else{g.fillStyle='#1c2027';g.strokeStyle=col;g.lineWidth=f.id===sel?2.6:1.3;g.beginPath();g.arc(x,y,r,0,Math.PI*2);g.fill();g.stroke();
       g.fillStyle=col;g.beginPath();g.arc(x,y,r*.4,0,Math.PI*2);g.fill()}
@@ -531,9 +533,9 @@ function drawPlot(g,W,H,t,w){
     if(ui?.sel?.size&&(st&&st.length>1?st.some(x=>ui.sel.has(x.id)):ui.sel.has(f.id))){g.save();g.strokeStyle='#00ffcc';g.lineWidth=1.6;g.setLineDash([4,3]);g.beginPath();g.arc(x,y,Math.max(r,s*.3)+8,0,Math.PI*2);g.stroke();g.restore()}
     if(f.id===sel&&f.type!=='wall'&&f.type!=='screen'){g.strokeStyle='#00ffcc';g.lineWidth=1.5;g.beginPath();g.arc(x,y,r+5,0,Math.PI*2);g.stroke()}
     g.globalAlpha=1;
-    const flat=f.type==='wall'||f.type==='screen',labelR=flat?.18*s:r,fw=f.w||(f.type==='wall'?6:5),fh=f.h||(f.type==='wall'?3.5:2.8);
+    const flat=f.type==='wall'||f.type==='screen'||isStruct(f),labelR=flat?.18*s:r,fw=f.w||(f.type==='wall'?6:5),fh=f.h||(f.type==='wall'?3.5:2.8);
     if(st&&st.length>1){const a=st.map(x=>x.address).sort((p,q)=>p-q);txt(`${f.block} · ${st.length}×`,x,y-labelR-6,'#e9ebef');txt(`${f.universe}.${String(a[0]).padStart(3,'0')}–${String(a[a.length-1]).padStart(3,'0')}`,x,y+r+12,'#5d6573')}
-    else{txt(flat?`${f.name} · ${fw}×${fh}m`:f.type==='projector'&&projectorInfo(f)?`${f.name} · ${projectorInfo(f).dist.toFixed(1)} m`:f.name,x,y-labelR-6,'#e9ebef');
+    else{txt(isStruct(f)?structLabel(f):flat?`${f.name} · ${fw}×${fh}m`:f.type==='projector'&&projectorInfo(f)?`${f.name} · ${projectorInfo(f).dist.toFixed(1)} m`:f.name,x,y-labelR-6,'#e9ebef');
     if(FIX_TYPES[f.type].ch)txt(f.universe+'.'+String(f.address).padStart(3,'0'),x,y+r+12,'#5d6573')}
     if(f.type==='laser'&&f.cube){const c=laserCubeState(f.cube);txt(`${f.cube} · ${laserStateText(c)}`,x,y+r+12,laserStateColor(c))}
     hits.push({f,x,y,r:flat?Math.max(fw*s/2,s*.4):Math.max(r,s*.4)});
