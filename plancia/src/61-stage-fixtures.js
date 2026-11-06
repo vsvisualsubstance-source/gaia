@@ -97,6 +97,7 @@ function stageDown(e,el,w){
   if(!r.width||!ui||!ui.proj)return;
   const toLocal=ev=>({x:(ev.clientX-r.left)*(c.width/c._d)/r.width,y:(ev.clientY-r.top)*(c.height/c._d)/r.height});
   const toM=p=>({x:(p.x-ui.proj.cx)/ui.proj.s,y:(p.y-ui.proj.oy)/ui.proj.s});
+  if(planPointer(e,el,toLocal,toM))return;   // planimetria: calibra o sposta
   const p0=toLocal(e);
   const hit=(ui.hits||[]).find(h=>Math.hypot(p0.x-h.x,p0.y-h.y)<=h.r);
   const tdHit=!hit&&(ui.tdHits||[]).find(h=>Math.hypot(p0.x-h.x,p0.y-h.y)<=h.r);
@@ -104,7 +105,7 @@ function stageDown(e,el,w){
   e.preventDefault(); el.setPointerCapture(e.pointerId);
   const mv=ev=>{
     if(!moved&&Math.hypot(ev.clientX-start.x,ev.clientY-start.y)>6)moved=true;
-    if(dragF&&moved){const m=toM(toLocal(ev));dragF.x=clamp(m.x,-L.stage.width/2-4,L.stage.width/2+4);dragF.y=clamp(m.y,-2,L.stage.depth+20)}
+    if(dragF&&moved){const m=toM(toLocal(ev));dragF.x=clamp(m.x,-150,150);dragF.y=clamp(m.y,-150,150)/* con la mappa del locale le luci stanno ovunque */}
   };
   const up=()=>{
     el.onpointermove=null;el.onpointerup=el.onpointercancel=null;

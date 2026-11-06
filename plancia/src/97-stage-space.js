@@ -27,6 +27,95 @@ function projectorInfo(f){
 }
 const screenLit=sc=>(L.fixtures||[]).some(p=>p.type==='projector'&&p.enabled!==false&&p.target===sc.id);
 
+// ---- Planimetria del locale (sfondo della Pianta) ----
+// L.stage.plan = {src:'/plans/<hash>.jpg', pw, ph (pixel), mpp (metri per pixel),
+// cx, cy (centro, metri della Pianta), rot (0/90/180/270), op (0..1), on, invert}.
+// L'immagine sta nel bridge (POST /api/plan-image), nello stato solo l'indirizzo.
+// Il palco resta fermo (x 0 al centro, y 0 al fondo): si sposta la mappa sotto.
+const planImgs=new Map();
+function planImage(src){
+  let im=planImgs.get(src);
+  if(!im){im=new Image();im.src=src;planImgs.set(src,im)}
+  return im.complete&&im.naturalWidth?im:null;
+}
+// rettangolo occupato (metri), tenendo conto della rotazione
+function planBounds(p=L.stage?.plan){
+  if(!p?.src||p.on===false)return null;
+  const side=(p.rot||0)%180!==0,w=(side?p.ph:p.pw)*p.mpp,h=(side?p.pw:p.ph)*p.mpp;
+  return{x0:p.cx-w/2,y0:p.cy-h/2,w,h};
+}
+function drawPlanPlot(g,X,Y,s){
+  const p=L.stage?.plan;if(!p?.src||p.on===false)return;
+  const im=planImage(p.src);if(!im)return;
+  g.save();g.globalAlpha=p.op??.55;g.translate(X(p.cx),Y(p.cy));g.rotate((p.rot||0)*Math.PI/180);
+  const w=p.pw*p.mpp*s,h=p.ph*p.mpp*s;
+  // le piante sono nero su bianco: invertite per stare sul fondo scuro (i colori restano)
+  if(p.invert!==false)g.filter='invert(1) hue-rotate(180deg)';
+  g.drawImage(im,-w/2,-h/2,w,h);g.restore();
+}
+// modo di modifica attivo sulla Pianta: null | {mode:'cal', pts:[{x,y}]} | {mode:'move'}
+let planEdit=null;
+function drawPlanEdit(g,X,Y,W,txt){
+  if(!planEdit)return;
+  const msg=planEdit.mode==='cal'?(planEdit.pts.length?'CALIBRA: tocca il secondo capo della misura':'CALIBRA: tocca il primo capo di una misura nota (es. la quota 1336 = 13,36 m)')
+    :'SPOSTA PLANIMETRIA: trascina la mappa sotto il palco · un tocco senza trascinare = fine';
+  g.fillStyle='#00ffccdd';g.fillRect(0,0,W,22);txt(msg,8,15,'#06110e','left',11);
+  if(planEdit.mode==='cal'){
+    const pts=planEdit.pts.map(p=>[X(p.x),Y(p.y)]);
+    g.strokeStyle='#00ffcc';g.fillStyle='#00ffcc';g.lineWidth=2;
+    if(pts.length===2){g.beginPath();g.moveTo(...pts[0]);g.lineTo(...pts[1]);g.stroke()}
+    for(const [x,y] of pts){g.beginPath();g.arc(x,y,5,0,Math.PI*2);g.fill()}
+  }
+}
+// tocco sulla Pianta in modo planimetria: true = gestito qui
+function planPointer(e,el,toLocal,toM){
+  if(!planEdit)return false;
+  const plan=L.stage.plan;if(!plan){planEdit=null;return false}
+  const p0=toM(toLocal(e)),start={x:e.clientX,y:e.clientY},c0={cx:plan.cx,cy:plan.cy};let moved=false;
+  e.preventDefault();el.setPointerCapture(e.pointerId);
+  el.onpointermove=ev=>{
+    if(!moved&&Math.hypot(ev.clientX-start.x,ev.clientY-start.y)>6)moved=true;
+    if(planEdit?.mode==='move'&&moved){const m=toM(toLocal(ev));plan.cx=c0.cx+(m.x-p0.x);plan.cy=c0.cy+(m.y-p0.y)}
+  };
+  el.onpointerup=el.onpointercancel=async()=>{
+    el.onpointermove=null;el.onpointerup=el.onpointercancel=null;
+    if(planEdit?.mode==='move'){if(moved)save();else{planEdit=null;showInfo('Planimetria al suo posto.')}return}
+    if(planEdit?.mode!=='cal'||moved)return;
+    planEdit.pts.push(p0);if(planEdit.pts.length<2)return;
+    const [a,b]=planEdit.pts,d=Math.hypot(b.x-a.x,b.y-a.y);
+    const v=await uiPrompt(`Misura vera tra i due punti: in metri (13.36) o come sulla pianta in cm (1336). Ora sulla mappa: ${d.toFixed(2)} m`,'');
+    planEdit=null;
+    const real=parsePlanLength(v);
+    if(!real||d<1e-6){if(v)showError('Misura non valida.');return}
+    const k=real/d;plan.mpp*=k;plan.cx=a.x+(plan.cx-a.x)*k;plan.cy=a.y+(plan.cy-a.y)*k;save();
+    showInfo(`Scala impostata (${real.toFixed(2)} m). Ora 📐 Spazio → ✥ Sposta, per mettere la mappa sotto il palco.`);
+  };
+  return true;
+}
+// "13,36" o "13.36m" -> 13.36; "1336cm" o "1336" (numero grande senza unita', come le quote in cm) -> 13.36
+function parsePlanLength(v){
+  const t=String(v||'').trim().toLowerCase().replace(',','.'),m=/^(\d+(?:\.\d+)?)\s*(cm|mm|m)?$/.exec(t);if(!m)return 0;
+  let n=+m[1];const u=m[2]||(n>=100?'cm':'m');n=u==='cm'?n/100:u==='mm'?n/1000:n;
+  return n>0&&n<1000?n:0;
+}
+// immagine scelta -> ridotta (lato lungo max 3000 px) -> bridge -> L.stage.plan
+async function uploadPlanImage(file){
+  if(!/^image\//.test(file.type))throw new Error('Serve un\'immagine (JPG, PNG). Un PDF va prima esportato come immagine.');
+  const url=URL.createObjectURL(file);
+  try{
+    const im=await new Promise((ok,ko)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=()=>ko(new Error('immagine non leggibile'));i.src=url});
+    const k=Math.min(1,3000/Math.max(im.naturalWidth,im.naturalHeight)),pw=Math.round(im.naturalWidth*k),ph=Math.round(im.naturalHeight*k);
+    const cv=document.createElement('canvas');cv.width=pw;cv.height=ph;const g=cv.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,pw,ph);g.drawImage(im,0,0,pw,ph);
+    const blob=await new Promise(ok=>cv.toBlob(ok,'image/jpeg',.9));
+    const r=await fetch('/api/plan-image',{method:'POST',headers:{'content-type':'image/jpeg'},body:blob});
+    const d=await r.json().catch(()=>({}));if(!r.ok||!d.ok)throw new Error(d.error||('HTTP '+r.status));
+    // prima posizione: larga quanto la sala, centrata sul palco; poi si calibra
+    const st=L.stage,v=venueRect(st),old=st.plan;
+    st.plan={src:d.src,pw,ph,mpp:Math.max(v.width,20)/pw,cx:0,cy:st.depth/2,rot:0,op:old?.op??.55,on:true,invert:old?.invert??true,name:file.name};
+    save();return st.plan;
+  }finally{URL.revokeObjectURL(url)}
+}
+
 // ---- Pianta ----
 function drawVenuePlot(g,X,Y,s,txt){
   const v=venueRect();
@@ -113,6 +202,13 @@ function openSpaceEditor(){
       <h4>Sala</h4><label class="chk"><input id="spAuto" type="checkbox"${st.venue.auto!==false?' checked':''}> Calcolata da palco, platea e regia (+2 m attorno)</label>
       <div class="two">${num('spVW','Larghezza (m)',v.width,2,300)}${num('spVD','Profondità (m)',v.depth,2,300)}</div>
       <div class="two">${num('spVH','Altezza (m)',v.height,2,40)}${num('spVB','Spazio dietro al palco (m)',-v.y0,0,50)}</div>
+      <h4>Planimetria del locale</h4>
+      ${st.plan?.src?`<p class="hint">${esc(st.plan.name||'immagine')} · ${(st.plan.pw*st.plan.mpp).toFixed(1)} × ${(st.plan.ph*st.plan.mpp).toFixed(1)} m</p>
+      <div class="row sp-plan"><button class="btn" id="spPlCal" title="Tocca i due capi di una quota nota e scrivi la misura vera">📏 Calibra scala</button><button class="btn" id="spPlMove" title="Trascina la mappa nella Pianta finché il palco è al suo posto">✥ Sposta</button><button class="btn" id="spPlRot">⟳ 90°</button><button class="btn ghost" id="spPlDel">Togli</button></div>
+      <div class="two"><label>Trasparenza<input id="spPlOp" type="range" min=".1" max="1" step=".05" value="${st.plan.op??.55}"></label>
+        <div><label class="chk"><input id="spPlOn" type="checkbox"${st.plan.on!==false?' checked':''}> Visibile</label><label class="chk"><input id="spPlInv" type="checkbox"${st.plan.invert!==false?' checked':''}> Linee chiare (inverti)</label></div></div>`:''}
+      <div class="row"><label class="btn" style="cursor:pointer">🗺 ${st.plan?.src?'Cambia':'Carica'} planimetria<input id="spPlFile" type="file" accept="image/*" hidden></label><span class="hint" id="spPlSt"></span></div>
+      <p class="hint">Pianta del locale (JPG o PNG) come sfondo della Pianta. Poi 📏 Calibra su una quota nota e ✥ Sposta per portare il palco nel punto giusto; le luci si trascinano sulla mappa.</p>
       <p class="hint">Le misure si vedono nella Pianta (rettangolo tratteggiato della sala) e servono al Render. Schermo di proiezione, proiettore, casse e LED wall si aggiungono toccando un punto vuoto della Pianta.</p>
     </div>`;
     const q=id=>s.querySelector('#'+id);
@@ -124,9 +220,23 @@ function openSpaceEditor(){
     set('spAW',n=>aud.width=n);set('spAD',n=>aud.depth=n);set('spAG',n=>aud.y=st.depth+n);set('spAX',n=>aud.x=n);
     set('spFY',n=>st.foh.y=st.depth+n);set('spFX',n=>st.foh.x=n);set('spFW',n=>st.foh.width=n);set('spFD',n=>st.foh.depth=n);
     q('spAuto').onchange=e=>{const v=venueRect();st.venue=e.target.checked?{auto:true,height:v.height}:{auto:false,width:+v.width.toFixed(1),depth:+v.depth.toFixed(1),height:+v.height.toFixed(1),back:+(-v.y0).toFixed(1)};save();paint()};
+    q('spPlFile').onchange=async e=>{const file=e.target.files?.[0];if(!file)return;q('spPlSt').textContent='Carico…';
+      try{await uploadPlanImage(file);showInfo('Planimetria caricata: ora 📏 Calibra scala.');paint()}catch(err){q('spPlSt').textContent='';showError('Planimetria: '+err.message)}};
+    if(st.plan?.src){
+      const pick=mode=>{planEdit=mode==='cal'?{mode,pts:[]}:{mode};closeSheet();
+        let changed=false;for(const w of page().widgets||[])if(w.type==='stage'&&w.view!=='plot'){w.view='plot';changed=true}
+        if(changed){save();render()}
+        showInfo(mode==='cal'?'Tocca nella Pianta i due capi di una quota nota.':'Trascina la mappa; un tocco senza trascinare per finire.')};
+      q('spPlCal').onclick=()=>pick('cal');q('spPlMove').onclick=()=>pick('move');
+      q('spPlRot').onclick=()=>{st.plan.rot=((st.plan.rot||0)+90)%360;save();paint()};
+      q('spPlDel').onclick=async()=>{if(!await uiConfirm('Togliere la planimetria dalla Pianta?'))return;delete st.plan;save();paint()};
+      q('spPlOp').oninput=e=>{st.plan.op=+e.target.value;save()};
+      q('spPlOn').onchange=e=>{st.plan.on=e.target.checked;save()};
+      q('spPlInv').onchange=e=>{st.plan.invert=e.target.checked;save()};
+    }
     set('spVW',n=>st.venue.width=n);set('spVD',n=>st.venue.depth=n);set('spVH',n=>st.venue.height=n);set('spVB',n=>st.venue.back=n);
   };
   paint();
 }
 
-if(typeof module==='object'&&module.exports){module.exports={showFootprint,venueRect,convexHull};}
+if(typeof module==='object'&&module.exports){module.exports={showFootprint,venueRect,convexHull,parsePlanLength,planBounds};}

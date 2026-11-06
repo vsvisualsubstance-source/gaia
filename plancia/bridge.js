@@ -21,6 +21,8 @@ const { createLibrary } = require('./fixture-lib');
 const PORT = +process.env.PORT || 8080;
 const OSC_IN = +process.env.OSC_IN || 9000;
 const STATE_FILE = process.env.PLANCIA_STATE_FILE || path.join(__dirname, 'data', 'state.json');
+// planimetrie caricate dalla Pianta (sfondo), accanto allo stato
+const PLAN_DIR = path.join(path.dirname(STATE_FILE), 'plans'), PLAN_MAX = 20 * 1024 * 1024;
 const fixtureLib = createLibrary({ dir: path.join(path.dirname(STATE_FILE), 'fixture-lib') });
 const audioLib = require('./audio-lib');
 const STATIC_ASSETS = {
@@ -192,6 +194,28 @@ const server = http.createServer((req, res) => {
       res.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' });
       res.end('Plancia asset could not be loaded.');
     });
+  } else if (req.url.split('?')[0] === '/api/plan-image' && req.method === 'POST') {
+    // Planimetria del locale (sfondo della Pianta): l'immagine va in un file a
+    // parte, nello stato resta solo il suo indirizzo /plans/<hash>.<ext>
+    const ext = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }[String(req.headers['content-type'] || '').split(';')[0]];
+    const reply = (code, obj) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(obj)); };
+    if (!ext) { req.resume(); return reply(415, { ok: false, error: 'Immagine JPEG, PNG o WebP.' }); }
+    const parts = []; let size = 0;
+    req.on('data', c => { size += c.length; if (size > PLAN_MAX) { reply(413, { ok: false, error: 'Immagine oltre 20 MB.' }); req.destroy(); } else parts.push(c); });
+    req.on('end', () => {
+      if (size > PLAN_MAX) return;
+      const buf = Buffer.concat(parts);
+      if (!buf.length) return reply(400, { ok: false, error: 'Immagine vuota.' });
+      const name = require('crypto').createHash('sha1').update(buf).digest('hex').slice(0, 16) + '.' + ext;
+      fs.promises.mkdir(PLAN_DIR, { recursive: true }).then(() => fs.promises.writeFile(path.join(PLAN_DIR, name), buf))
+        .then(() => reply(200, { ok: true, src: '/plans/' + name }), err => reply(500, { ok: false, error: err.message }));
+    });
+  } else if (/^\/plans\/[0-9a-f]{16}\.(jpg|png|webp)$/.test(req.url.split('?')[0]) && req.method === 'GET') {
+    const name = req.url.split('?')[0].slice(7), type = { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp' }[name.split('.').pop()];
+    fs.promises.readFile(path.join(PLAN_DIR, name)).then(buf => {
+      // il nome e' l'hash del contenuto: non cambia mai
+      res.writeHead(200, { 'content-type': type, 'cache-control': 'max-age=31536000, immutable' }); res.end(buf);
+    }, () => { res.writeHead(404); res.end(); });
   } else if (req.url.split('?')[0] === '/api/stage-ai' && req.method === 'POST') {
     // "Palco da descrizione": i tablet non possono chiamare Ollama (gira su
     // OPS, origini limitate), quindi passa dal bridge. Vedi stage-ai.js.

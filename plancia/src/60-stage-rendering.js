@@ -348,6 +348,8 @@ function plotProjection(W,H,stage,fixtures){
     ys.push(area.y-1,area.y+area.depth+1);
   }
   {const v=venueRect(stage);xs.push(v.x0,v.x0+v.width);ys.push(v.y0,v.y0+v.depth)} // la sala intera nella vista
+  // e la planimetria, tranne mentre la si trascina (la vista resta ferma)
+  if(planEdit?.mode!=='move'){const b=planBounds(stage.plan);if(b){xs.push(b.x0,b.x0+b.w);ys.push(b.y0,b.y0+b.h)}}
   for(const f of fixtures){xs.push(f.x-1,f.x+1);ys.push(f.y-1,f.y+1)}
   for(const f of tdFixtures())if(Number.isFinite(f.x)&&Number.isFinite(f.y)){xs.push(f.x-1,f.x+1);ys.push(f.y-1,f.y+1)}
   const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
@@ -373,10 +375,12 @@ function drawPlot(g,W,H,t,w){
     g.fillRect(left,top,area.width*s,area.depth*s);g.strokeRect(left,top,area.width*s,area.depth*s);g.setLineDash([]);
     txt(label,left+5,top+13,color,'left',9);
   };
+  drawPlanPlot(g,X,Y,s);
   drawVenuePlot(g,X,Y,s,txt);
   drawArea(geom.audience,'PLATEA','#7b8493');
   drawArea(geom.foh,'FOH','#ffb23e');
-  g.fillStyle='#12151a';g.strokeStyle='#4a515e';g.lineWidth=1.5;
+  // con la planimetria sotto il palco e' trasparente: si vede dove cade nel locale
+  g.fillStyle=planBounds(geom.plan)?'rgba(18,21,26,.3)':'#12151a';g.strokeStyle=planBounds(geom.plan)?'#00ffcc':'#4a515e';g.lineWidth=1.5;
   g.fillRect(X(stageX),Y(stageY),stageW*s,stageD*s);g.strokeRect(X(stageX),Y(stageY),stageW*s,stageD*s);
   txt(`PALCO ${stageW.toFixed(1)} × ${stageD.toFixed(1)} m · quota ${geom.floorHeight.toFixed(1)} m`,X(stageX)+5,Y(stageY)+14,'#5d6573','left');
   g.strokeStyle='#5d6573';g.lineWidth=1;g.beginPath();g.moveTo(X(stageX),Y(stageD+.35));g.lineTo(X(-stageX),Y(stageD+.35));g.stroke();
@@ -438,4 +442,5 @@ function drawPlot(g,W,H,t,w){
   // su questa stessa fascia verticale del palco.
   txt('Trascina=sposta · tocca fixture=proprietà · vuoto=aggiungi · autosalvataggio layout',lx,ly-8,'#e9ebef','left',9);
   lg.forEach((r,i)=>{txt(r[0],lx,ly+10+i*14,'#c9ced8','left');txt(r[1],lx+s*3.4,ly+10+i*14,'#868e9b','left')});
+  drawPlanEdit(g,X,Y,W,txt);
 }
