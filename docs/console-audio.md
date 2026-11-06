@@ -232,8 +232,8 @@ sulle altre uscite e lo segnala nello stato.
   su tutti i colpi del brano con scarto dei colpi fuori posto; ancora con la mediana pesata
   (le note del basso nella stessa banda non la spostano); BPM intero solo se spiega i colpi
   come quello misurato; meta' brano contro meta' brano = tempo variabile; battito 1 dai
-  cambi di sezione;  = cue automatico sul primo battito 1 con la cassa.
-  Nel JSON della griglia: ,  (dispersione dei colpi), .
+  cambi di sezione; `first_kick` = cue automatico sul primo battito 1 con la cassa.
+  Nel JSON della griglia: `first_kick`, `residual_ms` (dispersione dei colpi), `variable`.
   Prove sintetiche: fase entro 2-4 ms (secondo la forma della cassa), deriva sotto 1,5 ms
   in tre minuti, hi-hat forti in levare ignorati. Libreria vera: 586/639 brani sulla cassa,
   235 con dispersione sotto 3 ms.
@@ -242,7 +242,7 @@ sulle altre uscite e lo segnala nello stato.
   riallinea subito; il nudge tenuto sospende l'aggancio e al rilascio lo scarto scelto a
   orecchio diventa il riferimento; vale anche a tempo meta'/doppio. Il range del fader si
   allarga da solo (8, 16, 50%) quando il BPM del master lo richiede, invece di tagliare.
-  Stato:  in ms per il deck in SYNC; la console lo mostra (SYNC · fase).
+  Stato: `phase_err` in ms per il deck in SYNC; la console lo mostra (SYNC · fase).
 
 **Analisi** (fatta: `audio-engine/src/analysis.rs`, `library.rs`):
 - per traccia: BPM, griglia (BPM costante + ancora sul primo battito),
