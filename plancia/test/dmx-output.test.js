@@ -268,6 +268,7 @@ test('fixtureOutput: real output only while DMX Master is fresh and knows the fi
   assert.deepEqual(fixtureOutput({ uid: 'dim-1' }, { at }).color, [1, 1, 1]);
   assert.deepEqual(fixtureOutput({ uid: 'dark' }, { at }), { record: dmxOutputForFixture({ uid: 'dark' }), color: [1, 1, 1], level: 0, angles: null });
   assert.equal(fixtureOutput({ uid: 'sconosciuta' }, { at }), null);   // DMX Master non la conosce: simulazione
+  assert.equal(fixtureOutput({ uid: 'vuota' }, { at }), null);         // voce vuota (modello ch1..chN): simulazione, non spenta
 
   assert.deepEqual(fixtureOutput({ uid: 'head-1' }, { at, model: { pan_range: 540, tilt_range: 270 } }).angles, [0.5, -1 / 3]);
   assert.deepEqual(fixtureOutput({ uid: 'head-1' }, { at, model: { pan_range: 270, tilt_range: 90 } }).angles, [1, -1]);

@@ -161,6 +161,10 @@ function fixtureOutput(fixture,{at=Date.now(),model=null}={}){
   if(!dmxOutputFresh(at))return null;
   const record=dmxOutputForFixture(fixture);
   if(!record)return null;
+  // voce vuota: DMX Master non calcola niente per questa luce (modello coi ruoli
+  // dei canali ancora da compilare, ch1..chN): il Render la simula invece di
+  // disegnarla spenta
+  if(record.rgbOut==null&&record.intensity==null&&record.pan==null&&record.tilt==null)return null;
   const peak=record.rgbOut?Math.max(...record.rgbOut):0;
   return{record,color:peak>0?record.rgbOut.map(v=>v/peak):[1,1,1],
     level:record.sent?(record.rgbOut?peak:record.intensity||0):0,
