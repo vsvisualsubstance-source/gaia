@@ -157,7 +157,10 @@ function dmxHeadAngles(record,model){
 //   color   rgb_out a luminosita' piena ([1,1,1] se buio o assente: e' una tinta)
 //   level   0..1: picco di rgb_out, o intensity senza colore; 0 se non inviata
 //   angles  [pan,tilt] in -1..1 per le teste (con il modello TD), o null
+// anteprima di una scena (63-dmx-scenes.js): uscita finta per luce, il resto si ignora
+let PREVIEW_OVR=null;
 function fixtureOutput(fixture,{at=Date.now(),model=null}={}){
+  if(PREVIEW_OVR)return PREVIEW_OVR.get(fixture.id)||null;
   if(!dmxOutputFresh(at))return null;
   const record=dmxOutputForFixture(fixture);
   if(!record)return null;

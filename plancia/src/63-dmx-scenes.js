@@ -124,6 +124,37 @@ async function buildPaletteScenes(palettes,rigParams,onStep=()=>{}){
   return categories;
 }
 
+/* ---------- anteprima delle scene: miniatura del Render coi colori della scena ---------- */
+// Ogni scena porta scene.preview = {rig_a:{palette,colors}, rig_b:..., ledbar:...}: i
+// colori di ogni rig. Qui ogni luce del gruppo prende il colore della sua unita' e il
+// Render (vista dal pubblico, istante fisso) si disegna in piccolo. Le luci senza colore
+// nella scena restano spente. Cache per scena: si rifa' solo se cambiano scena o luci.
+const SCENE_THUMBS=new Map();
+function scenePreviewURL(scene){
+  const pv=scene?.preview;if(!pv||typeof pv!=='object')return null;
+  const groups=groupsOf(),keyOf=f=>{const g=groups.find(x=>x.group===f.group);return g?.bind||f.group};
+  const sig=JSON.stringify([pv,(L.fixtures||[]).map(f=>[f.id,f.type,f.x,f.y,f.z,f.aim,f.pitch,f.beamDeg,f.power,f.group,f.unit,f.vertical,f.enabled]),L.stage?.width,L.stage?.depth,L.stage?.floorGloss]);
+  const hit=SCENE_THUMBS.get(scene.id);if(hit&&hit.sig===sig)return hit.url;
+  const ovr=new Map();let any=false;
+  for(const f of L.fixtures||[]){
+    if(!FIX_TYPES[f.type]?.ch&&f.type!=='wall')continue;
+    const cols=pv[keyOf(f)]?.colors;
+    if(Array.isArray(cols)&&cols.length&&f.type!=='mh'){const raw=cols[(Math.max(1,+f.unit||1)-1)%cols.length].map(v=>+v>1?+v/255:+v||0),mx=Math.max(...raw);
+      ovr.set(f.id,{record:{sent:true,rgbOut:raw,intensity:mx},color:mx>0?raw.map(v=>v/mx):[1,1,1],level:mx,angles:null});any=true}
+    else ovr.set(f.id,{record:{sent:false,rgbOut:null,intensity:0},color:[1,1,1],level:0,angles:null});
+  }
+  let url=null;
+  if(any){const W=240,H=135,cv=document.createElement('canvas');cv.width=W;cv.height=H;const g=cv.getContext('2d');
+    // fondo e luce frontale coi colori della scena (non quelli dello show in corso)
+    const first=k=>{const c=pv[k]?.colors?.[0];return Array.isArray(c)?c.map(v=>+v>1?+v/255:+v||0):null};
+    const keep={blackout:SH.blackout,strobe:SH.strobe,master:SH.master},keepC={back:SH.back.c,wash:SH.wash.c,bar:SH.bar.c};
+    PREVIEW_OVR=ovr;SH.blackout=false;SH.strobe=false;SH.master=1;
+    SH.back.c=first('rig_b')||first('rig_a')||[.1,.1,.12];SH.wash.c=first('rig_a')||SH.back.c;SH.bar.c=first('ledbar')||SH.back.c;
+    try{drawRender(g,W,H,0,.6);url=cv.toDataURL('image/jpeg',.82)}catch{url=null}
+    finally{PREVIEW_OVR=null;Object.assign(SH,keep);SH.back.c=keepC.back;SH.wash.c=keepC.wash;SH.bar.c=keepC.bar}}
+  SCENE_THUMBS.set(scene.id,{sig,url});return url;
+}
+
 function openSceneEditor(){
   const cats=sceneCategoriesFrom(G.dxm[dmxId()]),scenes=tdScenes(),active=tdActiveScene(tdParams())?.index;
   const s=$('#scrim');s.hidden=false;
@@ -135,7 +166,7 @@ function openSceneEditor(){
   const checks=(sel,cls)=>cats.map(c=>`<label class="chk"><input type="checkbox" class="${cls}" value="${esc(c.id)}"${sel.includes(c.id)?' checked':''}> ${esc(c.label)}</label>`).join('');
   const rows=scenes.map(sc=>{const look=tdSceneLook(sc),used=(sc.cues||[]).length;
     return`<div class="scn-row${sc.index===active?' on':''}" data-scene="${esc(sc.id)}">
-      <div class="scn-head"><span class="scn-sw" style="${look.grad?`background:${look.grad}`:''}"></span>
+      <div class="scn-head">${(u=>u?`<img class="scn-th" src="${u}" alt="">`:`<span class="scn-sw" style="${look.grad?`background:${look.grad}`:''}"></span>`)(scenePreviewURL(sc))}
         <b>${String(sc.index+1).padStart(2,'0')} · ${esc(sc.label||sc.id)}</b>${sc.label&&sc.label!==sc.id?` <span class="mono hint">${esc(sc.id)}</span>`:''}
         <span class="hint">${esc(sceneCategoryText(sc.categories,cats))}${(sc.only||[]).length?` · solo ${esc(sc.only.map(gName).join(', '))}`:''}${used?` · in ${used} cue`:''}</span></div>
       <div class="row scn-act">

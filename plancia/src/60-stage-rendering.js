@@ -354,7 +354,7 @@ function drawRender(g,W,H,t,level,w){
         else if(!project.cam3d&&tl>=0&&ey>fb&&ey<ff+H*.05){g.save();g.translate(ex,ey);g.scale(1,.32);glow(g,0,0,wd*1.1,col,.5*k);g.restore()}
       }
     }
-    if(feedback){
+    if(feedback&&!PREVIEW_OVR){
       // due righe corte e centrate: livello (o OFF) e posizione
       const l1=[feedback.sent?(feedback.intensity==null?'OUT':`${Math.round(feedback.intensity*100)}%`):'OFF',
         // ruota colori con slot senza colore nel catalogo: TD manda bianco (nota 34)
@@ -378,6 +378,7 @@ function drawRender(g,W,H,t,level,w){
   g.fillStyle='#111318';g.strokeStyle='#ffb23e';g.lineWidth=1.2;
   g.fillRect(fohP.x-fohW/2,fohP.y-fohH/2,fohW,fohH);g.strokeRect(fohP.x-fohW/2,fohP.y-fohH/2,fohW,fohH);
   for(const f of lasers){
+    if(PREVIEW_OVR)break;   // anteprima di una scena: niente laser simulati
     const origin=project(f.x,f.y,fixtureZ(f)),spread=(f.spread||28)*Math.PI/180,base=(f.angle||0)*Math.PI/180;
     // collegata a un LaserCube che proietta: raggi veri dal gateway. Altrimenti (nessun
     // cubo, gateway assente, cubo spento o fermo) simulazione animata; lo stato del cubo

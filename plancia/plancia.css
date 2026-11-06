@@ -794,3 +794,8 @@ button{cursor:pointer}
 .ct-ch{flex:1 0 54px;max-width:90px;display:flex;flex-direction:column;align-items:center;gap:4px;border:1px solid var(--line);border-radius:6px;padding:6px 2px;min-height:0}
 .ct-ch input[type=range]{writing-mode:vertical-lr;direction:rtl;flex:1;min-height:80px;width:32px}
 .ct-ch b{font:700 13px var(--mono)}.ct-ch small{font:10px var(--mono);color:var(--dim);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ct-ch output{font:11px var(--mono)}
+
+/* anteprime delle scene (miniatura del Render) */
+.cs-th{width:58px;height:33px;object-fit:cover;border-radius:3px;flex:none;border:1px solid var(--line2)}
+.scn-th{width:72px;height:41px;object-fit:cover;border-radius:3px;flex:none;border:1px solid var(--line2);margin-right:6px;vertical-align:middle}
+.tl-blk.tl-th{background-image:linear-gradient(90deg,#000c 0,#0006 60%,#0003),var(--th);background-size:cover;background-position:center}
