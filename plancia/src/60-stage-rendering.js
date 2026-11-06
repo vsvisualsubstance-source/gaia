@@ -232,6 +232,9 @@ function drawRender(g,W,H,t,level,w){
   };
   if(!project.camDir)project.camDir=[0,1,0];   // vista dal pubblico
   const fixtureZ=f=>f.mountToTruss?geom.trussHeight:f.z;
+  // luci accese di questo fotogramma (posizione in metri, colore, forza): servono a
+  // riflessi sul pavimento lucido e nebbia, disegnati dopo tutte le luci
+  const lit=[],addLit=(x,y,z,col,k,r)=>{if(k>.02&&col)lit.push({x:+x||0,y:+y||0,z:+z||0,col,k:Math.min(1.5,k),r})};
   g.globalCompositeOperation='lighter';
   glow(g,W/2,H*.35,W*.6,SH.back.c,.12*hz*M*SH.g.back);
   drawScreensRender(g,project,zScale,t);drawProjectorsRender(g,project,zScale);g.globalCompositeOperation='lighter';
@@ -276,6 +279,7 @@ function drawRender(g,W,H,t,level,w){
         g.fillStyle=rgba(col,1,k);g.fillRect(wx0+x*pw+.5,wy0+y*ph+.5,Math.max(1,pw-1.2),Math.max(1,ph-1.2));
       }
       avg/=cols*rows;if(panel){g.restore();panel=false}glow(g,wp.x,wp.y,W*.42,c,.35*avg*hz);
+      addLit(wallF.x,wallF.y,(wallF.z||0)+(wallF.h||3.5)/2,c,avg,(wallF.w||6)*.45);
     }
     if(panel)g.restore();
     g.globalCompositeOperation='lighter';
@@ -305,7 +309,7 @@ function drawRender(g,W,H,t,level,w){
     // fascio nella direzione vera della luce; rivolta al pubblico: si vede la sorgente piu' forte
     const ab=aimBeam(project,f,f.z||0,H),pw=fixturePower(f);
     beam(g,p.x,p.y,ab.ang,ab.len,ab.wd,col,.22*k*pw*hz*(1-.6*ab.toward));glow(g,p.x,p.y,10+18*ab.toward,col,.9*Math.min(1,k*pw));
-    floorPool(g,project,ab.hit,col,.45*k*pw);
+    floorPool(g,project,ab.hit,col,.45*k*pw);addLit(f.x,f.y,f.z,col,k*pw,.5);
   }
   // truss fisso di sempre, solo se il progetto non ha americane sue
   g.globalCompositeOperation='source-over';g.strokeStyle='#30353f';g.lineWidth=1.5;
@@ -325,7 +329,7 @@ function drawRender(g,W,H,t,level,w){
   g.globalCompositeOperation='lighter';
   // etichette feedback: se le teste sono vicine si sfalsano in altezza (una si', una no)
   const byX=heads.map(hd=>hd[0]).sort((a,b)=>a-b),minGap=byX.slice(1).reduce((m,v,i)=>Math.min(m,v-byX[i]),Infinity);
-  for(const [x,y,h,p,size,live] of heads){
+  for(const [x,y,h,p,size,live,hf] of heads){
     const feedback=live?.record,k=live?live.level:p[5]*SH.g.mh*M*(h.strobe?(((t/1000*13)%1)<.3?1:0):1);
     // con il feedback: colore e livello da rgb_out, posizione da pan/tilt
     // reali in gradi (nota 33), zoom e focus reali da dmx_live; il gobo arriva
@@ -344,7 +348,7 @@ function drawRender(g,W,H,t,level,w){
           if(v[2]<-.05)floorAt=q}
         const gobo=feedback?0:h.gobo,wd=len*(.035+z*.22), subs=gobo===3?[0,1,2].map(j=>[Math.sin(t*.0012+j*2.1)*.06,.35+.2*j,.7]):GOBO[gobo]||GOBO[0];
         for(const [o,wf,a] of subs)beam(g,x,y,ang+o*(.6+z*2.2),len,wd*wf*(.8+soft*.4),col,.42*k*hz*a);
-        glow(g,x,y,size,col,.95*k);
+        glow(g,x,y,size,col,.95*k);addLit(hf.x,hf.y,fixtureZ(hf),col,k,.4);
         const ex=x+Math.sin(ang)*len,ey=y+Math.cos(ang)*len;
         if(floorAt){g.save();g.translate(floorAt.x,floorAt.y);g.scale(1,.32);glow(g,0,0,wd*1.1,col,.5*k);g.restore()}
         else if(!project.cam3d&&tl>=0&&ey>fb&&ey<ff+H*.05){g.save();g.translate(ex,ey);g.scale(1,.32);glow(g,0,0,wd*1.1,col,.5*k);g.restore()}
@@ -404,7 +408,7 @@ function drawRender(g,W,H,t,level,w){
         if(kv>.02)glow(g,x,y,10,color,.5*kv)}
       const kAvg=kSum/px,pw=fixturePower(f);
       if(kAvg>.02&&ab.toward<.9)beam(g,ab.p.x,ab.p.y,ab.ang,ab.len,ab.wd+ab.p.zs*span*.25,cSum,.16*kAvg*pw*hz*(1-ab.toward));
-      floorPool(g,project,ab.hit,cSum,.35*kAvg*pw);
+      floorPool(g,project,ab.hit,cSum,.35*kAvg*pw);addLit(f.x,f.y,(f.z||0)+(f.vertical?span/2:0),cSum,kAvg*pw*vis,f.vertical?.35:span*.4);
     }
   }
   // pubblico e blinder
@@ -415,10 +419,29 @@ function drawRender(g,W,H,t,level,w){
       const ab=aimBeam(project,f,f.z||0,H),c=live?live.color:[1,.85,.6],pw=fixturePower(f);
       glow(g,ab.p.x,ab.p.y,Math.max(12,ab.p.scale*1.5)*(.5+.5*ab.toward),c,.55*Math.min(1,actual*pw)*(.3+.7*ab.toward));
       if(ab.toward<.9)beam(g,ab.p.x,ab.p.y,ab.ang,ab.len,ab.wd,c,.25*actual*pw*(1-ab.toward));
-      floorPool(g,project,ab.hit,c,.4*actual*pw)}
+      floorPool(g,project,ab.hit,c,.4*actual*pw);addLit(f.x,f.y,f.z,c,actual*pw,.6)}
     if(!blinderF.length)glow(g,W/2,H*1.05,W*.7,[1,.85,.6],.55*bl);
   }
   g.globalCompositeOperation='source-over';
+  // pavimento lucido: ogni luce si specchia sotto il palco (z -> -z), riflesso allungato
+  // e limitato al palco. stage.floorGloss 0 = opaco, 1 = specchio (di partenza 0,5)
+  const gloss=clamp(geom.floorGloss??.5,0,1);
+  if(gloss>.01&&lit.length&&M>.01){
+    g.save();g.beginPath();g.moveTo(frontL.x,frontL.y);g.lineTo(frontR.x,frontR.y);g.lineTo(rearR.x,rearR.y);g.lineTo(rearL.x,rearL.y);g.closePath();g.clip();
+    g.globalCompositeOperation='lighter';
+    for(const l of lit){if(l.z<.05||l.y<0||l.y>depth)continue;
+      const m=project(l.x,l.y,-l.z),base=project(l.x,l.y,0),rx=Math.max(6,l.r*base.scale),ry=Math.max(rx*1.6,Math.abs(m.y-base.y)*.6);
+      g.save();g.translate(m.x,(m.y+base.y)/2);g.scale(1,ry/rx);glow(g,0,0,rx,l.col,.22*gloss*l.k);g.restore()}
+    g.restore();
+  }
+  // nebbia: con l'haze alto, nuvole morbide che girano piano, col colore medio delle luci accese
+  if(hz>.5&&lit.length&&M>.01){
+    const sum=[0,0,0];let kk=0;for(const l of lit){l.col.forEach((v,i)=>sum[i]+=v*l.k);kk+=l.k}
+    const avgc=sum.map(v=>v/Math.max(.001,kk)),mx=Math.max(...avgc)||1,col=avgc.map(v=>v/mx),a=.04*(hz-.5)*2*Math.min(1,kk/4)*M;
+    g.save();g.globalCompositeOperation='lighter';
+    for(let i=0;i<6;i++){const ph=t*.00003*(1+i*.31)+i*1.7,cx=W*(.5+.38*Math.sin(ph)),cy=H*(.42+.16*Math.cos(ph*1.3+i));glow(g,cx,cy,W*(.22+.05*i),col,a)}
+    g.restore();
+  }
   const audience=geom.audience,seatCols=12,seatRows=4;
   for(let row=0;row<seatRows;row++)for(let col=0;col<seatCols;col++){
     const xw=audience.x-audience.width/2+(col+.5)*audience.width/seatCols;

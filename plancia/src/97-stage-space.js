@@ -204,6 +204,7 @@ function openSpaceEditor(){
         <div><b>${area.toFixed(0)} m²</b><span>platea · ≈ ${Math.round(area*2)} persone in piedi, ${Math.round(area/.6)} sedute strette</span></div></div>
       <h4>Palco</h4><div class="two">${num('spW','Larghezza (m)',st.width,2,60)}${num('spD','Profondità (m)',st.depth,2,60)}</div>
       <div class="two">${num('spFl','Altezza del piano (m)',st.floorHeight,0,20)}${num('spTr','Altezza americana (m)',st.trussHeight,1,30)}</div>
+      <label>Pavimento nel Render <em>opaco … lucido … specchio: le luci si riflettono</em><input id="spGloss" type="range" min="0" max="1" step=".05" value="${st.floorGloss??.5}"></label>
       <h4>Platea</h4><div class="two">${num('spAW','Larghezza (m)',aud.width,1,200)}${num('spAD','Profondità (m)',aud.depth,1,200)}</div>
       <div class="two">${num('spAG','Distanza dal bordo palco (m)',gap,0,100)}${num('spAX','Spostamento laterale (m)',aud.x,-100,100)}</div>
       <h4>Regia (FOH)</h4><div class="two">${num('spFY','Distanza dal bordo palco (m)',st.foh.y-st.depth,0,150)}${num('spFX','Spostamento laterale (m)',st.foh.x,-100,100)}</div>
@@ -222,6 +223,7 @@ function openSpaceEditor(){
     </div>`;
     const q=id=>s.querySelector('#'+id);
     q('spClose').onclick=closeSheet;
+    q('spGloss').oninput=e=>{st.floorGloss=+e.target.value;save()};
     for(const id of ['spVW','spVD','spVB'])q(id).disabled=st.venue.auto!==false;
     const set=(id,fn)=>{q(id).onchange=e=>{const n=Number(e.target.value);if(!Number.isFinite(n))return;fn(n);ensureStageData(L);save();paint()}};
     set('spW',n=>st.width=n);set('spD',n=>{const g=st.audience.y-st.depth,fg=st.foh.y-st.depth;st.depth=n;st.audience.y=n+g;st.foh.y=n+fg});
