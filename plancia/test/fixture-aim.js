@@ -1,0 +1,59 @@
+'use strict';
+// Orientamento delle luci (60-stage-rendering.js, editor in 61-stage-fixtures.js):
+// direzione in pianta e inclinazione, pulsanti rapidi, propagazione al blocco,
+// Pianta e Render disegnati senza errori.
+//   node test/fixture-aim.js [--shot prefisso]
+
+const path = require('path');
+const { startPlancia, sleep } = require('./browser-harness');
+
+const arg = (name, def) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : def; };
+
+async function main() {
+  const p = await startPlancia({ hooks: true });
+  const fail = [];
+  const check = (ok, msg) => { console.log(`${ok ? 'ok    ' : 'ERRORE'} ${msg}`); if (!ok) fail.push(msg); };
+  const click = sel => p.ev(`(()=>{const b=document.querySelector(${JSON.stringify(sel)});if(!b)return false;b.click();return true})()`);
+  const fx = () => p.ev(`JSON.stringify(Object.fromEntries(window.__planciaTest.L.fixtures.map(f=>[f.id,[f.aim??null,f.pitch??null]])))`);
+  try {
+    await p.ev(`(()=>{const t=window.__planciaTest;
+      t.L.fixtures=[
+        {id:'c1',type:'bar',name:'COL1-1',group:'ledbar',universe:1,address:1,x:-3,y:-.6,z:.2,vertical:true,w:1,block:'COL1',unit:1,enabled:true},
+        {id:'c2',type:'bar',name:'COL1-2',group:'ledbar',universe:1,address:15,x:-3,y:-.6,z:1.2,vertical:true,w:1,block:'COL1',unit:1,enabled:true},
+        {id:'b1',type:'bar',name:'BAR1',group:'ledbar',universe:1,address:40,x:2,y:1,enabled:true,aim:90},
+        {id:'p1',type:'par',name:'PAR1',group:'front',universe:1,address:60,x:0,y:2,enabled:true},
+        {id:'p2',type:'par',name:'PAR2',group:'front',universe:1,address:64,x:3,y:2,enabled:true,aim:180,pitch:0}];
+      t.L.pages.push(t.P('Palco prova',[t.W('stage',0,0,16,10,{label:'Palco',view:'plot'})]));t.render();
+      const tabs=document.querySelectorAll('#tabs > *');tabs[tabs.length-1].click();return 1})()`);
+    await sleep(500);
+    // editor della barra in colonna: "Fondo" vale per tutto il blocco
+    await p.ev(`(()=>{const t=window.__planciaTest,w=t.L.pages[t.L.pages.length-1].widgets[0];t.openFixEditor(w,t.L.fixtures.find(f=>f.id==='c1'));return 1})()`);
+    await sleep(200);
+    check(await p.ev(`!!document.querySelector('#feAim')&&!!document.querySelector('#feAimBlock')?.checked`), 'editor: campi direzione e inclinazione, "vale per tutto il blocco" acceso');
+    check(await p.ev(`document.querySelector('#feAim').value===''`), 'direzione non impostata: campo vuoto (niente valore dato per scontato)');
+    await click('.fe-aim [data-aim="180"]'); await sleep(100);
+    let v = JSON.parse(await fx());
+    check(v.c1[0] === 180 && v.c2[0] === 180, `"Fondo": 180 su tutto il blocco COL1 (${JSON.stringify([v.c1, v.c2])})`);
+    await click('.fe-aim [data-pitch="90"]'); await sleep(100);
+    v = JSON.parse(await fx());
+    check(v.c1[1] === 90 && v.c2[1] === 90, '"Su": inclinazione 90 sul blocco');
+    await p.ev(`(()=>{const i=document.querySelector('#feAim');i.value='-270';i.dispatchEvent(new Event('change',{bubbles:true}));return 1})()`); await sleep(100);
+    v = JSON.parse(await fx());
+    check(v.c1[0] === 90, `-270 diventa 90 (gradi riportati tra -180 e 180): ${v.c1[0]}`);
+    await p.ev(`(()=>{const i=document.querySelector('#feAim');i.value='';i.dispatchEvent(new Event('change',{bubbles:true}));return 1})()`); await sleep(100);
+    v = JSON.parse(await fx());
+    check(v.c1[0] === null && v.c2[0] === null, 'campo svuotato: direzione di nuovo "non impostata"');
+    await p.ev(`(()=>{const i=document.querySelector('#feAim');i.value='180';i.dispatchEvent(new Event('change',{bubbles:true}));return 1})()`);
+    await p.ev(`(()=>{document.querySelector('#scrim').hidden=true;return 1})()`);
+    await sleep(400);
+    const shot = arg('--shot');
+    if (shot) await p.shot(path.resolve(shot + '-pianta.png'));
+    await p.ev(`(()=>{const S=window.__planciaTest.SH;S.blackout=false;S.master=1;for(const k of Object.keys(S.g))S.g[k]=1;return 1})()`);
+    await p.ev(`(()=>{document.querySelector('.t-stage [data-v="render"]').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));return 1})()`);
+    await sleep(800);
+    if (shot) { await p.shot(path.resolve(shot + '-render.png')); console.log('screenshot: ' + path.resolve(shot) + '-*.png'); }
+    check(!p.problems.length, `nessun errore nella pagina${p.problems.length ? ': ' + p.problems.join('; ') : ''}`);
+  } finally { p.close(); }
+  process.exitCode = fail.length ? 1 : 0;
+}
+main().catch(e => { console.error('orientamento luci: prova fallita:', e.message); process.exitCode = 2; });

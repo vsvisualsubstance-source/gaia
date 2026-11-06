@@ -228,6 +228,12 @@ function openFixEditor(w,f){
     <label>Nome<input id="feName"></label>
     <label>Altezza dal piano palco (m)<input id="feZ" type="number" min="-5" max="30" step="0.1"></label>
     ${f.type==='mh'||f.type==='laser'?`<label class="chk"><input id="feTruss" type="checkbox"> Segue altezza del truss</label>`:''}
+    ${AIM_TYPES.has(f.type)?`<div class="fe-aim"><div class="two"><label>Direzione in pianta (gradi) <em>0 = verso il pubblico · 180 = verso il fondo · 90 = destra · −90 = sinistra</em><input id="feAim" type="number" min="-180" max="180" step="5" placeholder="non impostata"></label>
+      <label>Inclinazione (gradi) <em>90 = in alto · 0 = orizzontale · −90 = in basso</em><input id="fePitch" type="number" min="-90" max="90" step="5" placeholder="non impostata"></label></div>
+      <div class="row"><button class="btn sm ghost" data-aim="0">↓ Pubblico</button><button class="btn sm ghost" data-aim="180">↑ Fondo</button><button class="btn sm ghost" data-aim="-90">← Sinistra</button><button class="btn sm ghost" data-aim="90">→ Destra</button>
+        <button class="btn sm ghost" data-pitch="90">Su</button><button class="btn sm ghost" data-pitch="0">Orizzontale</button><button class="btn sm ghost" data-pitch="-45">Giù</button></div>
+      ${f.block?`<label class="chk"><input id="feAimBlock" type="checkbox" checked> Vale per tutto il blocco ${esc(f.block)}</label>`:''}
+      <p class="hint" id="feAimMsg">Serve al Render e alla freccia nella Pianta. Non impostata = freccia tratteggiata con "?" (il Render usa ${f.type==='par'?'"in alto"':'"verso il pubblico"'}).</p></div>`:''}
     ${f.type==='screen'?`<div class="two"><label>Larghezza (m)<input id="feW" type="number" min="0.5" max="40" step="0.1"></label><label>Altezza (m)<input id="feH" type="number" min="0.3" max="20" step="0.1"></label></div>
     <label>Rotazione (gradi)<input id="feRot" type="number" min="-180" max="180" step="5"></label><p class="hint">Altezza dal piano = bordo inferiore dello schermo. Nel Render si illumina quando un proiettore lo punta.</p>`:''}
     ${f.type==='projector'?`<label>Schermo puntato<select id="fePrTarget"><option value="">— nessuno —</option>${(L.fixtures||[]).filter(x=>x.type==='screen').map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('')}</select></label>
@@ -262,6 +268,15 @@ function openFixEditor(w,f){
     <div class="row"><button class="btn danger" id="feDel">Elimina</button></div>
   </div>`;
   val2('#feName',f.name);val2('#feZ',f.z);
+  if($('#feAim')){val2('#feAim',f.aim??'');val2('#fePitch',f.pitch??'');
+    const aimTargets=()=>$('#feAimBlock')?.checked?(L.fixtures||[]).filter(x=>x.block===f.block&&AIM_TYPES.has(x.type)):[f];
+    const setAim=(key,v)=>{for(const x of aimTargets()){if(v===''||v==null)delete x[key];else x[key]=key==='aim'?(((+v%360)+360)%360>180?((+v%360)+360)%360-360:((+v%360)+360)%360):clamp(+v,-90,90)}save();
+      val2('#feAim',f.aim??'');val2('#fePitch',f.pitch??'')};
+    const onNum=(id,key)=>$('#'+id).addEventListener('change',e=>{const s=e.target.value.trim();if(s!==''&&!Number.isFinite(+s))return;setAim(key,s)});
+    onNum('feAim','aim');onNum('fePitch','pitch');
+    document.querySelectorAll('.fe-aim [data-aim]').forEach(b=>b.onclick=()=>setAim('aim',b.dataset.aim));
+    document.querySelectorAll('.fe-aim [data-pitch]').forEach(b=>b.onclick=()=>setAim('pitch',b.dataset.pitch));
+  }
   if($('#feTruss')){$('#feTruss').checked=!!f.mountToTruss;$('#feZ').disabled=!!f.mountToTruss}
   if($('#feSource')){
     val2('#feSource',f.sourceType||'procedural');val2('#feSourceRef',f.sourceRef||'');

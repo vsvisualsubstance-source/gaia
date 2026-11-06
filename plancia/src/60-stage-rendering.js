@@ -13,6 +13,23 @@ function beam(g,x,y,ang,len,wd,col,a){
   const gr=g.createLinearGradient(x,y,ex,ey);gr.addColorStop(0,rgba(col,a));gr.addColorStop(.55,rgba(col,a*.32));gr.addColorStop(1,rgba(col,0));
   g.fillStyle=gr;g.beginPath();g.moveTo(x+px*1.5,y+py*1.5);g.lineTo(x-px*1.5,y-py*1.5);g.lineTo(ex-px*wd,ey-py*wd);g.lineTo(ex+px*wd,ey+py*wd);g.closePath();g.fill();
 }
+// ---- orientamento delle luci (PAR, barre, blinder) ----
+// f.aim = direzione in pianta in gradi: 0 verso il pubblico (+y), 180 verso il fondo,
+// 90 destra, -90 sinistra. f.pitch = inclinazione: 90 in alto, 0 orizzontale, -90 in basso.
+// Non impostato = default del tipo (PAR in alto, il resto verso il pubblico), ma nella
+// Pianta la freccia resta tratteggiata con "?": non si da' per scontato.
+const AIM_TYPES=new Set(['par','bar','blinder']);
+const AIM_DEFAULT={par:{aim:0,pitch:90}};
+function fixtureAim(f){const d=AIM_DEFAULT[f.type]||{aim:0,pitch:0},a=+f.aim,p=+f.pitch;
+  return{aim:f.aim!=null&&Number.isFinite(a)?a:d.aim,pitch:f.pitch!=null&&Number.isFinite(p)?p:d.pitch,set:f.aim!=null||f.pitch!=null}}
+// vettore 3D (x destra, y verso il pubblico, z in alto)
+function aimVec(a){const h=a.aim*Math.PI/180,v=a.pitch*Math.PI/180;return[Math.sin(h)*Math.cos(v),Math.cos(h)*Math.cos(v),Math.sin(v)]}
+// fascio nel Render (vista dal pubblico) da una luce orientata: angolo e lunghezza a schermo
+function aimBeam(project,f,z,H){
+  const v=aimVec(fixtureAim(f)),L=4,p=project(f.x,f.y,z),q=project(f.x+v[0]*L,f.y+v[1]*L,z+v[2]*L);
+  const dx=q.x-p.x,dy=q.y-p.y;
+  return{p,ang:Math.atan2(dx,dy),len:clamp(Math.hypot(dx,dy)*1.3,H*.1,H*.6),toward:Math.max(0,v[1]),v};
+}
 function glow(g,x,y,r,col,a){const gr=g.createRadialGradient(x,y,0,x,y,r);gr.addColorStop(0,rgba(col,a));gr.addColorStop(1,rgba(col,0));g.fillStyle=gr;g.fillRect(x-r,y-r,r*2,r*2)}
 const wallVideoPlayers=new Map();
 function wallPreviewMessage(f,state=wallVideoPlayers.get(f.id)){
@@ -236,7 +253,9 @@ function drawRender(g,W,H,t,level){
     const live=outputOf(f),col=live?live.color:chaseCol(group==='back'?SH.back.c:SH.wash.c,i,uplights.length,t);
     const k=live?live.level:SH.g[group]*M*chaseK(i,uplights.length,t,level);
     if(k<.01)continue;
-    beam(g,p.x,p.y,Math.PI+(p.x<W/2?-.08:.08),H*.48,H*.07,col,.22*k*hz);glow(g,p.x,p.y,10,col,.9*k);
+    // fascio nella direzione vera della luce; rivolta al pubblico: si vede la sorgente piu' forte
+    const ab=aimBeam(project,f,f.z||0,H);
+    beam(g,p.x,p.y,ab.ang,ab.len,H*.07,col,.22*k*hz*(1-.6*ab.toward));glow(g,p.x,p.y,10+18*ab.toward,col,.9*k);
   }
   // truss
   g.globalCompositeOperation='source-over';g.strokeStyle='#30353f';g.lineWidth=1.5;
@@ -314,22 +333,33 @@ function drawRender(g,W,H,t,level){
   if(bars.length){const px=8;
     for(let i=0;i<bars.length;i++){const f=bars[i];
       const live=outputOf(f),col=live?live.color:null,fixtureLevel=live?live.level:0;
+      const span=f.w||(f.vertical?1:1.8),a=fixtureAim(f),h=a.aim*Math.PI/180;
+      // orientamento: rivolta al pubblico i LED si vedono pieni, rivolta altrove se ne vede
+      // il fianco o il retro (piu' scuri) e la luce va dove punta (fascio morbido)
+      const ab=aimBeam(project,f,(f.z||0)+(f.vertical?span/2:0),H),vis=.18+.82*ab.toward;
+      const ux=Math.cos(h),uy=-Math.sin(h); // asse di una barra orizzontale: perpendicolare alla direzione
+      let kSum=0,cSum=null;
       for(let j=0;j<px;j++){const idx=i*px+j,color=col||chaseCol(SH.bar.c,idx,bars.length*px,t),k=live?fixtureLevel:SH.g.ledbar*M*chaseK(SH.chase===2?idx:i,SH.chase===2?bars.length*px:bars.length,t,level);
+        kSum+=k;cSum=cSum||color;const kv=k*vis;
         // in piedi (f.vertical): i pixel salgono da f.z verso l'alto, una colonna di luce
-        const span=f.w||(f.vertical?1:1.8);
         if(f.vertical){const p=project(f.x,f.y,(f.z||0)+(j+.5)*span/px),x=p.x,y=p.y,hh=Math.max(1,zScale*span/px-1);
-          g.fillStyle=k>.02?rgba(color,1,k):'#15171c';g.fillRect(x-2,y-hh/2,4,hh);
-          if(k>.02)glow(g,x,y,10,color,.5*k);continue}
-        const p=project(f.x+(j+.5-px/2)*span/px,f.y,f.z),x=p.x,y=p.y;
-        g.fillStyle=k>.02?rgba(color,1,k):'#15171c';g.fillRect(x-p.scale*span/px/2+.5,y-2,Math.max(1,p.scale*span/px-1),4);
-        if(k>.02)glow(g,x,y,10,color,.5*k)}}
+          g.fillStyle=kv>.02?rgba(color,1,kv):'#15171c';g.fillRect(x-2,y-hh/2,4,hh);
+          if(kv>.02)glow(g,x,y,10,color,.5*kv);continue}
+        const o=(j+.5-px/2)*span/px,p=project(f.x+ux*o,f.y+uy*o,f.z),x=p.x,y=p.y,sw=Math.max(1,p.scale*span/px*Math.abs(ux)-1);
+        g.fillStyle=kv>.02?rgba(color,1,kv):'#15171c';g.fillRect(x-sw/2,y-2,Math.max(2,sw),4);
+        if(kv>.02)glow(g,x,y,10,color,.5*kv)}
+      const kAvg=kSum/px;
+      if(kAvg>.02&&ab.toward<.9)beam(g,ab.p.x,ab.p.y,ab.ang,ab.len,H*.05+zScale*span*.3,cSum,.16*kAvg*hz*(1-ab.toward));
+    }
   }
   // pubblico e blinder
   const bl=SH.g.blinder*(SH.blackout?0:1);
   if(bl>.01||blinderF.some(f=>outputOf(f)?.record.sent)){
     for(const f of blinderF){const live=outputOf(f),actual=live?live.level:bl;
       if(actual<=.01)continue;
-      const p=project(f.x,f.y,f.z);glow(g,p.x,p.y,Math.max(12,p.scale*1.5),live?live.color:[1,.85,.6],.55*actual)}
+      const ab=aimBeam(project,f,f.z||0,H),c=live?live.color:[1,.85,.6];
+      glow(g,ab.p.x,ab.p.y,Math.max(12,ab.p.scale*1.5)*(.5+.5*ab.toward),c,.55*actual*(.3+.7*ab.toward));
+      if(ab.toward<.9)beam(g,ab.p.x,ab.p.y,ab.ang,ab.len,H*.06,c,.25*actual*(1-ab.toward))}
     if(!blinderF.length)glow(g,W/2,H*1.05,W*.7,[1,.85,.6],.55*bl);
   }
   g.globalCompositeOperation='source-over';
@@ -432,10 +462,16 @@ function drawPlot(g,W,H,t,w){
     else if(f.type==='projector')drawProjectorPlot(g,f,x,y,s,col,f.id===sel,X,Y);
     else if(f.type==='bar'&&f.vertical){g.fillStyle='#1c2027';g.strokeStyle=col;g.lineWidth=st?.some(x=>x.id===sel)?2.6:1.5;g.fillRect(x-s*.17,y-s*.17,s*.34,s*.34);g.strokeRect(x-s*.17,y-s*.17,s*.34,s*.34);
       g.fillStyle=col;g.fillRect(x-s*.06,y-s*.06,s*.12,s*.12)}
-    else if(f.type==='bar'){g.fillStyle=col;g.fillRect(x-.9*s,y-.08*s,1.8*s,.16*s)}
+    else if(f.type==='bar'){const bl=(f.w||1.8)*s;g.save();g.translate(x,y);g.rotate(-fixtureAim(f).aim*Math.PI/180);g.fillStyle=col;g.fillRect(-bl/2,-.08*s,bl,.16*s);g.restore()}
     else if(f.type==='speaker'){g.fillStyle='#1b1f26';g.strokeStyle=col;g.lineWidth=1.2;g.fillRect(x-s*.32,y-s*.4,s*.64,s*.8);g.strokeRect(x-s*.32,y-s*.4,s*.64,s*.8)}
     else{g.fillStyle='#1c2027';g.strokeStyle=col;g.lineWidth=f.id===sel?2.6:1.3;g.beginPath();g.arc(x,y,r,0,Math.PI*2);g.fill();g.stroke();
       g.fillStyle=col;g.beginPath();g.arc(x,y,r*.4,0,Math.PI*2);g.fill()}
+    // direzione della luce (PAR, barre, blinder): freccia; tratteggiata con ? se non impostata
+    if(AIM_TYPES.has(f.type)){const a=fixtureAim(f),h=a.aim*Math.PI/180,flat=Math.cos(a.pitch*Math.PI/180),len=s*(.25+.55*flat),dx=Math.sin(h),dy=Math.cos(h);
+      const x0=x+dx*s*.2,y0=y+dy*s*.2,x1=x0+dx*len,y1=y0+dy*len;g.save();g.strokeStyle=a.set?'#00ffcc':'#868e9b';g.fillStyle=g.strokeStyle;g.lineWidth=1.4;if(!a.set)g.setLineDash([3,3]);
+      if(len>s*.3){g.beginPath();g.moveTo(x0,y0);g.lineTo(x1,y1);g.stroke();g.setLineDash([]);g.beginPath();g.moveTo(x1,y1);g.lineTo(x1-dx*6+dy*4,y1-dy*6-dx*4);g.lineTo(x1-dx*6-dy*4,y1-dy*6+dx*4);g.closePath();g.fill()}
+      if(a.pitch>30){g.setLineDash([]);g.beginPath();g.arc(x,y,s*.3,0,Math.PI*2);g.stroke();g.font='9px JetBrains Mono, monospace';g.textAlign='center';g.fillText(a.pitch>=80?'su':'↗'+Math.round(a.pitch),x+s*.42,y-s*.3)}
+      if(!a.set){g.font='bold 10px JetBrains Mono, monospace';g.textAlign='center';g.fillText('?',x1+dx*7,y1+dy*7+3)}g.restore()}
     if(f.id===sel&&f.type!=='wall'&&f.type!=='screen'){g.strokeStyle='#00ffcc';g.lineWidth=1.5;g.beginPath();g.arc(x,y,r+5,0,Math.PI*2);g.stroke()}
     g.globalAlpha=1;
     const flat=f.type==='wall'||f.type==='screen',labelR=flat?.18*s:r,fw=f.w||(f.type==='wall'?6:5),fh=f.h||(f.type==='wall'?3.5:2.8);
