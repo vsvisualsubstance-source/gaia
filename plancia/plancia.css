@@ -624,13 +624,13 @@ button{cursor:pointer}
 .au-tempo{display:flex;align-items:center;gap:6px}
 .au-tempo input{flex:1;min-width:60px}
 .au-mixer{gap:8px}
-.au-strips{flex:1;display:flex;gap:6px;min-height:0}
-.au-strip{flex:1;display:flex;flex-direction:column;align-items:stretch;gap:3px;min-width:0;padding:4px;border:1px solid var(--line);border-radius:6px}
-.au-strip.au-mid{flex:.8}
+.au-strips{flex:1;display:grid;grid-template-columns:1fr .8fr 1fr;grid-template-rows:auto auto 1fr auto;gap:0 6px;min-height:0}
+/* le tre colonne condividono le righe (lettera, manopole, meter, cuffia): i meter A, M, B hanno la stessa altezza */
+.au-strip{grid-row:1/-1;display:grid;grid-template-rows:subgrid;row-gap:4px;min-width:0;padding:4px;border:1px solid var(--line);border-radius:6px}
 .au-k{display:flex;flex-direction:column;font:10px var(--mono);color:var(--dim)}
 .au-k input{width:100%}
 .au-fadrow{flex:1;display:flex;gap:4px;min-height:60px}
-.au-rots{display:flex;flex-direction:column;align-items:center;gap:1px}
+.au-rots{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:1px}
 .au-rot{display:flex;flex-direction:column;align-items:center;cursor:ns-resize;touch-action:none;user-select:none;font:10px var(--mono);color:var(--dim);line-height:1}
 .au-rot svg{width:clamp(28px,4.2vh,40px);height:auto;overflow:visible}
 .au-rot .tr{fill:none;stroke:var(--line2);stroke-width:3.5;stroke-linecap:round}
@@ -638,7 +638,7 @@ button{cursor:pointer}
 .au-rot .cap{fill:var(--panel);stroke:var(--line2);stroke-width:1.5}
 .au-rot .ptr{stroke:var(--fg,#e8ecf2);stroke-width:2.5;stroke-linecap:round}
 .au-rot.drag .cap{stroke:var(--c)}
-.au-mst{display:grid;grid-template-columns:10px 10px;grid-template-rows:1fr auto;justify-content:center;column-gap:4px;font:10px var(--mono);color:var(--dim);text-align:center}
+.au-mst{justify-content:center}.au-lr{display:flex;justify-content:center;gap:4px;align-self:start;font:10px var(--mono);color:var(--dim)}.au-lr span{width:10px;text-align:center}
 .au-mst .au-meter{width:10px}
 .au-meter{width:8px;height:100%;border-radius:2px}
 .au-vfader{flex:1;writing-mode:vertical-lr;direction:rtl;min-height:0}

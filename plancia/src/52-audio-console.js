@@ -276,13 +276,14 @@ function auStripHtml(k){
   const knob=(key,label,min,max,v)=>auRot(key,label,min,max,v,k);
   return`<div class="au-strip" data-ch="${k}"><b class="au-letter">${k}</b>
     <div class="au-rots">${knob('gain','GAIN',0,2,1)}${knob('hi','HI',-1,1,0)}${knob('mid','MID',-1,1,0)}${knob('lo','LOW',-1,1,0)}${knob('filter','FILTRO',-1,1,0)}</div>
-    <button class="au-btn" data-au="chcue" data-ch="${k}" title="Preascolto in cuffia">🎧</button>
-    <div class="au-fadrow"><canvas class="au-meter" data-ch="${k}"></canvas><input class="au-vfader" type="range" min="0" max="1" step="0.01" value="1" data-au-r="mix" data-ch="${k}" data-key="fader"></div></div>`}
+    <div class="au-fadrow"><canvas class="au-meter" data-ch="${k}"></canvas><input class="au-vfader" type="range" min="0" max="1" step="0.01" value="1" data-au-r="mix" data-ch="${k}" data-key="fader"></div>
+    <button class="au-btn" data-au="chcue" data-ch="${k}" title="Preascolto in cuffia">🎧</button></div>`}
 function auMixerHtml(){
   return`<div class="au au-mixer"><div class="au-strips">${auStripHtml('A')}
     <div class="au-strip au-mid"><b class="au-letter">M</b>
       <div class="au-rots">${auRot('master','MASTER',0,1,.9)}${auRot('cue_mix','CUE · MIX',0,1,.5,null,'Cuffia: a sinistra solo i canali con 🎧, a destra solo il master')}${auRot('cue_level','CUE · VOL',0,1,.8,null,'Volume della cuffia')}</div>
-      <div class="au-fadrow au-mst" title="Uscita master: sinistro e destro"><canvas class="au-meter" data-ch="L"></canvas><canvas class="au-meter" data-ch="R"></canvas><span>L</span><span>R</span></div></div>
+      <div class="au-fadrow au-mst" title="Uscita master: sinistro e destro"><canvas class="au-meter" data-ch="L"></canvas><canvas class="au-meter" data-ch="R"></canvas></div>
+      <div class="au-lr"><span>L</span><span>R</span></div></div>
     ${auStripHtml('B')}</div>
     <label class="au-xf"><span>A</span><input type="range" min="-1" max="1" step="0.01" value="0" data-au-r="mix" data-key="xfader" title="Crossfader (doppio tocco: centro)"><span>B</span></label></div>`}
 function auPaintMixer(el){
