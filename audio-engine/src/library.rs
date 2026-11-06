@@ -15,7 +15,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::UNIX_EPOCH;
 
 /// da alzare quando cambia l'analisi: le tracce vengono rianalizzate
-pub const ANALYSIS_VERSION: u32 = 1;
+pub const ANALYSIS_VERSION: u32 = 2;   // 2 (2026-11-06): griglia sui colpi di cassa, battito 1, cue automatico
 const EXTS: [&str; 3] = ["mp3", "flac", "wav"];
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

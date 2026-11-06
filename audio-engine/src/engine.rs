@@ -156,6 +156,8 @@ pub struct DeckState {
     pub preview: bool,
     pub scrub: bool,
     pub snap: bool,
+    /// deck in SYNC che suona col master: scarto di fase dal master in ms (+ = in ritardo)
+    pub phase_err: Option<f64>,
 }
 
 #[derive(Clone, Serialize)]
@@ -208,11 +210,22 @@ struct Deck {
     /// scrub: dove sta il dito (s) e velocita' attuale della testina (s/s)
     scrub_target: f64,
     scrub_vel: f64,
+    /// aggancio di fase: scarto voluto dal master (battiti; lo fissa un nudge a orecchio)
+    phase_off: f64,
+    nudging: bool,
+    phase_err: Option<f64>,
 }
 
 impl Deck {
     fn new() -> Self {
-        Deck { track: None, pos: 0.0, playing: false, tempo: 0.0, range: 0.08, keylock: true, sync: false, cue: 0.0, hot: [None; HOT], nudge: 0.0, preview: false, scrub: false, snap: true, scrub_target: 0.0, scrub_vel: 0.0 }
+        Deck { track: None, pos: 0.0, playing: false, tempo: 0.0, range: 0.08, keylock: true, sync: false, cue: 0.0, hot: [None; HOT], nudge: 0.0, preview: false, scrub: false, snap: true, scrub_target: 0.0, scrub_vel: 0.0, phase_off: 0.0, nudging: false, phase_err: None }
+    }
+    /// battiti dall'ancora (non piegati): per confrontare deck a tempo meta' o doppio
+    fn beats(&self) -> f64 {
+        match &self.track {
+            Some(t) if t.period() > 0.0 => (self.pos - t.first_beat) / t.period(),
+            _ => 0.0,
+        }
     }
     fn rate(&self) -> f64 {
         1.0 + self.tempo * self.range + self.nudge
@@ -330,6 +343,11 @@ pub struct Engine {
 }
 
 const LETTER: [&str; 2] = ["A", "B"];
+/// aggancio di fase continuo: tempo di recupero e ritocco massimo di velocita'
+/// (0,4% = impercettibile); oltre SNAP secondi di scarto si riallinea subito
+const PLL_TAU: f64 = 0.5;
+const PLL_MAX: f64 = 0.004;
+const PLL_SNAP: f64 = 0.08;
 
 impl Engine {
     pub fn new(fs: f64, rx: Receiver<Msg>, tx: SyncSender<Out>) -> Self {
@@ -431,25 +449,79 @@ impl Engine {
             target *= 2.0;
         }
         let d = &mut self.decks[k];
+        // il range del fader non deve tagliare il sync: si allarga quanto serve (8, 16, 50%)
+        let need = (target / r - 1.0).abs();
+        if need > d.range {
+            if let Some(r2) = [0.08, 0.16, 0.5].into_iter().find(|x| *x >= need) {
+                d.range = r2;
+            }
+        }
         d.tempo = ((target / r - 1.0) / d.range).clamp(-1.0, 1.0);
+    }
+
+    /// scarto di fase del deck k dal master, in battiti del deck k (+ = k in ritardo),
+    /// anche a tempo meta'/doppio; con lo scarto voluto (nudge) gia' tolto se with_off
+    fn phase_gap(&self, k: usize, m: usize, with_off: bool) -> Option<f64> {
+        let (d, dm) = (&self.decks[k], &self.decks[m]);
+        let (t, tm) = (d.track.as_ref()?, dm.track.as_ref()?);
+        if !t.grid_ok() || !tm.grid_ok() || d.bpm() <= 0.0 || dm.bpm() <= 0.0 {
+            return None;
+        }
+        // quanti battiti del master per un battito di k (1, 2 o 0,5)
+        let f = dm.bpm() * dm.rate() / (d.bpm() * d.rate()).max(1e-9);
+        let f = [0.5, 1.0, 2.0].into_iter().min_by(|a, b| (a - f).abs().total_cmp(&(b - f).abs())).unwrap_or(1.0);
+        let mut g = dm.beats() / f - d.beats() - if with_off { d.phase_off } else { 0.0 };
+        g -= g.round();
+        Some(g)
+    }
+
+    /// ritocco di velocita' (s/s) per il deck k in SYNC che suona col master
+    fn pll(&mut self, k: usize) -> f64 {
+        let Some(m) = self.master_of(k) else {
+            self.decks[k].phase_err = None;
+            return 0.0;
+        };
+        if !self.decks[k].sync || !self.decks[k].playing || self.decks[k].scrub {
+            self.decks[k].phase_err = None;
+            return 0.0;
+        }
+        let Some(raw) = self.phase_gap(k, m, false) else {
+            self.decks[k].phase_err = None;
+            return 0.0;
+        };
+        let period = self.decks[k].track.as_ref().map(|t| t.period()).unwrap_or(0.0);
+        let d = &mut self.decks[k];
+        // nudge a orecchio: niente aggancio mentre lo tieni; quando lo lasci, quello e' il nuovo riferimento
+        if d.nudge != 0.0 {
+            d.nudging = true;
+            d.phase_err = Some(0.0);
+            return 0.0;
+        }
+        if d.nudging {
+            d.nudging = false;
+            d.phase_off = raw;
+        }
+        let mut e = raw - d.phase_off;
+        e -= e.round();
+        let es = e * period;
+        if es.abs() > PLL_SNAP {
+            // scarto grande (salto del master, hot cue): si riallinea subito
+            d.pos = d.clamp_pos(d.pos + es);
+            d.phase_err = Some(0.0);
+            return 0.0;
+        }
+        d.phase_err = Some((es * 1000.0 * 10.0).round() / 10.0);
+        (es / PLL_TAU).clamp(-PLL_MAX, PLL_MAX)
     }
 
     fn sync_phase(&mut self, k: usize) {
         let Some(m) = self.master_of(k) else { return };
-        let ok = |d: &Deck| d.track.as_ref().is_some_and(|t| t.grid_ok());
-        if !ok(&self.decks[k]) || !ok(&self.decks[m]) {
-            return;
-        }
-        let mut dp = self.decks[m].phase() - self.decks[k].phase();
-        if dp > 0.5 {
-            dp -= 1.0;
-        }
-        if dp < -0.5 {
-            dp += 1.0;
-        }
+        let Some(dp) = self.phase_gap(k, m, false) else { return };
         let d = &mut self.decks[k];
         let p = d.track.as_ref().map(|t| t.period()).unwrap_or(0.0);
         d.pos = d.clamp_pos(d.pos + dp * p);
+        d.phase_off = 0.0;
+        d.nudging = false;
     }
 
     fn resync_if_playing(&mut self, k: usize) {
@@ -630,6 +702,7 @@ impl Engine {
             }
             Sync(k, v) => {
                 self.decks[k].sync = v.unwrap_or(!self.decks[k].sync);
+                self.decks[k].phase_off = 0.0;
                 if self.decks[k].sync {
                     self.sync_tempo(k);
                     if self.decks[k].playing {
@@ -721,6 +794,7 @@ impl Engine {
             preview: d.preview,
             scrub: d.scrub,
             snap: d.snap,
+            phase_err: d.phase_err,
         };
         let s = Snapshot {
             t: self.frames as f64 / self.fs,
@@ -816,7 +890,9 @@ impl Engine {
         let target_m = self.master_level as f32;
         let smooth = 1.0 - (-1.0 / (0.01 * self.fs)).exp() as f32;
         let release = 1.0 - (-1.0 / (0.25 * self.fs)).exp() as f32;
-        let step: [f64; 2] = std::array::from_fn(|k| self.decks[k].rate() / self.fs);
+        // aggancio di fase continuo dei deck in SYNC (calcolato per blocco, ~10 ms)
+        let pll = [self.pll(0), self.pll(1)];
+        let step: [f64; 2] = std::array::from_fn(|k| (self.decks[k].rate() + pll[k]) / self.fs);
         let scrub_a = 1.0 - (-1.0 / (0.005 * self.fs)).exp();
         let fs = self.fs;
         for f in 0..frames {
@@ -1012,6 +1088,107 @@ mod tests {
         let dp = (e.decks[0].phase() - e.decks[1].phase()).abs();
         assert!(dp.min(1.0 - dp) < 0.01, "fase {dp}");
         assert_eq!(e.master, 0);
+    }
+
+    // ---- sync stabile: aggancio continuo, range automatico, nudge, salti del master ----
+
+    /// scarto di fase in ms tra il deck 1 e il master 0 (battiti di 1)
+    fn gap_ms(e: &Engine) -> f64 {
+        e.phase_gap(1, 0, false).unwrap() * e.decks[1].track.as_ref().unwrap().period() * 1000.0
+    }
+
+    #[test]
+    fn sync_oltre_l_8_per_cento_allarga_il_range() {
+        let (mut e, tx, _o) = engine();
+        tx.send(Msg::Loaded { deck: 0, track: clicks("a", 128.0, 0.1, 200.0), cue: 0.1, hot: [None; HOT], start: None, play: false, force: false }).unwrap();
+        tx.send(Msg::Loaded { deck: 1, track: clicks("b", 117.0, 0.3, 200.0), cue: 0.3, hot: [None; HOT], start: None, play: false, force: false }).unwrap();
+        tx.send(Msg::Cmd(Cmd::Play(0, None))).unwrap();
+        run(&mut e, 1.0);
+        tx.send(Msg::Cmd(Cmd::Sync(1, None))).unwrap();
+        tx.send(Msg::Cmd(Cmd::Play(1, None))).unwrap();
+        run(&mut e, 0.5);
+        assert_eq!(e.decks[1].range, 0.16, "128 contro 117 vuole +9,4%: range a ±16%");
+        assert!((e.decks[1].bpm() - 128.0).abs() < 0.01, "stesso BPM: {}", e.decks[1].bpm());
+        run(&mut e, 120.0);
+        assert!(gap_ms(&e).abs() < 1.0, "due minuti dopo ancora in fase: {:.2} ms", gap_ms(&e));
+    }
+
+    #[test]
+    fn aggancio_continuo_recupera_senza_salti() {
+        let (mut e, tx, _o) = engine();
+        tx.send(Msg::Loaded { deck: 0, track: clicks("a", 124.0, 0.1, 120.0), cue: 0.1, hot: [None; HOT], start: None, play: false, force: false }).unwrap();
+        tx.send(Msg::Loaded { deck: 1, track: clicks("b", 124.0, 0.2, 120.0), cue: 0.2, hot: [None; HOT], start: None, play: false, force: false }).unwrap();
+        tx.send(Msg::Cmd(Cmd::Play(0, None))).unwrap();
+        run(&mut e, 1.0);
+        tx.send(Msg::Cmd(Cmd::Sync(1, None))).unwrap();
+        tx.send(Msg::Cmd(Cmd::Play(1, None))).unwrap();
+        run(&mut e, 1.0);
+        // uno scarto di 20 ms (come una griglia appena fuori): recupero morbido, senza salti
+        e.decks[1].pos += 0.020;
+        let mut prev = e.decks[1].pos;
+        let mut max_step = 0f64;
+        let mut buf = vec![0f32; 480 * 2];
+        // 0,4% di ritocco al massimo: ~4 ms recuperati al secondo, 20 ms in ~5 s
+        for _ in 0..800 {
+            e.render(&mut buf, 2);
+            max_step = max_step.max((e.decks[1].pos - prev - 480.0 / 48000.0).abs());
+            prev = e.decks[1].pos;
+        }
+        assert!(gap_ms(&e).abs() < 0.5, "dopo 8 s di nuovo in fase: {:.3} ms", gap_ms(&e));
+        assert!(max_step < 0.0001, "solo ritocchi di velocita', nessun salto: {:.6} s per blocco", max_step);
+        assert!(e.decks[1].phase_err.is_some(), "scarto mandato alla console");
+    }
+
+    #[test]
+    fn salto_del_master_riallinea_subito() {
+        let (mut e, tx, _o) = engine();
+        tx.send(Msg::Loaded { deck: 0, track: clicks("a", 126.0, 0.0, 120.0), cue: 0.0, hot: [None; HOT], start: None, play: false, force: false }).unwrap();
+        tx.send(Msg::Loaded { deck: 1, track: clicks("b", 126.0, 0.15, 120.0), cue: 0.15, hot: [None; HOT], start: None, play: false, force: false }).unwrap();
+        tx.send(Msg::Cmd(Cmd::Play(0, None))).unwrap();
+        run(&mut e, 1.0);
+        tx.send(Msg::Cmd(Cmd::Sync(1, None))).unwrap();
+        tx.send(Msg::Cmd(Cmd::Play(1, None))).unwrap();
+        run(&mut e, 1.0);
+        // il master salta di mezzo battito (seek a mano): il deck in sync si riallinea al primo blocco
+        e.command(Cmd::Seek(0, e.decks[0].pos + 0.5 * 60.0 / 126.0 + 0.003));
+        run(&mut e, 0.03);
+        assert!(gap_ms(&e).abs() < 1.0, "riallineato: {:.2} ms", gap_ms(&e));
+    }
+
+    #[test]
+    fn nudge_a_orecchio_diventa_il_riferimento() {
+        let (mut e, tx, _o) = engine();
+        tx.send(Msg::Loaded { deck: 0, track: clicks("a", 120.0, 0.0, 120.0), cue: 0.0, hot: [None; HOT], start: None, play: false, force: false }).unwrap();
+        tx.send(Msg::Loaded { deck: 1, track: clicks("b", 120.0, 0.0, 120.0), cue: 0.0, hot: [None; HOT], start: None, play: false, force: false }).unwrap();
+        tx.send(Msg::Cmd(Cmd::Play(0, None))).unwrap();
+        run(&mut e, 1.0);
+        tx.send(Msg::Cmd(Cmd::Sync(1, None))).unwrap();
+        tx.send(Msg::Cmd(Cmd::Play(1, None))).unwrap();
+        run(&mut e, 1.0);
+        // nudge in avanti per mezzo secondo (+4%): +20 ms, poi rilascio
+        e.command(Cmd::Nudge(1, 0.04));
+        run(&mut e, 0.5);
+        e.command(Cmd::Nudge(1, 0.0));
+        run(&mut e, 0.02);
+        let after = gap_ms(&e);
+        run(&mut e, 10.0);
+        assert!((gap_ms(&e) - after).abs() < 0.5, "lo scarto scelto a orecchio resta: {after:.2} -> {:.2} ms", gap_ms(&e));
+        assert!(after.abs() > 15.0, "il nudge ha spostato davvero ({after:.2} ms)");
+    }
+
+    #[test]
+    fn sync_a_tempo_meta() {
+        // 140 contro 70: il deck a 70 resta a 70 (un suo battito = due del master) e in fase
+        let (mut e, tx, _o) = engine();
+        tx.send(Msg::Loaded { deck: 0, track: clicks("a", 140.0, 0.05, 120.0), cue: 0.05, hot: [None; HOT], start: None, play: false, force: false }).unwrap();
+        tx.send(Msg::Loaded { deck: 1, track: clicks("b", 70.0, 0.4, 120.0), cue: 0.4, hot: [None; HOT], start: None, play: false, force: false }).unwrap();
+        tx.send(Msg::Cmd(Cmd::Play(0, None))).unwrap();
+        run(&mut e, 1.0);
+        tx.send(Msg::Cmd(Cmd::Sync(1, None))).unwrap();
+        tx.send(Msg::Cmd(Cmd::Play(1, None))).unwrap();
+        run(&mut e, 30.0);
+        assert!((e.decks[1].bpm() - 70.0).abs() < 0.01, "a 70: {}", e.decks[1].bpm());
+        assert!(gap_ms(&e).abs() < 1.0, "in fase sui battiti comuni: {:.2} ms", gap_ms(&e));
     }
 
     #[test]

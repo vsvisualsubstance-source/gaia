@@ -51,6 +51,7 @@ function auApplyState(s){
   const now=performance.now();AU.liveAt=now;AU.live=true;AU.master=s.master==='B'?'B':'A';AU.out=s.outputs?.[0]||null;AU.cueOut=(s.outputs||[]).find(o=>o.role==='cue')||null;AU.lightsOut=(s.outputs||[]).find(o=>o.role==='lights')||null;AU.phones=!!s.headphones;AU.meterM=+s.meters?.master||0;AU.meterL=+(s.meters?.master_l??s.meters?.master)||0;AU.meterR=+(s.meters?.master_r??s.meters?.master)||0;
   for(const k of['A','B']){const sd=s.decks?.[k],d=AU.decks[k];if(!sd)continue;
     for(const f of['playing','tempo','range','keylock','sync','cue','nudge','preview','scrub','snap'])if(sd[f]!=null)d[f]=sd[f];
+    d.phaseErr=sd.phase_err??null;   // scarto di fase dal master (ms), solo deck in SYNC che suona
     d.hot=Array.from({length:AU_HOT_SAVED},(_,i)=>sd.hot?.[i]??null);
     if(!d.localScrub)d.pos=sd.pos;d.basePos=sd.pos;d.baseAt=now;
     // traccia caricata da un altro tablet (o tolta): la pagina prende forma d'onda e griglia
@@ -245,7 +246,7 @@ function auPaintDeck(el,w){
   set('.au-bpm i',`${d.tempo*d.range>=0?'+':''}${(d.tempo*d.range*100).toFixed(1)}%`);
   set('.au-time .el',d.playing?auFmt(d.pos):auFmtFine(d.pos));set('.au-time .zm',d.zoom+' s');
   box.querySelector('[data-au=snap]')?.classList.toggle('on',d.snap);set('.au-time .rem','-'+auFmt((d.track?.seconds||0)-d.pos));
-  set('.au-time .st',d.gridEdit&&d.track?`GRID · ${d.track.bpm?d.track.bpm.toFixed(2):'—'} BPM${d.track.locked?' · bloccata':''}${AU.live?'':' · serve il motore'}`:audioDoc().active&&G.audioTlSt?.engine?'TIMELINE: comanda la traccia AUDIO':!d.track?'':!auGridOk(d)?'griglia incerta: sync solo tempo':d.sync&&!auMasterOf(k)?'sync: nessun master in onda':AU.live?'':'simulazione');
+  set('.au-time .st',d.gridEdit&&d.track?`GRID · ${d.track.bpm?d.track.bpm.toFixed(2):'—'} BPM${d.track.locked?' · bloccata':''}${AU.live?'':' · serve il motore'}`:audioDoc().active&&G.audioTlSt?.engine?'TIMELINE: comanda la traccia AUDIO':!d.track?'':!auGridOk(d)?'griglia incerta: sync solo tempo':d.sync&&!auMasterOf(k)?'sync: nessun master in onda':AU.live&&d.sync&&d.phaseErr!=null?`SYNC · fase ${d.phaseErr>=0?'+':''}${d.phaseErr.toFixed(1)} ms${Math.abs(d.phaseErr)>5?' · aggancio…':''}`:AU.live?(d.track?.variable?'tempo variabile: controlla la griglia':''):'simulazione');
   const on=(sel,v)=>box.querySelector(sel)?.classList.toggle('on',!!v);
   on('[data-au=grid]',d.gridEdit);
   const hotRow=box.querySelector('.au-hot'),gridRow=box.querySelector('.au-grid');if(gridRow&&gridRow.hidden===!!d.gridEdit){gridRow.hidden=!d.gridEdit;hotRow.hidden=!!d.gridEdit}
@@ -389,7 +390,7 @@ function auPaintLib(el){
   tab.innerHTML=`<table><thead><tr><th></th>${pl?'<th>#</th>':''}${th('title','Titolo')}${th('artist','Artista')}${th('bpm','BPM')}${th('seconds','Durata')}${th('confidence','Griglia')}${pl?'':th('folder','Cartella')}<th></th></tr></thead><tbody>
     ${rows.slice(0,400).map(t=>`<tr${loaded.includes(t.id)?' class="on"':''}${t.missing?' class="au-miss"':''}><td class="au-load">${t.missing?'':`<button class="au-btn" data-au="load" data-deck="A" data-id="${t.id}">A</button><button class="au-btn" data-au="load" data-deck="B" data-id="${t.id}">B</button>`}</td>
       ${pl?`<td class="num dim">${t.plIndex+1}</td>`:''}<td>${esc(t.title)}</td><td class="dim">${esc(t.artist)}</td><td class="num">${t.bpm?t.bpm.toFixed(2):'—'}</td><td class="num">${t.missing?'—':auFmt(t.seconds)}</td>
-      <td>${t.missing?'':t.locked?'<span class="au-gr ok">a mano</span>':t.confidence>=.4?'<span class="au-gr ok">ok</span>':'<span class="au-gr bad">incerta</span>'}</td>${pl?'':`<td class="dim">${esc(t.folder)}</td>`}${ctl(t)}</tr>`).join('')}
+      <td>${t.missing?'':t.locked?'<span class="au-gr ok">a mano</span>':t.variable?'<span class="au-gr bad" title="Il tempo cambia lungo il brano (suonato dal vivo): controlla la griglia">variabile</span>':t.confidence>=.4?`<span class="au-gr ok"${t.residual_ms!=null?` title="colpi di cassa a ${t.residual_ms} ms dalla griglia"`:''}>ok</span>`:'<span class="au-gr bad">incerta</span>'}</td>${pl?'':`<td class="dim">${esc(t.folder)}</td>`}${ctl(t)}</tr>`).join('')}
     </tbody></table>${pl&&!n?'<p class="hint">Playlist vuota: torna a "Tutta la libreria" e aggiungi i brani con ＋.</p>':''}${rows.length>400?`<p class="hint">Prime 400 di ${rows.length}: cerca o scegli una cartella.</p>`:''}`;
 }
 

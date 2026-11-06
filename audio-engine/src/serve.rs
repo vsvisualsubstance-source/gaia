@@ -170,7 +170,8 @@ fn load_track(root: &Path, cache: &Path, id: &str) -> Result<(TrackData, f64, [O
         confidence: g("confidence"),
         locked: info.get("locked").and_then(Value::as_bool).unwrap_or(false),
     };
-    let mut cue = track.first_beat;
+    // cue di partenza: il primo battito 1 con la cassa (analisi 2), altrimenti il primo battito
+    let mut cue = info.get("grid").and_then(|x| x.get("first_kick")).and_then(Value::as_f64).unwrap_or(track.first_beat);
     let mut hot = [None; HOT];
     if let Ok(s) = std::fs::read_to_string(cache.join(format!("{id}.cues.json"))) {
         if let Ok(c) = serde_json::from_str::<Value>(&s) {

@@ -221,6 +221,29 @@ sulle altre uscite e lo segnala nello stato.
 
 ### Analisi, sync e regolazioni a mano (come Traktor)
 
+**Versione 2 (2026-11-06): griglia sulla cassa e sync agganciato.**
+
+- *Perche'*: la versione 1 metteva l'ancora della griglia sul picco dell'inviluppo di
+  tutto lo spettro, che nella tech house e' spesso un hi-hat: su 514 brani su 639 la
+  fase era fuori dalla cassa di oltre 50 ms (mediana circa 110 ms). Due brani sbagliati
+  allo stesso modo restavano vicini tra loro, due sbagliati diversamente si sdoppiavano.
+- *Analisi*: cassa ad alta risoluzione (passa-basso 120 Hz, 1 ms); inizio del colpo =
+  meta' della salita dell'ampiezza (stesso punto per casse secche e morbide); retta pesata
+  su tutti i colpi del brano con scarto dei colpi fuori posto; ancora con la mediana pesata
+  (le note del basso nella stessa banda non la spostano); BPM intero solo se spiega i colpi
+  come quello misurato; meta' brano contro meta' brano = tempo variabile; battito 1 dai
+  cambi di sezione;  = cue automatico sul primo battito 1 con la cassa.
+  Nel JSON della griglia: ,  (dispersione dei colpi), .
+  Prove sintetiche: fase entro 2-4 ms (secondo la forma della cassa), deriva sotto 1,5 ms
+  in tre minuti, hi-hat forti in levare ignorati. Libreria vera: 586/639 brani sulla cassa,
+  235 con dispersione sotto 3 ms.
+- *Sync*: aggancio continuo della fase per blocco (~10 ms): ritocco di velocita' fino allo
+  0,4% (inudibile, ~4 ms recuperati al secondo); oltre 80 ms (salto del master) si
+  riallinea subito; il nudge tenuto sospende l'aggancio e al rilascio lo scarto scelto a
+  orecchio diventa il riferimento; vale anche a tempo meta'/doppio. Il range del fader si
+  allarga da solo (8, 16, 50%) quando il BPM del master lo richiede, invece di tagliare.
+  Stato:  in ms per il deck in SYNC; la console lo mostra (SYNC · fase).
+
 **Analisi** (fatta: `audio-engine/src/analysis.rs`, `library.rs`):
 - per traccia: BPM, griglia (BPM costante + ancora sul primo battito),
   confidenza 0..1, forma d'onda (panoramica + 3 bande a 50 punti/s),
