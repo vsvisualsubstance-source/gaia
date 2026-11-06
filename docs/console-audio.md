@@ -181,8 +181,8 @@ cercata per parte del nome (`gaia-audio list` mostra i nomi che vede):
 
 Ogni opzione accetta piu' schede in ordine di preferenza, separate da `|`:
 vale la prima collegata, mai la stessa del master per cuffia e luci. Sulla
-touring: `--device "Main (Traktor Kontrol Z1|MOTU"`, cioe' la Z1 se c'e',
-altrimenti la MOTU M2. La M2 ha due uscite e la sua presa cuffie ripete il
+touring: `--device "Main (Traktor Kontrol Z1|MOTU|predefinita"`, cioe' la Z1 se c'e',
+altrimenti la MOTU M2, altrimenti l uscita predefinita di Windows (parola `predefinita` o `default` nell elenco; mai VB-Cable, che Windows a volte mette come predefinito). La M2 ha due uscite e la sua presa cuffie ripete il
 master: con la sola M2 il preascolto separato non c'e' (🎧 grigio nella
 console), serve una seconda uscita (Z1, altra scheda) per `--cue-device`.
 

@@ -299,9 +299,17 @@ struct OutputInfo {
 
 /// "Main (Traktor Kontrol Z1|MOTU": schede in ordine di preferenza, separate da |,
 /// ognuna come parte del nome. Vale la prima che c'e' (e che non e' in avoid,
-/// cioe' gia' usata da un'altra uscita del motore). Restituisce l'indice in names.
-fn pick_device(names: &[String], want: &str, avoid: Option<&str>) -> Option<usize> {
+/// cioe' gia' usata da un'altra uscita del motore). "predefinita" (o "default") =
+/// l'uscita predefinita di Windows, indice def. Restituisce l'indice in names.
+fn pick_device(names: &[String], want: &str, avoid: Option<&str>, def: Option<usize>) -> Option<usize> {
     for alt in want.split('|').map(|a| a.trim().to_lowercase()).filter(|a| !a.is_empty()) {
+        if alt == "predefinita" || alt == "default" {
+            // mai il cavo virtuale delle luci: Windows a volte lo mette come predefinito dopo l'installazione
+            if let Some(i) = def.filter(|&i| Some(names[i].as_str()) != avoid && !names[i].to_lowercase().contains("vb-audio")) {
+                return Some(i);
+            }
+            continue;
+        }
         if let Some(i) = names.iter().position(|n| n.to_lowercase().contains(&alt) && Some(n.as_str()) != avoid) {
             return Some(i);
         }
@@ -320,7 +328,9 @@ fn find_device_avoid(want: &Option<String>, avoid: Option<&str>) -> Result<cpal:
         Some(w) => {
             let devs: Vec<cpal::Device> = host.output_devices().map_err(|e| e.to_string())?.collect();
             let names: Vec<String> = devs.iter().map(|d| d.description().map(|n| n.to_string()).unwrap_or_default()).collect();
-            pick_device(&names, w, avoid)
+            let def_name = host.default_output_device().and_then(|d| d.description().ok().map(|n| n.to_string()));
+            let def = def_name.and_then(|dn| names.iter().position(|n| *n == dn));
+            pick_device(&names, w, avoid, def)
                 .map(|i| devs[i].clone())
                 .ok_or_else(|| format!("uscita \"{}\" non trovata", w.replace('|', "\" o \"")))
         }
@@ -808,11 +818,16 @@ mod tests {
     #[test]
     fn scheda_preferita_o_alternativa() {
         let names: Vec<String> = ["Speakers (Realtek)", "Out 1-2 (MOTU M Series)", "CABLE Input (VB-Audio Virtual Cable) [Speaker]"].iter().map(|s| s.to_string()).collect();
-        assert_eq!(pick_device(&names, "Main (Traktor Kontrol Z1|MOTU", None), Some(1), "senza Z1: la MOTU");
+        assert_eq!(pick_device(&names, "Main (Traktor Kontrol Z1|MOTU", None, None), Some(1), "senza Z1: la MOTU");
         let z1: Vec<String> = ["Main (Traktor Kontrol Z1 WDM Audio)", "Out 1-2 (MOTU M Series)"].iter().map(|s| s.to_string()).collect();
-        assert_eq!(pick_device(&z1, "Main (Traktor Kontrol Z1|MOTU", None), Some(0), "con la Z1: la Z1, prima nell'elenco");
-        assert_eq!(pick_device(&names, "Headphone (Traktor Kontrol Z1|MOTU", Some("Out 1-2 (MOTU M Series)")), None, "cuffia: non la stessa uscita del master");
-        assert_eq!(pick_device(&names, " cable input (vb-audio ", None), Some(2), "spazi e maiuscole non contano");
+        assert_eq!(pick_device(&z1, "Main (Traktor Kontrol Z1|MOTU", None, None), Some(0), "con la Z1: la Z1, prima nell'elenco");
+        assert_eq!(pick_device(&names, "Headphone (Traktor Kontrol Z1|MOTU", Some("Out 1-2 (MOTU M Series)"), None), None, "cuffia: non la stessa uscita del master");
+        assert_eq!(pick_device(&names, " cable input (vb-audio ", None, None), Some(2), "spazi e maiuscole non contano");
+        // nessuna delle schede elencate: l'uscita predefinita di Windows
+        assert_eq!(pick_device(&names, "Main (Traktor Kontrol Z1|MOTU X|predefinita", None, Some(0)), Some(0), "ripiego sulla predefinita");
+        assert_eq!(pick_device(&names, "Main (Traktor Kontrol Z1|default", None, None), None, "nessuna predefinita: niente");
+        assert_eq!(pick_device(&names, "Z1|predefinita", Some("Speakers (Realtek)"), Some(0)), None, "la predefinita gia' usata dal master: no");
+        assert_eq!(pick_device(&names, "Z1|predefinita", None, Some(2)), None, "predefinita = VB-Cable: no (la musica finirebbe nel cavo)");
     }
 
     #[test]
