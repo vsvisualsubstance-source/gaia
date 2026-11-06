@@ -485,6 +485,8 @@ function drawPlot(g,W,H,t,w){
       if(len>s*.3){g.beginPath();g.moveTo(x0,y0);g.lineTo(x1,y1);g.stroke();g.setLineDash([]);g.beginPath();g.moveTo(x1,y1);g.lineTo(x1-dx*6+dy*4,y1-dy*6-dx*4);g.lineTo(x1-dx*6-dy*4,y1-dy*6+dx*4);g.closePath();g.fill()}
       if(a.pitch>30){g.setLineDash([]);g.beginPath();g.arc(x,y,s*.3,0,Math.PI*2);g.stroke();g.font='9px JetBrains Mono, monospace';g.textAlign='center';g.fillText(a.pitch>=80?'su':'↗'+Math.round(a.pitch),x+s*.42,y-s*.3)}
       if(!a.set){g.font='bold 10px JetBrains Mono, monospace';g.textAlign='center';g.fillText('?',x1+dx*7,y1+dy*7+3)}g.restore()}
+    // selezione multipla (editor oggetti): anello tratteggiato
+    if(ui?.sel?.size&&(st&&st.length>1?st.some(x=>ui.sel.has(x.id)):ui.sel.has(f.id))){g.save();g.strokeStyle='#00ffcc';g.lineWidth=1.6;g.setLineDash([4,3]);g.beginPath();g.arc(x,y,Math.max(r,s*.3)+8,0,Math.PI*2);g.stroke();g.restore()}
     if(f.id===sel&&f.type!=='wall'&&f.type!=='screen'){g.strokeStyle='#00ffcc';g.lineWidth=1.5;g.beginPath();g.arc(x,y,r+5,0,Math.PI*2);g.stroke()}
     g.globalAlpha=1;
     const flat=f.type==='wall'||f.type==='screen',labelR=flat?.18*s:r,fw=f.w||(f.type==='wall'?6:5),fh=f.h||(f.type==='wall'?3.5:2.8);
@@ -504,7 +506,9 @@ function drawPlot(g,W,H,t,w){
   // Testo corto apposta: visto dal vivo (screenshot Playwright) che la
   // versione lunga di prima si sovrapponeva al marcatore FOH, disegnato
   // su questa stessa fascia verticale del palco.
-  txt('Trascina=sposta · tocca fixture=proprietà · vuoto=aggiungi · autosalvataggio layout',lx,ly-8,'#e9ebef','left',9);
+  txt('Trascina=sposta · tocca=proprietà · Shift o ⬚=selezione · vuoto=aggiungi',lx,ly-8,'#e9ebef','left',9);
   lg.forEach((r,i)=>{txt(r[0],lx,ly+10+i*14,'#c9ced8','left');txt(r[1],lx+s*3.4,ly+10+i*14,'#868e9b','left')});
+  if(ui?.box){const bx=ui.box;g.save();g.fillStyle='rgba(0,255,204,.08)';g.strokeStyle='#00ffcc';g.setLineDash([5,4]);g.lineWidth=1;
+    g.fillRect(Math.min(bx.x0,bx.x1),Math.min(bx.y0,bx.y1),Math.abs(bx.x1-bx.x0),Math.abs(bx.y1-bx.y0));g.strokeRect(Math.min(bx.x0,bx.x1),Math.min(bx.y0,bx.y1),Math.abs(bx.x1-bx.x0),Math.abs(bx.y1-bx.y0));g.restore()}
   drawPlanEdit(g,X,Y,W,txt);
 }

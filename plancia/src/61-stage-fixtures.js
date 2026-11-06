@@ -136,6 +136,96 @@ function svBind(el,w){
 }
 function svButton(el,w,a){const{W,H}=svCanvas(el);if(a==='fit'){const v=stageViewOf(w);v.z=1;v.x=0;v.y=0}else svZoomAt(w,W/2,H/2,a==='in'?1.4:1/1.4,W,H)}
 
+/* ---------- editor oggetti della Pianta: selezione multipla e strumenti ---------- */
+// Selezione per tablet e per sessione (_stageUI[w.id].sel, Set di id), mai nel layout.
+// ⬚ = modalita' selezione (tocco aggiunge/toglie, trascinare a vuoto = riquadro);
+// Shift/Ctrl + clic fa lo stesso senza modalita'. Le luci di un blocco si selezionano insieme.
+let plotLastW=null;
+const plotSel=w=>{const ui=_stageUI[w.id]||(_stageUI[w.id]={});return ui.sel||(ui.sel=new Set())};
+const withBlock=f=>f.block?(L.fixtures||[]).filter(x=>x.block===f.block):[f];
+const selFixtures=w=>(L.fixtures||[]).filter(f=>plotSel(w).has(f.id));
+// pezzi della selezione: un blocco e' un pezzo solo (si allinea e distribuisce intero)
+function selItems(list){const out=[],by=new Map();
+  for(const f of list){if(f.block){let it=by.get(f.block);if(!it){it={fx:[]};by.set(f.block,it);out.push(it)}it.fx.push(f)}else out.push({fx:[f]})}
+  for(const it of out){it.x=it.fx.reduce((a,f)=>a+(+f.x||0),0)/it.fx.length;it.y=it.fx.reduce((a,f)=>a+(+f.y||0),0)/it.fx.length}
+  return out;
+}
+// nome successivo libero: "PAR3" -> "PAR4"...; senza numero: "LASER" -> "LASER 2"
+function nextFixtureName(name,taken){
+  const m=/^(.*?)(\d+)$/.exec(name||'');let base=m?m[1]:(name||'LUCE')+' ',n=m?+m[2]:1;
+  while(taken.has(base+(++n)));const out=base+n;taken.add(out);return out;
+}
+// primo indirizzo libero per una luce (canali veri del suo modello), stesso universo
+function freeAddressFor(f,extra=[]){
+  const n=footprintFor(f)||1,uni=f.universe||1,used=[...(L.fixtures||[]),...extra].filter(x=>x!==f&&(x.universe||1)===uni&&FIX_TYPES[x.type]?.ch).map(x=>[+x.address||1,(+x.address||1)+(footprintFor(x)||1)-1]);
+  for(let a=1;a+n-1<=512;){const end=a+n-1,clash=used.filter(([s,e])=>a<=e&&end>=s);if(!clash.length)return a;a=Math.max(...clash.map(([,e])=>e))+1}
+  return 1;
+}
+// copie: id nuovi, nomi successivi, indirizzi liberi, blocchi nuovi (COL5...), unita' nuove
+function cloneFixtures(list,move){
+  const names=new Set((L.fixtures||[]).map(f=>f.name)),blocks=new Set((L.fixtures||[]).map(f=>f.block).filter(Boolean));
+  const blockMap=new Map(),unitMap=new Map(),out=[];
+  const maxUnit=g=>Math.max(0,...[...(L.fixtures||[]),...out].filter(f=>f.group===g).map(f=>+f.unit||0));
+  for(const f of list){
+    const c=JSON.parse(JSON.stringify(f));c.id='p-'+uid();c.name=nextFixtureName(f.name,names);delete c._synced;
+    if(f.block){if(!blockMap.has(f.block)){let b=f.block,m=/^(.*?)(\d+)$/.exec(b),base=m?m[1]:b+' ',k=m?+m[2]:1;while(blocks.has(base+(++k)));blocks.add(base+k);blockMap.set(f.block,base+k)}c.block=blockMap.get(f.block)}
+    if(f.unit!=null){const key=f.group+'|'+(f.block||f.unit);if(!unitMap.has(key))unitMap.set(key,maxUnit(f.group)+1);c.unit=unitMap.get(key)}
+    Object.assign(c,move(f));
+    if(FIX_TYPES[c.type]?.ch)c.address=freeAddressFor(c,out);
+    out.push(c);
+  }
+  L.fixtures.push(...out);return out;
+}
+async function selAction(w,a){
+  const sel=plotSel(w),list=selFixtures(w);
+  const done=(msg,keep)=>{save();if(keep)for(const f of keep)sel.add(f.id);if(msg)showInfo(msg)};
+  if(a==='all'){(L.fixtures||[]).forEach(f=>sel.add(f.id));return}
+  if(a==='none'){sel.clear();return}
+  if(a==='mode'){const ui=_stageUI[w.id];ui.selMode=!ui.selMode;showInfo(ui.selMode?'Selezione: tocca le luci, o trascina a vuoto per un riquadro.':'Selezione spenta: trascinare a vuoto sposta la vista.');return}
+  if(!list.length){showError('Seleziona prima qualche luce (⬚ o Shift + clic).');return}
+  if(a==='dup'){const c=cloneFixtures(list,f=>({x:+(f.x+.5).toFixed(2),y:+(f.y+.5).toFixed(2)}));sel.clear();done(`${c.length} copie (spostate di 0,5 m): trascinale dove servono.`,c)}
+  else if(a==='mirror'){const src=list.filter(f=>Math.abs(+f.x||0)>.05);if(!src.length){showError('Specchia: le luci sono già al centro.');return}
+    const c=cloneFixtures(src,f=>({x:-f.x,...(f.aim!=null?{aim:-f.aim}:{}),...(f.rot!=null?{rot:-f.rot}:{}),...(f.angle!=null?{angle:-f.angle}:{})}));sel.clear();done(`${c.length} copie a specchio dall'altra parte del palco.`,c)}
+  else if(a==='row'||a==='col'){const it=selItems(list),k=a==='row'?'y':'x',m=it.reduce((s,i)=>s+i[k],0)/it.length;
+    for(const i of it)for(const f of i.fx)f[k]=+(f[k]+m-i[k]).toFixed(2);done(a==='row'?'Allineate in riga.':'Allineate in colonna.')}
+  else if(a==='dist'){const it=selItems(list);if(it.length<3){showError('Distribuisci: servono almeno 3 luci o blocchi.');return}
+    const byX=Math.abs(Math.max(...it.map(i=>i.x))-Math.min(...it.map(i=>i.x)))>=Math.abs(Math.max(...it.map(i=>i.y))-Math.min(...it.map(i=>i.y)));
+    it.sort((p,q)=>byX?p.x-q.x:p.y-q.y);const a0=it[0],a1=it[it.length-1];
+    it.forEach((i,n)=>{const t=n/(it.length-1),tx=a0.x+(a1.x-a0.x)*t,ty=a0.y+(a1.y-a0.y)*t;for(const f of i.fx){f.x=+(f.x+tx-i.x).toFixed(2);f.y=+(f.y+ty-i.y).toFixed(2)}});
+    done(`${it.length} pezzi a passo regolare.`)}
+  else if(a==='array'){const v=await uiPrompt('Fila di copie: quante e il passo in metri (es. "4 1.5"; aggiungi "y" per andare verso il pubblico: "4 1.5 y")','3 1.5');if(!v)return;
+    const m=/^\s*(\d+)\s+(-?\d+(?:[.,]\d+)?)\s*(y)?\s*$/i.exec(v);if(!m){showError('Fila: scrivi quante copie e il passo, es. "4 1.5".');return}
+    const n=clamp(+m[1],1,48),step=+m[2].replace(',','.'),alongY=!!m[3];let all=[];
+    for(let i=1;i<=n;i++)all=all.concat(cloneFixtures(list,f=>alongY?{y:+(f.y+step*i).toFixed(2)}:{x:+(f.x+step*i).toFixed(2)}));
+    sel.clear();done(`${n} copie a ${step} m${alongY?' verso il pubblico':''}: ${all.length} luci nuove.`,all)}
+  else if(a.startsWith('aim:')||a.startsWith('pitch:')){const[k,v]=a.split(':');let n=0;for(const f of list)if(AIM_TYPES.has(f.type)){f[k]=+v;n++}
+    done(n?`Direzione su ${n} luci.`:'Direzione: vale per PAR, barre e blinder.')}
+  else if(a==='block'){await fgMakeBlock(list);render()}
+  else if(a==='del'){if(!await uiConfirm(`Eliminare ${list.length} luci dalla Pianta?${list.some(f=>f._synced)?' Quelle già su DMX Master vengono tolte anche lì.':''}`))return;
+    for(const f of list)if(f._synced)devCmd(dmxId(),{action:'set',param:'dmx_fixture_remove',value:{id:f.id}});
+    const ids=new Set(list.map(f=>f.id));L.fixtures=L.fixtures.filter(f=>!ids.has(f.id));sel.clear();done(`${list.length} luci eliminate.`)}
+}
+function paintSelBar(el,w){
+  const bar=el.querySelector('.sel-bar');if(!bar)return;
+  const ui=_stageUI[w.id]||{},n=w.view==='plot'?selFixtures(w).length:0,mode=!!ui.selMode&&w.view==='plot';
+  const sig=n+'|'+mode;if(bar._sig===sig)return;bar._sig=sig;
+  el.querySelector('[data-selmode]')?.classList.toggle('on',mode);
+  bar.hidden=!n;
+  if(n)bar.innerHTML=`<b>${n} luci</b><button data-sel="dup" title="Duplica (Ctrl+D)">⧉ Duplica</button><button data-sel="mirror" title="Copie dall'altra parte del palco, direzione speculare">⇔ Specchia</button>
+    <button data-sel="row" title="Stessa profondità">═ Riga</button><button data-sel="col" title="Stessa posizione destra-sinistra">‖ Colonna</button><button data-sel="dist" title="A passo regolare tra la prima e l'ultima">↔ Distribuisci</button>
+    <button data-sel="array" title="N copie a passo fisso">⋯ Fila</button>
+    <span class="sel-aim"><button data-sel="aim:0" title="Verso il pubblico">↓</button><button data-sel="aim:180" title="Verso il fondo">↑</button><button data-sel="aim:-90" title="Verso sinistra">←</button><button data-sel="aim:90" title="Verso destra">→</button><button data-sel="pitch:90" title="In alto">Su</button><button data-sel="pitch:0" title="Orizzontale">—</button><button data-sel="pitch:-45" title="In basso">Giù</button></span>
+    <button data-sel="block" title="Un blocco: si spostano insieme e nel chase fanno la stessa cosa">⊞ Blocco</button><button data-sel="del" class="danger" title="Elimina (Canc)">🗑</button><button data-sel="none" title="Deseleziona (Esc)">✕</button>`;
+}
+document.addEventListener('keydown',e=>{
+  const w=plotLastW;if(!w||w.view!=='plot'||!document.body.contains(document.querySelector(`.w[data-id="${w.id}"]`)))return;
+  if(e.target.closest?.('input,textarea,select,[contenteditable]')||!$('#scrim').hidden)return;
+  const k=e.key.toLowerCase(),mod=e.ctrlKey||e.metaKey;let a=null;
+  if(k==='delete'||k==='backspace')a='del';else if(mod&&k==='d')a='dup';else if(mod&&k==='a')a='all';else if(k==='escape')a='none';
+  if(!a||(a!=='all'&&!plotSel(w).size))return;
+  e.preventDefault();selAction(w,a);
+});
+
 function stageDown(e,el,w){
   const ui=_stageUI[w.id]; const c=el.querySelector('canvas'),r=c.getBoundingClientRect();
   if(!r.width||!ui||!ui.proj)return;
@@ -145,10 +235,23 @@ function stageDown(e,el,w){
   const p0=toLocal(e);
   const hit=(ui.hits||[]).find(h=>Math.hypot(p0.x-h.x,p0.y-h.y)<=h.r);
   const tdHit=!hit&&(ui.tdHits||[]).find(h=>Math.hypot(p0.x-h.x,p0.y-h.y)<=h.r);
-  if(!hit&&!tdHit){svPanStart(e,el,w,()=>openFixAdd(w,toM(p0)));return}   // vuoto: trascina = sposta la vista, tocca = aggiungi
+  plotLastW=w;
+  const sel=plotSel(w),multi=e.shiftKey||e.ctrlKey||e.metaKey||!!ui.selMode;
+  if(!hit&&!tdHit){
+    if(multi){   // riquadro di selezione
+      e.preventDefault();el.setPointerCapture(e.pointerId);let moved=false;
+      el.onpointermove=ev=>{if(ui.pinch)return;const p=toLocal(ev);if(!moved&&Math.hypot(p.x-p0.x,p.y-p0.y)>6)moved=true;if(moved)ui.box={x0:p0.x,y0:p0.y,x1:p.x,y1:p.y}};
+      el.onpointerup=el.onpointercancel=()=>{el.onpointermove=null;el.onpointerup=el.onpointercancel=null;const b=ui.box;ui.box=null;
+        if(!moved){if(!e.shiftKey&&!e.ctrlKey)sel.clear();return}
+        const [xa,xb]=[Math.min(b.x0,b.x1),Math.max(b.x0,b.x1)],[ya,yb]=[Math.min(b.y0,b.y1),Math.max(b.y0,b.y1)];
+        for(const h of ui.hits||[])if(h.x>=xa&&h.x<=xb&&h.y>=ya&&h.y<=yb)for(const f of withBlock(h.f))sel.add(f.id)};
+      return}
+    // vuoto: trascina = sposta la vista; tocca = deseleziona, o aggiungi una luce
+    svPanStart(e,el,w,()=>{if(sel.size)sel.clear();else openFixAdd(w,toM(p0))});return}
   const start={x:e.clientX,y:e.clientY}; let moved=false; const dragF=hit&&hit.f;
-  // blocco: le luci con lo stesso f.block si spostano insieme (colonne, file di barre)
-  const mates=dragF?.block?(L.fixtures||[]).filter(x=>x.block===dragF.block).map(x=>({f:x,x:x.x,y:x.y})):null;
+  // si spostano insieme: la selezione (se la luce ne fa parte) o il blocco (f.block)
+  const group=dragF&&sel.has(dragF.id)&&sel.size>1?[...new Set(selFixtures(w).flatMap(withBlock))]:dragF?.block?withBlock(dragF):null;
+  const mates=group?group.map(x=>({f:x,x:x.x,y:x.y})):null;
   e.preventDefault(); el.setPointerCapture(e.pointerId);
   const mv=ev=>{
     if(ui.pinch)return;   // due dita: zoom, non si sposta la luce
@@ -161,6 +264,7 @@ function stageDown(e,el,w){
     el.onpointermove=null;el.onpointerup=el.onpointercancel=null;
     if(ui.pinchDone){ui.pinchDone=false;if(dragF&&moved)save();return}
     if(dragF&&moved)save();
+    else if(dragF&&!moved&&multi){const fx=withBlock(dragF),on=fx.every(f=>sel.has(f.id));fx.forEach(f=>on?sel.delete(f.id):sel.add(f.id))}   // aggiunge/toglie dalla selezione
     else if(dragF&&!moved)openFixEditor(w,dragF);
     else if(!moved&&tdHit)openTdInfo(tdHit.tf);
     else if(!moved)openFixAdd(w,toM(p0));
@@ -504,11 +608,13 @@ registerWidget('stage',{oscAddress:false,
     }
   }},
   size:[8,6],label:'Palco',showsValue:false,showsAddr:false,
-  inner:w=>`<canvas></canvas><div class="seg"><button data-v="render" aria-pressed="${w.view!=='plot'}">Render</button><button data-v="plot" aria-pressed="${w.view==='plot'}">Pianta</button><button data-act="syncall" title="Invia a DMX Master solo le fixture patchabili DMX. È un invio separato dall'autosalvataggio del layout; LED wall escluse.">⇪ TD</button><button data-act="importtd" title="Importa da DMX Master la patch delle sole fixture DMX; le fixture non-DMX restano in Plancia.">⇩ TD</button><button data-act="more" title="Scene, modelli, gruppi, lampade, spazio, AI e pulizia">☰ Strumenti</button><span class="seg-more" hidden><button data-act="replacepatch">⇪ Sostituisci tutta la patch</button><button data-act="resolve" title="Pulisce i doppioni DMX in TD e reimporta la patch; le fixture non-DMX restano in Plancia.">🧹 TD</button><button data-act="scenes" title="Scene di DMX Master: cattura dal vivo con categorie, richiama, ricattura, rinomina, elimina">▣ Scene</button><button data-act="stage-ai" title="Palco da descrizione: lo descrivi a parole, Ollama prepara le fixture nella Pianta">✨ AI</button><button data-act="space" title="Misure di palco, platea, regia e sala: ingombro totale dello show">📐 Spazio</button><button data-act="lamps" title="Lampade a scarica delle teste (iSpot...): accendi e spegni da DMX Master">💡 Lampade</button><button data-act="models" title="Modelli di fixture di DMX Master: canali, colore lampada, ruota colori e gobo delle teste">▤ Modelli</button><button data-act="groups" title="Gruppi DMX (rig di DMX Master): front, back, teste, LED bar, haze, blinder e rig nuovi">▦ Gruppi</button><button data-act="types" title="Invia la tassonomia dei tipi di Plancia a DMX Master (sostituisce quella attuale).">📋 TD</button></span></div><div class="sv-zoom"><button data-zoom="out" title="Allontana (anche rotella o due dita)">−</button><button data-zoom="in" title="Avvicina (anche rotella o due dita)">+</button><button data-zoom="fit" title="Vista intera">⤢</button></div><div class="hud"></div>`,
+  inner:w=>`<canvas></canvas><div class="seg"><button data-v="render" aria-pressed="${w.view!=='plot'}">Render</button><button data-v="plot" aria-pressed="${w.view==='plot'}">Pianta</button><button data-act="syncall" title="Invia a DMX Master solo le fixture patchabili DMX. È un invio separato dall'autosalvataggio del layout; LED wall escluse.">⇪ TD</button><button data-act="importtd" title="Importa da DMX Master la patch delle sole fixture DMX; le fixture non-DMX restano in Plancia.">⇩ TD</button><button data-act="more" title="Scene, modelli, gruppi, lampade, spazio, AI e pulizia">☰ Strumenti</button><span class="seg-more" hidden><button data-act="replacepatch">⇪ Sostituisci tutta la patch</button><button data-act="resolve" title="Pulisce i doppioni DMX in TD e reimporta la patch; le fixture non-DMX restano in Plancia.">🧹 TD</button><button data-act="scenes" title="Scene di DMX Master: cattura dal vivo con categorie, richiama, ricattura, rinomina, elimina">▣ Scene</button><button data-act="stage-ai" title="Palco da descrizione: lo descrivi a parole, Ollama prepara le fixture nella Pianta">✨ AI</button><button data-act="space" title="Misure di palco, platea, regia e sala: ingombro totale dello show">📐 Spazio</button><button data-act="lamps" title="Lampade a scarica delle teste (iSpot...): accendi e spegni da DMX Master">💡 Lampade</button><button data-act="models" title="Modelli di fixture di DMX Master: canali, colore lampada, ruota colori e gobo delle teste">▤ Modelli</button><button data-act="groups" title="Gruppi DMX (rig di DMX Master): front, back, teste, LED bar, haze, blinder e rig nuovi">▦ Gruppi</button><button data-act="types" title="Invia la tassonomia dei tipi di Plancia a DMX Master (sostituisce quella attuale).">📋 TD</button></span></div><div class="sel-bar" hidden></div><div class="sv-zoom"><button data-selmode title="Selezione: tocca più luci o trascina un riquadro (anche Shift + clic)">⬚</button><button data-zoom="out" title="Allontana (anche rotella o due dita)">−</button><button data-zoom="in" title="Avvicina (anche rotella o due dita)">+</button><button data-zoom="fit" title="Vista intera">⤢</button></div><div class="hud"></div>`,
   mounted:(el,w)=>{sizeCanvas(el);svBind(el,w)},
   // barra in alto: vista e strumenti; nella Pianta trascina e tocca le fixture;
   // nel Render un tocco riprova le anteprime video bloccate dei LED wall
   onPointer(e,el,w){svBind(el,w);const zb=e.target.closest('[data-zoom]');if(zb){svButton(el,w,zb.dataset.zoom);return}
+      const sb=e.target.closest('[data-sel],[data-selmode]');if(sb){e.preventDefault();plotLastW=w;if(w.view!=='plot'&&sb.dataset.selmode!=null){w.view='plot';el.querySelectorAll('.seg [data-v]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.v==='plot'));save()}
+        selAction(w,sb.dataset.selmode!=null?'mode':sb.dataset.sel);return}
       const b=e.target.closest('[data-v]');if(b){w.view=b.dataset.v;el.querySelectorAll('.seg button').forEach(x=>x.setAttribute('aria-pressed',x===b));save()}
       else if(e.target.closest('[data-act="more"]'))stageTools(el);
       else if(e.target.closest('[data-act="replacepatch"]'))replacePatchInTD();
@@ -533,5 +639,6 @@ registerWidget('stage',{oscAddress:false,
       const W=c.width/c._d,H=c.height/c._d;if(w.view==='plot')drawPlot(g,W,H,now,w);
       else{const v=stageViewOf(w);svClamp(v,'render',W,H);g.setTransform(c._d*v.z,0,0,c._d*v.z,c._d*v.x,c._d*v.y);drawRender(g,W,H,now,level);g.setTransform(c._d,0,0,c._d,0,0)}
       const hud=w.view==='plot'?'':`${SH.blackout?'<b>BLACKOUT</b> · ':''}SC ${SH.scene+1} ${esc((tdScenes().length?tdScenes().find(s=>s.index===SH.scene)?.label:dmxOutputFresh()?'':LOOKS[SH.scene]?.n)||'')} · fade ${SH.fade.toFixed(1)}s · chase ${CHASE[SH.chase]||'Off'}${SH.strobe?' · <b>STROBO</b>':''} · ${esc(dmxOutputSummary())}`;
-      const h=el.querySelector('.hud');if(h._v!==hud){h.innerHTML=hud;h._v=hud}},
+      const h=el.querySelector('.hud');if(h._v!==hud){h.innerHTML=hud;h._v=hud}
+      paintSelBar(el,w)},
   help:w=>['Palco','Render: come escono le luci (colori reali da DMX Master). Pianta: posizioni e patch, tocca una luce per nome, indirizzo, modello e colore. In alto: 📐 Spazio = misure di palco, platea, regia e sala; ⇪/⇩ TD scambiano la patch, ▣ Scene, ▤ Modelli (libreria), ▦ Gruppi, 💡 Lampade, ✨ AI.']});
