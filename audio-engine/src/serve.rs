@@ -31,6 +31,8 @@ pub struct ServeOpts {
     pub no_audio: bool,
     /// uscita separata per la cuffia (parte del nome), es. "Headphone"
     pub cue_device: Option<String>,
+    /// copia del mix per le luci (parte del nome), es. "CABLE Input" (VB-Cable)
+    pub tap_device: Option<String>,
 }
 
 type Clients = Arc<Mutex<Vec<Sender<String>>>>;
@@ -314,6 +316,10 @@ fn find_device(want: &Option<String>) -> Result<cpal::Device, String> {
 struct HpRing {
     q: VecDeque<f32>,
     primed: bool,
+    /// frame del motore per ogni frame dell'uscita (1 = stessa frequenza, cuffia);
+    /// il cavo virtuale delle luci puo' andare a 48 kHz col motore a 44.1
+    step: f64,
+    frac: f64,
 }
 type Hp = Arc<Mutex<HpRing>>;
 const HP_TARGET: usize = 2 * 1024;
@@ -321,7 +327,13 @@ const HP_MAX: usize = 2 * 8192;
 
 impl HpRing {
     fn new() -> Self {
-        HpRing { q: VecDeque::with_capacity(HP_MAX + 4096), primed: false }
+        HpRing { q: VecDeque::with_capacity(HP_MAX + 4096), primed: false, step: 1.0, frac: 0.0 }
+    }
+    fn set_step(&mut self, step: f64) {
+        self.step = if step.is_finite() && step > 0.0 { step } else { 1.0 };
+        self.frac = 0.0;
+        self.primed = false;
+        self.q.clear();
     }
     fn push(&mut self, s: &[f32]) {
         self.q.extend(s.iter().copied());
@@ -331,6 +343,9 @@ impl HpRing {
     }
     /// riempie l'uscita cuffia (stereo sui primi due canali); a vuoto silenzio e si riparte dal livello giusto
     fn pull(&mut self, out: &mut [f32], ch: usize) {
+        if (self.step - 1.0).abs() > 1e-9 {
+            return self.pull_resampled(out, ch);
+        }
         let frames = out.len() / ch.max(1);
         out.fill(0.0);
         if !self.primed {
@@ -350,6 +365,38 @@ impl HpRing {
                 out[f * ch + 1] = r;
             }
         }
+    }
+}
+
+impl HpRing {
+    /// come pull, con interpolazione lineare a passo step (orologi e frequenze diverse)
+    fn pull_resampled(&mut self, out: &mut [f32], ch: usize) {
+        let frames = out.len() / ch.max(1);
+        out.fill(0.0);
+        let need = (frames as f64 * self.step + self.frac).ceil() as usize + 2;
+        if !self.primed {
+            if self.q.len() < HP_TARGET + 2 * need {
+                return;
+            }
+            self.primed = true;
+        }
+        if self.q.len() < 2 * need {
+            self.primed = false;
+            return;
+        }
+        for f in 0..frames {
+            let i = self.frac as usize;
+            let t = (self.frac - i as f64) as f32;
+            let (l0, r0, l1, r1) = (self.q[2 * i], self.q[2 * i + 1], self.q[2 * i + 2], self.q[2 * i + 3]);
+            out[f * ch] = l0 + (l1 - l0) * t;
+            if ch > 1 {
+                out[f * ch + 1] = r0 + (r1 - r0) * t;
+            }
+            self.frac += self.step;
+        }
+        let used = self.frac as usize;
+        self.q.drain(..2 * used);
+        self.frac -= used as f64;
     }
 }
 
@@ -389,7 +436,33 @@ fn open_cue(want: &str, rate: f64, hp: Hp, err_tx: Sender<String>) -> Result<(cp
     Ok((stream, OutputInfo { device: name, rate, ok: true, error: None }))
 }
 
-fn open_output(want: &Option<String>, engine: &Arc<Mutex<Engine>>, err_tx: Sender<String>, hp: Hp) -> Result<(cpal::Stream, OutputInfo), String> {
+/// uscita per le luci (cavo virtuale): alla frequenza del dispositivo, il buffer adatta
+fn open_tap(want: &str, rate: f64, tap: Hp, err_tx: Sender<String>) -> Result<(cpal::Stream, OutputInfo), String> {
+    let dev = find_device(&Some(want.to_string()))?;
+    let name = dev.description().map(|n| n.to_string()).unwrap_or_else(|_| "?".into());
+    let cfg = f32_config(&dev, Some(rate as u32)).or_else(|_| f32_config(&dev, None)).map_err(|e| format!("{name}: {e}"))?;
+    let (ch, fs) = (cfg.channels as usize, cfg.sample_rate as f64);
+    if let Ok(mut q) = tap.lock() {
+        q.set_step(rate / fs);
+    }
+    let stream = dev
+        .build_output_stream(
+            cfg,
+            move |data: &mut [f32], _: &cpal::OutputCallbackInfo| match tap.lock() {
+                Ok(mut q) => q.pull(data, ch),
+                Err(_) => data.fill(0.0),
+            },
+            move |e| {
+                let _ = err_tx.send(e.to_string());
+            },
+            None,
+        )
+        .map_err(|e| format!("{name}: {e}"))?;
+    stream.play().map_err(|e| format!("{name}: {e}"))?;
+    Ok((stream, OutputInfo { device: name, rate: fs, ok: true, error: None }))
+}
+
+fn open_output(want: &Option<String>, engine: &Arc<Mutex<Engine>>, err_tx: Sender<String>, hp: Hp, tap: Hp) -> Result<(cpal::Stream, OutputInfo), String> {
     let dev = find_device(want)?;
     let name = dev.description().map(|n| n.to_string()).unwrap_or_else(|_| "?".into());
     let sup = dev.default_output_config().map_err(|e| e.to_string())?;
@@ -411,6 +484,11 @@ fn open_output(want: &Option<String>, engine: &Arc<Mutex<Engine>>, err_tx: Sende
                     if e.hp_ext() {
                         if let Ok(mut q) = hp.lock() {
                             q.push(&e.hp_buf);
+                        }
+                    }
+                    if e.tap_ext() {
+                        if let Ok(mut q) = tap.lock() {
+                            q.push(&e.tap_buf);
                         }
                     }
                 }
@@ -449,7 +527,7 @@ fn null_clock(engine: Arc<Mutex<Engine>>, run: Arc<AtomicBool>) {
     });
 }
 
-fn state_json(s: crate::engine::Snapshot, out: &OutputInfo, cue: &Option<OutputInfo>) -> String {
+fn state_json(s: crate::engine::Snapshot, out: &OutputInfo, cue: &Option<OutputInfo>, tap: &Option<OutputInfo>) -> String {
     let [da, db] = s.decks;
     let [ma, mb] = s.mix;
     json!({
@@ -460,6 +538,7 @@ fn state_json(s: crate::engine::Snapshot, out: &OutputInfo, cue: &Option<OutputI
         "headphones": s.headphones,
         "outputs": std::iter::once(json!({"kind": if out.ok { "wasapi" } else { "none" }, "role": "master", "device": out.device, "rate": out.rate, "ok": out.ok, "error": out.error}))
             .chain(cue.iter().map(|c| json!({"kind": "wasapi", "role": "cue", "device": c.device, "rate": c.rate, "ok": c.ok, "error": c.error})))
+            .chain(tap.iter().map(|c| json!({"kind": "wasapi", "role": "lights", "device": c.device, "rate": c.rate, "ok": c.ok, "error": c.error})))
             .collect::<Vec<_>>(),
     })
     .to_string()
@@ -495,12 +574,18 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
     let mut cue_stream: Option<cpal::Stream> = None;
     let mut cue_info: Option<OutputInfo> = o.cue_device.as_ref().map(|d| OutputInfo { device: d.clone(), rate: 0.0, ok: false, error: Some("non aperta".into()) });
     let mut cue_retry_at = Instant::now();
+    // uscita per le luci (cavo virtuale verso DMX Master): come la cuffia, a parte
+    let tap: Hp = Arc::new(Mutex::new(HpRing::new()));
+    let (tap_err_tx, tap_err_rx) = mpsc::channel::<String>();
+    let mut tap_stream: Option<cpal::Stream> = None;
+    let mut tap_info: Option<OutputInfo> = o.tap_device.as_ref().map(|d| OutputInfo { device: d.clone(), rate: 0.0, ok: false, error: Some("non aperta".into()) });
+    let mut tap_retry_at = Instant::now();
     let try_open = |stream: &mut Option<cpal::Stream>, info: &mut OutputInfo| {
         if o.no_audio {
             info.error = Some("senza audio (--no-audio)".into());
             return;
         }
-        match open_output(&o.device, &engine, err_tx.clone(), hp.clone()) {
+        match open_output(&o.device, &engine, err_tx.clone(), hp.clone(), tap.clone()) {
             Ok((s, i)) => {
                 null_run.store(false, Ordering::Relaxed);
                 println!("uscita: {} ({} Hz)", i.device, i.rate);
@@ -536,8 +621,28 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
             }
         }
     };
+    let open_tap_now = |tap_stream: &mut Option<cpal::Stream>, tap_info: &mut Option<OutputInfo>, rate: f64| {
+        let Some(want) = &o.tap_device else { return };
+        match open_tap(want, rate, tap.clone(), tap_err_tx.clone()) {
+            Ok((s, i)) => {
+                println!("luci: {} ({} Hz)", i.device, i.rate);
+                if let Ok(mut e) = engine.lock() {
+                    e.set_tap_ext(true);
+                }
+                *tap_stream = Some(s);
+                *tap_info = Some(i);
+            }
+            Err(e) => {
+                if tap_info.as_ref().and_then(|c| c.error.as_deref()) != Some(e.as_str()) {
+                    eprintln!("luci: {e} (riprovo ogni 5 s)");
+                }
+                *tap_info = Some(OutputInfo { device: want.clone(), rate, ok: false, error: Some(e) });
+            }
+        }
+    };
     if stream.is_some() {
         open_cue_now(&mut cue_stream, &mut cue_info, info.rate);
+        open_tap_now(&mut tap_stream, &mut tap_info, info.rate);
     }
     if stream.is_none() {
         null_run.store(true, Ordering::Relaxed);
@@ -547,7 +652,7 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
 
     loop {
         match orx.recv_timeout(Duration::from_millis(200)) {
-            Ok(Out::State(s)) => broadcast(&clients, &state_json(s, &info, &cue_info)),
+            Ok(Out::State(s)) => broadcast(&clients, &state_json(s, &info, &cue_info, &tap_info)),
             Ok(Out::SaveCues { id, cue, hot }) => {
                 if let Err(e) = save_cues(&o.cache, &id, cue, &hot) {
                     error_msg(&clients, &format!("punti della traccia non salvati: {e}"));
@@ -591,6 +696,8 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
             if stream.is_some() {
                 cue_stream = None;
                 cue_retry_at = Instant::now();
+                tap_stream = None;
+                tap_retry_at = Instant::now();
             }
         }
         if let Ok(e) = cue_err_rx.try_recv() {
@@ -608,6 +715,22 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
         if o.cue_device.is_some() && cue_stream.is_none() && stream.is_some() && Instant::now() >= cue_retry_at {
             cue_retry_at = Instant::now() + Duration::from_secs(5);
             open_cue_now(&mut cue_stream, &mut cue_info, info.rate);
+        }
+        if let Ok(e) = tap_err_rx.try_recv() {
+            eprintln!("luci: {e}");
+            tap_stream = None;
+            if let Ok(mut en) = engine.lock() {
+                en.set_tap_ext(false);
+            }
+            if let Some(c) = tap_info.as_mut() {
+                c.ok = false;
+                c.error = Some(e);
+            }
+            tap_retry_at = Instant::now() + Duration::from_secs(5);
+        }
+        if o.tap_device.is_some() && tap_stream.is_none() && stream.is_some() && Instant::now() >= tap_retry_at {
+            tap_retry_at = Instant::now() + Duration::from_secs(5);
+            open_tap_now(&mut tap_stream, &mut tap_info, info.rate);
         }
     }
 }
@@ -648,6 +771,22 @@ mod tests {
         assert!(out4[0] == 0.5 && out4[1] == 0.5 && out4[2] == 0.0 && out4[3] == 0.0, "stereo sui primi due canali");
         r.push(&vec![0.1; HP_MAX * 2]);
         assert!(r.q.len() <= HP_MAX, "non cresce oltre il massimo");
+    }
+
+    #[test]
+    fn buffer_luci_a_frequenza_diversa() {
+        // motore a 44.1 kHz, cavo virtuale a 48: una rampa deve uscire continua e piu' lenta
+        let mut r = HpRing::new();
+        r.set_step(44100.0 / 48000.0);
+        let ramp: Vec<f32> = (0..8000).flat_map(|i| [i as f32, -(i as f32)]).collect();
+        r.push(&ramp);
+        let mut out = vec![0f32; 480 * 2];
+        r.pull(&mut out, 2);
+        assert!((out[2] - out[0] - 0.91875).abs() < 1e-3, "passo 44.1/48: {}", out[2] - out[0]);
+        assert!(out.chunks(2).all(|f| f[1] == -f[0]), "destro e sinistro restano allineati");
+        let last = out[out.len() - 2];
+        r.pull(&mut out, 2);
+        assert!((out[0] - last - 0.91875).abs() < 1e-3, "continua tra un blocco e l'altro");
     }
 
     #[test]

@@ -314,6 +314,9 @@ pub struct Engine {
     /// cuffia su un'uscita separata: ogni blocco la lascia in hp_buf (stereo interleaved)
     hp_ext: bool,
     pub hp_buf: Vec<f32>,
+    /// copia del mix per DMX Master (cavo virtuale): dopo fader e crossfader, prima del volume master
+    tap_ext: bool,
+    pub tap_buf: Vec<f32>,
     headphones: bool,
     gm: f32,
     lim: f32,
@@ -346,6 +349,8 @@ impl Engine {
             hp_peak: 0.0,
             hp_ext: false,
             hp_buf: Vec::new(),
+            tap_ext: false,
+            tap_buf: Vec::new(),
             headphones: false,
             gm: 0.0,
             lim: 1.0,
@@ -370,6 +375,19 @@ impl Engine {
 
     pub fn hp_ext(&self) -> bool {
         self.hp_ext
+    }
+
+    /// uscita per le luci (--tap-device): il mix senza il volume master, cosi' abbassare
+    /// il master in sala non cambia quanto reagiscono le luci
+    pub fn set_tap_ext(&mut self, on: bool) {
+        self.tap_ext = on;
+        if on {
+            self.tap_buf.reserve(32768);
+        }
+    }
+
+    pub fn tap_ext(&self) -> bool {
+        self.tap_ext
     }
 
     pub fn set_rate(&mut self, fs: f64) {
@@ -765,6 +783,7 @@ impl Engine {
         let ch = channels.max(1);
         let frames = out.len() / ch;
         self.hp_buf.clear();
+        self.tap_buf.clear();
         // dissolvenze dei fader (timeline): avanzano a blocchi, il guadagno poi si insegue per campione
         for k in 0..2 {
             if let Some(mut r) = self.strips[k].ramp {
@@ -850,6 +869,10 @@ impl Engine {
                 b *= st.g;
                 l += a;
                 r += b;
+            }
+            if self.tap_ext {
+                self.tap_buf.push(l.clamp(-1.0, 1.0));
+                self.tap_buf.push(r.clamp(-1.0, 1.0));
             }
             self.gm += (target_m - self.gm) * smooth;
             l *= self.gm;
@@ -1140,5 +1163,25 @@ mod tests {
         assert!(peak <= 0.978, "picco {peak}");
         e.command(Cmd::Mix(MixVals { xfader: Some(-1.0), ..Default::default() }));
         assert!(e.xgain(1) < 1e-9 && (e.xgain(0) - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn uscita_luci_senza_volume_master() {
+        let (mut e, tx, _o) = engine();
+        let tone = Arc::new(TrackData { id: "t".into(), rel: String::new(), samples: Arc::new(vec![0.4; 44100 * 2 * 4]), rate: 44100.0, seconds: 4.0, bpm: 0.0, first_beat: 0.0, confidence: 0.0, locked: false });
+        tx.send(Msg::Loaded { deck: 0, track: tone, cue: 0.0, hot: [None; HOT], start: None, play: false, force: false }).unwrap();
+        tx.send(Msg::Cmd(Cmd::Mix(MixVals { master: Some(0.0), xfader: Some(-1.0), ..Default::default() }))).unwrap();
+        tx.send(Msg::Cmd(Cmd::Play(0, None))).unwrap();
+        e.set_tap_ext(true);
+        let mut buf = vec![0f32; 480 * 2];
+        for _ in 0..50 {
+            e.render(&mut buf, 2);
+        }
+        assert!(buf.iter().all(|x| x.abs() < 1e-3), "master a zero: in sala silenzio");
+        assert_eq!(e.tap_buf.len(), 480 * 2, "un blocco stereo per le luci");
+        assert!(e.tap_buf.iter().all(|x| (x - 0.4).abs() < 0.05), "le luci sentono la musica: {}", e.tap_buf[0]);
+        e.set_tap_ext(false);
+        e.render(&mut buf, 2);
+        assert!(e.tap_buf.is_empty(), "spenta: niente copia");
     }
 }

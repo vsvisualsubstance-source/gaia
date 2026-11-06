@@ -170,6 +170,27 @@ Configurazione salvata dal motore (file JSON accanto al binario):
 }
 ```
 
+**Come e' oggi (2026-11-06)**: tre uscite da riga di comando, ognuna
+cercata per parte del nome (`gaia-audio list` mostra i nomi che vede):
+
+| opzione | cosa esce | OPS |
+|---|---|---|
+| `--device` | master | `Main (Traktor Kontrol Z1` |
+| `--cue-device` | cuffia | `Headphone (Traktor Kontrol Z1` |
+| `--tap-device` | **luci**: copia del mix dopo fader e crossfader, *prima* del volume master | `CABLE Input (VB-Audio` |
+
+L'uscita luci serve a DMX Master sulla stessa macchina: la DMX legge un
+ingresso audio, e la Z1 non ne ha. Con **VB-Audio Virtual Cable** il motore
+suona su "CABLE Input" e la DMX ascolta "CABLE Output" (sorgente
+`scheda_audio`, driver DirectSound). Il volume master non conta, quindi
+abbassare la sala non cambia quanto reagiscono le luci. Il cavo ha un
+orologio suo (spesso 48 kHz): il motore adatta frequenza e deriva con
+interpolazione lineare, bene per l'analisi delle luci e non per l'ascolto.
+La Console Audio mostra lo stato (LUCI ✓ / ✗). TouchDesigner legge le
+schede all'avvio: dopo aver installato il cavo va riavviato.
+L'alternativa senza cavo e' la sorgente `touch_audio` dal controller
+della .73.
+
 `kind`: `wasapi` | `asio` | `ndi`. Il motore elenca i dispositivi visti
 (`outputs.list`) e la Plancia li offre in un menu: "qualsiasi uscita
 disponibile". Se un dispositivo sparisce (Dante spento) il motore continua

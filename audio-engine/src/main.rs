@@ -60,6 +60,7 @@ struct Opts {
     device: Option<String>,
     no_audio: bool,
     cue_device: Option<String>,
+    tap_device: Option<String>,
     rest: Vec<String>,
 }
 
@@ -73,6 +74,7 @@ fn parse(args: &[String]) -> Result<Opts, String> {
         device: None,
         no_audio: false,
         cue_device: None,
+        tap_device: None,
         rest: Vec::new(),
     };
     let mut it = args.iter();
@@ -85,6 +87,7 @@ fn parse(args: &[String]) -> Result<Opts, String> {
             "--device" => o.device = Some(it.next().ok_or("--device senza nome")?.clone()),
             "--no-audio" => o.no_audio = true,
             "--cue-device" => o.cue_device = Some(it.next().ok_or("--cue-device senza nome")?.clone()),
+            "--tap-device" => o.tap_device = Some(it.next().ok_or("--tap-device senza nome")?.clone()),
             "--range" => {
                 let v = it.next().ok_or("--range senza valori")?;
                 let (a, b) = v.split_once('-').ok_or("--range MIN-MAX")?;
@@ -184,7 +187,7 @@ fn main() -> ExitCode {
             Ok(())
         }
         "analyze" => return analyze(&o),
-        "serve" => serve::serve(serve::ServeOpts { root: o.root, cache: o.cache, port: o.port, device: o.device, no_audio: o.no_audio, cue_device: o.cue_device }),
+        "serve" => serve::serve(serve::ServeOpts { root: o.root, cache: o.cache, port: o.port, device: o.device, no_audio: o.no_audio, cue_device: o.cue_device, tap_device: o.tap_device }),
         "grid" => grid(&o),
         "index" => {
             println!("{}", serde_json::to_string_pretty(&library::index(&o.root, &o.cache)).unwrap_or_default());
