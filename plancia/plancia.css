@@ -451,7 +451,7 @@ button{cursor:pointer}
 .fg-bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .fg-sp{flex:1}
 .fg-tiles{flex:1;min-height:0;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px;align-content:start}
-.fg-tile{display:grid;grid-template-columns:auto 1fr;grid-template-rows:auto auto;column-gap:8px;align-items:center;text-align:left;padding:8px;border:1px solid var(--line2);border-radius:8px;background:var(--panel2);color:var(--fg);cursor:pointer;min-height:56px}
+.fg-tile{display:grid;grid-template-columns:auto 1fr;grid-template-rows:auto auto;column-gap:8px;align-items:center;text-align:left;padding:8px;border:1px solid var(--line2);border-radius:8px;background:var(--panel2);color:var(--fg);cursor:pointer;min-height:56px}.fg-tile.part{border-style:dashed;border-color:var(--accent)}.fg-block b small{font:600 10px var(--mono);color:var(--dim)}.fg-scene{border-color:var(--accent);color:var(--accent)}
 .fg-tile .fg-sw{grid-row:1/3;width:26px;height:26px;border-radius:50%;background:#3a404b;box-shadow:0 0 10px rgba(255,255,255,.08) inset}
 .fg-tile b{font:600 15px/1.1 inherit}
 .fg-tile span{font-size:11px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
