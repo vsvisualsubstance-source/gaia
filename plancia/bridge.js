@@ -29,7 +29,12 @@ const STATIC_ASSETS = {
   '/app.js': { file: 'app.js', contentType: 'text/javascript; charset=utf-8' },
   '/plancia.css': { file: 'plancia.css', contentType: 'text/css; charset=utf-8' }
 };
-let target = { host: process.env.OSC_HOST || '192.168.1.73', port: +process.env.OSC_PORT || 7020 };
+// OSC di regia verso DMX Master. host 'auto' = la DMX Master accesa (dmx-master.js):
+// la .73 se gira li', 127.0.0.1 se gira su questa macchina (OPS, touring).
+const dmxMaster = require('./dmx-master').startDmxMaster();
+let target = { host: process.env.OSC_HOST || 'auto', port: +process.env.OSC_PORT || 7020 };
+const resolveHost = h => (h === 'auto' ? dmxMaster.host() || '127.0.0.1' : h);
+const defaultTarget = () => ({ host: resolveHost(target.host), port: target.port });
 // Gaia: osc_bridge.py sul Core ascolta /gaia/td/... sulla 9008 e lo ripubblica su MQTT gaia/touchdesigner/...
 let gaiaOsc = { host: process.env.GAIA_OSC_HOST || '192.168.1.142', port: +process.env.GAIA_OSC_PORT || 9008 };
 let oscChannels = new Map();
@@ -82,7 +87,7 @@ function saveSharedState(state, ws, clientRevision) {
 }
 const routeOf = (address, channel) => {
   if (address.startsWith('/gaia/')) return gaiaOsc;
-  if (!channel || channel === 'default') return target;
+  if (!channel || channel === 'default') return defaultTarget();
   return oscChannels.get(channel) || null;
 };
 const validPort = port => Number.isInteger(port) && port > 0 && port <= 65535;
@@ -94,7 +99,7 @@ function channelsFromConfig(channels) {
 }
 function channelFromSource(address) {
   const matches = [];
-  if (target.host === address) matches.push('default');
+  if (defaultTarget().host === address) matches.push('default');
   for (const [id, channel] of oscChannels) if (channel.host === address) matches.push(id);
   return matches.length > 1 ? null : matches[0];
 }
@@ -270,6 +275,7 @@ const server = http.createServer((req, res) => {
   } else { res.writeHead(404); res.end(); }
 });
 const wss = new WebSocketServer({ noServer: true });
+dmxMaster.onChange(() => { for (const c of wss.clients) if (c.readyState === 1) c.send(hello()); });
 // /mqtt: ponte verso il broker MQTT WebSocket di OPS (Docker, 127.0.0.1:19001).
 // Serve alle pagine aperte da un indirizzo di OPS dove le porte di Docker non si
 // vedono (hotspot di Windows 192.168.137.1, Tailscale): la 8080 si', quindi
@@ -295,7 +301,7 @@ server.on('upgrade', (req, sock, head) => {
 });
 const udp = dgram.createSocket({ type: 'udp4', reuseAddr: true });
 
-const hello = () => JSON.stringify({ type: 'hello', target, gaia: gaiaOsc, channels: [...oscChannels].map(([id, endpoint]) => ({ id, ...endpoint })), listen: OSC_IN, midi: midiOut ? midiOut.name || true : false, sharedState: persistedState, sharedRevision: persistedRevision });
+const hello = () => JSON.stringify({ type: 'hello', target, targetResolved: defaultTarget(), dmxMaster: dmxMaster.id(), gaia: gaiaOsc, channels: [...oscChannels].map(([id, endpoint]) => ({ id, ...endpoint })), listen: OSC_IN, midi: midiOut ? midiOut.name || true : false, sharedState: persistedState, sharedRevision: persistedRevision });
 const broadcast = (msg, except) => {
   const s = JSON.stringify(msg);
   for (const c of wss.clients) if (c !== except && c.readyState === 1) c.send(s);
@@ -307,7 +313,7 @@ const videoTimeline = require('./video-timeline').startVideoTimeline({ getDoc: (
 const laserTimeline = require('./laser-timeline').startLaserTimeline({ getDoc: () => persistedState?.layout?.laserTimeline, getScenes: () => persistedState?.layout?.laserScenes || [], broadcast });
 // Movimento teste (head-motion-engine.js): scene in layout.headMotions, timeline in
 // layout.headTimeline, /mh/pantilt verso DMX Master sul canale OSC predefinito.
-const headMotion = require('./head-motion-engine').startHeadMotion({
+const headMotion = require('./head-motion-engine').startHeadMotion({ tdId: () => dmxMaster.id(),
   getDoc: () => persistedState?.layout?.headTimeline, getScenes: () => persistedState?.layout?.headMotions || [], broadcast,
   sendOsc: (address, args) => { const to = routeOf(address, 'default'); if (to) udp.send(encode(address, args), to.port, to.host, () => {}); }
 });
@@ -330,7 +336,7 @@ const audioEngine = require('./audio-engine-link').startAudioEngineLink({
 require('./audio-timeline').startAudioTimeline({ getDoc: () => persistedState?.layout?.audioTimeline, engine: audioEngine, lib: audioLib, broadcast });
 // Controller DJ (Traktor Kontrol Z1) sulla Console Audio: comandi al motore, LED dallo stato
 const audioMidi = require('./audio-midi').startAudioMidi({ engine: audioEngine, isTimeline: () => !!persistedState?.layout?.audioTimeline?.active });
-const chase = require('./chase-engine').startChase({ broadcast,
+const chase = require('./chase-engine').startChase({ broadcast, tdId: () => dmxMaster.id(),
   sendOsc: (address, args) => { const to = routeOf(address, 'default'); if (to) udp.send(encode(address, args), to.port, to.host, () => {}); }
 });
 
@@ -410,7 +416,7 @@ wss.on('connection', ws => {
       target = { host: String(m.host), port: +m.port };
       if (m.gaiaHost && validPort(+m.gaiaPort)) gaiaOsc = { host: String(m.gaiaHost), port: +m.gaiaPort };
       if (Array.isArray(m.channels)) oscChannels = channelsFromConfig(m.channels);
-      console.log(`OSC in uscita → ${target.host}:${target.port} · /gaia/... → ${gaiaOsc.host}:${gaiaOsc.port}`);
+      console.log(`OSC in uscita → ${target.host}${target.host === 'auto' ? ' (' + defaultTarget().host + ')' : ''}:${target.port} · /gaia/... → ${gaiaOsc.host}:${gaiaOsc.port}`);
       for (const c of wss.clients) if (c.readyState === 1) c.send(hello());
     } else if (m.type === 'midi_fake' && process.env.PLANCIA_MIDI_FAKE === '1') {
       // solo per i test (test/midi-learn.js): un messaggio come da un controller
@@ -437,7 +443,7 @@ server.listen(PORT, () => {
   const ips = Object.values(os.networkInterfaces()).flat().filter(i => i && i.family === 'IPv4' && !i.internal).map(i => i.address);
   console.log('\nPlancia bridge attivo');
   console.log(`  Apri sul tablet:  ${ips.map(ip => `http://${ip}:${PORT}`).join('  ') || `http://localhost:${PORT}`}`);
-  console.log(`  OSC in uscita →  ${target.host}:${target.port}`);
+  console.log(`  OSC in uscita →  ${target.host}:${target.port}${target.host === 'auto' ? ' (segue la DMX Master accesa)' : ''}`);
   console.log(`  OSC /gaia/... →  ${gaiaOsc.host}:${gaiaOsc.port} (Gaia, osc_bridge)`);
   console.log(`  Stato Plancia:   ${STATE_FILE}`);
   console.log(`  OSC in ingresso: porta UDP ${OSC_IN}`);

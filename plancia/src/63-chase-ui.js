@@ -14,15 +14,15 @@ function tapTempo(){
 function chases(){return Array.isArray(L.chases)?L.chases:[]}
 function chaseDoc(){return L.chaseTimeline&&Array.isArray(L.chaseTimeline.cues)?L.chaseTimeline:{cues:[]}}
 // novita' della timeline che DMX Master dichiara (nota TD 60): track, chases, scene_only...
-function tdTimelineHas(f){return(G.dxm['td-dmx-win']?.show?.timeline_features||[]).includes(f)}
+function tdTimelineHas(f){return(G.dxm[dmxId()]?.show?.timeline_features||[]).includes(f)}
 // chase dentro DMX Master (dmx_chase, campo chases): se c'e' si usa quello, il motore su OPS resta di riserva
 function chaseTdReady(){return tdTimelineHas('chases')}
 const chaseTd=ch=>{const o=JSON.parse(JSON.stringify(ch));delete o.template;return o};
 function chasePlay(ch){
-  if(chaseTdReady()){emit({type:'chase',action:'stop'},true);devCmd('td-dmx-win',{action:'set',param:'dmx_chase',value:{chase:chaseTd(ch),bpm:liveBpm()}})}
+  if(chaseTdReady()){emit({type:'chase',action:'stop'},true);devCmd(dmxId(),{action:'set',param:'dmx_chase',value:{chase:chaseTd(ch),bpm:liveBpm()}})}
   else emit({type:'chase',action:'play',chase:ch,bpm:liveBpm()},true);
 }
-function chaseStop(){if(chaseTdReady())devCmd('td-dmx-win',{action:'set',param:'dmx_chase',value:null});emit({type:'chase',action:'stop'},true)}
+function chaseStop(){if(chaseTdReady())devCmd(dmxId(),{action:'set',param:'dmx_chase',value:null});emit({type:'chase',action:'stop'},true)}
 // chase che gira adesso, da TD (dal vivo o timeline) o dal bridge: {id, name, step, steps, bpm, where}
 function chaseRun(){
   const steps=id=>chases().find(c=>c.id===id)?.steps.length||0;

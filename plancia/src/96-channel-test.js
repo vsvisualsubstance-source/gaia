@@ -4,9 +4,9 @@
 // sostituisce il test precedente; null lo spegne. Lettura: {port_id, values, until_ms} | null.
 // Serve a trovare l'ordine dei canali di una luce senza toccare il catalogo.
 const CT={port:null,start:1,count:8,ttl:120,vals:{},fix:null,timer:null};
-function ctPorts(){const p=G.dxm['td-dmx-win']?.patch?.ports;return Array.isArray(p)?p.filter(x=>x.kind!=='usb'||x.online==='1'):[]}
+function ctPorts(){const p=G.dxm[dmxId()]?.patch?.ports;return Array.isArray(p)?p.filter(x=>x.kind!=='usb'||x.online==='1'):[]}
 function ctState(){const s=tdParams().dmx_channel_test;return s&&typeof s==='object'&&s.values&&Object.keys(s.values).length?s:null}
-const ctMax=()=>+G.dxm['td-dmx-win']?.patch?.channel_test?.ttl_max_s||600;
+const ctMax=()=>+G.dxm[dmxId()]?.patch?.channel_test?.ttl_max_s||600;
 // luci in patch sulla porta: per riempire indirizzo e numero di canali e dare un nome ai canali
 function ctFixtures(){return(tdParams().dmx_fixtures||[]).filter(f=>f.port_id===CT.port&&+f.address>0)}
 function ctChannelName(addr){
@@ -18,10 +18,10 @@ function ctSend(){
   clearTimeout(CT.timer);CT.timer=setTimeout(()=>{
     const values=Object.fromEntries(Object.entries(CT.vals).filter(([a])=>+a>=CT.start&&+a<CT.start+CT.count).map(([a,v])=>[a,Math.round(v)]));
     if(!CT.port){showError('Test canali: scegli la porta.');return}
-    if(!devCmd('td-dmx-win',{action:'set',param:'dmx_channel_test',value:{port_id:CT.port,values,ttl:CT.ttl}}))showError('Test canali: non collegata a Gaia.');
+    if(!devCmd(dmxId(),{action:'set',param:'dmx_channel_test',value:{port_id:CT.port,values,ttl:CT.ttl}}))showError('Test canali: non collegata a Gaia.');
   },100);
 }
-function ctOff(){CT.vals={};clearTimeout(CT.timer);devCmd('td-dmx-win',{action:'set',param:'dmx_channel_test',value:null})}
+function ctOff(){CT.vals={};clearTimeout(CT.timer);devCmd(dmxId(),{action:'set',param:'dmx_channel_test',value:null})}
 function ctStatusText(){
   const s=ctState();if(!s)return'spento: le luci seguono la patch';
   const left=Math.max(0,Math.round(((+s.until_ms||0)-Date.now())/1000)),n=Object.keys(s.values).length;

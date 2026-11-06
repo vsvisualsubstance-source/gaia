@@ -9,15 +9,15 @@ function hmDoc(){return L.headTimeline&&Array.isArray(L.headTimeline.cues)?L.hea
 // BPM della timeline dello show (DMX Master se la pubblica, altrimenti il widget)
 function hmBpm(){const d=tdTimelineDoc(),w=L.pages.flatMap(p=>p.widgets).find(x=>x.type==='timeline'&&x.addr==='/show');return+d?.bpm>0?+d.bpm:+w?.bpm>0?+w.bpm:120}
 function hmHeadCount(){return Math.max(1,Math.min(8,tdHeadEntries().length||4))}
-function hmTdReady(){return tdParams().heads_motion_state!==undefined||!!G.dxm['td-dmx-win']?.heads?.params?.heads_motion}
+function hmTdReady(){return tdParams().heads_motion_state!==undefined||!!G.dxm[dmxId()]?.heads?.params?.heads_motion}
 // 'td' | 'ops': scelta salvata in L.headTimeline.engine, altrimenti TD se lo offre
 function hmEngine(){const e=L.headTimeline?.engine;return e==='ops'||!hmTdReady()?'ops':'td'}
 const hmTdScene=sc=>{const o=JSON.parse(JSON.stringify(sc));delete o.template;return o};
 function hmPlay(sc){
-  if(hmEngine()==='td'){emit({type:'head_motion',action:'stop'},true);devCmd('td-dmx-win',{action:'set',param:'heads_motion',value:{scene:hmTdScene(sc),bpm:liveBpm()}})}
+  if(hmEngine()==='td'){emit({type:'head_motion',action:'stop'},true);devCmd(dmxId(),{action:'set',param:'heads_motion',value:{scene:hmTdScene(sc),bpm:liveBpm()}})}
   else emit({type:'head_motion',action:'play',scene:sc,bpm:liveBpm()},true);
 }
-function hmStop(){if(hmTdReady())devCmd('td-dmx-win',{action:'set',param:'heads_motion',value:null});emit({type:'head_motion',action:'stop'},true)}
+function hmStop(){if(hmTdReady())devCmd(dmxId(),{action:'set',param:'heads_motion',value:null});emit({type:'head_motion',action:'stop'},true)}
 // stato del motore in uso: {source, scene: {id, name}}
 function hmState(){
   if(hmEngine()==='td'){const s=tdParams().heads_motion_state;return s?{source:s.source,scene:s.scene_id?{id:s.scene_id,name:s.name||s.scene_id}:null,td:true}:null}

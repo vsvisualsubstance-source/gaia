@@ -6,7 +6,7 @@
 // in dmx_rig_config_result. I campi che su quel gruppo non fanno niente restano
 // visibili in grigio con il motivo.
 const RC_UI={sel:null,closed:new Set(),pending:new Map(),timer:null,last:null};
-function rigConfigDef(){const r=G.dxm['td-dmx-win']?.rig_config;return r&&r.kinds&&r.fields&&Array.isArray(r.groups)?r:null}
+function rigConfigDef(){const r=G.dxm[dmxId()]?.rig_config;return r&&r.kinds&&r.fields&&Array.isArray(r.groups)?r:null}
 function rigConfigValues(){const v=tdParams().dmx_rig_config;return v&&typeof v==='object'?v:{}}
 function rigConfigGroup(){const d=rigConfigDef();if(!d)return null;
   const g=d.groups.find(x=>x.group===RC_UI.sel)||d.groups.find(x=>x.fixtures>0)||d.groups[0];RC_UI.sel=g?.group||null;return g}
@@ -23,7 +23,7 @@ function rigConfigFlush(){
   if(!RC_UI.pending.size)return;
   const groups=Object.fromEntries(RC_UI.pending);RC_UI.pending.clear();
   const request_id=`plancia-${Date.now().toString(36)}`;RC_UI.last={request_id,ts:Date.now()};
-  if(!devCmd('td-dmx-win',{action:'set',param:'dmx_rig_config',value:{groups,request_id}}))showError('Config rig: non collegata a Gaia.');
+  if(!devCmd(dmxId(),{action:'set',param:'dmx_rig_config',value:{groups,request_id}}))showError('Config rig: non collegata a Gaia.');
 }
 function rigConfigResultText(){
   const r=tdParams().dmx_rig_config_result;if(!RC_UI.last)return'';
@@ -45,7 +45,7 @@ const rcRole=(kind,f)=>rcField(kind,f).role||((rigConfigDef()?.calibration?.[kin
 function rigPresets(kind){const p=tdParams().dmx_rig_presets;return(Array.isArray(p)?p:[]).filter(x=>!kind||x.kind===kind)}
 // un comando di taratura con il suo request_id: l'esito arriva in dmx_rig_config_result
 function rigCmd(param,value){const request_id=`plancia-${Date.now().toString(36)}`;RC_UI.last={request_id,ts:Date.now()};
-  if(!devCmd('td-dmx-win',{action:'set',param,value:{...value,request_id}}))showError('Config rig: non collegata a Gaia.')}
+  if(!devCmd(dmxId(),{action:'set',param,value:{...value,request_id}}))showError('Config rig: non collegata a Gaia.')}
 // gruppo con luci nuove o cambiate: si propone la partenza adatta (una volta per insieme di modelli)
 const rcProfSig=g=>JSON.stringify([g.fixtures,[...(g.profiles||[])].sort()]);
 function rigStarterPending(g){return!!(g?.starter&&g.fixtures&&(L.rigSeen||{})[g.group]!==rcProfSig(g))}

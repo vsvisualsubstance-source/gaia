@@ -56,8 +56,8 @@ function paletteSceneId(palette){
 // Comando di scena verso TD e attesa dell'esito: done() vero sul nuovo
 // stato pubblicato, oppure un last_error nuovo = rifiutato.
 function tdSceneCommand(param,value,done,timeoutMs=6000){
-  const dev=()=>G.devices['td-dmx-win']||{},err0=dev().last_error;
-  if(!devCmd('td-dmx-win',{action:'set',param,value}))return Promise.reject(new Error('Non collegata a Gaia: apri ⋯ → Gaia e collegati prima.'));
+  const dev=()=>G.devices[dmxId()]||{},err0=dev().last_error;
+  if(!devCmd(dmxId(),{action:'set',param,value}))return Promise.reject(new Error('Non collegata a Gaia: apri ⋯ → Gaia e collegati prima.'));
   return new Promise((resolve,reject)=>{
     const t0=Date.now();
     const check=()=>{
@@ -72,10 +72,10 @@ function tdSceneCommand(param,value,done,timeoutMs=6000){
 }
 const tdSceneById=id=>tdScenes().find(s=>s.id===id)||null;
 // palette dei rig pubblicate da DMX Master: [{n:'dmx_a_palette',label,options}]
-const tdPaletteParams=()=>enumParams('td-dmx-win').filter(p=>/^dmx_.+_palette$/.test(p.n));
+const tdPaletteParams=()=>enumParams(dmxId()).filter(p=>/^dmx_.+_palette$/.test(p.n));
 // Attesa su TD come tdSceneCommand, per piu' comandi gia' inviati
 function tdWait(done,timeoutMs=8000){
-  const dev=()=>G.devices['td-dmx-win']||{},err0=dev().last_error,t0=Date.now();
+  const dev=()=>G.devices[dmxId()]||{},err0=dev().last_error,t0=Date.now();
   return new Promise((resolve,reject)=>{
     const check=()=>{
       const err=dev().last_error;
@@ -94,16 +94,16 @@ function tdWait(done,timeoutMs=8000){
 async function buildPaletteScenes(palettes,rigParams,onStep=()=>{}){
   const set=async values=>{
     for(const[p,v]of Object.entries(values))
-      if(v!=null&&tdParams()[p]!==v&&!devCmd('td-dmx-win',{action:'set',param:p,value:v}))throw new Error('Non collegata a Gaia: apri ⋯ → Gaia e collegati prima.');
+      if(v!=null&&tdParams()[p]!==v&&!devCmd(dmxId(),{action:'set',param:p,value:v}))throw new Error('Non collegata a Gaia: apri ⋯ → Gaia e collegati prima.');
     await tdWait(()=>Object.entries(values).every(([p,v])=>v==null||tdParams()[p]===v));
   };
   const before=Object.fromEntries(rigParams.map(p=>[p,tdParams()[p]]));
   const wasActive=tdShowActive()===true;
   // categoria solo palette se TD la offre, altrimenti tutto il look dei rig
-  const categories=sceneCategoriesFrom(G.dxm['td-dmx-win']).some(c=>c.id==='palette')?['palette']:['rigs'];
+  const categories=sceneCategoriesFrom(G.dxm[dmxId()]).some(c=>c.id==='palette')?['palette']:['rigs'];
   try{
     if(wasActive){
-      if(!devCmd('td-dmx-win',{action:'disable',service:'show_active'}))throw new Error('Non collegata a Gaia.');
+      if(!devCmd(dmxId(),{action:'disable',service:'show_active'}))throw new Error('Non collegata a Gaia.');
       await tdWait(()=>tdShowActive()===false);
     }
     for(let i=0;i<palettes.length;i++){
@@ -114,21 +114,21 @@ async function buildPaletteScenes(palettes,rigParams,onStep=()=>{}){
       if(old&&!same(old.categories,categories))
         await tdSceneCommand('show_scene_update',{name:id,label:old.label||pal,categories},()=>same(tdSceneById(id)?.categories,categories));
       await set(Object.fromEntries(rigParams.map(p=>[p,pal])));
-      const pub=()=>`${G.devices['td-dmx-win']?.ts}|${JSON.stringify(tdSceneById(id))}`,b=pub();
+      const pub=()=>`${G.devices[dmxId()]?.ts}|${JSON.stringify(tdSceneById(id))}`,b=pub();
       await tdSceneCommand('show_scene_capture',{name:id,label:pal,categories},()=>!!tdSceneById(id)&&pub()!==b);
     }
   }finally{
     try{await set(before)}catch{}
-    if(wasActive)devCmd('td-dmx-win',{action:'enable',service:'show_active'});
+    if(wasActive)devCmd(dmxId(),{action:'enable',service:'show_active'});
   }
   return categories;
 }
 
 function openSceneEditor(){
-  const cats=sceneCategoriesFrom(G.dxm['td-dmx-win']),scenes=tdScenes(),active=tdActiveScene(tdParams())?.index;
+  const cats=sceneCategoriesFrom(G.dxm[dmxId()]),scenes=tdScenes(),active=tdActiveScene(tdParams())?.index;
   const s=$('#scrim');s.hidden=false;
   // scene limitate ad alcuni gruppi (nota TD 60): vuoto = tutti
-  const groupsOnly=tdTimelineHas('scene_only')?(G.dxm['td-dmx-win']?.show?.scene_groups||[]):[];
+  const groupsOnly=tdTimelineHas('scene_only')?(G.dxm[dmxId()]?.show?.scene_groups||[]):[];
   const gName=g=>({rig_a:'Rig A',rig_b:'Rig B',heads:'Teste'})[g]||groupsOf().find(x=>x.group===g)?.label||g;
   const onlyChecks=(sel,cls)=>groupsOnly.length?`<div class="scn-cats scn-only"><span class="hint">Solo i gruppi (nessuno = tutti):</span>${groupsOnly.map(g=>`<label class="chk"><input type="checkbox" class="${cls}" value="${esc(g)}"${(sel||[]).includes(g)?' checked':''}> ${esc(gName(g))}</label>`).join('')}</div>`:'';
   const onlyOf=(root,cls)=>groupsOnly.length?{only:[...root.querySelectorAll('.'+cls+':checked')].map(x=>x.value)}:{};
@@ -193,7 +193,7 @@ function openSceneEditor(){
     row.querySelector('[data-sa="recapture"]').onclick=async()=>{
       if(!await uiConfirm(`Sovrascrivere "${id}" con i valori dal vivo di adesso?\nCambiano solo le sue categorie: ${sceneCategoryText(sc?.categories,cats)}.`))return;
       // conferma = TD ha ripubblicato status/matrix dopo il comando
-      const pub=()=>`${G.devices['td-dmx-win']?.ts}|${G.dxm['td-dmx-win']?.ts}`,before=pub();
+      const pub=()=>`${G.devices[dmxId()]?.ts}|${G.dxm[dmxId()]?.ts}`,before=pub();
       // stessi gruppi di prima: senza only TD la riporterebbe a tutti
       try{await tdSceneCommand('show_scene_capture',{name:id,categories:sc?.categories||cats.map(c=>c.id),...(groupsOnly.length?{only:sc?.only||[]}:{})},()=>pub()!==before);
         reopen();showInfo(`Scena "${id}" ricatturata.`)}catch(e){fail(e)}
@@ -222,7 +222,7 @@ function openSceneEditor(){
 function paletteScenesSection(scenes){
   const rigs=tdPaletteParams();if(!rigs.length)return'';
   const pals=[...new Set(rigs.flatMap(p=>p.options.map(String)))].filter(p=>!/^custom$/i.test(p));
-  const have=new Set(scenes.map(x=>x.id)),onlyPalette=sceneCategoriesFrom(G.dxm['td-dmx-win']).some(c=>c.id==='palette');
+  const have=new Set(scenes.map(x=>x.id)),onlyPalette=sceneCategoriesFrom(G.dxm[dmxId()]).some(c=>c.id==='palette');
   return`<div class="scn-new scn-pal">
       <h4>Scene dalle palette</h4>
       <p class="hint">Una scena <b>colore</b> per ogni palette scelta (es. Warm → <span class="mono">pal_warm</span>), da mettere nelle cue come le altre: nel menu stanno nel gruppo <b>Colore</b>. Le palette dal vivo non vanno in timeline, le scene sì. ${onlyPalette?'Salvano solo le palette dei rig.':'Per ora salvano tutto il <b>look dei rig</b> (anche dimmer, kick e audio di adesso): prepara prima quelli.'} Una ✓ = esiste già, viene ricatturata${onlyPalette?' (e portata alla sola categoria Palette se era fatta con il look dei rig)':''}.</p>

@@ -14,7 +14,7 @@ function headWheel(){const m=headsModel();return Array.isArray(m?.colors)?m.colo
 function headGobos(){const m=headsModel();return Array.isArray(m?.gobos)?m.gobos.filter(c=>c&&c.name!=null):[]}
 // senza modello noto non si nasconde niente
 function headHasChannel(ch){const m=headsModel();return!m||!Array.isArray(m.channels)||m.channels.includes(ch)}
-function tdHeadPositions(){const p=G.dxm['td-dmx-win']?.heads?.programmer?.positions;return Array.isArray(p)&&p.length?p:null}
+function tdHeadPositions(){const p=G.dxm[dmxId()]?.heads?.programmer?.positions;return Array.isArray(p)&&p.length?p:null}
 const headSlotName=n=>String(n).replace(/_/g,' ');
 // voci di un widget scenes che vengono dalle teste vere; null = quelle scritte nel widget
 function headItems(w){
@@ -65,20 +65,20 @@ function tdPresetId(name){const k=presetKey(name),p=(tdHeadPresets()||[]).find(x
 // comando teste a DMX Master con il suo esito (heads_last_result); senza esito in 3 s non blocca
 function tdHeadsCmd(param,value){
   const before=tdParams().heads_last_result?.seq;
-  if(!devCmd('td-dmx-win',{action:'set',param,value}))return Promise.reject(new Error('Plancia non collegata a Gaia.'));
+  if(!devCmd(dmxId(),{action:'set',param,value}))return Promise.reject(new Error('Plancia non collegata a Gaia.'));
   return new Promise((ok,ko)=>{let n=0;const t=setInterval(()=>{const r=tdParams().heads_last_result;
     if(r&&r.seq!==before){clearInterval(t);if(r.ok===false)ko(new Error(r.message||'rifiutato da DMX Master'));else ok(r)}
     else if(++n>12){clearInterval(t);ok(null)}},250)});
 }
 const tdPresetSync=(what,p)=>p.catch(e=>showError(`Preset in DMX Master (${what}): ${e.message}`));
 // ---- colore delle teste: fisso o "segue un gruppo" (heads_color_follow, nota TD 64)
-function headFollowGroups(){const g=G.dxm['td-dmx-win']?.heads?.programmer?.color_follow_groups;return Array.isArray(g)&&g.length?g:null}
+function headFollowGroups(){const g=G.dxm[dmxId()]?.heads?.programmer?.color_follow_groups;return Array.isArray(g)&&g.length?g:null}
 function headFollow(){const p=tdParams();if('heads_color_follow' in p)return p.heads_color_follow||null;return headsList()[0]?.color_follow||null}
 const headFollowLabel=g=>headFollowGroups()?.find(x=>x.group===g||x.alias===g)?.label||g;
 function setHeadFollow(group){return tdHeadsCmd('heads_color_follow',group||null).catch(e=>showError('Colore teste: '+e.message))}
 // categoria "solo colore" delle scene teste (chiesta in OPS 47): scene che cambiano
 // colore/gobo/dimmer senza spostare le teste. Finche' TD non la offre, niente scelte rapide.
-function headColorCategory(){return sceneCategoriesFrom(G.dxm['td-dmx-win']).some(c=>c.id==='heads_color')?'heads_color':null}
+function headColorCategory(){return sceneCategoriesFrom(G.dxm[dmxId()]).some(c=>c.id==='heads_color')?'heads_color':null}
 const slug=s=>String(s).toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
 // scena "solo colore" per uno slot della ruota o per un "segue": la riusa se c'e' gia'
 async function headColorScene(kind,v){

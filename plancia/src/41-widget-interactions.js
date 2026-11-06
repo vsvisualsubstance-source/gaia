@@ -67,7 +67,7 @@ function renderInsp(){
   insp.innerHTML=`<h3>${NAMES[T]}</h3>
     <label>Etichetta<input id="fLabel"></label>
     ${hasAddr?`<label>${spec.addrLabel||'Indirizzo OSC'}<input id="fAddr" class="mono" spellcheck="false" autocapitalize="off"></label>`:''}
-    ${hasAddr&&!gaiaOscAddress?`<label>Canale OSC<select id="fOscChannel"><option value="">Predefinito · ${esc(C.host)}:${C.port}</option>${C.oscChannels.map(c=>`<option value="${esc(c.id)}">${esc(oscChannelName(c))}</option>`).join('')}${missingOscChannel?`<option value="${esc(w.oscChannel)}">Non configurato · ${esc(w.oscChannel)}</option>`:''}</select></label>
+    ${hasAddr&&!gaiaOscAddress?`<label>Canale OSC<select id="fOscChannel"><option value="">Predefinito · ${C.host==='auto'?'DMX Master (auto)':esc(C.host)}:${C.port}</option>${C.oscChannels.map(c=>`<option value="${esc(c.id)}">${esc(oscChannelName(c))}</option>`).join('')}${missingOscChannel?`<option value="${esc(w.oscChannel)}">Non configurato · ${esc(w.oscChannel)}</option>`:''}</select></label>
       ${missingOscChannel?'<p class="hint">Questo layout riferisce un canale assente su questo browser. Configuralo in Impostazioni o scegli un altro canale.</p>':''}
       <p class="hint">La famiglia e l’istanza identificano la destinazione; indirizzo e argomenti restano quelli definiti dal contratto del progetto TD.</p>`:''}
     ${hasAddr&&gaiaOscAddress?'<p class="hint">Questo indirizzo usa il canale Gaia dedicato (/gaia/), non un canale OSC personalizzato.</p>':''}

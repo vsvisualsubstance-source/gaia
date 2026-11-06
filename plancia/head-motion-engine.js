@@ -33,7 +33,7 @@ function startHeadMotion({ getDoc, getScenes, sendOsc, broadcast, rate = 30, url
   // all'avvio di una scena: tutte le teste selezionate e velocita' dei motori
   const begin = sc => {
     sendOsc('/mh/select/all', []);
-    if (sc.motor != null && client?.connected) client.publish(`gaia/device/${tdId}/command`, JSON.stringify({ action: 'set', param: 'heads_speed', value: +sc.motor }));
+    if (sc.motor != null && client?.connected) client.publish(`gaia/device/${typeof tdId === 'function' ? tdId() : tdId}/command`, JSON.stringify({ action: 'set', param: 'heads_speed', value: +sc.motor }));
   };
   const timer = setInterval(() => {
     const now = Date.now(), doc = getDoc() || {}, scenes = getScenes() || [];

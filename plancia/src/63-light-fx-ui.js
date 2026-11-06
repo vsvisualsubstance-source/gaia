@@ -5,13 +5,13 @@
 // Funzioni usate dal render della timeline: dichiarazioni function.
 function lightFx(){return Array.isArray(L.lightFx)?L.lightFx:[]}
 function fxDoc(){return L.fxTimeline&&Array.isArray(L.fxTimeline.cues)?L.fxTimeline:{cues:[]}}
-function fxTdReady(){return tdParams().dmx_effects_state!==undefined||!!G.dxm['td-dmx-win']?.patch?.effects}
+function fxTdReady(){return tdParams().dmx_effects_state!==undefined||!!G.dxm[dmxId()]?.patch?.effects}
 function fxState(){return tdParams().dmx_effects_state||null}
 function fxLiveIds(){return new Set((fxState()?.live||[]).map(x=>x.id))}
 const fxTd=fx=>{const o=JSON.parse(JSON.stringify(fx));delete o.template;return o};
 function fxPlay(fx){if(!fxTdReady()){showError('DMX Master non offre ancora gli effetti (dmx_effect).');return}
-  devCmd('td-dmx-win',{action:'set',param:'dmx_effect',value:{effect:fxTd(fx),bpm:liveBpm()}})}
-function fxStop(id){devCmd('td-dmx-win',{action:'set',param:'dmx_effect',value:id?{stop:id}:null})}
+  devCmd(dmxId(),{action:'set',param:'dmx_effect',value:{effect:fxTd(fx),bpm:liveBpm()}})}
+function fxStop(id){devCmd(dmxId(),{action:'set',param:'dmx_effect',value:id?{stop:id}:null})}
 // gruppi a cui un effetto puo' andare: quelli della Plancia (colore, livello, teste)
 function fxGroups(){return groupsOf().map(g=>({id:g.group,label:groupLabel(g.group)}))}
 function fxGroupLights(fx){
@@ -19,7 +19,7 @@ function fxGroupLights(fx){
   return Math.max(1,(L.fixtures||[]).filter(f=>f.group===g&&FIX_TYPES[f.type]?.ch).length||4);
 }
 function fxPaletteColors(name){
-  for(const r of Object.values(G.dxm?.['td-dmx-win']?.rigs||{})){const c=r?.params?.dmx_palette?.colors?.[name];if(Array.isArray(c)&&c.length)return c}
+  for(const r of Object.values(G.dxm?.[dmxId()]?.rigs||{})){const c=r?.params?.dmx_palette?.colors?.[name];if(Array.isArray(c)&&c.length)return c}
   return null;
 }
 // anteprima: una fila di luci, intensita' e colore come le calcola DMX Master

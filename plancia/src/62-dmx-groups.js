@@ -100,7 +100,7 @@ function openGroupEditor(list){
 // dmx_groups_result), stesso schema a polling di resolveDuplicates().
 function sendGroupsToTD(){
   const before=tdParams().dmx_groups_result?.ts;
-  if(!devCmd('td-dmx-win',{action:'set',param:'dmx_groups',value:groupsPayload(groupsOf())})){
+  if(!devCmd(dmxId(),{action:'set',param:'dmx_groups',value:groupsPayload(groupsOf())})){
     alert('Gruppi salvati in Plancia. Non collegata a Gaia: invio a DMX Master non fatto.');return}
   let tries=0;
   const check=()=>{
@@ -110,7 +110,7 @@ function sendGroupsToTD(){
       const parts=[['creati',r.created],['legati',r.bound],['aggiornati',r.updated],['tolti',r.removed],['tenuti perché hanno fixture',r.kept],['ignorati',r.ignored]]
         .filter(([,v])=>Array.isArray(v)?v.length:v).map(([k,v])=>`${k}: ${show(v)}`);
       alert('Gruppi confermati da DMX Master.'+(parts.length?'\n'+parts.join('\n'):' Nessuna modifica.'));return}
-    if(++tries>=16){const err=G.devices['td-dmx-win']?.last_error;
+    if(++tries>=16){const err=G.devices[dmxId()]?.last_error;
       alert('Nessuna conferma da DMX Master entro 8 s'+(err?': '+err:'.'));return}
     setTimeout(check,500);
   };

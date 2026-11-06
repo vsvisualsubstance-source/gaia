@@ -31,7 +31,7 @@ async function syncAllFixtures(){
     // scrive, torna un errore leggibile in status.last_error col
     // suggerimento -- meglio di scrivere comunque e aggiungere un
     // altro doppione (come successo ieri, 19+ gruppi).
-    const ok=devCmd('td-dmx-win',{action:'set',param:f._synced?'dmx_fixture_update':'dmx_fixture_add',
+    const ok=devCmd(dmxId(),{action:'set',param:f._synced?'dmx_fixture_update':'dmx_fixture_add',
       value:{...fixtureTdValue(f),on_conflict:'reject'}});
     if(ok)sent++;
   }
@@ -48,7 +48,7 @@ async function syncAllFixtures(){
 async function resolveDuplicates(){
   if(!await uiConfirm('Chiede a DMX Master di togliere i doppioni e sistemare gli indirizzi sovrapposti, poi ricarica il palco da li\'. Continuare?'))return;
   const reqId='p-'+uid();
-  const ok=devCmd('td-dmx-win',{action:'set',param:'dmx_patch_resolve',value:{request_id:reqId,apply:true}});
+  const ok=devCmd(dmxId(),{action:'set',param:'dmx_patch_resolve',value:{request_id:reqId,apply:true}});
   if(!ok){alert('Non collegata a Gaia — apri ⋯ → Gaia e collegati prima.');return}
   let tries=0;
   const check=()=>{
@@ -75,7 +75,7 @@ async function syncTypesToTD(){
   const types=Object.entries(FIX_TYPES).filter(([k])=>k!=='laser').map(([type,ft])=>({
     type,label:ft.label,group:ft.group,kind:ft.kind||'none',model:ft.model
   }));
-  const ok=devCmd('td-dmx-win',{action:'set',param:'dmx_types',value:types});
+  const ok=devCmd(dmxId(),{action:'set',param:'dmx_types',value:types});
   if(!ok){alert('Non collegata a Gaia — apri ⋯ → Gaia e collegati prima.');return}
   let tries=0;
   const check=()=>{
@@ -85,7 +85,7 @@ async function syncTypesToTD(){
       alert(`Tassonomia confermata da DMX Master (${have.length} tipi).`);return;
     }
     if(tries>=10){
-      const err=G.devices['td-dmx-win']?.last_error;
+      const err=G.devices[dmxId()]?.last_error;
       alert('Nessuna conferma completa da DMX Master'+(err?' — '+err:' — riprova più tardi.'));return;
     }
     setTimeout(check,500);
@@ -159,7 +159,7 @@ function openFixAdd(w,pos){
     // Manda subito con on_conflict:"auto" (nota 20, "per gli inserimenti
     // rapidi"): TD piazza davvero al primo posto libero (autorevole, non
     // la nostra stima) e noi riallineiamo appena arriva la conferma.
-    if(ft.ch&&devCmd('td-dmx-win',{action:'set',param:'dmx_fixture_add',
+    if(ft.ch&&devCmd(dmxId(),{action:'set',param:'dmx_fixture_add',
       value:{id:f.id,type:f.type,name:f.name,group:f.group,model:f.model,universe:f.universe,address:f.address,x:f.x,y:f.y,enabled:true,on_conflict:'auto'}})){
       let tries=0;
       const check=()=>{
@@ -315,7 +315,7 @@ function openFixEditor(w,f){
   const groupUnits=async own=>{
     const list=(L.fixtures||[]).filter(x=>x.group===f.group&&fixtureHasPalette(x)).sort((a,b)=>(a.x||0)-(b.x||0)||String(a.name).localeCompare(String(b.name)));
     list.forEach((x,i)=>{x.unit=own?i+1:1});save();val2('#feUnit',f.unit);checkDirty();
-    const sent=list.filter(x=>x._synced);let ok=0;for(const x of sent)if(devCmd('td-dmx-win',{action:'set',param:'dmx_fixture_update',value:{...fixtureTdValue(x),on_conflict:'reject'}}))ok++;
+    const sent=list.filter(x=>x._synced);let ok=0;for(const x of sent)if(devCmd(dmxId(),{action:'set',param:'dmx_fixture_update',value:{...fixtureTdValue(x),on_conflict:'reject'}}))ok++;
     syncedSnap=JSON.stringify({group:f.group,model:f.model,universe:f.universe,address:f.address,unit:f.unit??null});
     $('#feUnitMsg').textContent=`${list.length} luci del gruppo ${own?'ognuna per conto suo (1…'+list.length+')':'a specchio (unità 1)'}${sent.length?` · mandate ${ok}/${sent.length} a DMX Master`:''}.`};
   if($('#feUnitsOwn'))$('#feUnitsOwn').onclick=()=>groupUnits(true);
@@ -366,24 +366,24 @@ function openFixEditor(w,f){
     // on_conflict:"reject" (nota 20): dall'editor, dove l'indirizzo e'
     // scelto a mano, un conflitto deve dare un errore leggibile (con
     // suggerimento) invece di scrivere comunque sopra un'altra fixture.
-    const ok=devCmd('td-dmx-win',{action:'set',param:f._synced?'dmx_fixture_update':'dmx_fixture_add',
+    const ok=devCmd(dmxId(),{action:'set',param:f._synced?'dmx_fixture_update':'dmx_fixture_add',
       value:{...fixtureTdValue(f),on_conflict:'reject'}});
     if(!ok){$('#feSyncMsg').textContent='Non collegata a Gaia — apri ⋯ → Gaia e collegati prima.';return}
     const btn=$('#feSync'); btn.disabled=true; $('#feSyncMsg').textContent='Mandato, verifico la conferma da DMX Master…';
     let tries=0;
     const check=()=>{
       tries++;
-      const list=(G.devices['td-dmx-win']?.params||{}).dmx_fixtures||[];
+      const list=(G.devices[dmxId()]?.params||{}).dmx_fixtures||[];
       const found=list.find(x=>x.uid===f.id);
       if(found){
         f._synced=true; f.model=found.profile||f.model; save();
         syncedSnap=JSON.stringify({group:f.group,model:f.model,universe:f.universe,address:f.address});
-        const rep=((G.devices['td-dmx-win']?.params||{}).dmx_patch_report||[]).find(x=>x.id===found.id);
+        const rep=((G.devices[dmxId()]?.params||{}).dmx_patch_report||[]).find(x=>x.id===found.id);
         $('#feSyncMsg').textContent='Confermato da DMX Master'+(rep&&rep.status==='conflict'?' — ATTENZIONE: indirizzo in conflitto con un\'altra fixture già patchata.':'.');
         btn.textContent='Aggiorna su DMX Master'; btn.disabled=false; return;
       }
       if(tries>=6){
-        const err=G.devices['td-dmx-win']?.last_error;
+        const err=G.devices[dmxId()]?.last_error;
         $('#feSyncMsg').textContent='Nessuna conferma da DMX Master'+(err?' — '+err:' — controlla gruppo/profilo/indirizzo (puoi riprovare).');
         btn.disabled=false; return;
       }
@@ -391,7 +391,7 @@ function openFixEditor(w,f){
     };
     setTimeout(check,500);
   };
-  $('#feDel').onclick=()=>{if(f._synced)devCmd('td-dmx-win',{action:'set',param:'dmx_fixture_remove',value:{id:f.id}});
+  $('#feDel').onclick=()=>{if(f._synced)devCmd(dmxId(),{action:'set',param:'dmx_fixture_remove',value:{id:f.id}});
     L.fixtures=L.fixtures.filter(x=>x.id!==f.id); const ui=_stageUI[w.id];if(ui&&ui.selFix===f.id)ui.selFix=null; save(); closeSheet()};
   s.onpointerdown=e=>{if(e.target===s)closeSheet()};
   $('#feClose').onclick=closeSheet;

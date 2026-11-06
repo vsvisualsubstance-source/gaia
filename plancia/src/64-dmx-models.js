@@ -43,7 +43,7 @@ function cleanModelSlots(rows,withColor){
 }
 
 // ---- UI ----
-const modelRolesFor=kind=>G.dxm['td-dmx-win']?.catalog?.kinds?.[kind]?.roles||[];
+const modelRolesFor=kind=>G.dxm[dmxId()]?.catalog?.kinds?.[kind]?.roles||[];
 function openModelEditor(){
   const models=tdModels(),s=$('#scrim');s.hidden=false;
   const byKind=MODEL_KINDS.map(k=>({k,list:models.filter(m=>m.kind===k.id)})).filter(x=>x.list.length);
@@ -137,7 +137,7 @@ function openModelForm(m,opts={}){
         if(opts.onDone)opts.onDone(name);else back();
       }catch(e){
         // nessun cambiamento visibile = valori gia' uguali: non e' un errore
-        if(!isNew&&/conferma/.test(e.message)&&!G.devices['td-dmx-win']?.last_error){showInfo(`Modello "${name}": nessuna modifica.`);back();return}
+        if(!isNew&&/conferma/.test(e.message)&&!G.devices[dmxId()]?.last_error){showInfo(`Modello "${name}": nessuna modifica.`);back();return}
         fail(e)}
     };
     if(s.querySelector('#mfDel'))s.querySelector('#mfDel').onclick=async()=>{

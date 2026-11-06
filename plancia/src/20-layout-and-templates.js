@@ -144,7 +144,11 @@ ensureStageData(L);
 // passa da osc_bridge.py (quello e' solo per /gaia/..., vedi GAIA_PLANCIA_INTEGRATION.md).
 // 192.168.1.73:7020 = valore noto al 2026-10-15 -- se DMX Master cambia
 // macchina/IP, aggiorna qui (o dall'interfaccia, persiste in locale).
-let C=Object.assign({url:(location.protocol==='http:'?'ws://'+location.host:'ws://localhost:8080'),host:'192.168.1.73',port:7020},store.get(CKEY)||{});
+let C=Object.assign({url:(location.protocol==='http:'?'ws://'+location.host:'ws://localhost:8080'),host:'auto',port:7020},store.get(CKEY)||{});
+// 2026-11-06: l'OSC di regia segue la DMX Master accesa ('auto', la sceglie il bridge):
+// la .73 se gira li', questa macchina se gira su OPS o sulla touring. Il vecchio
+// predefinito .73 salvato sui tablet diventa 'auto' (con la DMX sulla .73 e' uguale).
+if(C.host==='192.168.1.73')C.host='auto';
 C.oscChannels=Array.isArray(C.oscChannels)?C.oscChannels.filter(c=>c&&typeof c.id==='string'&&c.id).map(c=>({
   id:c.id,name:String(c.name||''),family:['dmx','patchdeck','mixeraudio','gaia','custom'].includes(c.family)?c.family:'custom',instance:String(c.instance||''),host:String(c.host||''),port:+c.port||''
 })):[];

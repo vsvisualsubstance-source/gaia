@@ -16,10 +16,9 @@ const AUDIO_PRESETS=[ // non toccano la taratura (min/max) del rig: quanto segue
 ];
 const AUDIO_KEYS=['audio_amount','min_dimmer','max_dimmer','smooth_factor','kick_threshold','kick_boost','kick_decay'];
 const AR_SEL=new Set(); // rig selezionati per i preset (in memoria)
-const TD_DEV='td-dmx-win';
 // rig con motore audio (chase): quelli che pubblicano la soglia del kick
 function audioRigs(){
-  const rigs=G.dxm?.[TD_DEV]?.rigs||{},p=tdParams();
+  const rigs=G.dxm?.[dmxId()]?.rigs||{},p=tdParams();
   return Object.keys(rigs).filter(k=>p[`dmx_${k}_kick_threshold`]!=null).map(k=>{
     const g=(L.groups||[]).find(x=>x.bind===`rig_${k}`||x.group===k),group=g?.group||k;
     return{key:k,group,label:g?groupLabel(g.group):({a:'Front (rig A)',b:'Back (rig B)'}[k]||k)};
@@ -38,9 +37,9 @@ function updateAudioMeters(el){
     const lv=r?.level??0;if(i._lv!==lv){i._lv=lv;i.style.width=(lv*100).toFixed(1)+'%'}
     m.classList.toggle('kick',!!r&&now()-r.kickAt<140);m.classList.toggle('none',!r)});
 }
-const arKickOn=k=>G.devices[TD_DEV]?.services?.[`dmx_${k}_kick_enable`]==='active';
-const arSet=(k,n,v)=>setDmxParam(TD_DEV,`dmx_${k}_${n}`,String(v));
-const arKick=(k,on)=>devCmd(TD_DEV,{action:on?'enable':'disable',service:`dmx_${k}_kick_enable`});
+const arKickOn=k=>G.devices[dmxId()]?.services?.[`dmx_${k}_kick_enable`]==='active';
+const arSet=(k,n,v)=>setDmxParam(dmxId(),`dmx_${k}_${n}`,String(v));
+const arKick=(k,on)=>devCmd(dmxId(),{action:on?'enable':'disable',service:`dmx_${k}_kick_enable`});
 // luci del gruppo nella patch di DMX Master e il loro modo/guadagno (null = diversi)
 // TD chiama i gruppi a modo suo (es. rig_b): stessa conversione dell'import da DMX Master
 const arFixtures=r=>(tdParams().dmx_fixtures||[]).filter(x=>x.group===r.group||normGroupName(x.group,groupsOf())===r.group);

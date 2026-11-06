@@ -41,7 +41,7 @@ const videoGatewayUrl=()=>{const n=net();return n.video?`http://${n.video}:${n.v
 const bridgeCfg=()=>({type:'config',host:C.host,port:+C.port,gaiaHost:net().osc,gaiaPort:+net().oscPort,channels:C.oscChannels});
 const G={client:null,ok:false,host:null,sim:false,nr:null,nrWs:null,nrOk:false,dirty:true,lastPaint:0,devices:{},pdm:{},pdThumb:{},tdState:{},dxm:{},dmx:{},levels:{},canvas:null,brain:null,dream:null,chat:[],chatV:0,lastSent:null,offSince:null,tdAutoSynced:false};
 function tdHeadEntries(){
-  const params=G.devices['td-dmx-win']?.params||{};
+  const params=G.devices[dmxId()]?.params||{};
   const listed=Array.isArray(params.heads_list)?params.heads_list:Object.values(params.heads_list||{});
   const fixtures=Array.isArray(params.dmx_fixtures)?params.dmx_fixtures.filter(f=>
     ['heads','mh'].includes(String(f.group||'').toLowerCase())||String(f.group||'').toLowerCase().startsWith('heads_')||f.type==='mh'):[];
@@ -52,7 +52,7 @@ function tdHeadEntries(){
     const aliases=[h.uid,h.key,h.name,h.unit,`u${h.unit}`,h.id,`id:${h.id}`].filter(x=>x!=null).map(String);
     return{id:String(id),label:String(h.name||`Testa ${h.unit??h.id??''}`),aliases};
   }).filter(Boolean);
-  const matrix=G.dxm['td-dmx-win']||{},programmer=matrix.heads?.programmer||matrix.dmx_matrix?.heads?.programmer;
+  const matrix=G.dxm[dmxId()]||{},programmer=matrix.heads?.programmer||matrix.dmx_matrix?.heads?.programmer;
   const order=programmer?.order;
   if(!Array.isArray(order))return entries;
   return order.map(item=>{
@@ -192,7 +192,7 @@ function mergeTdState(id){
 }
 const tdParamsBefore=id=>{const q=G.devices[id]?.params;return{cues:JSON.stringify(q?.show_cues),scenes:JSON.stringify(q?.show_scene_catalog)}};
 function tdParamsChanged(id,old){
-  if(id!=='td-dmx-win')return;
+  if(id!==dmxId())return;
   const p=G.devices[id];
   // reimport automatico della patch di TD all'apertura, ma MAI sopra
   // fixture della Pianta non ancora mandate (palco AI, fixture nuove):
@@ -348,7 +348,7 @@ onMqtt('gaia/devices/+/dmx_matrix',(p,seg,obj)=>{if(obj){G.dxm[p.device_id||seg[
 // timeline di DMX Master, retained, ripubblicata a ogni rev nuova
 // (nota TD 31): piu' fresca di show_timeline nello status
 onMqtt('gaia/devices/+/show_timeline',(p,seg,obj)=>{
-  if(obj&&Array.isArray(p.cues)&&seg[2]==='td-dmx-win'){
+  if(obj&&Array.isArray(p.cues)&&seg[2]===dmxId()){
     const old=G.tdTimeline?.rev;G.tdTimeline=p;
     if(old!==p.rev)onTdTimelineRev(p);
   }

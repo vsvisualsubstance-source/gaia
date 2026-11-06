@@ -5,10 +5,11 @@ rem su OPS -- connettersi alla IP esterna (192.168.1.240) da un processo
 rem che vive sulla stessa macchina non e' affidabile su Windows (Docker
 rem Desktop/HNS, stesso problema gia' trovato per agent/dhcp_server.py/
 rem osc_bridge.py) -- 127.0.0.1 per il canale Gaia.
-rem OSC_HOST/OSC_PORT (canale 3, show control) puntano invece a DMX
+rem OSC_HOST=auto (2026-11-06): segue la DMX Master accesa (dmx-master.js),
+rem la .73 o questa macchina (127.0.0.1). Prima: OSC_HOST/OSC_PORT puntavano a DMX
 rem Master su un'ALTRA macchina -- IP reale, non 127.0.0.1.
 set PORT=8080
-set OSC_HOST=192.168.1.73
+set OSC_HOST=auto
 set OSC_PORT=7020
 set GAIA_OSC_HOST=127.0.0.1
 set GAIA_OSC_PORT=9008

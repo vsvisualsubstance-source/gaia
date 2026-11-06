@@ -4,7 +4,7 @@ function bridgeOnline(){return!!ws&&ws.readyState===1}
 function status(){
   const on=ws&&ws.readyState===1;
   $('#conn').classList.toggle('on',on);
-  const full=on?`Bridge → ${hello?.target?.host??C.host}:${hello?.target?.port??C.port}`:'Non connesso · simulazione';
+  const full=on?`Bridge → ${hello?.targetResolved?.host??hello?.target?.host??C.host}:${hello?.target?.port??C.port}${hello?.dmxMaster?` · ${hello.dmxMaster}`:''}`:'Non connesso · simulazione';
   $('#connTxt').textContent=on?'OSC':'OSC · sim';$('#conn').title='Connessione OSC: '+full;
 }
 function connect(){

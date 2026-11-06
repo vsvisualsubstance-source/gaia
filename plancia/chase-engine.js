@@ -8,19 +8,23 @@
 const { chaseOrder, chaseSec } = require('./src/63-chase');
 
 function startChase({ sendOsc, broadcast, url = process.env.PLANCIA_MQTT || 'mqtt://127.0.0.1:11883', tdId = 'td-dmx-win', log = console.log, catalog = null }) {
-  let client = null, scenes = catalog || [];
+  // tdId: id della DMX Master, oppure una funzione che lo da' (dmx-master.js: segue quella accesa)
+  const dmxId = typeof tdId === 'function' ? tdId : () => tdId;
+  let client = null;
+  const byDmx = {};   // catalogo per DMX: vale quello della DMX Master accesa
+  const sceneList = () => catalog || byDmx[dmxId()] || [];
   if (!catalog) {
     let mqtt = null;
     try { mqtt = require('mqtt'); } catch { log('Chase: pacchetto mqtt mancante, catalogo scene assente'); }
     if (mqtt) {
       client = mqtt.connect(url, { clientId: `plancia-bridge-chase-${process.pid}`, reconnectPeriod: 3000, connectTimeout: 5000 });
-      client.on('connect', () => client.subscribe(`gaia/devices/${tdId}/show_scenes`));
+      client.on('connect', () => client.subscribe('gaia/devices/+/show_scenes'));
       client.on('error', e => log('Chase MQTT:', e.message));
-      client.on('message', (t, p) => { try { const c = JSON.parse(p)?.params?.show_scene_catalog; if (Array.isArray(c)) scenes = c; } catch { /* ignora */ } });
+      client.on('message', (t, p) => { try { const c = JSON.parse(p)?.params?.show_scene_catalog; if (Array.isArray(c)) byDmx[t.split('/')[2]] = c; } catch { /* ignora */ } });
     }
   }
   let run = null, status = {}, lastStatus = '';
-  const indexOf = id => scenes.find(s => s.id === id)?.index;
+  const indexOf = id => sceneList().find(s => s.id === id)?.index;
   const tick = () => {
     if (run) {
       const now = Date.now(), order = chaseOrder(run.chase);

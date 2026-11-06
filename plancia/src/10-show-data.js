@@ -229,14 +229,28 @@ function nextAddress(type,universe){ // primo indirizzo libero per quel tipo+uni
 // alle fixture già a mano in TD invece di mostrarle. Solo lettura qui
 // (niente drag/edit): id numerico di TD, non il nostro uid stringa.
 function tdFixtures(){
-  const list=(G.devices['td-dmx-win']?.params||{}).dmx_fixtures;
+  const list=(G.devices[dmxId()]?.params||{}).dmx_fixtures;
   if(!Array.isArray(list))return[];
   const mine=new Set((L.fixtures||[]).map(f=>f.id));
   return list.filter(x=>!x.uid||!mine.has(x.uid));
 }
 
 /* ---------- universi/indirizzi reali, patch TD come fonte unica (nota 19/20) ---------- */
-const tdParams=()=>(G.devices['td-dmx-win']||{}).params||{};
+// DMX Master accesa: td-dmx-win (PC dedicato, la .73) oppure td-dmx-ops (lo
+// stesso progetto su OPS o sulla touring). L'id lo sceglie TD dal nome della
+// macchina; qui vale quella viva (status < 2 min) con piu' parametri, a parita'
+// la piu' recente; nessuna viva = la piu' recente vista. Stessa regola del
+// bridge (dmx-master.js). PD_DMX (td-pddmx-win) resta fuori.
+let _dmxPick={t:0,id:'td-dmx-win'};
+function dmxId(){
+  const t=Date.now();if(t-_dmxPick.t<1000)return _dmxPick.id;
+  const ids=Object.keys(G.devices||{}).filter(id=>/^td-dmx-/.test(id));
+  const age=id=>t-(G.devices[id]?.ts||G.devices[id]?._seen||0),np=id=>Object.keys(G.devices[id]?.params||{}).length;
+  const live=ids.filter(id=>age(id)<120000),pool=live.length?live:ids;
+  pool.sort((x,y)=>(live.length?np(y)-np(x):0)||age(x)-age(y));
+  _dmxPick={t,id:pool[0]||'td-dmx-win'};return _dmxPick.id;
+}
+const tdParams=()=>(G.devices[dmxId()]||{}).params||{};
 const universeMap=()=>tdParams().dmx_universe_map||null;
 // Catalogo condiviso (nota 19): modelli/tipi che DMX Master conosce
 // davvero, letti da status.params -- sostituisce i canali fissi di
@@ -250,7 +264,7 @@ const tdModelFor=f=>{const name=tdFixtureByUid(f.uid??f.id)?.profile||f.model;re
 const tdScenes=()=>tdSceneList(tdParams());
 // colori di una scena di TD per pulsanti e cue: {grad, ic} (vuoti senza preview)
 function tdSceneLook(scene){
-  const stepped=dmxPaletteColors(G.dxm['td-dmx-win'],'dmx_a_palette')?.stepped||new Set();
+  const stepped=dmxPaletteColors(G.dxm[dmxId()],'dmx_a_palette')?.stepped||new Set();
   const segs=tdScenePreview(scene,stepped),first=segs[0]?.[0]?.[0];
   return{grad:dmxGradient(segs),ic:Array.isArray(first)?dmxHex(first):''};
 }

@@ -29,7 +29,7 @@ function openSheet(){
     </section>
     <section><h3 style="font-size:14px">Connessione OSC</h3>
       <label>Indirizzo del bridge<input id="sUrl" class="mono" spellcheck="false" autocapitalize="off"></label>
-      <div class="three"><label>Invia OSC a (host)<input id="sHost" class="mono"></label><label>Porta<input id="sPort" type="number"></label></div>
+      <div class="three"><label>Invia OSC a (host) <em>auto = la DMX Master accesa</em><input id="sHost" class="mono" placeholder="auto"></label><label>Porta<input id="sPort" type="number"></label></div>
       <div class="row"><button class="btn primary" id="sApply">Connetti</button></div>
       <p class="note">Avvia il bridge sul computer con <code>npm start</code> e apri dal tablet l'indirizzo che stampa (es. <code>http://192.168.1.20:8080</code>). L'OSC in arrivo va sulla porta <code>9000</code> del bridge. Senza bridge, il render simula il rig in locale.</p>
     </section>
@@ -72,7 +72,7 @@ function openSheet(){
     list.innerHTML=oscChannelsDraft.map((c,i)=>`<div class="osc-route" data-route="${i}">
       <label>Nome<input data-prop="name" value="${esc(c.name)}" placeholder="Es. DMX Master"></label>
       <label>Famiglia<select data-prop="family">${Object.entries(OSC_FAMILIES).map(([k,v])=>`<option value="${k}"${k===c.family?' selected':''}>${esc(v)}</option>`).join('')}</select></label>
-      <label>Istanza<input data-prop="instance" value="${esc(c.instance)}" placeholder="Es. td-dmx-win"></label>
+      <label>Istanza<input data-prop="instance" value="${esc(c.instance)}" placeholder="Es. td-dmx-ops"></label>
       <label>Host<input data-prop="host" class="mono" value="${esc(c.host)}" spellcheck="false" autocapitalize="off"></label>
       <label>Porta<input data-prop="port" type="number" min="1" max="65535" value="${esc(c.port)}"></label>
       <button class="btn danger" data-route-del="${i}" aria-label="Elimina canale OSC">×</button>
@@ -106,7 +106,7 @@ function openSheet(){
     const t=TPL[b.dataset.trep];L={pages:t.pages(),fixtures:L.fixtures||defaultFixtures(L.rig),stage:L.stage||stageDefaults(),...(L.groups?{groups:L.groups}:{})};ensureStageData(L);pi=0;selId=null;save();render();initShow();tmsg(`Layout sostituito con "${t.name}".`);$('#sJson').value=JSON.stringify(L,null,1);
     armed=false;b.textContent='Sostituisci';b.classList.remove('danger')}});
   $('#sApply').onclick=()=>{
-    const port=Number($('#sPort').value),host=$('#sHost').value.trim();
+    const port=Number($('#sPort').value),host=$('#sHost').value.trim()||'auto';
     const invalid=oscChannelsDraft.find(c=>!c.host.trim()||!Number.isInteger(Number(c.port))||Number(c.port)<1||Number(c.port)>65535||(!c.instance.trim()&&!c.name.trim()));
     const error=$('#oscRouteError');
     if(!host||!Number.isInteger(port)||port<1||port>65535){error.textContent='Inserisci un host e una porta OSC predefinita valida (1–65535).';error.hidden=false;return}

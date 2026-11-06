@@ -266,14 +266,14 @@ function timelineFromTD(doc){
 // prima dell'invio), stesso schema a polling di resolveDuplicates().
 function tdTimelineRequest(doc){
   const before=tdParams().show_timeline_result?.seq;
-  if(!devCmd('td-dmx-win',{action:'set',param:'show_timeline',value:doc}))
+  if(!devCmd(dmxId(),{action:'set',param:'show_timeline',value:doc}))
     return Promise.reject(new Error('Non collegata a Gaia: apri ⋯ → Gaia e collegati prima.'));
   return new Promise((resolve,reject)=>{
     let tries=0;
     const check=()=>{
       const r=tdParams().show_timeline_result;
       if(r&&r.seq!==before&&!!r.dry_run===!!doc.dry_run)return resolve(r);
-      if(++tries>=16){const err=G.devices['td-dmx-win']?.last_error;
+      if(++tries>=16){const err=G.devices[dmxId()]?.last_error;
         return reject(new Error('Nessuna risposta da DMX Master entro 8 s'+(err?`: ${err}`:'.')))}
       setTimeout(check,500);
     };
@@ -449,7 +449,7 @@ const SHOW_CLOCK_STATE='gaia/show/clock/state',SHOW_CLOCK_COMMAND='gaia/show/clo
 const showClock={id:`plancia-${Math.random().toString(36).slice(2)}`,state:null,receivedAt:0,
   osc:null,authority:false,hasMqtt:false,minRtt:null,rtts:[],pings:new Map(),pingSeq:0};
 onMqtt(SHOW_CLOCK_STATE,(p,seg,obj)=>{
-  if(obj&&p.v===1&&p.master==='td-dmx-win'&&Number.isFinite(+p.pos)&&typeof p.playing==='boolean'){
+  if(obj&&p.v===1&&p.master===dmxId()&&Number.isFinite(+p.pos)&&typeof p.playing==='boolean'){
     const oldLength=showClock.state?.length;
     showClock.state={...p,pos:+p.pos,playing:p.playing};showClock.receivedAt=now();showClock.authority=true;showClock.hasMqtt=true;
     if(oldLength!==p.length)refreshShowTimelines();
@@ -483,7 +483,7 @@ function showClockPosition(sample=showClockSample()){
     Number.isFinite(+s.length)&&+s.length>0?+s.length:Infinity);
 }
 function showClockCues(){
-  const raw=G.devices['td-dmx-win']?.params?.show_cues;
+  const raw=G.devices[dmxId()]?.params?.show_cues;
   const list=Array.isArray(raw)?raw:Array.isArray(raw?.cues)?raw.cues:null;
   if(!list)return null;
   return list.map((item,i)=>{
@@ -545,7 +545,7 @@ function seek(w,t,quietCue){if(isShowTimeline(w)&&showClock.authority){showClock
 // la timeline non scrive le luci e si compone dal tablet; riacceso, TD
 // riapplica subito (senza fade) tutto lo stato a strati del tempo corrente.
 function tdShowActive(){
-  const st=G.devices['td-dmx-win']?.services?.show_active;
+  const st=G.devices[dmxId()]?.services?.show_active;
   if(st==='active'||st==='inactive')return st==='active';
   const a=showClock.state?.active;return typeof a==='boolean'?a:null;
 }
@@ -553,7 +553,7 @@ async function toggleShowActive(){
   const on=tdShowActive();
   if(on===null){showError('Stato della timeline di DMX Master non disponibile (Gaia collegata?).');return}
   if(!on&&!await uiConfirm('Tornare alla TIMELINE?\nDMX Master riapplica subito, senza fade, la scena del tempo corrente: il look composto qui viene sostituito.',{ok:'TIMELINE'}))return;
-  if(!devCmd('td-dmx-win',{action:on?'disable':'enable',service:'show_active'})){showError('Non collegata a Gaia: apri ⋯ → Gaia.');return}
+  if(!devCmd(dmxId(),{action:on?'disable':'enable',service:'show_active'})){showError('Non collegata a Gaia: apri ⋯ → Gaia.');return}
   showInfo(on?'LIVE: la timeline non comanda più le luci. Componi e cattura le scene.':'TIMELINE: le luci seguono di nuovo la timeline.');
 }
 // ▶ con DMX Master in LIVE: l'orologio partirebbe ma le luci non seguirebbero le cue
@@ -562,7 +562,7 @@ async function playShowClock(w){
   if(tdShowActive()===false){
     const v=await uiChoose('DMX Master è in LIVE: le luci non seguono la timeline',[{label:'▶ Play in TIMELINE (le luci seguono le cue)',value:'tl'},{label:'▶ Play restando in LIVE',value:'live'}],{hint:'In LIVE la timeline scorre ma le luci restano come le comandi dal tablet.'});
     if(v==null)return;
-    if(v==='tl'){if(!devCmd('td-dmx-win',{action:'enable',service:'show_active'})){showError('Non collegata a Gaia: apri ⋯ → Gaia.');return}showInfo('TIMELINE: le luci seguono di nuovo la timeline.')}
+    if(v==='tl'){if(!devCmd(dmxId(),{action:'enable',service:'show_active'})){showError('Non collegata a Gaia: apri ⋯ → Gaia.');return}showInfo('TIMELINE: le luci seguono di nuovo la timeline.')}
   }
   showClockCommand(w,'play');
 }
