@@ -624,24 +624,28 @@ button{cursor:pointer}
 .au-tempo{display:flex;align-items:center;gap:6px}
 .au-tempo input{flex:1;min-width:60px}
 .au-mixer{gap:8px}
-.au-strips{flex:1;display:grid;grid-template-columns:1fr .8fr 1fr;grid-template-rows:auto auto 1fr auto;gap:0 6px;min-height:0}
-/* le tre colonne condividono le righe (lettera, manopole, meter, cuffia): i meter A, M, B hanno la stessa altezza */
-.au-strip{grid-row:1/-1;display:grid;grid-template-rows:subgrid;row-gap:4px;min-width:0;padding:4px;border:1px solid var(--line);border-radius:6px}
+.au-strips{flex:1;display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;min-height:0}
+/* colonna: manopole a sinistra in una sola fila, meter e fader a destra a tutta altezza;
+   sotto il fader la cuffia (nel master le scritte L R, alte uguali): i meter A, M, B sono alti uguali */
+.au-strip{display:flex;flex-direction:column;gap:4px;min-width:0;min-height:0;padding:4px;border:1px solid var(--line);border-radius:6px}
+.au-body{flex:1;display:flex;gap:4px;min-height:0}
+.au-fadcol{flex:1;display:flex;flex-direction:column;gap:4px;min-width:0;min-height:0}
+.au-hp{flex:none;height:30px;padding:0}
 .au-k{display:flex;flex-direction:column;font:10px var(--mono);color:var(--dim)}
 .au-k input{width:100%}
-.au-fadrow{flex:1;display:flex;gap:4px;min-height:60px}
-.au-rots{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:1px}
+.au-fadrow{flex:1;display:flex;justify-content:center;gap:6px;min-height:60px}
+.au-rots{display:flex;flex-direction:column;align-items:center;justify-content:space-between;gap:2px;min-height:0}
 .au-rot{display:flex;flex-direction:column;align-items:center;cursor:ns-resize;touch-action:none;user-select:none;font:10px var(--mono);color:var(--dim);line-height:1}
-.au-rot svg{width:clamp(28px,4.2vh,40px);height:auto;overflow:visible}
+.au-rot svg{width:clamp(30px,6vh,52px);height:auto;overflow:visible}
 .au-rot .tr{fill:none;stroke:var(--line2);stroke-width:3.5;stroke-linecap:round}
 .au-rot .val{fill:none;stroke:var(--c);stroke-width:3.5;stroke-linecap:round}
 .au-rot .cap{fill:var(--panel);stroke:var(--line2);stroke-width:1.5}
 .au-rot .ptr{stroke:var(--fg,#e8ecf2);stroke-width:2.5;stroke-linecap:round}
 .au-rot.drag .cap{stroke:var(--c)}
-.au-mst{justify-content:center}.au-lr{display:flex;justify-content:center;gap:4px;align-self:start;font:10px var(--mono);color:var(--dim)}.au-lr span{width:10px;text-align:center}
+.au-mst{justify-content:center}.au-lr{display:flex;justify-content:center;align-items:flex-start;gap:4px;font:10px var(--mono);color:var(--dim)}.au-lr span{width:10px;text-align:center}
 .au-mst .au-meter{width:10px}
-.au-meter{width:8px;height:100%;border-radius:2px}
-.au-vfader{flex:1;writing-mode:vertical-lr;direction:rtl;min-height:0}
+.au-meter{width:10px;height:100%;border-radius:2px}
+.au-vfader{flex:none;width:28px;writing-mode:vertical-lr;direction:rtl;min-height:0}
 .au-xf{display:flex;align-items:center;gap:6px;font:700 13px var(--display);color:var(--dim)}
 .au-xf input{flex:1}
 .au-libbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
