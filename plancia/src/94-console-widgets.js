@@ -134,7 +134,7 @@ function paintCueStack(el,w,force){
   const {list,act,next}=csState(w),sig=JSON.stringify([list.map(s=>[s.index,s.label||s.id]),act,next,SH.fade.toFixed(1)]);
   if(!force&&box._sig===sig)return;box._sig=sig;
   box.innerHTML=list.length?`<div class="cs-list">${list.map(s=>{const look=tdSceneLook(s);return`<button class="cs-row${s.index===act?' act':''}${s.index===next?' nxt':''}" data-cs="${s.index}">
-      <span class="cs-no">${s.index===act?'▶':s.index===next?'NEXT':String(s.index).padStart(2,'0')}</span>${(u=>u?`<img class="cs-th" src="${u}" alt="">`:'')(scenePreviewURL(s))}<b>${esc(s.label||s.id)}</b><i style="background:${look.grad||'transparent'}"></i></button>`}).join('')}</div>
+      <span class="cs-no">${s.index===act?'▶':s.index===next?'NEXT':String(s.index).padStart(2,'0')}</span>${(u=>u?`<img class="cs-th" src="${u}" alt="">`:'')(scenePreviewURL(s))}<b>${esc(s.label||s.id)}</b><i style="background:${smLookGrad(s)||look.grad||'transparent'}"></i></button>`}).join('')}</div>
     <div class="cs-btns"><button class="btn cs-back" data-cs-act="back">◀ BACK</button><button class="btn primary cs-go" data-cs-act="go">GO ▶<small>fade ${SH.fade.toFixed(1)} s</small></button></div>`
     :'<p class="hint">Nessuna scena da DMX Master (non collegato o nessuna scena catturata: ▣ Scene nel Palco).</p>';
 }

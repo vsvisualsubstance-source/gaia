@@ -799,3 +799,15 @@ button{cursor:pointer}
 .cs-th{width:58px;height:33px;object-fit:cover;border-radius:3px;flex:none;border:1px solid var(--line2)}
 .scn-th{width:72px;height:41px;object-fit:cover;border-radius:3px;flex:none;border:1px solid var(--line2);margin-right:6px;vertical-align:middle}
 .tl-blk.tl-th{background-image:linear-gradient(90deg,#000c 0,#0006 60%,#0003),var(--th);background-size:cover;background-position:center}
+/* scene come tabella (63-scene-matrix.js) */
+.smx-sheet{max-width:min(1100px,96vw)}
+.smx-wrap{overflow:auto;max-height:62vh;border:1px solid var(--line2);border-radius:8px}
+.smx{width:100%;border-collapse:collapse;font-size:13px}
+.smx th{position:sticky;top:0;background:var(--panel);text-align:left;padding:8px;font:600 11px var(--display);letter-spacing:.06em;text-transform:uppercase;color:var(--dim);border-bottom:1px solid var(--line2);white-space:nowrap}
+.smx td{padding:6px 8px;border-bottom:1px solid var(--line2);white-space:nowrap}
+.smx tr.on td{background:#ffb23e14}.smx tr.on .smx-name b{color:var(--accent,#ffb23e)}.smx tr.hid{opacity:.5}
+.smx-name{display:flex;align-items:center;gap:6px}.smx-name .btn{min-width:30px;padding:2px 6px}
+.smx-cell.ed{cursor:pointer}.smx-cell.ed:hover{background:#ffffff0d}
+.smx-chip{display:inline-block;width:34px;height:14px;border-radius:3px;vertical-align:middle;margin-right:6px;border:1px solid #ffffff22}
+.smx-pal{font-size:12px}.smx-none{color:var(--dim)}.smx-txt{font-size:12px;color:var(--dim)}
+.smx-foot{margin-top:10px;align-items:center;gap:12px;flex-wrap:wrap}

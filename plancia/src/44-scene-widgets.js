@@ -45,7 +45,7 @@ registerWidget('scenes',{oscAddress:w=>!['dmx-enum','head-presets'].includes(w.m
       // scene di TD: striscia con le palette salvate nella scena (front |
       // back, preview della nota TD 37), barretta col primo colore front
       return `<div class="sc" style="grid-template-columns:repeat(${c},minmax(0,1fr))">${it.map((n,i)=>{const look=td.length?tdSceneLook(td[i]):null,ic=look?look.ic:lk&&LOOKS[i]?lookHex(i):'';
-        return `<div class="si" data-i="${i}" title="${esc(n)}"${ic?` style="--ic:${ic}"`:''}><span class="no">${String(i+1).padStart(2,'0')}</span><span class="nm">${esc(n)}</span><i class="chip"></i><i class="prog"></i>${look?.grad?`<i class="pal" style="background:${look.grad}"></i>`:''}</div>`}).join('')}${pos?'<div class="si si-manage" data-act="pos-store" title="Salva in DMX Master la posizione delle teste selezionate"><span class="nm">💾 Salva</span></div><div class="si si-manage" data-act="pos-scene" title="Cattura la posizione attuale come scena teste, da usare in timeline"><span class="nm">📷 Scena</span></div>':''}${manage?'<div class="si si-manage" data-act="manage-scenes" title="Crea, ricattura, rinomina ed elimina le scene di DMX Master"><span class="nm">＋ Scene…</span></div>':''}</div>${lk?'<span class="simtag" title="DMX Master non collegato: look locali della Plancia, solo simulazione">SIMULAZIONE</span>':''}`},
+        return `<div class="si" data-i="${i}" title="${esc(n)}"${ic?` style="--ic:${ic}"`:''}><span class="no">${String(i+1).padStart(2,'0')}</span><span class="nm">${esc(n)}</span><i class="chip"></i><i class="prog"></i>${(g=>g?`<i class="pal" style="background:${g}"></i>`:'')(td.length?smLookGrad(td[i])||look?.grad:look?.grad)}</div>`}).join('')}${pos?'<div class="si si-manage" data-act="pos-store" title="Salva in DMX Master la posizione delle teste selezionate"><span class="nm">💾 Salva</span></div><div class="si si-manage" data-act="pos-scene" title="Cattura la posizione attuale come scena teste, da usare in timeline"><span class="nm">📷 Scena</span></div>':''}${manage?'<div class="si si-manage" data-act="manage-scenes" title="Crea, ricattura, rinomina ed elimina le scene di DMX Master"><span class="nm">＋ Scene…</span></div>':''}</div>${lk?'<span class="simtag" title="DMX Master non collegato: look locali della Plancia, solo simulazione">SIMULAZIONE</span>':''}`},
   paint(el,w){    if(w.mode==='dmx-enum')paintTdEnum(el,w);
     else el.querySelectorAll('.si').forEach((n,i)=>n.classList.toggle('on',w.mode==='multi'||w.mode==='head-select'?!!(Array.isArray(w.value)&&+w.value[i]):w.value===i));
   },
@@ -53,7 +53,7 @@ registerWidget('scenes',{oscAddress:w=>!['dmx-enum','head-presets'].includes(w.m
       if(w.mode==='head-select'&&w.addr==='/mh/select/heads')return (w.headValues||[]).filter((_,i)=>!!w.value?.[i]);
       return w.mode==='multi'?(w.value||[]).map(x=>+x?1:0):[w.value];
   },
-  onPointer(e,el,w){      if(e.target.closest('[data-act="manage-scenes"]')){e.preventDefault();openSceneEditor();return}
+  onPointer(e,el,w){      if(e.target.closest('[data-act="manage-scenes"]')){e.preventDefault();openSceneMatrix();return}
       if(e.target.closest('[data-act="pos-store"]')){e.preventDefault();headPositionStore();return}
       if(e.target.closest('[data-act="pos-scene"]')){e.preventDefault();headSceneFromLive();return}
       if(w.mode==='head-presets'){
