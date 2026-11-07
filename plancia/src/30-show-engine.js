@@ -23,7 +23,7 @@ function syncLedWidgets(){for(const w of allW())if(w.type==='scenes'&&w.addr==='
 const selHeads=()=>{const n=fixCounts().mh;ensureHeadPool(n);return SH.heads.filter((h,k)=>SH.sel.has(k)&&k<n)};
 function model(a,args){
   const v=+args[0];
-  if(a.startsWith('/dmx/group/')){const g=a.slice(11);if(/^[a-z0-9_]+$/.test(g))SH.g[g]=v;return}  // anche i rig nuovi (consolle...)
+  if(a.startsWith('/dmx/group/')){const g=a.slice(11);if(/^[a-z0-9_]+$/.test(g)){SH.g[g]=v;(SH.gAt||(SH.gAt={}))[g]=Date.now()}return}  // anche i rig nuovi (consolle...)
   switch(a){
     case '/dmx/master':SH.master=v;break;
     // Con le scene di DMX Master l'indice e' una scena di TD, non un LOOK

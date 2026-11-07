@@ -17,6 +17,14 @@ const chaseCol=(c,i,n,t)=>SH.chase===3?hsv2rgb((t*.00018+i/Math.max(1,n))%1,1,Ma
 // ~1/s), la config dei rig (~ogni 3 s) o lo stato di TD (ogni 10 s): col solo stato il Render
 // restava indietro di secondi rispetto alle cue (2026-11-07)
 let _simScene={k:'',at:0};
+// livello del rig adesso: fader appena mosso qui (SH.g), config dei rig (~2/s) o stato TD (10 s)
+function rigLevelNow(id,r,key,group){
+  const p=G.devices[id]?.params||{},c=[],num=v=>Number.isFinite(+v)&&v!==null&&v!==''?+v:null;
+  if(num(p['dmx_'+r+'_level'])!=null)c.push({v:+p['dmx_'+r+'_level'],at:G.devices[id]?._seen||0});
+  const rc=G.tdState?.[id]?.dmx_rig_config,rv=num(rc?.params?.dmx_rig_config?.[key]?.level);if(rv!=null)c.push({v:rv,at:rc.at||0});
+  if(SH.gAt?.[group]&&group in SH.g)c.push({v:SH.g[group],at:SH.gAt[group]});
+  const best=c.sort((a,b)=>b.at-a.at)[0];return best?best.v:1;
+}
 function rigPaletteNow(id,r,key){
   const p=G.devices[id]?.params||{},c=[{pal:p['dmx_'+r+'_palette'],at:G.devices[id]?._seen||0}];
   const rc=G.tdState?.[id]?.dmx_rig_config,rv=rc?.params?.dmx_rig_config?.[key]?.palette;if(rv)c.push({pal:rv,at:rc.at||0});
@@ -30,7 +38,7 @@ function tdRigSim(group,t,i,n){const id=dmxId(),p=G.devices[id]?.params;if(!p||!
   const cols=(name==='Custom'?[1,2,3,4,5].map(k=>p[`dmx_${r}_custom_color${k}`]):dmxPaletteColors(G.dxm?.[id],pn)?.colors?.[name])?.filter(Array.isArray);
   if(!cols?.length)return null;const sp=+(rigConfigValues()[r==='a'||r==='b'?'rig_'+r:r]?.color_speed)||.2;
   const u=((t/1000*sp*.5+i/Math.max(1,n))%1+1)%1*cols.length,k=Math.floor(u)%cols.length,f=u-Math.floor(u),c0=cols[k],c1=cols[(k+1)%cols.length];
-  const lv=Number.isFinite(+p[`dmx_${r}_level`])?+p[`dmx_${r}_level`]:1;
+  const lv=rigLevelNow(id,r,r==='a'||r==='b'?'rig_'+r:group,group);
   return{color:c0.map((v,j)=>v+(c1[j]-v)*f),level:lv*(DMX_OUTPUT.master??1)*(DMX_OUTPUT.blackout?0:1)}}
 function rigTint(c,n){if(!n)return c;const[h,sa,v]=rgb2hsv(...c);return hsv2rgb((h+n*.37)%1,Math.max(sa,.85),Math.max(v,.8))}
 function beam(g,x,y,ang,len,wd,col,a){
