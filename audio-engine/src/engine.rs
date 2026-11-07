@@ -581,9 +581,9 @@ impl Engine {
                 if d.playing && d.sync {
                     self.sync_phase(k);
                 }
-                // diventa master solo se il master attuale non e' un altro deck in onda
-                let cur = &self.decks[self.master];
-                if self.decks[k].playing && !(self.master != k && cur.playing && cur.track.is_some()) {
+                // diventa master solo se l'altro deck non e' in onda: chi suona gia' comanda il tempo
+                let o = 1 - k;
+                if self.decks[k].playing && !(self.decks[o].playing && self.decks[o].track.is_some()) {
                     self.master = k;
                 }
             }
@@ -856,6 +856,15 @@ impl Engine {
                         }
                     }
                 }
+            }
+        }
+        // il master e' sempre un deck in onda: se il suo si e' fermato e l'altro suona, passa all'altro
+        // (altrimenti la traccia nuova caricata sul deck fermo diventerebbe master partendo)
+        {
+            let (m, o) = (self.master, 1 - self.master);
+            let on = |d: &Deck| d.playing && d.track.is_some();
+            if !on(&self.decks[m]) && on(&self.decks[o]) {
+                self.master = o;
             }
         }
         for k in 0..2 {
@@ -1183,6 +1192,32 @@ mod tests {
         run(&mut e, 10.0);
         assert!((gap_ms(&e) - after).abs() < 0.5, "lo scarto scelto a orecchio resta: {after:.2} -> {:.2} ms", gap_ms(&e));
         assert!(after.abs() > 15.0, "il nudge ha spostato davvero ({after:.2} ms)");
+    }
+
+    #[test]
+    fn traccia_nuova_in_sync_non_ruba_il_master() {
+        // B suonava da master, A in SYNC; B si ferma, A resta in onda
+        let (mut e, tx, _o) = engine();
+        tx.send(Msg::Loaded { deck: 0, track: clicks("a", 120.0, 0.0, 120.0), cue: 0.0, hot: [None; HOT], start: None, play: false, force: false }).unwrap();
+        tx.send(Msg::Loaded { deck: 1, track: clicks("b", 126.0, 0.0, 120.0), cue: 0.0, hot: [None; HOT], start: None, play: false, force: false }).unwrap();
+        tx.send(Msg::Cmd(Cmd::Play(1, None))).unwrap();
+        run(&mut e, 1.0);
+        tx.send(Msg::Cmd(Cmd::Sync(0, None))).unwrap();
+        tx.send(Msg::Cmd(Cmd::Play(0, None))).unwrap();
+        run(&mut e, 1.0);
+        e.command(Cmd::Play(1, Some(false)));
+        run(&mut e, 0.5);
+        assert_eq!(e.master, 0, "il master passa al deck che suona");
+        let tempo_a = e.decks[0].tempo;
+        // traccia nuova su B, SYNC, play: A non cambia
+        tx.send(Msg::Loaded { deck: 1, track: clicks("c", 132.0, 0.0, 120.0), cue: 0.0, hot: [None; HOT], start: None, play: false, force: false }).unwrap();
+        run(&mut e, 0.1);
+        e.command(Cmd::Sync(1, None));
+        e.command(Cmd::Play(1, None));
+        run(&mut e, 2.0);
+        assert_eq!(e.master, 0);
+        assert_eq!(e.decks[0].tempo, tempo_a, "il master comanda, non cambia");
+        assert!((e.decks[1].bpm() - e.decks[0].bpm()).abs() < 0.01, "B al tempo del master: {} vs {}", e.decks[1].bpm(), e.decks[0].bpm());
     }
 
     #[test]

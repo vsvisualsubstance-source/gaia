@@ -137,7 +137,7 @@ function auCmd(c){
     // CUE tenuto (preascolto) + PLAY: continua, e lasciando CUE non si ferma (come i CDJ)
     case'deck.play':{if(!d.track)return;d.playing=d.preview?true:!d.playing;d.preview=false;if(d.playing&&d.sync)auSyncPhase(c.deck);
       // diventa master solo se il master attuale non e' un altro deck in onda
-      const cur=AU.decks[AU.master];if(d.playing&&!(AU.master!==c.deck&&cur.playing&&cur.track))AU.master=c.deck;break}
+      const o=AU.decks[c.deck==='A'?'B':'A'];if(d.playing&&!(o.playing&&o.track))AU.master=c.deck;break}
     case'deck.cue_down':if(!d.track)return;
       if(d.playing){d.playing=false;d.pos=d.cue}
       else if(Math.abs(d.pos-d.cue)>.02){d.cue=auSnap(d,d.pos);auSaveCues(c.deck)}
