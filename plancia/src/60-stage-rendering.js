@@ -8,6 +8,19 @@ function chaseK(i,n,t,level){
   switch(SH.chase){case 1:return .3+.7*(.5+.5*Math.sin(t*.002+i*.8));case 2:return((Math.floor(t/110)+i)%Math.max(2,n)===0)?1:.1;
     case 4:return hash(i,Math.floor(t/90))>.5?1:.08;case 5:return .12+.88*level;default:return 1}}
 const chaseCol=(c,i,n,t)=>SH.chase===3?hsv2rgb((t*.00018+i/Math.max(1,n))%1,1,Math.max(...c,.6)):c;
+// rig di barre senza DMX Master (simulazione): il rig LED bar ha il colore delle barre,
+// gli altri rig la stessa tinta girata di un terzo di giro ciascuno, per distinguerli nel Render
+// DMX Master accesa ma senza uscita per quella luce (modello coi canali ancora da compilare):
+// il Render la simula col rig di TD, cioe' la sua palette attiva (che cambia con le scene)
+// fatta girare come la fa girare TD, e il suo livello; null = TD non dice niente di quel rig
+function tdRigSim(group,t,i,n){const id=dmxId(),p=G.devices[id]?.params;if(!p||!dmxOutputFresh())return null;
+  const g=(L.groups||[]).find(x=>x.group===group),r=g?.bind==='rig_a'?'a':g?.bind==='rig_b'?'b':group,pn=`dmx_${r}_palette`,name=p[pn];
+  const cols=(name==='Custom'?[1,2,3,4,5].map(k=>p[`dmx_${r}_custom_color${k}`]):dmxPaletteColors(G.dxm?.[id],pn)?.colors?.[name])?.filter(Array.isArray);
+  if(!cols?.length)return null;const sp=+(rigConfigValues()[r==='a'||r==='b'?'rig_'+r:r]?.color_speed)||.2;
+  const u=((t/1000*sp*.5+i/Math.max(1,n))%1+1)%1*cols.length,k=Math.floor(u)%cols.length,f=u-Math.floor(u),c0=cols[k],c1=cols[(k+1)%cols.length];
+  const lv=Number.isFinite(+p[`dmx_${r}_level`])?+p[`dmx_${r}_level`]:1;
+  return{color:c0.map((v,j)=>v+(c1[j]-v)*f),level:lv*(DMX_OUTPUT.master??1)*(DMX_OUTPUT.blackout?0:1)}}
+function rigTint(c,n){if(!n)return c;const[h,sa,v]=rgb2hsv(...c);return hsv2rgb((h+n*.37)%1,Math.max(sa,.85),Math.max(v,.8))}
 function beam(g,x,y,ang,len,wd,col,a){
   const dx=Math.sin(ang),dy=Math.cos(ang),ex=x+dx*len,ey=y+dy*len,px=-dy,py=dx;
   const gr=g.createLinearGradient(x,y,ex,ey);gr.addColorStop(0,rgba(col,a));gr.addColorStop(.55,rgba(col,a*.32));gr.addColorStop(1,rgba(col,0));
@@ -389,8 +402,8 @@ function drawRender(g,W,H,t,level,w){
   }
   // barre LED
   g.globalCompositeOperation='lighter';
-  if(bars.length){const px=8;
-    for(let i=0;i<bars.length;i++){const f=bars[i];
+  if(bars.length){const px=8,rigs=[...new Set(bars.map(f=>f.group||'ledbar'))].sort((a,b)=>(b==='ledbar')-(a==='ledbar'));
+    for(let i=0;i<bars.length;i++){const f=bars[i],rig=f.group||'ledbar',rn=rigs.indexOf(rig),rk=SH.g[rig]??SH.g.ledbar;
       const live=outputOf(f),col=live?live.color:null,fixtureLevel=live?live.level:0;
       const span=f.w||(f.vertical?1:1.8),a=fixtureAim(f),h=a.aim*Math.PI/180;
       // orientamento: rivolta al pubblico i LED si vedono pieni, rivolta altrove se ne vede
@@ -398,7 +411,7 @@ function drawRender(g,W,H,t,level,w){
       const ab=aimBeam(project,f,(f.z||0)+(f.vertical?span/2:0),H),vis=.18+.82*ab.toward;
       const ux=Math.cos(h),uy=-Math.sin(h); // asse di una barra orizzontale: perpendicolare alla direzione
       let kSum=0,cSum=null;
-      for(let j=0;j<px;j++){const idx=i*px+j,color=col||chaseCol(SH.bar.c,idx,bars.length*px,t),k=live?fixtureLevel:SH.g.ledbar*M*chaseK(SH.chase===2?idx:i,SH.chase===2?bars.length*px:bars.length,t,level);
+      for(let j=0;j<px;j++){const idx=i*px+j,sim=live?null:tdRigSim(rig,t,i,bars.length),color=col||sim?.color||rigTint(chaseCol(SH.bar.c,idx,bars.length*px,t),rn),k=live?fixtureLevel:sim?sim.level:rk*M*chaseK(SH.chase===2?idx:i,SH.chase===2?bars.length*px:bars.length,t,level);
         kSum+=k;cSum=cSum||color;const kv=k*vis;
         // in piedi (f.vertical): i pixel salgono da f.z verso l'alto, una colonna di luce
         if(f.vertical){const p=project(f.x,f.y,(f.z||0)+(j+.5)*span/px),x=p.x,y=p.y,hh=Math.max(1,p.zs*span/px-1);

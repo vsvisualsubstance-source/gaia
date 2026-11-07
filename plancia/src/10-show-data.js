@@ -65,6 +65,8 @@ const FIX_COLOR={mh:'#58a6ff',par:'#ffb23e',bar:'#3fb950',wall:'#ff6fae',blinder
 // del rig (heads/rig_a/rig_b) prima di salvarli in dmx_fixtures (nota TD
 // 19/20) -- per ricostruire il "type" di Plancia da li' serve la mappa
 // inversa. Gruppo non riconosciuto -> 'par' (generico), meglio di niente.
+// campi di una fixture che DMX Master non conserva: il reimport da TD li tiene
+const FIX_LOCAL_KEYS=['z','vertical','w','aim','pitch','beamDeg','power','block','mountToTruss','mount','cube','fov','throw','h','rot'];
 const GROUP_TO_TYPE={heads:'mh',mh:'mh',rig_a:'par',rig_b:'par',front:'par',back:'par',ledbar:'bar',blinder:'blinder',haze:'haze'};
 // "p-" davanti: uid() e' 7 caratteri base36, ~1 volta su 10000 esce
 // tutto cifre -- DMX Master lo leggerebbe come id numerico (i SUOI,
@@ -327,8 +329,13 @@ function importFromTD(silent,asked){
   if(!mine.length){if(!silent)alert('DMX Master non ha ancora fixture create da Plancia — nulla da importare.');return false}
   if(!silent&&!asked){uiConfirm(`Sostituisce le ${(L.fixtures||[]).length} fixture locali con le ${mine.length} trovate su DMX Master. Continuare?`).then(y=>{if(y)importFromTD(false,true)});return false}
   const localOnly=(L.fixtures||[]).filter(f=>!FIX_TYPES[f.type]?.ch);
-  L.fixtures=[...mine.map(x=>({
-    id:x.uid,type:GROUP_TO_TYPE[x.group]||'par',name:x.name||x.uid,
+  // TD conosce patch, gruppo e posizione in pianta: tipo, altezza, in piedi, orientamento,
+  // fascio, blocco e aggancio all'americana sono solo della Plancia e restano (2026-11-07:
+  // il reimport automatico trasformava le barre di un rig nuovo in PAR e le colonne in barre a terra)
+  const prev=new Map((L.fixtures||[]).map(f=>[f.id,f]));
+  const keep=f=>{if(!f)return{};const o={};for(const k of FIX_LOCAL_KEYS)if(f[k]!==undefined)o[k]=f[k];return o};
+  L.fixtures=[...mine.map(x=>({...keep(prev.get(x.uid)),
+    id:x.uid,type:prev.get(x.uid)?.type||GROUP_TO_TYPE[x.group]||'par',name:x.name||x.uid,
     group:normGroupName(x.group,groupsOf()),model:x.profile||undefined,universe:portIdToUniverse(x.port_id),address:x.address,
     x:typeof x.x==='number'?x.x:0,y:typeof x.y==='number'?x.y:0,
     enabled:x.enabled!==0&&x.enabled!==false,palette:x.palette||'',audio:x.audio||'',audio_gain:x.audio_gain??'',_synced:true,
