@@ -59,10 +59,12 @@ async function main() {
       let ready = false;
       for (let i = 0; i < 40 && !ready; i++) { await sleep(250); ready = await p.ev(`(()=>{const A=window.__planciaTest.AU.decks;return A.A.track?.id===${JSON.stringify(pick[0])}&&A.B.track?.id===${JSON.stringify(pick[1])}&&!!A.A.baseAt})()`); }
       check(ready, 'tracce caricate dal motore su A e B');
+      // caricata parte da 0:00 (non dal cue): si misura da dove era
+      const p0 = +(await p.ev('window.__planciaTest.AU.decks.A.pos')) || 0;
       await down('.au-deck[data-deck=A] [data-au=play]');
       await sleep(2000);
       const a = JSON.parse(await p.ev(`JSON.stringify((({playing,pos,cue})=>({playing,pos,cue}))(window.__planciaTest.AU.decks.A))`));
-      check(a.playing && a.pos - a.cue > 1.6 && a.pos - a.cue < 2.6, `A in onda dal motore: ${(a.pos - a.cue).toFixed(2)} s in 2 s`);
+      check(a.playing && a.pos - p0 > 1.6 && a.pos - p0 < 2.6, `A in onda dal motore: ${(a.pos - p0).toFixed(2)} s in 2 s`);
       const meter = await p.ev('window.__planciaTest.AU.mix.A.meter');
       check(meter > 0.01, `meter di A dal motore: ${meter.toFixed(3)}`);
       // B: hot cue 1 qui, SYNC, play -> tempo e fase di A

@@ -137,6 +137,37 @@ function svBind(el,w){
   const end=e=>{ptrs.delete(e.pointerId);if(ptrs.size<2&&pin){pin=null;ui().pinch=false}};
   el.addEventListener('pointerup',end,true);el.addEventListener('pointercancel',end,true);
 }
+// video del Render (2026-11-07): registra la tela del Palco per far vedere lo show;
+// MP4 se il browser lo sa fare (si manda su WhatsApp), altrimenti WebM; scaricato sul dispositivo
+let renderRec=null;
+function renderRecType(){const MR=window.MediaRecorder;if(!MR?.isTypeSupported)return'';
+  return['video/mp4;codecs=avc1','video/mp4','video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'].find(t=>MR.isTypeSupported(t))||''}
+function renderRecPaint(){document.querySelectorAll('.t-stage [data-rec]').forEach(b=>{b.classList.toggle('rec-on',!!renderRec);
+  b.textContent=renderRec?`■ ${Math.max(0,Math.ceil((renderRec.until-Date.now())/1000))}s`:'⏺'})}
+function renderRecStop(){const r=renderRec;if(!r)return;clearTimeout(r.timer);clearInterval(r.tick);renderRec=null;renderRecPaint();try{r.mr.stop()}catch{}}
+async function renderRecord(el,w){
+  if(renderRec){renderRecStop();return}
+  const cv=el.querySelector('canvas'),type=renderRecType();
+  if(!cv?.captureStream||!type){showError('Questo browser non sa registrare video della pagina (serve Chrome o Edge).');return}
+  if(w.view==='plot'){w.view='render';el.querySelectorAll('.seg [data-v]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.v==='render'));save()}
+  const show=allW().find(x=>x.type==='timeline'&&isShowTimeline(x));
+  const items=[10,30,60].map(s=>({label:`⏺ ${s} s, quello che succede ora`,value:{s}}));
+  if(show)items.push(...[30,60].map(s=>({label:`⏺ ${s} s, show dall'inizio (▶ timeline)`,value:{s,start:true}})));
+  const v=await uiChoose('Video del Render',items,{hint:"Registra il Palco com'è adesso sullo schermo (telecamera e zoom compresi). \"Show dall'inizio\" fa ripartire la timeline: le luci vere la seguono."});
+  if(!v)return;
+  const chunks=[],mr=new MediaRecorder(cv.captureStream(30),{mimeType:type,videoBitsPerSecond:4e6});
+  mr.ondataavailable=e=>{if(e.data?.size)chunks.push(e.data)};
+  mr.onstop=()=>{if(!chunks.length){showError('Video vuoto: riprova.');return}
+    const blob=new Blob(chunks,{type:type.split(';')[0]}),a=document.createElement('a'),d=new Date(),p=n=>String(n).padStart(2,'0');
+    const name=(L._projectName||'palco').replace(/[^\w\- ]+/g,'-').trim().replace(/\s+/g,'_');
+    a.href=URL.createObjectURL(blob);a.download=`render_${name}_${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.${type.includes('mp4')?'mp4':'webm'}`;
+    document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),60000);
+    showInfo(`Video del Render salvato: ${a.download} (${(blob.size/1048576).toFixed(1)} MB).`)};
+  if(v.start&&show){tlAct(show,'start');await playShowClock(show)}
+  mr.start(1000);
+  renderRec={mr,until:Date.now()+v.s*1000,timer:setTimeout(renderRecStop,v.s*1000),tick:setInterval(renderRecPaint,500)};renderRecPaint();
+}
+
 // telecamera del Render (per tablet, non salvata): gira attorno, sali/scendi, viste rapide
 function camOf(w){const ui=_stageUI[w.id]||(_stageUI[w.id]={});return ui.cam||(ui.cam={yaw:0,elev:0})}
 function camAction(w,a){const c=camOf(w);
@@ -634,11 +665,12 @@ registerWidget('stage',{oscAddress:false,
     }
   }},
   size:[8,6],label:'Palco',showsValue:false,showsAddr:false,
-  inner:w=>`<canvas></canvas><div class="seg"><button data-v="render" aria-pressed="${w.view!=='plot'}">Render</button><button data-v="plot" aria-pressed="${w.view==='plot'}">Pianta</button><button data-act="syncall" title="Invia a DMX Master solo le fixture patchabili DMX. È un invio separato dall'autosalvataggio del layout; LED wall escluse.">⇪ TD</button><button data-act="importtd" title="Importa da DMX Master la patch delle sole fixture DMX; le fixture non-DMX restano in Plancia.">⇩ TD</button><button data-act="more" title="Scene, modelli, gruppi, lampade, spazio, AI e pulizia">☰ Strumenti</button><span class="seg-more" hidden><button data-act="replacepatch">⇪ Sostituisci tutta la patch</button><button data-act="resolve" title="Pulisce i doppioni DMX in TD e reimporta la patch; le fixture non-DMX restano in Plancia.">🧹 TD</button><button data-act="scenes" title="Scene di DMX Master: cattura dal vivo con categorie, richiama, ricattura, rinomina, elimina">▣ Scene</button><button data-act="stage-ai" title="Palco da descrizione: lo descrivi a parole, Ollama prepara le fixture nella Pianta">✨ AI</button><button data-act="space" title="Misure di palco, platea, regia e sala: ingombro totale dello show">📐 Spazio</button><button data-act="lamps" title="Lampade a scarica delle teste (iSpot...): accendi e spegni da DMX Master">💡 Lampade</button><button data-act="models" title="Modelli di fixture di DMX Master: canali, colore lampada, ruota colori e gobo delle teste">▤ Modelli</button><button data-act="groups" title="Gruppi DMX (rig di DMX Master): front, back, teste, LED bar, haze, blinder e rig nuovi">▦ Gruppi</button><button data-act="types" title="Invia la tassonomia dei tipi di Plancia a DMX Master (sostituisce quella attuale).">📋 TD</button></span></div><div class="sel-bar" hidden></div><div class="sv-cam"><button data-cam="left" title="Gira attorno al palco (anche Shift + trascina)">⟲</button><button data-cam="right" title="Gira attorno al palco">⟳</button><button data-cam="up" title="Più in alto">△</button><button data-cam="down" title="Più in basso">▽</button><button data-cam="front" title="Vista dal pubblico">Pubblico</button><button data-cam="sl" title="Dal lato sinistro">Sx</button><button data-cam="sr" title="Dal lato destro">Dx</button><button data-cam="top" title="Dall'alto">Alto</button></div><div class="sv-zoom"><button data-selmode title="Selezione: tocca più luci o trascina un riquadro (anche Shift + clic)">⬚</button><button data-zoom="out" title="Allontana (anche rotella o due dita)">−</button><button data-zoom="in" title="Avvicina (anche rotella o due dita)">+</button><button data-zoom="fit" title="Vista intera">⤢</button></div><div class="hud"></div>`,
+  inner:w=>`<canvas></canvas><div class="seg"><button data-v="render" aria-pressed="${w.view!=='plot'}">Render</button><button data-v="plot" aria-pressed="${w.view==='plot'}">Pianta</button><button data-act="syncall" title="Invia a DMX Master solo le fixture patchabili DMX. È un invio separato dall'autosalvataggio del layout; LED wall escluse.">⇪ TD</button><button data-act="importtd" title="Importa da DMX Master la patch delle sole fixture DMX; le fixture non-DMX restano in Plancia.">⇩ TD</button><button data-act="more" title="Scene, modelli, gruppi, lampade, spazio, AI e pulizia">☰ Strumenti</button><span class="seg-more" hidden><button data-act="replacepatch">⇪ Sostituisci tutta la patch</button><button data-act="resolve" title="Pulisce i doppioni DMX in TD e reimporta la patch; le fixture non-DMX restano in Plancia.">🧹 TD</button><button data-act="scenes" title="Scene di DMX Master: cattura dal vivo con categorie, richiama, ricattura, rinomina, elimina">▣ Scene</button><button data-act="stage-ai" title="Palco da descrizione: lo descrivi a parole, Ollama prepara le fixture nella Pianta">✨ AI</button><button data-act="space" title="Misure di palco, platea, regia e sala: ingombro totale dello show">📐 Spazio</button><button data-act="lamps" title="Lampade a scarica delle teste (iSpot...): accendi e spegni da DMX Master">💡 Lampade</button><button data-act="models" title="Modelli di fixture di DMX Master: canali, colore lampada, ruota colori e gobo delle teste">▤ Modelli</button><button data-act="groups" title="Gruppi DMX (rig di DMX Master): front, back, teste, LED bar, haze, blinder e rig nuovi">▦ Gruppi</button><button data-act="types" title="Invia la tassonomia dei tipi di Plancia a DMX Master (sostituisce quella attuale).">📋 TD</button></span></div><div class="sel-bar" hidden></div><div class="sv-cam"><button data-cam="left" title="Gira attorno al palco (anche Shift + trascina)">⟲</button><button data-cam="right" title="Gira attorno al palco">⟳</button><button data-cam="up" title="Più in alto">△</button><button data-cam="down" title="Più in basso">▽</button><button data-cam="front" title="Vista dal pubblico">Pubblico</button><button data-cam="sl" title="Dal lato sinistro">Sx</button><button data-cam="sr" title="Dal lato destro">Dx</button><button data-cam="top" title="Dall'alto">Alto</button><button data-rec title="Registra un video del Render (10-60 s) da far vedere">⏺</button></div><div class="sv-zoom"><button data-selmode title="Selezione: tocca più luci o trascina un riquadro (anche Shift + clic)">⬚</button><button data-zoom="out" title="Allontana (anche rotella o due dita)">−</button><button data-zoom="in" title="Avvicina (anche rotella o due dita)">+</button><button data-zoom="fit" title="Vista intera">⤢</button></div><div class="hud"></div>`,
   mounted:(el,w)=>{sizeCanvas(el);svBind(el,w)},
   // barra in alto: vista e strumenti; nella Pianta trascina e tocca le fixture;
   // nel Render un tocco riprova le anteprime video bloccate dei LED wall
   onPointer(e,el,w){svBind(el,w);const zb=e.target.closest('[data-zoom]');if(zb){svButton(el,w,zb.dataset.zoom);return}
+      const rb=e.target.closest('[data-rec]');if(rb){e.preventDefault();renderRecord(el,w);return}
       const cb=e.target.closest('[data-cam]');if(cb){e.preventDefault();camAction(w,cb.dataset.cam);return}
       const sb=e.target.closest('[data-sel],[data-selmode]');if(sb){e.preventDefault();plotLastW=w;if(w.view!=='plot'&&sb.dataset.selmode!=null){w.view='plot';el.querySelectorAll('.seg [data-v]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.v==='plot'));save()}
         selAction(w,sb.dataset.selmode!=null?'mode':sb.dataset.sel);return}
