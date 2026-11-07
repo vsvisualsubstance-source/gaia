@@ -13,8 +13,20 @@ const chaseCol=(c,i,n,t)=>SH.chase===3?hsv2rgb((t*.00018+i/Math.max(1,n))%1,1,Ma
 // DMX Master accesa ma senza uscita per quella luce (modello coi canali ancora da compilare):
 // il Render la simula col rig di TD, cioe' la sua palette attiva (che cambia con le scene)
 // fatta girare come la fa girare TD, e il suo livello; null = TD non dice niente di quel rig
+// palette di un rig adesso, dalla fonte piu' fresca: la scena appena richiamata (dmx_live,
+// ~1/s), la config dei rig (~ogni 3 s) o lo stato di TD (ogni 10 s): col solo stato il Render
+// restava indietro di secondi rispetto alle cue (2026-11-07)
+let _simScene={k:'',at:0};
+function rigPaletteNow(id,r,key){
+  const p=G.devices[id]?.params||{},c=[{pal:p['dmx_'+r+'_palette'],at:G.devices[id]?._seen||0}];
+  const rc=G.tdState?.[id]?.dmx_rig_config,rv=rc?.params?.dmx_rig_config?.[key]?.palette;if(rv)c.push({pal:rv,at:rc.at||0});
+  const sc=DMX_OUTPUT.scene;
+  if(sc?.scene){const k=sc.scene+'|'+sc.ts;if(_simScene.k!==k)_simScene={k,at:Date.now()};
+    const x=tdScenes().find(t=>t.id===sc.scene),cell=x&&smCell(x,{key,kind:'color'});if(cell?.palette)c.push({pal:cell.palette,at:_simScene.at})}
+  return c.filter(x=>x.pal).sort((a,b)=>b.at-a.at)[0]?.pal;
+}
 function tdRigSim(group,t,i,n){const id=dmxId(),p=G.devices[id]?.params;if(!p||!dmxOutputFresh())return null;
-  const g=(L.groups||[]).find(x=>x.group===group),r=g?.bind==='rig_a'?'a':g?.bind==='rig_b'?'b':group,pn=`dmx_${r}_palette`,name=p[pn];
+  const g=(L.groups||[]).find(x=>x.group===group),r=g?.bind==='rig_a'?'a':g?.bind==='rig_b'?'b':group,pn=`dmx_${r}_palette`,name=rigPaletteNow(id,r,r==='a'||r==='b'?'rig_'+r:group);
   const cols=(name==='Custom'?[1,2,3,4,5].map(k=>p[`dmx_${r}_custom_color${k}`]):dmxPaletteColors(G.dxm?.[id],pn)?.colors?.[name])?.filter(Array.isArray);
   if(!cols?.length)return null;const sp=+(rigConfigValues()[r==='a'||r==='b'?'rig_'+r:r]?.color_speed)||.2;
   const u=((t/1000*sp*.5+i/Math.max(1,n))%1+1)%1*cols.length,k=Math.floor(u)%cols.length,f=u-Math.floor(u),c0=cols[k],c1=cols[(k+1)%cols.length];

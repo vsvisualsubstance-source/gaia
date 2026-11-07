@@ -297,8 +297,11 @@ function paintTdEnum(el,w){
   const pal=dmxPaletteColors(G.dxm[info.id],pp);
   const custom=[1,2,3,4,5].map(k=>params[pp.replace(/_palette$/,`_custom_color${k}`)]).filter(Array.isArray);
   const group=dmxPaletteGroup(pp),live=group&&dmxOutputFresh()?dmxGroupColor(group,tdGroupOf):null;
+  // palette accesa adesso dalla fonte piu' fresca (scena appena richiamata, config dei rig), non
+  // solo dallo stato di TD che arriva ogni 10 s
+  const pm=/^dmx_(.+)_palette$/.exec(pp),curPal=(pm&&rigPaletteNow(info.id,pm[1],pm[1]==='a'||pm[1]==='b'?'rig_'+pm[1]:pm[1]))??info.value;
   sc.querySelectorAll('.si').forEach((n,i)=>{
-    const o=String(opts[i]),on=String(info.value)===o;n.classList.toggle('on',on);
+    const o=String(opts[i]),on=String(curPal)===o;n.classList.toggle('on',on);
     const cols=o==='Custom'?custom:pal?.colors?.[o]||null;
     const grad=cols?.length?dmxGradient([[cols,o==='Custom'||pal?.stepped.has(o)]]):'';
     const strip=n.querySelector('.pal');if(strip&&strip._g!==grad){strip._g=grad;strip.style.background=grad}

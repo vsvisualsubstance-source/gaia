@@ -131,16 +131,17 @@ function csState(w){
 }
 function paintCueStack(el,w,force){
   const box=el.querySelector('.cs');if(!box)return;
-  const {list,act,next}=csState(w),sig=JSON.stringify([list.map(s=>[s.index,s.label||s.id]),act,next,SH.fade.toFixed(1)]);
+  const {list,act,next}=csState(w),ch=chaseRun(),chw=ch&&ch.where!=='timeline'?ch.name:'',sig=JSON.stringify([list.map(s=>[s.index,s.label||s.id]),act,next,SH.fade.toFixed(1),chw]);
   if(!force&&box._sig===sig)return;box._sig=sig;
-  box.innerHTML=list.length?`<div class="cs-list">${list.map(s=>{const look=tdSceneLook(s);return`<button class="cs-row${s.index===act?' act':''}${s.index===next?' nxt':''}" data-cs="${s.index}">
+  box.innerHTML=(chw?`<button class="btn cs-chwarn" data-cs-act="chase-stop" title="Una sequenza dal vivo richiama scene a tempo: GO e timeline vengono coperti">⚠ Sequenza "${esc(chw)}" in corso · ■ STOP</button>`:'')+(list.length?`<div class="cs-list">${list.map(s=>{const look=tdSceneLook(s);return`<button class="cs-row${s.index===act?' act':''}${s.index===next?' nxt':''}" data-cs="${s.index}">
       <span class="cs-no">${s.index===act?'▶':s.index===next?'NEXT':String(s.index).padStart(2,'0')}</span>${(u=>u?`<img class="cs-th" src="${u}" alt="">`:'')(scenePreviewURL(s))}<b>${esc(s.label||s.id)}</b><i style="background:${smLookGrad(s)||look.grad||'transparent'}"></i></button>`}).join('')}</div>
     <div class="cs-btns"><button class="btn cs-back" data-cs-act="back">◀ BACK</button><button class="btn primary cs-go" data-cs-act="go">GO ▶<small>fade ${SH.fade.toFixed(1)} s</small></button></div>`
-    :'<p class="hint">Nessuna scena da DMX Master (non collegato o nessuna scena catturata: ▣ Scene nel Palco).</p>';
+    :'<p class="hint">Nessuna scena da DMX Master (non collegato o nessuna scena catturata: ▣ Scene nel Palco).</p>');
 }
 function cueStackDown(e,el,w){
   const row=e.target.closest('[data-cs]'),act=e.target.closest('[data-cs-act]');if(!row&&!act)return;e.preventDefault();
   const {list,ai,next}=csState(w);
+  if(act?.dataset.csAct==='chase-stop'){chaseStop();showInfo('Sequenza fermata: GO e timeline comandano di nuovo le scene.');paintCueStack(el,w,true);return}
   if(row)CS_NEXT.set(w.id,+row.dataset.cs);
   else if(act.dataset.csAct==='go'&&next!=null){fire('/dmx/scene',[next],w.oscChannel);const i=list.findIndex(s=>s.index===next);CS_NEXT.set(w.id,list[i+1]?.index??list[0].index)}
   else if(act.dataset.csAct==='back'&&ai>0){const prev=list[ai-1].index;fire('/dmx/scene',[prev],w.oscChannel);CS_NEXT.set(w.id,list[ai]?.index)}

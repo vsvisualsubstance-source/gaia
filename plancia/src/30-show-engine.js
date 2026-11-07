@@ -142,7 +142,12 @@ function renderCueEditor(w,cues,meta={}){
     targets:[row.querySelector('.cue-scene').value,row.querySelector('.cue-fade').value.trim()!==''?`fade=${+row.querySelector('.cue-fade').value}`:'',
       row.querySelector('.cue-extra').value.trim()].filter(Boolean).join('; ')
   }));
-  s.querySelectorAll('.cue-scene').forEach(sel=>sel.onchange=()=>{const sw=sel.closest('.cue-edit-row').querySelector('.cue-sw');if(sw)sw.style.background=cueSceneSwatch(sel.value)});
+  // il nome della cue segue la scena se era il nome della scena di prima, vuoto o "Cue N"
+  // (2026-11-07: cue "colore_blu" che mandava pal_plasma)
+  const sceneNames=v=>{const x=String(v||'').startsWith('@')?tdScenes().find(t=>t.id===String(v).slice(1)):null;return x?[x.id,x.label||x.id]:[]};
+  s.querySelectorAll('.cue-scene').forEach(sel=>{let prev=sel.value;sel.onchange=()=>{const row=sel.closest('.cue-edit-row'),sw=row.querySelector('.cue-sw');if(sw)sw.style.background=cueSceneSwatch(sel.value);
+    const nm=row.querySelector('.cue-name'),cur=nm?nm.value.trim():'',nu=sceneNames(sel.value);
+    if(nm&&nu.length&&(!cur||/^Cue \d+$/.test(cur)||sceneNames(prev).includes(cur)))nm.value=nu[1];prev=sel.value}});
   // durata modificabile qui (prima era fissa: con la timeline di TD a 10 s
   // ogni cue oltre 0:10 veniva rifiutata e non c'era modo di allungarla)
   const dur=()=>{const d=parseCueTime(s.querySelector('#cueDur').value);return d>0?d:duration};
@@ -566,7 +571,7 @@ async function playShowClock(w){
   }
   showClockCommand(w,'play');
 }
-function tlAct(w,act){if(act==='live'){toggleShowActive();return}if(act==='vlive'){toggleVideoActive();return}if(act==='vcue'){openVideoCueEditor(w);return}if(act==='llive'){toggleLaserActive();return}if(act==='mlive'){toggleHeadMotionActive();return}if(act==='ccue'){openChaseCueEditor(w);return}if(act==='csend'){chaseSendTimeline(w);return}if(act==='tlmenu'){tlMenu(w);return}if(act==='fcue'){openFxCueEditor(w);return}if(act==='tap'){const b=tapTempo();if(b)showInfo(`Tempo: ${b} BPM`);return}if(act==='mcue'){openHeadMotionCueEditor(w);return}if(act==='lcue'){openLaserCueEditor(w);return}if(act==='alive'){toggleAudioActive();return}if(act==='acue'){openAudioCueEditor(w);return}const r=rt(w),cues=parseCues(w);
+function tlAct(w,act){if(act==='chase-stop'){chaseStop();showInfo('Sequenza fermata: ora le cue LUCI della timeline comandano le scene.');return}if(act==='live'){toggleShowActive();return}if(act==='vlive'){toggleVideoActive();return}if(act==='vcue'){openVideoCueEditor(w);return}if(act==='llive'){toggleLaserActive();return}if(act==='mlive'){toggleHeadMotionActive();return}if(act==='ccue'){openChaseCueEditor(w);return}if(act==='csend'){chaseSendTimeline(w);return}if(act==='tlmenu'){tlMenu(w);return}if(act==='fcue'){openFxCueEditor(w);return}if(act==='tap'){const b=tapTempo();if(b)showInfo(`Tempo: ${b} BPM`);return}if(act==='mcue'){openHeadMotionCueEditor(w);return}if(act==='lcue'){openLaserCueEditor(w);return}if(act==='alive'){toggleAudioActive();return}if(act==='acue'){openAudioCueEditor(w);return}const r=rt(w),cues=parseCues(w);
   if(isShowTimeline(w)&&showClock.authority){
     const sample=showClockSample();
     if(act==='edit-cues'){openCueEditor(w);return}
