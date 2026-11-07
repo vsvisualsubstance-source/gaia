@@ -110,6 +110,8 @@ pub enum Cmd {
     Tempo(usize, f64),
     Range(usize, f64),
     Nudge(usize, f64),
+    /// fase fine a mano, in ms (+ = il deck anticipa); resta finche' non la riporti a 0
+    Trim(usize, f64),
     Sync(usize, Option<bool>),
     Master(usize),
     Keylock(usize),
@@ -158,6 +160,8 @@ pub struct DeckState {
     pub snap: bool,
     /// deck in SYNC che suona col master: scarto di fase dal master in ms (+ = in ritardo)
     pub phase_err: Option<f64>,
+    /// fase fine impostata a mano (ms, + = anticipa)
+    pub trim_ms: f64,
 }
 
 #[derive(Clone, Serialize)]
@@ -214,11 +218,13 @@ struct Deck {
     phase_off: f64,
     nudging: bool,
     phase_err: Option<f64>,
+    /// fase fine a mano (secondi, + = anticipa): il SYNC la rispetta
+    trim: f64,
 }
 
 impl Deck {
     fn new() -> Self {
-        Deck { track: None, pos: 0.0, playing: false, tempo: 0.0, range: 0.08, keylock: true, sync: false, cue: 0.0, hot: [None; HOT], nudge: 0.0, preview: false, scrub: false, snap: true, scrub_target: 0.0, scrub_vel: 0.0, phase_off: 0.0, nudging: false, phase_err: None }
+        Deck { track: None, pos: 0.0, playing: false, tempo: 0.0, range: 0.08, keylock: true, sync: false, cue: 0.0, hot: [None; HOT], nudge: 0.0, preview: false, scrub: false, snap: true, scrub_target: 0.0, scrub_vel: 0.0, phase_off: 0.0, nudging: false, phase_err: None, trim: 0.0 }
     }
     /// battiti dall'ancora (non piegati): per confrontare deck a tempo meta' o doppio
     fn beats(&self) -> f64 {
@@ -490,18 +496,20 @@ impl Engine {
             return 0.0;
         };
         let period = self.decks[k].track.as_ref().map(|t| t.period()).unwrap_or(0.0);
+        // anche il nudge sul master: il deck agganciato non lo deve inseguire
+        let master_nudge = self.decks[m].nudge != 0.0;
         let d = &mut self.decks[k];
         // nudge a orecchio: niente aggancio mentre lo tieni; quando lo lasci, quello e' il nuovo riferimento
-        if d.nudge != 0.0 {
+        if d.nudge != 0.0 || master_nudge {
             d.nudging = true;
             d.phase_err = Some(0.0);
             return 0.0;
         }
         if d.nudging {
             d.nudging = false;
-            d.phase_off = raw;
+            d.phase_off = raw + if period > 0.0 { d.trim / period } else { 0.0 };
         }
-        let mut e = raw - d.phase_off;
+        let mut e = raw - d.phase_off + if period > 0.0 { d.trim / period } else { 0.0 };
         e -= e.round();
         let es = e * period;
         if es.abs() > PLL_SNAP {
@@ -519,7 +527,7 @@ impl Engine {
         let Some(dp) = self.phase_gap(k, m, false) else { return };
         let d = &mut self.decks[k];
         let p = d.track.as_ref().map(|t| t.period()).unwrap_or(0.0);
-        d.pos = d.clamp_pos(d.pos + dp * p);
+        d.pos = d.clamp_pos(d.pos + dp * p + d.trim);
         d.phase_off = 0.0;
         d.nudging = false;
     }
@@ -670,25 +678,13 @@ impl Engine {
                 if !v.is_finite() {
                     return;
                 }
-                self.decks[k].tempo = v.clamp(-1.0, 1.0);
-                // deck in sync: il fader muove il master (come Traktor), il deck lo segue
-                if self.decks[k].sync {
-                    if let Some(m) = self.master_of(k) {
-                        let (Some(dt), Some(mt)) = (self.decks[k].track.clone(), self.decks[m].track.clone()) else { return };
-                        if dt.bpm > 0.0 && mt.bpm > 0.0 {
-                            let d = &self.decks[k];
-                            let mut target = dt.bpm * (1.0 + d.tempo * d.range);
-                            while target / mt.bpm > 1.5 {
-                                target /= 2.0;
-                            }
-                            while target / mt.bpm < 0.67 {
-                                target *= 2.0;
-                            }
-                            let md = &mut self.decks[m];
-                            md.tempo = ((target / mt.bpm - 1.0) / md.range).clamp(-1.0, 1.0);
-                        }
-                    }
+                // deck agganciato a un master: toccare il suo tempo vuol dire regolarlo a mano,
+                // quindi esce dal SYNC; l'altro deck non cambia mai
+                if self.decks[k].sync && self.master_of(k).is_some() {
+                    self.decks[k].sync = false;
+                    self.decks[k].phase_err = None;
                 }
+                self.decks[k].tempo = v.clamp(-1.0, 1.0);
             }
             Range(k, v) => {
                 if [0.08, 0.16, 0.5].iter().any(|r| (r - v).abs() < 1e-6) {
@@ -698,6 +694,18 @@ impl Engine {
             Nudge(k, v) => {
                 if v.is_finite() {
                     self.decks[k].nudge = v.clamp(-0.2, 0.2);
+                }
+            }
+            Trim(k, ms) => {
+                if ms.is_finite() {
+                    let d = &mut self.decks[k];
+                    let v = (ms / 1000.0).clamp(-0.05, 0.05);
+                    let delta = v - d.trim;
+                    d.trim = v;
+                    // subito, senza aspettare l'aggancio (che poi la mantiene)
+                    if d.track.is_some() {
+                        d.pos = d.clamp_pos(d.pos + delta);
+                    }
                 }
             }
             Sync(k, v) => {
@@ -765,7 +773,7 @@ impl Engine {
         let d = &mut self.decks[k];
         d.cue = d.clamp_pos(cue);
         d.hot = hot;
-        d.pos = start.filter(|x| x.is_finite()).map(|x| d.clamp_pos(x)).unwrap_or(d.cue);
+        d.pos = start.filter(|x| x.is_finite()).map(|x| d.clamp_pos(x)).unwrap_or(0.0);
         d.playing = false;
         d.preview = false;
         d.nudge = 0.0;
@@ -795,6 +803,7 @@ impl Engine {
             scrub: d.scrub,
             snap: d.snap,
             phase_err: d.phase_err,
+            trim_ms: (d.trim * 1000.0 * 10.0).round() / 10.0,
         };
         let s = Snapshot {
             t: self.frames as f64 / self.fs,
@@ -1177,6 +1186,59 @@ mod tests {
     }
 
     #[test]
+    fn caricata_parte_dall_inizio_anche_col_cue_salvato() {
+        let (mut e, tx, _o) = engine();
+        tx.send(Msg::Loaded { deck: 0, track: clicks("a", 120.0, 0.0, 120.0), cue: 95.0, hot: [None; HOT], start: None, play: false, force: false }).unwrap();
+        run(&mut e, 0.01);
+        assert!(e.decks[0].pos.abs() < 1e-9, "dall'inizio: {}", e.decks[0].pos);
+        assert!((e.decks[0].cue - 95.0).abs() < 1e-9, "il CUE salvato resta");
+    }
+
+    #[test]
+    fn tempo_a_mano_sul_deck_in_sync_non_tocca_il_master() {
+        let (mut e, tx, _o) = engine();
+        tx.send(Msg::Loaded { deck: 0, track: clicks("a", 120.0, 0.0, 120.0), cue: 0.0, hot: [None; HOT], start: None, play: false, force: false }).unwrap();
+        tx.send(Msg::Loaded { deck: 1, track: clicks("b", 124.0, 0.0, 120.0), cue: 0.0, hot: [None; HOT], start: None, play: false, force: false }).unwrap();
+        tx.send(Msg::Cmd(Cmd::Play(0, None))).unwrap();
+        run(&mut e, 1.0);
+        tx.send(Msg::Cmd(Cmd::Sync(1, None))).unwrap();
+        tx.send(Msg::Cmd(Cmd::Play(1, None))).unwrap();
+        run(&mut e, 1.0);
+        let master = e.decks[0].tempo;
+        e.command(Cmd::Tempo(1, e.decks[1].tempo + 0.01));
+        run(&mut e, 1.0);
+        assert_eq!(e.decks[0].tempo, master, "il master non cambia");
+        assert!(!e.decks[1].sync, "il deck regolato a mano esce dal SYNC");
+    }
+
+    #[test]
+    fn fase_fine_resta_e_il_nudge_del_master_non_si_insegue() {
+        let (mut e, tx, _o) = engine();
+        tx.send(Msg::Loaded { deck: 0, track: clicks("a", 120.0, 0.0, 120.0), cue: 0.0, hot: [None; HOT], start: None, play: false, force: false }).unwrap();
+        tx.send(Msg::Loaded { deck: 1, track: clicks("b", 120.0, 0.0, 120.0), cue: 0.0, hot: [None; HOT], start: None, play: false, force: false }).unwrap();
+        tx.send(Msg::Cmd(Cmd::Play(0, None))).unwrap();
+        run(&mut e, 1.0);
+        tx.send(Msg::Cmd(Cmd::Sync(1, None))).unwrap();
+        tx.send(Msg::Cmd(Cmd::Play(1, None))).unwrap();
+        run(&mut e, 2.0);
+        // fase fine: B anticipa di 10 ms e ci resta, il master non si muove
+        let tempo_a = e.decks[0].tempo;
+        e.command(Cmd::Trim(1, 10.0));
+        run(&mut e, 10.0);
+        assert!((gap_ms(&e) + 10.0).abs() < 0.5, "B 10 ms avanti: {:.2} ms", gap_ms(&e));
+        assert_eq!(e.decks[0].tempo, tempo_a);
+        // nudge sul master: B non lo insegue, lo scarto nuovo resta
+        e.command(Cmd::Nudge(0, 0.04));
+        run(&mut e, 0.5);
+        e.command(Cmd::Nudge(0, 0.0));
+        run(&mut e, 0.02);
+        let after = gap_ms(&e);
+        run(&mut e, 10.0);
+        assert!((after + 10.0).abs() > 15.0, "il nudge del master ha spostato la fase ({after:.2} ms)");
+        assert!((gap_ms(&e) - after).abs() < 0.5, "resta: {after:.2} -> {:.2} ms", gap_ms(&e));
+    }
+
+    #[test]
     fn sync_a_tempo_meta() {
         // 140 contro 70: il deck a 70 resta a 70 (un suo battito = due del master) e in fase
         let (mut e, tx, _o) = engine();
@@ -1278,7 +1340,7 @@ mod tests {
     #[test]
     fn cue_tenuto_poi_play_continua() {
         let (mut e, tx, _o) = engine();
-        tx.send(Msg::Loaded { deck: 0, track: clicks("a", 120.0, 0.0, 20.0), cue: 2.0, hot: [None; HOT], start: None, play: false, force: false }).unwrap();
+        tx.send(Msg::Loaded { deck: 0, track: clicks("a", 120.0, 0.0, 20.0), cue: 2.0, hot: [None; HOT], start: Some(2.0), play: false, force: false }).unwrap();
         run(&mut e, 0.01);
         e.command(Cmd::CueDown(0)); // sul cue: preascolto
         assert!(e.decks[0].playing && e.decks[0].preview);

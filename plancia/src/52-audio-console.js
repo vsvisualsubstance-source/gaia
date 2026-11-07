@@ -51,7 +51,8 @@ function auApplyState(s){
   const now=performance.now();AU.liveAt=now;AU.live=true;AU.master=s.master==='B'?'B':'A';AU.out=s.outputs?.[0]||null;AU.cueOut=(s.outputs||[]).find(o=>o.role==='cue')||null;AU.lightsOut=(s.outputs||[]).find(o=>o.role==='lights')||null;AU.phones=!!s.headphones;AU.meterM=+s.meters?.master||0;AU.meterL=+(s.meters?.master_l??s.meters?.master)||0;AU.meterR=+(s.meters?.master_r??s.meters?.master)||0;
   for(const k of['A','B']){const sd=s.decks?.[k],d=AU.decks[k];if(!sd)continue;
     for(const f of['playing','tempo','range','keylock','sync','cue','nudge','preview','scrub','snap'])if(sd[f]!=null)d[f]=sd[f];
-    d.phaseErr=sd.phase_err??null;   // scarto di fase dal master (ms), solo deck in SYNC che suona
+    d.phaseErr=sd.phase_err??null;
+    d.trimMs=sd.trim_ms??0;          // fase fine a mano (ms, + = anticipa)   // scarto di fase dal master (ms), solo deck in SYNC che suona
     d.hot=Array.from({length:AU_HOT_SAVED},(_,i)=>sd.hot?.[i]??null);
     if(!d.localScrub)d.pos=sd.pos;d.basePos=sd.pos;d.baseAt=now;
     // traccia caricata da un altro tablet (o tolta): la pagina prende forma d'onda e griglia
@@ -155,11 +156,10 @@ function auCmd(c){
       if(c.op==='clear'){d.hot[c.n]=null;auSaveCues(c.deck)}
       else if(d.hot[c.n]==null){d.hot[c.n]=auSnap(d,d.pos);auSaveCues(c.deck)}
       else{d.pos=d.hot[c.n];if(d.playing&&d.sync)auSyncPhase(c.deck)}break;
-    case'deck.tempo':{d.tempo=Math.max(-1,Math.min(1,c.value));
-      // deck in sync: il fader muove il master (come Traktor), il deck lo segue
-      const m=d.sync&&auMasterOf(c.deck);
-      if(m&&m.track?.bpm&&d.track?.bpm){let target=d.track.bpm*(1+d.tempo*d.range);const r=m.track.bpm;
-        while(target/r>1.5)target/=2;while(target/r<.67)target*=2;m.tempo=Math.max(-1,Math.min(1,(target/r-1)/m.range))}break}
+    case'deck.tempo':d.tempo=Math.max(-1,Math.min(1,c.value));
+      // deck agganciato: regolarlo a mano lo toglie dal SYNC, l'altro deck non cambia mai
+      if(d.sync&&auMasterOf(c.deck))d.sync=false;break;
+    case'deck.trim':{const v=Math.max(-50,Math.min(50,+c.ms||0));if(d.track)d.pos=Math.max(0,d.pos+(v-(d.trimMs||0))/1000);d.trimMs=v;break}
     case'deck.range':d.range=c.value;break;
     case'deck.nudge':d.nudge=c.value;break;
     case'deck.sync':d.sync=!d.sync;if(d.sync){auSyncTempo(c.deck);if(d.playing)auSyncPhase(c.deck)}break;
@@ -234,6 +234,8 @@ function auDeckHtml(w){
   <div class="au-tempo"><button class="au-btn" data-au="nudge" data-v="-1" title="Tieni premuto: rallenta">‹‹</button>
     <input type="range" min="-1" max="1" step="0.001" value="0" data-au-r="tempo" data-deck="${k}" title="Tempo (doppio tocco: 0)">
     <button class="au-btn" data-au="nudge" data-v="1" title="Tieni premuto: accelera">››</button>
+    <button class="au-btn au-trim" data-au="trim" data-v="-1" title="Fase fine: 1 ms indietro (resta). Doppio tocco: 0">‹1</button>
+    <button class="au-btn au-trim" data-au="trim" data-v="1" title="Fase fine: 1 ms avanti (resta). Doppio tocco: 0">1›</button>
     <select data-au-s="range" data-deck="${k}">${AU_RANGES.map(r=>`<option value="${r}">±${r*100}%</option>`).join('')}</select></div>
 </div>`}
 function auPaintDeck(el,w){
@@ -246,7 +248,7 @@ function auPaintDeck(el,w){
   set('.au-bpm i',`${d.tempo*d.range>=0?'+':''}${(d.tempo*d.range*100).toFixed(1)}%`);
   set('.au-time .el',d.playing?auFmt(d.pos):auFmtFine(d.pos));set('.au-time .zm',d.zoom+' s');
   box.querySelector('[data-au=snap]')?.classList.toggle('on',d.snap);set('.au-time .rem','-'+auFmt((d.track?.seconds||0)-d.pos));
-  set('.au-time .st',d.gridEdit&&d.track?`GRID · ${d.track.bpm?d.track.bpm.toFixed(2):'—'} BPM${d.track.locked?' · bloccata':''}${AU.live?'':' · serve il motore'}`:audioDoc().active&&G.audioTlSt?.engine?'TIMELINE: comanda la traccia AUDIO':!d.track?'':!auGridOk(d)?'griglia incerta: sync solo tempo':d.sync&&!auMasterOf(k)?'sync: nessun master in onda':AU.live&&d.sync&&d.phaseErr!=null?`SYNC · fase ${d.phaseErr>=0?'+':''}${d.phaseErr.toFixed(1)} ms${Math.abs(d.phaseErr)>5?' · aggancio…':''}`:AU.live?(d.track?.variable?'tempo variabile: controlla la griglia':''):'simulazione');
+  set('.au-time .st',d.gridEdit&&d.track?`GRID · ${d.track.bpm?d.track.bpm.toFixed(2):'—'} BPM${d.track.locked?' · bloccata':''}${AU.live?'':' · serve il motore'}`:audioDoc().active&&G.audioTlSt?.engine?'TIMELINE: comanda la traccia AUDIO':!d.track?'':!auGridOk(d)?'griglia incerta: sync solo tempo':d.sync&&!auMasterOf(k)?'sync: nessun master in onda':AU.live&&d.sync&&d.phaseErr!=null?`SYNC · fase ${d.phaseErr>=0?'+':''}${d.phaseErr.toFixed(1)} ms${d.trimMs?` · fine ${d.trimMs>0?'+':''}${d.trimMs} ms`:''}${Math.abs(d.phaseErr)>5?' · aggancio…':''}`:AU.live?(d.track?.variable?'tempo variabile: controlla la griglia':''):'simulazione');
   const on=(sel,v)=>box.querySelector(sel)?.classList.toggle('on',!!v);
   on('[data-au=grid]',d.gridEdit);
   const hotRow=box.querySelector('.au-hot'),gridRow=box.querySelector('.au-grid');if(gridRow&&gridRow.hidden===!!d.gridEdit){gridRow.hidden=!d.gridEdit;hotRow.hidden=!!d.gridEdit}
@@ -409,6 +411,8 @@ function auDown(e,el,w){
   else if(a==='sync')auCmd({cmd:'deck.sync',deck:k});
   else if(a==='master')auCmd({cmd:'deck.master',deck:k});
   else if(a==='keylock')auCmd({cmd:'deck.keylock',deck:k});
+  else if(a==='trim'){const d=AU.decks[k],now=Date.now(),dbl=b._t&&now-b._t<350;b._t=now;
+    auCmd({cmd:'deck.trim',deck:k,ms:dbl?0:Math.max(-50,Math.min(50,(d.trimMs||0)+ +b.dataset.v))})}
   else if(a==='nudge'){auCmd({cmd:'deck.nudge',deck:k,value:.04*+b.dataset.v});auHold={up:()=>auCmd({cmd:'deck.nudge',deck:k,value:0})}}
   else if(a==='hot'){const n=+b.dataset.n,t=setTimeout(()=>{auCmd({cmd:'deck.hotcue',deck:k,n,op:'clear'});auHold=null},600);
     auHold={up:()=>{clearTimeout(t);auCmd({cmd:'deck.hotcue',deck:k,n,op:'go'})}}}

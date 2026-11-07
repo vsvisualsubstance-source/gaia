@@ -624,7 +624,7 @@ button{cursor:pointer}
 .au-btn.play{font-size:16px}.au-btn.play.on{border-color:var(--ok);color:var(--ok);background:color-mix(in srgb,var(--ok) 16%,var(--panel))}
 .au-btn.cue{border-color:#ff5d5d55}
 .au-hot .au-btn.on{border-color:var(--ok);color:var(--ok)}.au-grid{display:flex;gap:4px}.au-grid[hidden],.au-hot[hidden]{display:none}.au-grid .au-btn{flex:1;min-width:0;padding-inline:2px;font-size:11px;white-space:nowrap}.au-btn.na{opacity:.4}.au-plctl{white-space:nowrap}.au-plctl .au-btn{min-width:30px}.au-plctl .au-btn[disabled]{opacity:.3}tr.au-miss td{color:var(--dim);font-style:italic}
-.au-tempo{display:flex;align-items:center;gap:6px}
+.au-tempo{display:flex;align-items:center;gap:6px}.au-tempo .au-trim{min-width:30px;padding-inline:4px;font-size:11px;color:var(--dim)}
 .au-tempo input{flex:1;min-width:60px}
 .au-mixer{gap:8px}
 .au-strips{flex:1;display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;min-height:0}

@@ -261,13 +261,19 @@ sulle altre uscite e lo segnala nello stato.
 - ogni deck ha un **tempo master**: l'altro deck, il clock interno o
   Ableton Link; un deck in sync segue il tempo del master (*tempo sync*) e
   si allinea alla sua fase usando le griglie (*beat sync*);
-- il fader del tempo di un deck in sync muove il master (come Traktor);
+- regolare un deck non cambia mai l'altro (2026-11-07): il fader del tempo di un deck
+  agganciato a un master lo toglie dal SYNC (il master resta com'e'); il nudge sul master
+  non viene inseguito dal deck agganciato (al rilascio lo scarto nuovo resta);
+- **fase fine** (`deck.trim`, ms, + = anticipa, fino a ±50): sposta subito il deck e il
+  SYNC la mantiene; nella console i tasti ‹1 / 1› (1 ms, doppio tocco = 0), sull'LPD8 le
+  manopole K7 (A) e K8 (B): centro 0, ai lati ±20 ms; la riga di stato mostra "fine";
 - senza griglia (confidenza bassa) il sync e' solo di tempo e la pagina
   lo segnala.
 
 **Regolazioni a mano**:
-- deck: fader del tempo (±8/16/50%), nudge (spinta/freno finche' tenuto),
-  keylock;
+- deck: fader del tempo (±8/16/50%), nudge (spinta/freno finche' tenuto), fase fine,
+  keylock; caricare una traccia parte sempre dall'inizio (0:00), il CUE salvato resta il
+  punto del tasto CUE;
 - griglia: BPM esatto, ×2 / ÷2, sposta ancora (ms), "il battito e' qui",
   tap; ogni correzione **blocca** la griglia: un'analisi nuova non la
   sovrascrive (`locked`). Da riga di comando:

@@ -99,6 +99,7 @@ pub fn parse_cmd(v: &Value) -> Result<Option<Cmd>, String> {
         "deck.tempo" => Cmd::Tempo(d()?, num("value")?),
         "deck.range" => Cmd::Range(d()?, num("value")?),
         "deck.nudge" => Cmd::Nudge(d()?, num("value")?),
+        "deck.trim" => Cmd::Trim(d()?, num("ms")?),
         "deck.sync" => Cmd::Sync(d()?, v.get("value").and_then(Value::as_bool)),
         "deck.master" => Cmd::Master(d()?),
         "deck.keylock" => Cmd::Keylock(d()?),

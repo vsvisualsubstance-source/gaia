@@ -20,7 +20,8 @@
 //   pad modo CC (canale 10, CC 16-19 sopra, 12-15 sotto; valore = forza, 0 = rilascio):
 //     hot cue 1-4 del deck (vuoto = salva, pieno = salta)
 //   manopole K1-K8 (canale 1, CC 70-77): K1 tempo A, K2 nudge A, K3 tempo B,
-//     K4 nudge B, K5 volume cuffia, K6 master; K7-K8 libere
+//     K4 nudge B, K5 volume cuffia, K6 master, K7 fase fine A, K8 fase fine B
+//     (al centro 0, ai lati fino a 20 ms avanti/indietro; il SYNC la mantiene)
 // Con la traccia AUDIO in TIMELINE i comandi dei deck dell'LPD8 si ignorano
 // (li comanda la timeline); cuffia e master restano a mano.
 
@@ -100,6 +101,8 @@ function lpd8Commands(m, st) {
       case 2: case 4: return st.timeline ? [] : [{ cmd: 'deck.nudge', deck: k === 2 ? 'A' : 'B', value: round(bipolar(m.v) * 0.04) }];
       case 5: return [{ cmd: 'mix.set', values: { cue_level: round(x) } }];
       case 6: return [{ cmd: 'mix.set', values: { master: round(x) } }];
+      // fase fine: sposta il deck di qualche ms rispetto al master e ci resta (passi da 0,5 ms)
+      case 7: case 8: return st.timeline ? [] : [{ cmd: 'deck.trim', deck: k === 7 ? 'A' : 'B', ms: Math.round(bipolar(m.v) * 40) / 2 }];
     }
   }
   return [];

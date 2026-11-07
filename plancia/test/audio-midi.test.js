@@ -73,7 +73,9 @@ test('LPD8 manopole e timeline', () => {
   assert.deepEqual(lpd8Commands(cc(1, 73, 0), st), [{ cmd: 'deck.nudge', deck: 'B', value: -0.04 }]);
   assert.deepEqual(lpd8Commands(cc(1, 71, 64), st), [{ cmd: 'deck.nudge', deck: 'A', value: 0 }]);
   assert.deepEqual(lpd8Commands(cc(1, 74, 127), st), [{ cmd: 'mix.set', values: { cue_level: 1 } }]);
-  assert.deepEqual(lpd8Commands(cc(1, 76, 0), st), [], 'K7 libera');
+  assert.deepEqual(lpd8Commands(cc(1, 76, 0), st), [{ cmd: 'deck.trim', deck: 'A', ms: -20 }], 'K7 fase fine A');
+  assert.deepEqual(lpd8Commands(cc(1, 77, 64), st), [{ cmd: 'deck.trim', deck: 'B', ms: 0 }], 'K8 al centro');
+  assert.deepEqual(lpd8Commands(cc(1, 77, 127), st), [{ cmd: 'deck.trim', deck: 'B', ms: 20 }]);
   st.timeline = true;
   assert.deepEqual(lpd8Commands(note(40, 100), st), [], 'timeline: niente play');
   assert.deepEqual(lpd8Commands(cc(1, 70, 10), st), [], 'timeline: niente tempo');
