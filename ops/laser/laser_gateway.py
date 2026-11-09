@@ -127,7 +127,21 @@ def clean_value(key, v):
                 raise ValueError("ogni maschera vuole [x0, y0, x1, y1]")
             out.append(m)
         return out
+    if key == "zone_poly":
+        return _clean_poly(v, allow_empty=True)
+    if key == "mask_polys":
+        return [_clean_poly(m) for m in (v or [])[:8]]
     raise ValueError(f"parametro sconosciuto: {key}")
+
+
+def _clean_poly(v, allow_empty=False):
+    """Forma: lista di punti [x, y] in -1..1, da 3 a 48 punti (vuota = nessuna forma)."""
+    pts = [[max(-1.0, min(1.0, float(p[0]))), max(-1.0, min(1.0, float(p[1])))] for p in (v or [])]
+    if not pts and allow_empty:
+        return []
+    if not 3 <= len(pts) <= 48:
+        raise ValueError("una forma vuole da 3 a 48 punti")
+    return pts
 
 
 # ---------------------------------------------------------------- cubo

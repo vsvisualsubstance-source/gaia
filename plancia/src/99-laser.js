@@ -64,9 +64,31 @@ function lzSlider(cid,key,label,v,min=0,max=1,step=.01){
 function lzZoneHtml(c){
   const [x0,y0,x1,y1]=c.zone||[-1,-1,1,1],L_=(x0+1)/2*100,W_=(x1-x0)/2*100,T_=(1-y1)/2*100,H_=(y1-y0)/2*100;
   const zs=(i,label,v)=>`<label class="ar-sl"><span>${label}<b>${(+v).toFixed(2)}</b></span><input type="range" min="-1" max="1" step=".01" value="${v}" data-lz-z="${i}" data-lz-c="${c.id}"></label>`;
-  return`<div class="lz-zone"><div class="lz-zbox" title="Area di proiezione del cubo; in verde la zona dove il fascio può andare"><i style="left:${L_}%;top:${T_}%;width:${W_}%;height:${H_}%"></i></div>
+  return`<div class="lz-zone"><div class="lz-zbox${LZ_POLY?.cid===c.id?' draw':''}"${LZ_POLY?.cid===c.id?` data-lz="polytap" data-lz-c="${c.id}"`:''} title="Area di proiezione del cubo; in verde la zona dove il fascio può andare"><i style="left:${L_}%;top:${T_}%;width:${W_}%;height:${H_}%"></i>${lzPolySvg(c)}</div>
     <div class="lz-zs">${zs(0,'Sinistra',x0)}${zs(2,'Destra',x1)}${zs(1,'Basso',y0)}${zs(3,'Alto',y1)}</div></div>
-    <button class="btn sm ghost" data-lz="zonereset" data-lz-c="${c.id}">Zona intera</button>`;
+    <button class="btn sm ghost" data-lz="zonereset" data-lz-c="${c.id}">Zona intera</button>
+    ${lzPolyTools(c)}`;
+}
+// forme (zone_poly, mask_polys): si scelgono dai preset o si disegnano toccando il riquadro
+let LZ_POLY=null;   // {cid, target:'zone'|'mask', pts:[[x,y],...]} mentre si disegna
+const lzPolyPoint=([x,y])=>`${((x+1)/2*100).toFixed(1)},${((1-y)/2*100).toFixed(1)}`;
+const lzPolyPts=pts=>(pts||[]).map(lzPolyPoint).join(' ');
+function lzRoundPts(rx,ry,n=32){return Array.from({length:n},(_,i)=>[+(rx*Math.cos(i/n*Math.PI*2)).toFixed(3),+(ry*Math.sin(i/n*Math.PI*2)).toFixed(3)])}
+const LZ_SHAPES={cerchio:()=>lzRoundPts(.9,.9),ovale:()=>lzRoundPts(.95,.55),trapezio:()=>[[-.95,-.8],[.95,-.8],[.55,.8],[-.55,.8]],esagono:()=>lzRoundPts(.9,.9,6)};
+function lzPolyTools(c){
+  const dr=LZ_POLY?.cid===c.id?LZ_POLY:null,mp=Array.isArray(c.mask_polys)?c.mask_polys:[],hasZone=(c.zone_poly||[]).length>=3;
+  if(dr)return`<div class="lz-pdraw"><p class="hint">Tocca il riquadro qui sopra per mettere i punti della ${dr.target==='zone'?'zona':'maschera'}: ${dr.pts.length} punti, ne servono almeno 3.</p>
+    <button class="btn sm primary" data-lz="polysave" data-lz-c="${c.id}"${dr.pts.length<3?' disabled':''}>Salva forma</button><button class="btn sm ghost" data-lz="polyundo" data-lz-c="${c.id}"${dr.pts.length?'':' disabled'}>Togli ultimo</button><button class="btn sm ghost" data-lz="polycancel" data-lz-c="${c.id}">Annulla</button></div>`;
+  return`<div class="lz-pdraw"><p class="hint">Forma della zona: il fascio resta dentro. Vale insieme al rettangolo.</p>
+    ${Object.keys(LZ_SHAPES).map(k=>`<button class="btn sm ghost" data-lz="polypreset" data-lz-v="${k}" data-lz-c="${c.id}">${k[0].toUpperCase()+k.slice(1)}</button>`).join('')}
+    <button class="btn sm ghost" data-lz="polydraw" data-lz-v="zone" data-lz-c="${c.id}">Disegna</button>${hasZone?`<button class="btn sm ghost" data-lz="polyclear" data-lz-c="${c.id}">Togli forma</button>`:''}
+    <p class="hint">Maschere a forma: il fascio si spegne dentro.</p>
+    ${mp.map((_,i)=>`<button class="btn sm ghost" data-lz="mpdel" data-lz-v="${i}" data-lz-c="${c.id}">Forma ${i+1} ×</button>`).join('')}
+    <button class="btn sm ghost" data-lz="mpround" data-lz-c="${c.id}"${mp.length>=8?' disabled':''}>＋ Rotonda</button><button class="btn sm ghost" data-lz="polydraw" data-lz-v="mask" data-lz-c="${c.id}"${mp.length>=8?' disabled':''}>＋ Disegna</button></div>`;
+}
+function lzPolySvg(c){
+  const dr=LZ_POLY?.cid===c.id?LZ_POLY:null,zone=(c.zone_poly||[]).length>=3?c.zone_poly:null;
+  return`<svg class="lz-zsvg" viewBox="0 0 100 100" preserveAspectRatio="none">${zone?`<polygon class="z" points="${lzPolyPts(zone)}"/>`:''}${(c.mask_polys||[]).map(m=>`<polygon class="m" points="${lzPolyPts(m)}"/>`).join('')}${dr?`<polygon class="d" points="${lzPolyPts(dr.pts)}"/>${dr.pts.map(p=>{const[x,y]=lzPolyPoint(p).split(',');return`<circle cx="${x}" cy="${y}" r="2.2"/>`}).join('')}`:''}</svg>`;
 }
 // maschere (laser_render): rettangoli dentro la zona dove il fascio si spegne, max 8
 function lzMasksHtml(c){
@@ -151,6 +173,17 @@ function laserDown(e,el,w){
   else if(a==='mode')lzSet(cid,'mode',v);
   else if(a==='flip_x'||a==='flip_y')lzSet(cid,a,!c?.[a]);
   else if(a==='zonereset')lzSet(cid,'zone',[-1,-1,1,1]);
+  else if(a==='polypreset'&&LZ_SHAPES[v])lzSet(cid,'zone_poly',LZ_SHAPES[v]());
+  else if(a==='polyclear')lzSet(cid,'zone_poly',[]);
+  else if(a==='mpround')lzSet(cid,'mask_polys',[...(c?.mask_polys||[]),lzRoundPts(.25,.25,24)]);
+  else if(a==='mpdel')lzSet(cid,'mask_polys',(c?.mask_polys||[]).filter((_,i)=>i!==+v));
+  else if(a==='polydraw'){LZ_POLY={cid,target:v,pts:[]};paintLaser(el,w,true)}
+  else if(a==='polycancel'){LZ_POLY=null;paintLaser(el,w,true)}
+  else if(a==='polyundo'&&LZ_POLY){LZ_POLY.pts.pop();paintLaser(el,w,true)}
+  else if(a==='polytap'&&LZ_POLY&&LZ_POLY.pts.length<48){const r=b.getBoundingClientRect();
+    LZ_POLY.pts.push([+(((e.clientX-r.left)/r.width)*2-1).toFixed(3),+(1-((e.clientY-r.top)/r.height)*2).toFixed(3)]);paintLaser(el,w,true)}
+  else if(a==='polysave'&&LZ_POLY?.pts.length>=3){const{target,pts}=LZ_POLY;LZ_POLY=null;
+    if(target==='zone')lzSet(cid,'zone_poly',pts);else lzSet(cid,'mask_polys',[...(c?.mask_polys||[]),pts]);paintLaser(el,w,true)}
   else if(a==='maskadd')lzSet(cid,'masks',[...(c?.masks||[]),[-.2,-.2,.2,.2]]);
   else if(a==='maskdel')lzSet(cid,'masks',(c?.masks||[]).filter((_,i)=>i!==+v));
   else if(a==='scan'){lzCmd({action:'scan'});showInfo('Laser: ricerca dei cubi sulla rete…')}

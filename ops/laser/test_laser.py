@@ -99,6 +99,43 @@ SQUARE = {"id": "q", "name": "Quadrato", "strokes": [{"pts": [[-.5, -.5], [.5, -
 
 
 class TestScene(unittest.TestCase):
+    def _lit_in(self, out, box):
+        x0, y0, x1, y1 = [(v + 1) * 0.5 * P.DAC_MAX for v in box]
+        return [s for s in out if (s[2] or s[3] or s[4]) and x0 <= s[0] <= x1 and y0 <= s[1] <= y1]
+
+    def test_maschera_taglia_anche_una_linea_di_due_punti(self):
+        line = [(-0.8, 0, 0, 0, 0), (-0.8, 0, 255, 255, 255), (0.8, 0, 255, 255, 255)]
+        out = unpack(R.render(line, {"max_intensity": 1.0, "masks": [[-0.2, -0.2, 0.2, 0.2]]}, 30000))
+        self.assertEqual(self._lit_in(out, (-0.17, -0.1, 0.17, 0.1)), [], "acceso dentro la maschera")
+        self.assertTrue(self._lit_in(out, (-0.8, -0.1, -0.3, 0.1)), "sinistra accesa")
+        self.assertTrue(self._lit_in(out, (0.3, -0.1, 0.8, 0.1)), "destra accesa")
+
+    def test_forma_zona_e_maschera_a_forma(self):
+        line = [(-0.9, 0, 0, 0, 0), (-0.9, 0, 255, 255, 255), (0.9, 0, 255, 255, 255)]
+        diamond = [[0, -0.5], [0.5, 0], [0, 0.5], [-0.5, 0]]
+        out = unpack(R.render(line, {"max_intensity": 1.0, "zone_poly": diamond}, 30000))
+        self.assertTrue(self._lit_in(out, (-0.4, -0.1, 0.4, 0.1)), "acceso dentro la forma")
+        self.assertEqual(self._lit_in(out, (-0.9, -0.1, -0.54, 0.1)) + self._lit_in(out, (0.54, -0.1, 0.9, 0.1)), [], "fuori dalla forma")
+        out = unpack(R.render(line, {"max_intensity": 1.0, "mask_polys": [diamond]}, 30000))
+        self.assertEqual(self._lit_in(out, (-0.45, -0.1, 0.45, 0.1)), [], "dentro la maschera a forma")
+        self.assertTrue(self._lit_in(out, (-0.9, -0.1, -0.6, 0.1)))
+
+    def test_linea_che_esce_dalla_zona_si_ferma_al_bordo(self):
+        line = [(0, 0, 0, 0, 0), (0, 0, 255, 255, 255), (0.9, 0, 255, 255, 255)]
+        out = unpack(R.render(line, {"max_intensity": 1.0, "zone": [-1, -1, 0.5, 1]}, 30000))
+        self.assertTrue(self._lit_in(out, (0.05, -0.1, 0.45, 0.1)), "la parte dentro resta accesa")
+        self.assertEqual(self._lit_in(out, (0.52, -0.1, 1, 0.1)), [])
+
+    def test_forma_degenere_tutto_spento_e_validazione(self):
+        line = [(-0.5, 0, 0, 0, 0), (-0.5, 0, 255, 255, 255), (0.5, 0, 255, 255, 255)]
+        self.assertIsNone(R.render(line, {"max_intensity": 1.0, "zone_poly": [[0, 0], [0, 0], [0, 0]]}, 30000))
+        self.assertEqual(G.clean_value("zone_poly", []), [])
+        self.assertEqual(G.clean_value("zone_poly", [[2, 0], [0, 2], [-2, -2]]), [[1, 0], [0, 1], [-1, -1]])
+        with self.assertRaises(ValueError):
+            G.clean_value("zone_poly", [[0, 0], [1, 1]])
+        with self.assertRaises(ValueError):
+            G.clean_value("mask_polys", [[[0, 0]]])
+
     def test_frame_troppo_lungo_niente_salto_al_ritorno(self):
         v = [-0.6, -0.2, 0.2, 0.6]
         pts = []

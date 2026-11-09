@@ -818,3 +818,6 @@ button{cursor:pointer}
 .lzs-cal{display:flex;flex-wrap:wrap;align-items:center;gap:6px}.lzs-cal .btn{min-height:30px}
 .lzs-w{position:absolute;left:8px;top:8px;z-index:2;padding:1px 5px;border-radius:4px;font:700 11px var(--mono,monospace);font-style:normal;pointer-events:auto;background:#0009}.lzs-w.media{color:#ffb23e}.lzs-w.pesante{color:#ff5a5f}
 .lzs-wtxt.media{color:#ffb23e}.lzs-wtxt.pesante{color:#ff8a8d}
+
+.lz-zsvg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}.lz-zsvg polygon{vector-effect:non-scaling-stroke;stroke-width:1}.lz-zsvg .z{fill:#9be15d44;stroke:#9be15d}.lz-zsvg .m{fill:#ff5a5f55;stroke:#ff5a5f}.lz-zsvg .d{fill:#3ec9ff33;stroke:#3ec9ff}.lz-zsvg circle{fill:#3ec9ff}.lz-zbox.draw{cursor:crosshair;border-color:#3ec9ff;touch-action:none}
+.lz-pdraw{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}.lz-pdraw .hint{width:100%;margin:2px 0}

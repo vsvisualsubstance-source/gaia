@@ -13,10 +13,14 @@
 
 Il laser è stato staccato dalla touring nel pomeriggio.
 
+## Sicurezza: maschere
+
+Fino al commit di oggi le maschere controllavano solo gli estremi delle linee: una linea lunga attraversava una maschera restando accesa (84 campioni su 104, misurato). Corretto nel gateway su OPS. **Sulla touring la correzione non è attiva finché non si aggiorna e si riavvia il gateway: fino ad allora le maschere non vanno considerate affidabili.**
+
 ## Da fare domani sulla touring
 
 1. `git pull --ff-only` in `C:\gaia`, poi `node build-app.js` in `plancia`.
-2. Riavviare il gateway laser per attivare i tempi nuovi e la sosta a fine linea.
+2. Riavviare il gateway laser: attiva la correzione delle maschere, i tempi nuovi e la sosta a fine linea. **Da fare prima di riarmare il laser.**
 3. Con il laser collegato: premere Template per avere Pioggia, Nuvola, Scintille e Coriandoli.
 4. Reimportare gli SVG già caricati: la correzione degli spigoli vale solo per i nuovi import.
 5. Provare griglia e quadrato a 9.000 e a 20.000 punti. Se a 20.000 si deforma ancora, provare blank shift 2, 4, 6.
@@ -46,4 +50,5 @@ Conclusione: nessuna prova che il DHCP abbia causato gli errori. Il server DHCP 
 - Import SVG: gli spigoli veri vengono trovati e i tratti dritti ridotti a due punti.
 - Render 3D della Plancia: laser proiettato su un piano.
 - Scene nuove: Pioggia, Nuvola di punti, Scintille, Coriandoli.
+- Zone di sicurezza a forma (cerchio, ovale, trapezio, esagono, disegnata) e maschere a forma, tagliate esattamente sui bordi.
 - Nessuna di queste è stata ancora provata sul laser vero nella versione finale.

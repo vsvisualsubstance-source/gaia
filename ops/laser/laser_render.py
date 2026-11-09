@@ -52,11 +52,14 @@ DEFAULTS = {
     "keystone_x": 0.0,                # trapezio: larghezza diversa in alto e in basso
     "keystone_y": 0.0,                #           altezza diversa a sinistra e a destra
     "masks": [],                      # [[x0, y0, x1, y1], ...] spazio d'uscita, fascio spento dentro
+    "zone_poly": [],                  # [[x, y], ...] (almeno 3): il fascio resta dentro questa forma
+    "mask_polys": [],                 # [[[x, y], ...], ...]: forme dove il fascio si spegne
     "gain_r": 1.0, "gain_g": 1.0, "gain_b": 1.0,
     "color_min": 0.0,                 # soglia dei diodi: un canale acceso parte da qui
     "blank_shift": 0,                 # campioni di ritardo del colore
 }
 MAX_MASKS = 8
+MAX_POLY_POINTS = 48
 
 
 def render(points, cfg, pps):
@@ -102,22 +105,39 @@ def _prepare(points, c):
     ca, sa = math.cos(a), math.sin(a)
     kx, ky = c["keystone_x"], c["keystone_y"]
     masks = [m for m in (c["masks"] or [])[:MAX_MASKS] if len(m) == 4]
+    zone_poly = [tuple(p[:2]) for p in (c["zone_poly"] or [])[:MAX_POLY_POINTS]]
+    if len(zone_poly) < 3:
+        zone_poly = None
+    mask_polys = [[tuple(p[:2]) for p in m[:MAX_POLY_POINTS]] for m in (c["mask_polys"] or [])[:MAX_MASKS]]
+    mask_polys = [m for m in mask_polys if len(m) >= 3]
+    mask_rects = [[(min(m[0], m[2]), min(m[1], m[3])), (max(m[0], m[2]), min(m[1], m[3])),
+                   (max(m[0], m[2]), max(m[1], m[3])), (min(m[0], m[2]), max(m[1], m[3]))] for m in masks]
+    zone_rect = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+    banned = [(_bbox(m), m) for m in mask_rects + mask_polys]
+    groups = [(_bbox(p), _edges(p)) for p in [zone_rect] + mask_rects + mask_polys]
+    zone_group = (_bbox(zone_poly), _edges(zone_poly)) if zone_poly else None
+
+    def allowed(x, y):
+        return (x0 <= x <= x1 and y0 <= y <= y1
+                and (zone_poly is None or _in_poly(x, y, zone_poly))
+                and not any(b[0] <= x <= b[2] and b[1] <= y <= b[3] and _in_poly(x, y, m) for b, m in banned))
+
     gains = [max(0.0, min(1.0, c[k])) for k in ("gain_r", "gain_g", "gain_b")]
     cmin = max(0.0, min(0.3, c["color_min"]))
-    out = []
+    raw = []
     for x, y, r, g, b in points:
         px, py = x * sx, y * sy
         px, py = px * ca - py * sa, px * sa + py * ca
         px, py = px * (1 + kx * py), py * (1 + ky * px)
         tx, ty = px + c["offset_x"], py + c["offset_y"]
-        inside = x0 <= tx <= x1 and y0 <= ty <= y1 and not any(
-            min(m[0], m[2]) <= tx <= max(m[0], m[2]) and min(m[1], m[3]) <= ty <= max(m[1], m[3]) for m in masks)
-        tx, ty = min(max(tx, x0), x1), min(max(ty, y0), y1)
-        if inside and gain > 0:
+        if gain > 0 and (r > 0 or g > 0 or b > 0):
             r, g, b = (0 if v <= 0 else (cmin + v / 255 * (1 - cmin)) * 255 * k for v, k in zip((r, g, b), gains))
-            out.append((tx, ty, r * gain, g * gain, b * gain))
+            raw.append((tx, ty, r * gain, g * gain, b * gain))
         else:
-            out.append((tx, ty, 0, 0, 0))
+            raw.append((tx, ty, 0, 0, 0))
+    # il controllo vale su tutta la linea, non solo sui suoi estremi (2026-11-09: una linea di
+    # due punti attraversava accesa le maschere): si taglia esattamente sui bordi
+    out = [(min(max(p[0], x0), x1), min(max(p[1], y0), y1), p[2], p[3], p[4]) for p in _cut(raw, groups, zone_group, allowed)]
     lit = [p for p in out if p[2] or p[3] or p[4]]
     if lit:
         span = max(max(p[0] for p in lit) - min(p[0] for p in lit),
@@ -125,6 +145,82 @@ def _prepare(points, c):
         if span < STATIC_SPAN:
             out = [(p[0], p[1], p[2] * STATIC_GAIN, p[3] * STATIC_GAIN, p[4] * STATIC_GAIN)
                    for p in out]
+    return out
+
+
+def _edges(poly):
+    return [(poly[i], poly[(i + 1) % len(poly)]) for i in range(len(poly))]
+
+
+def _in_poly(x, y, poly):
+    """Punto nel poligono (pari/dispari). Poligono degenere: fuori, cioe' spento per la zona."""
+    inside = False
+    n = len(poly)
+    for i in range(n):
+        (ax, ay), (bx, by) = poly[i], poly[(i + 1) % n]
+        if (ay > y) != (by > y) and x < ax + (y - ay) * (bx - ax) / (by - ay):
+            inside = not inside
+    return inside
+
+
+def _bbox(poly):
+    xs, ys = [p[0] for p in poly], [p[1] for p in poly]
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def _crossings(a, b, groups):
+    """Valori 0..1 lungo a-b dove la linea attraversa uno dei bordi. Le forme il cui riquadro
+    non tocca la linea si saltano: e' esatto e fa risparmiare quasi tutto il calcolo."""
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    lox, hix = min(a[0], b[0]), max(a[0], b[0])
+    loy, hiy = min(a[1], b[1]), max(a[1], b[1])
+    out = []
+    for box, edges in groups:
+        if hix < box[0] or lox > box[2] or hiy < box[1] or loy > box[3]:
+            continue
+        for (px, py), (qx, qy) in edges:
+            ex, ey = qx - px, qy - py
+            den = dx * ey - dy * ex
+            if abs(den) < 1e-12:
+                continue
+            t = ((px - a[0]) * ey - (py - a[1]) * ex) / den
+            u = ((px - a[0]) * dy - (py - a[1]) * dx) / den
+            if 1e-9 < t < 1 - 1e-9 and -1e-9 <= u <= 1 + 1e-9:
+                out.append(t)
+    return sorted(out)
+
+
+ZONE_SHORT2 = 0.03 ** 2    # sotto questa lunghezza (1,5% del campo), con i due estremi dentro, la zona non si ricontrolla
+
+
+def _cut(points, groups, zone_group, allowed):
+    """Ogni tratto acceso viene spezzato sui bordi: ogni pezzo e' tutto dentro o tutto fuori.
+    Un pezzo vietato diventa spostamento al buio; quello dopo riparte dal suo inizio."""
+    out = []
+    prev = None
+    for p in points:
+        if prev is None or not _lit(p):
+            if _lit(p) and not allowed(p[0], p[1]):
+                p = (p[0], p[1], 0, 0, 0)
+            out.append(p)
+            prev = p
+            continue
+        gs = groups
+        if zone_group and not ((p[0] - prev[0]) ** 2 + (p[1] - prev[1]) ** 2 < ZONE_SHORT2
+                               and allowed(prev[0], prev[1]) and allowed(p[0], p[1])):
+            gs = groups + [zone_group]
+        ts = [0.0] + _crossings(prev, p, gs) + [1.0]
+        for t0, t1 in zip(ts, ts[1:]):
+            ax, ay = prev[0] + (p[0] - prev[0]) * t0, prev[1] + (p[1] - prev[1]) * t0
+            bx, by = prev[0] + (p[0] - prev[0]) * t1, prev[1] + (p[1] - prev[1]) * t1
+            if allowed((ax + bx) / 2, (ay + by) / 2):
+                if not (out and _lit(out[-1])):
+                    out.append((ax, ay, 0, 0, 0))
+                    out.append((ax, ay, p[2], p[3], p[4]))
+                out.append((bx, by, p[2], p[3], p[4]))
+            else:
+                out.append((bx, by, 0, 0, 0))
+        prev = p
     return out
 
 
