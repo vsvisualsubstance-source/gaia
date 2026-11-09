@@ -3217,7 +3217,9 @@
    "tpl-scanner",
    "tpl-griglia",
    "tpl-pioggia",
-   "tpl-nuvola"
+   "tpl-nuvola",
+   "tpl-scintille",
+   "tpl-coriandoli"
   ]
  },
  "incoming": {

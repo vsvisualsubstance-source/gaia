@@ -17,7 +17,7 @@ const { startPlancia, sleep } = require('./browser-harness');
     await sleep(500);
     assert.match(await p.ev(`document.querySelector('#toast').textContent`), /template/i, 'il tocco non arriva al widget');
     await sleep(300);
-    assert.equal(await p.ev(`[...document.querySelectorAll('canvas[data-lzs-cv]')].filter(c=>c.getContext('2d').getImageData(60,60,1,1).data[3]>0).length`), 15, 'miniature delle scene non disegnate');
+    assert.equal(await p.ev(`[...document.querySelectorAll('canvas[data-lzs-cv]')].filter(c=>c.getContext('2d').getImageData(60,60,1,1).data[3]>0).length`), 17, 'miniature delle scene non disegnate');
     await p.ev(`document.querySelector('#helpBtn').click();1`);
     await sleep(800);
     const step=()=>p.ev(`document.querySelector('.tour-tip')?.innerText.split(String.fromCharCode(10)).join(' | ').slice(0,160)`);

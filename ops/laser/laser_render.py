@@ -142,6 +142,9 @@ def _interpolate(pts, lit_step, blank_step, corner=CORNER_DWELL, pre=PRE_DWELL):
         lit = _lit(q)
         d = math.hypot(q[0] - prev[0], q[1] - prev[1])
         n = max(1, math.ceil(d / (lit_step if lit else blank_step)))
+        if not lit and _lit(prev):
+            # fine di una linea: si resta accesi fermi finche' gli specchi arrivano in fondo
+            path.extend([prev] * corner)
         if lit and not _lit(prev) and d > 0:
             # spostamento al buio fino all'attacco, pausa, poi si accende
             n2 = max(1, math.ceil(d / blank_step))

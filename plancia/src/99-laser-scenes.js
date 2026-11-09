@@ -21,6 +21,14 @@ function lzsCloud(n=LZS_CLOUD_DOTS){const r=lzsRng(7),out=[];while(out.length<n)
 function lzsRain(frames=LZS_RAIN_FRAMES,n=LZS_RAIN_DROPS){const r=lzsRng(11),drops=Array.from({length:n},()=>({x:r()*1.9-.95,y:r(),v:1+Math.floor(r()*2)}));
   return Array.from({length:frames},(_,f)=>({strokes:lzsNearest(drops.map(d=>[d.x,1-2*((d.y+d.v*f/frames)%1)])).map(([x,y])=>lzsDot(x,y))}))}
 const LZS_CLOUD_DOTS=70,LZS_RAIN_DROPS=40,LZS_RAIN_FRAMES=50;
+// puntini a caso che si accendono e si spengono piano: ogni punto ha il suo momento e la sua
+// durata, nel giro dell'animazione; il colore del tratto fa la dissolvenza (modo "stroke")
+function lzsTwinkle(seed,n,frames,life,colors){const r=lzsRng(seed),dots=Array.from({length:n},()=>{let x,y;do{x=r()*2-1;y=r()*2-1}while(x*x+y*y>1);return{x,y,ph:Math.floor(r()*frames),lf:life+Math.floor(r()*life),c:colors[Math.floor(r()*colors.length)]}});
+  return Array.from({length:frames},(_,f)=>{const on=dots.map(d=>{const t=((f+d.ph)%frames)/d.lf;return t<1?[d.x,d.y,d.c,Math.max(.25,Math.sin(Math.PI*t))]:null}).filter(Boolean);
+    const list=on.length?on:[[0,0,colors[0],.25]];
+    return{strokes:lzsNearest(list).map(([x,y,c,k])=>({...lzsDot(x,y),rgb:c.map(v=>+(v*k).toFixed(3))}))}})}
+const LZS_TW_WHITE=[[1,1,1],[.6,.8,1]],LZS_TW_COLOR=[[1,0,.3],[0,.6,1],[0,1,.4],[1,.75,0]];
+const lzsScintille=()=>lzsTwinkle(21,64,60,12,LZS_TW_WHITE),lzsCoriandoli=()=>lzsTwinkle(33,48,60,16,LZS_TW_COLOR);
 function lzsShape(kind){
   const P=(n,f,closed=false)=>({pts:Array.from({length:n},(_,i)=>f(i/(closed?n:n-1))).map(([x,y])=>[+x.toFixed(4),+y.toFixed(4)]),closed});
   const TAU=Math.PI*2,poly=(k,r=1,rot=Math.PI/2)=>P(k,u=>[r*Math.cos(rot+u*TAU),r*Math.sin(rot+u*TAU)],true);
@@ -38,6 +46,8 @@ function lzsShape(kind){
     case'infinito':return[P(160,u=>{const t=u*TAU,d=1+Math.sin(t)**2;return[Math.cos(t)/d,Math.sin(t)*Math.cos(t)/d*1.4]},true)];
     case'scanner':return[{pts:[[-1,0],[1,0]],closed:false}];
     case'nuvola':return lzsCloud();
+    case'scintille':return lzsScintille()[0].strokes;
+    case'coriandoli':return lzsCoriandoli()[0].strokes;
     case'pioggia':return lzsRain()[0].strokes;
     case'griglia':return[-.6,-.2,.2,.6].flatMap(v=>[{pts:[[-.8,v],[.8,v]],closed:false},{pts:[[v,-.8],[v,.8]],closed:false}]);
   }
@@ -61,6 +71,8 @@ function lzsTemplates(){
     T('griglia','Griglia',{rgb:[.2,.6,1]},{rotate:10,scale:.8},{amount:.5,to:'brightness'}),
     {...T('pioggia','Pioggia',{rgb:[.15,.65,1]},{scale:.9}),frames:lzsRain(),frame_fps:25},
     T('nuvola','Nuvola di punti',{mode:'cycle',rate:.1},{rotate:25,scale:.85,pulse:.15,pulse_hz:.3}),
+    {...T('scintille','Scintille',{mode:'stroke'},{scale:.9}),frames:lzsScintille(),frame_fps:25},
+    {...T('coriandoli','Coriandoli',{mode:'stroke'},{scale:.9}),frames:lzsCoriandoli(),frame_fps:25},
   ];
 }
 function laserScenes(){return Array.isArray(L.laserScenes)?L.laserScenes:[]}
@@ -124,6 +136,38 @@ function animateLaserThumbs(el){
 
 // ---- SVG -> scena: il browser misura ogni forma (archi, trasformazioni comprese)
 const LZS_SVG_POINTS=500;
+// --- calcolo puro dell'import SVG (provato in test/laser-svg.test.js) ---
+// Campionare a distanza fissa salta gli spigoli veri: quadrati e griglie venivano smussati e il
+// render non poteva fermarsi sullo spigolo (2026-11-09). Qui si cercano e si aggiungono.
+function lzsCornerLens(len,at,n){
+  const step=len/n,base=Array.from({length:n+1},(_,j)=>Math.min(len,j*step)),extra=[],d=step*.02;
+  const dir=(a,b)=>{const p=at(a),q=at(b);return Math.atan2(q.y-p.y,q.x-p.x)},diff=(a,b)=>Math.abs(Math.atan2(Math.sin(a-b),Math.cos(a-b)));
+  const far=(a,b)=>{const p=at(a),q=at(b);return Math.hypot(q.x-p.x,q.y-p.y)>(b-a)*1.5+1e-6};
+  for(let j=1;j<n;j++){
+    if(far(base[j-1],base[j])||far(base[j],base[j+1]))continue;
+    const d0=dir(base[j-1],base[j-1]+d),d1=dir(base[j+1]-d,base[j+1]);
+    if(diff(d0,d1)<20*Math.PI/180)continue;
+    let lo=base[j-1],hi=base[j+1];
+    for(let k=0;k<18;k++){const mid=(lo+hi)/2,dm=dir(mid,Math.min(len,mid+d*.01));if(diff(dm,d0)<diff(dm,d1))lo=mid;else hi=mid}
+    extra.push((lo+hi)/2);
+  }
+  return[...base,...extra].sort((a,b)=>a-b).filter((v,i,a)=>!i||v-a[i-1]>step*1e-3);
+}
+// via i punti allineati: restano gli spigoli (il render li riconosce e ci si ferma) e i tratti
+// tornano dritti; se la linea torna al punto di partenza diventa chiusa
+function lzsSimplify(pts,tol=.0006){
+  if(pts.length<3)return{pts,closed:false};
+  const out=[pts[0]];
+  for(let i=1;i<pts.length-1;i++){const a=out[out.length-1],b=pts[i],c=pts[i+1],ux=c[0]-a[0],uy=c[1]-a[1],L=Math.hypot(ux,uy);
+    const dist=L?Math.abs((b[0]-a[0])*uy-(b[1]-a[1])*ux)/L:Math.hypot(b[0]-a[0],b[1]-a[1]);
+    const back=L&&((b[0]-a[0])*ux+(b[1]-a[1])*uy<0||(b[0]-c[0])*-ux+(b[1]-c[1])*-uy<0);
+    if(dist>tol||back)out.push(b)}
+  out.push(pts[pts.length-1]);
+  const f=out[0],l=out[out.length-1];
+  if(out.length>3&&Math.hypot(f[0]-l[0],f[1]-l[1])<tol*2){out.pop();return{pts:out,closed:true}}
+  return{pts:out,closed:false};
+}
+// --- fine calcolo puro ---
 async function lzsImportSvg(file){
   const txt=await file.text(),doc=new DOMParser().parseFromString(txt,'image/svg+xml'),root=doc.querySelector('svg');
   if(!root)throw new Error('non è un file SVG');
@@ -136,11 +180,11 @@ async function lzsImportSvg(file){
     const strokes=[];
     els.forEach((e,i)=>{
       if(!lens[i])return;
-      const n=Math.max(4,Math.round(LZS_SVG_POINTS*lens[i]/total)),m=e.getCTM(),step=lens[i]/n;
+      const n=Math.max(4,Math.round(LZS_SVG_POINTS*lens[i]/total)),m=e.getCTM(),step=lens[i]/n,at=l=>e.getPointAtLength(l),lp=lzsCornerLens(lens[i],at,n);
       const cs=getComputedStyle(e),col=[cs.stroke,cs.fill].map(lzsCssRgb).find(Boolean)||null;
       let cur=[],prev=null;
-      for(let j=0;j<=n;j++){
-        const p=e.getPointAtLength(Math.min(lens[i],j*step)),q=m?p.matrixTransform(m):p;
+      for(const l of lp){
+        const p=at(Math.min(lens[i],l)),q=m?p.matrixTransform(m):p;
         // salto tra due sotto-tracciati: si chiude la linea e se ne apre un'altra (al buio)
         if(prev&&Math.hypot(q.x-prev.x,q.y-prev.y)>step*3*(m?Math.hypot(m.a,m.b):1)){if(cur.length>1)strokes.push({pts:cur,closed:false,rgb:col});cur=[]}
         cur.push([q.x,q.y]);prev=q;
@@ -149,7 +193,7 @@ async function lzsImportSvg(file){
     });
     const xs=strokes.flatMap(s=>s.pts.map(p=>p[0])),ys=strokes.flatMap(s=>s.pts.map(p=>p[1]));
     const cx=(Math.min(...xs)+Math.max(...xs))/2,cy=(Math.min(...ys)+Math.max(...ys))/2,half=Math.max(Math.max(...xs)-Math.min(...xs),Math.max(...ys)-Math.min(...ys))/2||1;
-    strokes.forEach(s=>{s.pts=s.pts.map(([x,y])=>[+((x-cx)/half).toFixed(4),+(-(y-cy)/half).toFixed(4)])}); // y dell'SVG va in giu'
+    strokes.forEach(s=>{const r=lzsSimplify(s.pts.map(([x,y])=>[+((x-cx)/half).toFixed(4),+(-(y-cy)/half).toFixed(4)]));s.pts=r.pts;s.closed=r.closed}); // y dell'SVG va in giu'
     const name=file.name.replace(/\.svg$/i,'');
     return{id:'svg-'+uid(),name,strokes,color:{mode:strokes.some(s=>s.rgb)?'stroke':'fixed',rgb:[1,1,1],palette:[[1,0,0],[0,1,0],[0,0,1]],rate:.2},
       anim:{rotate:0,scale:.8,pulse:0,pulse_hz:.5,orbit:0,orbit_hz:.2,draw_hz:0},audio:{amount:0,to:'scale'}};
