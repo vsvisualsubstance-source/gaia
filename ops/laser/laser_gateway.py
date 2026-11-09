@@ -50,7 +50,7 @@ MQTT_LOSS_S = 5.0
 # niente sorgente "dmx" (nota TD 51): le scene del gateway fanno gia' lo show
 MODES = ("off", "test", "scene", "patchdeck", "yolo")
 INTERNAL_FPS = 30      # test e scene: frame generati dal gateway
-PREVIEW_POINTS = 80    # anteprima per il Render della Plancia: punti per cubo...
+PREVIEW_POINTS = 200    # anteprima per il Render della Plancia: punti per cubo...
 PREVIEW_S = 0.16       # ...e ogni quanto (~6/s, solo mentre un cubo e' in uscita)
 DARK = P.pack_sample(0x800, 0x800, 0, 0, 0) * P.SAMPLES_PER_PACKET   # campioni al buio, al centro
 

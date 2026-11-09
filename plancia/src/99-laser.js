@@ -197,8 +197,10 @@ function drawRealLaser(g,f,origin,z0,spread,base,distance,project){
   const c=laserCubeState(f.cube),pts=c?.streaming?laserPreviewPts(f.cube):null,col=laserStateColor(c);
   if(pts?.length){
     const tan=Math.tan(spread/2);
-    const tg=pts.map(p=>{const a=base+p[0]/100*spread/2;
-      return project(f.x+Math.sin(a)*distance,f.y+Math.cos(a)*distance,Math.max(0,z0+p[1]/100*distance*tan))});
+    // su un piano davanti al laser (prima su un arco attorno al cubo: una griglia piatta si curvava)
+    const fx=Math.sin(base),fy=Math.cos(base);
+    const tg=pts.map(p=>{const o=p[0]/100*distance*tan;
+      return project(f.x+fx*distance+fy*o,f.y+fy*distance-fx*o,Math.max(0,z0+p[1]/100*distance*tan))});
     const lit=pts.map((p,i)=>p[2]?i:-1).filter(i=>i>=0),k=Math.max(1,Math.ceil(lit.length/40));
     g.save();g.globalCompositeOperation='lighter';g.lineWidth=1;g.globalAlpha=.3;
     lit.forEach((i,j)=>{if(j%k)return;g.strokeStyle='#'+pts[i][2];g.beginPath();g.moveTo(origin.x,origin.y);g.lineTo(tg[i].x,tg[i].y);g.stroke()});

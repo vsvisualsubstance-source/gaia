@@ -99,6 +99,17 @@ SQUARE = {"id": "q", "name": "Quadrato", "strokes": [{"pts": [[-.5, -.5], [.5, -
 
 
 class TestScene(unittest.TestCase):
+    def test_frame_troppo_lungo_niente_salto_al_ritorno(self):
+        v = [-0.6, -0.2, 0.2, 0.6]
+        pts = []
+        for a in v:
+            pts += [(-0.8, a, 0, 0, 0), (0.8, a, 255, 255, 255), (a, -0.8, 0, 0, 0), (a, 0.8, 255, 255, 255)]
+        for pps in (9000, 12000, 20000, 30000):
+            out = unpack(R.render(pts, {"max_intensity": 1.0}, pps))
+            self.assertLessEqual(len(out), pps // R.MIN_REFRESH)
+            jump = max(max(abs(a[0] - b[0]), abs(a[1] - b[1])) for a, b in zip(out, out[1:] + out[:1]))
+            self.assertLess(jump / (0.5 * P.DAC_MAX), 0.35, f"salto brusco a {pps} pps")
+
     def test_velocita_specchi_e_spigoli_non_dipendono_dai_pps(self):
         side = 0.3
         sq = [(-side, -side), (side, -side), (side, side), (-side, side), (-side, -side)]
@@ -372,7 +383,7 @@ class TestGateway(unittest.TestCase):
         self.assertTrue(lit_pts)
         self.assertTrue(all(p[0] >= -1 for p in pts))           # la zona vale anche nell'anteprima
         self.assertTrue(all(len(p[2]) == 6 for p in lit_pts))
-        self.assertLess(len(json.dumps(self.gw.preview_payload())), 2000)
+        self.assertLess(len(json.dumps(self.gw.preview_payload())), 5000)   # ~6 al secondo per cubo
 
     def test_9_scene_streams_and_mode_all(self):
         self.assertTrue(wait(self.cube.online))

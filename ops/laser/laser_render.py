@@ -30,12 +30,13 @@ CORNER_COS = math.cos(math.radians(45))
 STATIC_SPAN = 0.04
 STATIC_GAIN = 0.15
 # Velocita' degli specchi costante (2026-11-09): col passo fisso, alzando i pps gli specchi
-# andavano piu' veloci in proporzione, e gli spigoli non riuscivano a seguire. Sopra 12 kpps
-# il passo si stringe; sotto resta LIT_STEP/BLANK_STEP, come prima.
-MAX_LIT_SPEED = 144.0    # spazio -1..1 al secondo a raggio acceso (= LIT_STEP a 12 kpps)
-MAX_BLANK_SPEED = 600.0  # al buio
-CORNER_TIME = 0.0003     # secondi di sosta sugli spigoli vivi
-PRE_TIME = 0.00025       # secondi al buio fermi prima di riaccendere
+# andavano piu' veloci in proporzione, e gli spigoli non riuscivano a seguire. Sopra 9 kpps
+# il passo si stringe; sotto resta LIT_STEP/BLANK_STEP, come prima. Riferimento: 9 kpps, il
+# valore a cui l'operatore vede la griglia pulita sul cubo vero.
+MAX_LIT_SPEED = 108.0    # spazio -1..1 al secondo a raggio acceso (= LIT_STEP a 9 kpps)
+MAX_BLANK_SPEED = 450.0  # al buio (= BLANK_STEP a 9 kpps)
+CORNER_TIME = 0.00033     # secondi di sosta sugli spigoli vivi
+PRE_TIME = 0.00033       # secondi al buio fermi prima di riaccendere
 MIN_REFRESH = 25      # sotto questo ridisegno al secondo il frame viene sfoltito
 
 DEFAULTS = {
@@ -71,11 +72,11 @@ def render(points, cfg, pps):
     blank_step = min(BLANK_STEP, MAX_BLANK_SPEED / max(1, pps))
     corner = max(CORNER_DWELL, round(CORNER_TIME * pps))
     pre = max(PRE_DWELL, round(PRE_TIME * pps))
-    for _ in range(4):
+    for _ in range(10):        # le soste non si accorciano col passo: servono piu' giri
         path = _interpolate(pts, lit_step * k, blank_step * k, corner, pre)
         if len(path) <= budget:
             break
-        k *= len(path) / budget
+        k *= 1.03 * len(path) / budget
     else:
         path = path[:budget - 1] + [(path[0][0], path[0][1], 0, 0, 0)]
     path = _blank_shift(path, int(c["blank_shift"]))
