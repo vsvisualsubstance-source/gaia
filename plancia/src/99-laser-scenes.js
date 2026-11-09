@@ -167,6 +167,46 @@ function lzsSimplify(pts,tol=.0006){
   if(out.length>3&&Math.hypot(f[0]-l[0],f[1]-l[1])<tol*2){out.pop();return{pts:out,closed:true}}
   return{pts:out,closed:false};
 }
+// Peso di una figura: quante volte piu' veloce della velocita' "pulita" devono correre gli
+// specchi per ridisegnarla 25 volte al secondo. Stessi valori di ops/laser/laser_render.py
+// (108 u/s accesi, 450 al buio, soste di 0,33 ms): 1 = al limite del pulito, oltre si deforma.
+const LZS_W={lit:108,blank:450,dwell:.00033,refresh:25,light:1.25,heavy:2.2};
+function lzsFrameTime(strokes,scale,pps){
+  let t=0,last=null,first=null;const cos45=Math.SQRT1_2;
+  for(const st of strokes||[]){
+    const raw=(st.pts||[]).map(([x,y])=>[x*scale,y*scale]);if(!raw.length)continue;
+    const pts=st.closed?[...raw,raw[0]]:raw,a=pts[0];first=first||a;
+    if(last)t+=Math.hypot(a[0]-last[0],a[1]-last[1])/LZS_W.blank;
+    t+=LZS_W.dwell*2;             // sosta prima di riaccendere e a fine linea
+    for(let i=1;i<pts.length;i++){const p=pts[i-1],q=pts[i],d=Math.hypot(q[0]-p[0],q[1]-p[1]);
+      t+=d?d/LZS_W.lit:1/pps;     // punto ripetuto (puntini): un campione in piu'
+      const n=pts[i+1];if(n&&d){const e=Math.hypot(n[0]-q[0],n[1]-q[1]);if(e&&((q[0]-p[0])*(n[0]-q[0])+(q[1]-p[1])*(n[1]-q[1]))/(d*e)<cos45)t+=LZS_W.dwell}}
+    last=pts[pts.length-1];
+  }
+  if(last&&first)t+=Math.hypot(first[0]-last[0],first[1]-last[1])/LZS_W.blank;
+  return t;
+}
+// {k, level:'leggera'|'media'|'pesante', scale: dimensione per stare nel pulito (null = non basta)}
+function lzsWeight(sc,pps=30000){
+  const frames=sc?.frames?.length?sc.frames.map(f=>f.strokes):[sc?.strokes||[]],s=+sc?.anim?.scale||1;
+  const heavy=frames.reduce((b,f)=>lzsFrameTime(f,s,pps)>lzsFrameTime(b,s,pps)?f:b,frames[0]);
+  const k=lzsFrameTime(heavy,s,pps)*LZS_W.refresh,half=lzsFrameTime(heavy,s/2,pps)*LZS_W.refresh,slope=(k-half)/(s/2),fixed=k-slope*s;
+  const fit=slope>0&&fixed<LZS_W.light*.9?Math.min(s,(LZS_W.light-fixed)/slope):null;
+  return{k:+k.toFixed(2),level:k<=LZS_W.light?'leggera':k<=LZS_W.heavy?'media':'pesante',scale:fit==null?null:Math.floor(fit*100)/100};
+}
+function lzsWeightText(w,sc){
+  if(w.level==='leggera')return`Figura leggera (${w.k}×): il laser la disegna pulita.`;
+  const tip=w.scale!=null&&w.scale<(+sc?.anim?.scale||1)-.01?`Per averla pulita porta la Dimensione a ${w.scale}, oppure togli qualche linea.`:'Togli linee o punti: la Dimensione da sola non basta.';
+  return`Figura ${w.level} (${w.k}×): gli specchi devono correre ${w.k} volte oltre il pulito, spigoli e linee possono deformarsi. ${tip}`;
+}
+// figure di taratura: non stanno nella libreria, si mandano con un tocco
+function lzsCalScenes(){
+  const line=(a,b)=>({pts:[a,b],closed:false}),frame=r=>({pts:[[-r,-r],[r,-r],[r,r],[-r,r]],closed:true}),ring=r=>({pts:Array.from({length:96},(_,i)=>[+(r*Math.cos(i/96*Math.PI*2)).toFixed(4),+(r*Math.sin(i/96*Math.PI*2)).toFixed(4)]),closed:true});
+  const S=(id,name,strokes)=>({id:'cal-'+id,name,calibration:true,strokes,color:{mode:'fixed',rgb:[0,1,.4],palette:[[1,0,0],[0,1,0],[0,0,1]],rate:.2},anim:{rotate:0,scale:1,pulse:0,pulse_hz:.5,orbit:0,orbit_hz:.2,draw_hz:0},audio:{amount:0,to:'scale'}});
+  return[S('croce','Croce',[line([-.9,0],[.9,0]),line([0,-.9],[0,.9])]),S('quadrato','Quadrato',[frame(.9)]),S('cerchio','Cerchio',[ring(.9)]),
+    S('angoli','Quattro angoli',[[-1,-1],[1,-1],[1,1],[-1,1]].map(([x,y])=>({pts:[[x*.9,y*.9],[x*.9,y*.7],[x*.9,y*.9],[x*.7,y*.9]],closed:false}))),
+    S('griglia','Griglia 3×3',[frame(.45),line([-.15,-.45],[-.15,.45]),line([.15,-.45],[.15,.45]),line([-.45,-.15],[.45,-.15]),line([-.45,.15],[.45,.15])])];
+}
 // --- fine calcolo puro ---
 async function lzsImportSvg(file){
   const txt=await file.text(),doc=new DOMParser().parseFromString(txt,'image/svg+xml'),root=doc.querySelector('svg');
@@ -212,11 +252,12 @@ function lzScenesHtml(d){
       <span class="lzs-tg">${lzsTargets(d).map(id=>`<button class="${LZS_TARGET===id?'on':''}" data-lzs="target" data-lzs-v="${id}">${id==='all'?'Tutti':esc(id)}</button>`).join('')}</span>
       <button class="btn sm${LZS_FLASH?' on':''}" data-lzs="flash" title="FLASH: tieni premuta una scena per proiettarla sopra quella attiva, si toglie quando la lasci (su tutti i cubi in modalità Scene)">FLASH</button>
       <button class="btn sm ghost" data-lzs="svg">+ Importa SVG</button><button class="btn sm ghost" data-lzs="ilda" title="File ILDA (.ild), anche animati">+ ILDA</button><button class="btn sm ghost" data-lzs="text">+ Testo</button><button class="btn sm ghost" data-lzs="reset" title="Rimette i template mancanti">Template</button></div>
-    <div class="lzs-grid">${laserScenes().map(s=>`<div class="lzs-tile${running.has(s.id)?' on':''}"><button class="lzs-go" data-lzs="apply" data-lzs-v="${esc(s.id)}" title="Manda a ${LZS_TARGET==='all'?'tutti i cubi':LZS_TARGET} (passa in modalità Scene)">
+    <div class="lzs-cal"><span class="hint">Taratura</span>${lzsCalScenes().map(c=>`<button class="btn sm ghost" data-lzs="cal" data-lzs-v="${c.id}" title="Manda ${esc(c.name)} a ${LZS_TARGET==='all'?'tutti i cubi':LZS_TARGET}: armare resta manuale. Leggi spigoli e bordi per regolare posizione, scala e trapezio.">${esc(c.name)}</button>`).join('')}</div>
+    <div class="lzs-grid">${laserScenes().map(s=>`<div class="lzs-tile${running.has(s.id)?' on':''}">${(w=>w.level==='leggera'?'':`<i class="lzs-w ${w.level}" title="${esc(lzsWeightText(w,s))}">${w.k}×</i>`)(lzsWeight(s))}<button class="lzs-go" data-lzs="apply" data-lzs-v="${esc(s.id)}" title="Manda a ${LZS_TARGET==='all'?'tutti i cubi':LZS_TARGET} (passa in modalità Scene)">
         <canvas data-lzs-cv="${esc(s.id)}" width="120" height="120"></canvas><span>${esc(s.name)}</span>${running.has(s.id)?`<em>${running.get(s.id).join(' ')}</em>`:''}</button>
         <button class="lzs-ed" data-lzs="edit" data-lzs-v="${esc(s.id)}" title="Modifica">✎</button></div>`).join('')||'<p class="hint">Nessuna scena: tocca Template.</p>'}</div></div>`;
 }
-function lzsSig(){return[LZS_TARGET,LZS_FLASH,laserScenes().map(s=>[s.id,s.name])]}
+function lzsSig(){return[LZS_TARGET,LZS_FLASH,laserScenes().map(s=>[s.id,s.name,s.anim?.scale])]}
 function lzsApply(s,target=LZS_TARGET){lzCmd({action:'scene',cube:target,scene:s},'scene')}
 function lzsDown(e,el,w){
   const b=e.target.closest('[data-lzs]');if(!b)return;e.preventDefault();
@@ -227,6 +268,7 @@ function lzsDown(e,el,w){
     const up=()=>{b.removeEventListener('pointerup',up);b.removeEventListener('pointercancel',up);b.removeEventListener('pointerleave',up);b.classList.remove('press');lzCmd({action:'flash',on:false},'flash')};
     b.addEventListener('pointerup',up);b.addEventListener('pointercancel',up);b.addEventListener('pointerleave',up);return}
   else if(a==='apply'&&s){lzsApply(s);showInfo(`Laser: "${s.name}" a ${LZS_TARGET==='all'?'tutti i cubi':LZS_TARGET} (modalità Scene; armare resta manuale).`)}
+  else if(a==='cal'){const c=lzsCalScenes().find(x=>x.id===v);if(c){lzsApply(c);showInfo(`Laser: taratura "${c.name}" a ${LZS_TARGET==='all'?'tutti i cubi':LZS_TARGET} (modalità Scene; armare resta manuale).`)}}
   else if(a==='edit'&&s)openLaserSceneEditor(s);
   else if(a==='reset'){const have=new Set(laserScenes().map(x=>x.id)),add=lzsTemplates().filter(x=>!have.has(x.id));
     L.laserScenes=[...laserScenes(),...add];save();showInfo(add.length?`Aggiunti ${add.length} template.`:'Tutti i template ci sono già.')}
@@ -256,6 +298,7 @@ function openLaserSceneEditor(orig){
     <div class="lzs-ed-grid"><canvas id="lsPrev" width="260" height="260"></canvas><div>
       <label>Nome<input id="lsName" value="${esc(sc.name)}"></label>
       <p class="hint">${sc.strokes.length} linee · ${n} punti${nf?` · animazione di ${nf} frame a ${sc.frame_fps||25} fps`:''}${sc.template?' · template':''}. Anteprima qui accanto; il gateway applica poi zona e intensità di ogni cubo.</p>
+      <p class="hint lzs-wtxt" id="lsWeight"></p>
       <label>Colore<select id="lsCm">${[['fixed','Fisso'],['cycle','Arcobaleno che scorre'],['palette','Palette a turno'],['stroke','Colori dell\'SVG']].map(([k,t])=>`<option value="${k}"${C.mode===k?' selected':''}>${t}</option>`).join('')}</select></label>
       <div class="two"><label>Colore fisso<input type="color" id="lsRgb" value="${hex(C.rgb)}"></label><label>Palette<span class="lzs-pal">${C.palette.slice(0,4).map((c,i)=>`<input type="color" data-pal="${i}" value="${hex(c)}">`).join('')}</span></label></div>
       ${sl('lsRate','Velocità colore (giri/s)',C.rate,0,2,.01)}
@@ -273,6 +316,7 @@ function openLaserSceneEditor(orig){
     <div class="row"><span class="lzs-tg" id="lsTg"></span><button class="btn" id="lsTry">Prova sui cubi</button></div>
     <div class="cue-editor-actions"><button class="btn danger" id="lsDel">Elimina</button><button class="btn ghost" id="lsDup">Duplica</button><button class="btn primary" id="lsSave">Salva</button></div>
   </div>`;
+  const paintWeight=()=>{const box=$('#lsWeight');if(!box)return;const w=lzsWeight(sc);box.textContent=lzsWeightText(w,sc);box.className='hint lzs-wtxt '+w.level};
   const read=()=>{
     sc.name=$('#lsName').value.trim()||'Scena';
     sc.color={...C,mode:$('#lsCm').value,rgb:unhex($('#lsRgb').value),palette:[...s.querySelectorAll('[data-pal]')].map(x=>unhex(x.value)),rate:+$('#lsRate').value};
@@ -280,9 +324,10 @@ function openLaserSceneEditor(orig){
       pulse_shape:$('#lsPulseSh').value,swing:+$('#lsSwing').value,swing_hz:+$('#lsSwingHz').value,swing_shape:$('#lsSwingSh').value};
     // a tempo: il riferimento e' il BPM del momento in cui lo si accende
     const on=$('#lsTempo').checked;if(on&&!sc.tempo?.sync){TP.bpm=liveBpm();$('#lsTempoRef').textContent=TP.bpm}sc.tempo={sync:on,bpm:TP.bpm};
-    sc.audio={amount:+$('#lsAudio').value,to:$('#lsAudioTo').value};return sc};
+    sc.audio={amount:+$('#lsAudio').value,to:$('#lsAudioTo').value};paintWeight();return sc};
   s.querySelectorAll('input[type=range]').forEach(r=>r.oninput=()=>{const b=$('#'+r.id+'V');if(b)b.textContent=(+r.value).toFixed(+r.step<1?2:0);read()});
   s.querySelectorAll('select,input[type=color],#lsName,#lsTempo').forEach(x=>x.oninput=read);
+  paintWeight();
   const d=lzDev(),tg=s.querySelector('#lsTg');let target=LZS_TARGET;
   const paintTg=()=>{tg.innerHTML=lzsTargets(d).map(id=>`<button class="${target===id?'on':''}" data-t="${id}">${id==='all'?'Tutti':esc(id)}</button>`).join('')};paintTg();
   tg.onclick=e=>{const b=e.target.closest('[data-t]');if(b){target=b.dataset.t;paintTg()}};

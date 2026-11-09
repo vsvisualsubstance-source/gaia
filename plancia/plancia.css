@@ -814,3 +814,7 @@ button{cursor:pointer}
 .tl-chwarn{margin-left:8px;padding:3px 10px;border:1px solid #e5484d;border-radius:6px;background:#e5484d22;color:#ff8a8d;font:600 11px var(--mono);cursor:pointer;animation:recblink 1.2s steps(2) infinite}.tl-chwarn[hidden]{display:none}
 .cs-chwarn{width:100%;margin-bottom:6px;border-color:#e5484d;background:#e5484d22;color:#ff8a8d;font-size:12px}
 .lz-remove{margin-left:auto;min-height:26px;padding:2px 8px}
+
+.lzs-cal{display:flex;flex-wrap:wrap;align-items:center;gap:6px}.lzs-cal .btn{min-height:30px}
+.lzs-w{position:absolute;left:8px;top:8px;z-index:2;padding:1px 5px;border-radius:4px;font:700 11px var(--mono,monospace);font-style:normal;pointer-events:auto;background:#0009}.lzs-w.media{color:#ffb23e}.lzs-w.pesante{color:#ff5a5f}
+.lzs-wtxt.media{color:#ffb23e}.lzs-wtxt.pesante{color:#ff8a8d}
