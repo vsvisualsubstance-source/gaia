@@ -8,7 +8,7 @@
 | Progetti Plancia | 19 | 19 |
 | Rig Consolle e Fronte in TD | presenti | presenti |
 | Barre consolle nella patch | 4 + 1 fronte | 2 (DX, SX) + 1 fronte, tolte di proposito |
-| `dmx.toe` | **non salvato dal 05/11: serve Ctrl+S** | salvato il 09/11 alle 16:40 |
+| `dmx.toe` | **TD chiuso a fine giornata e nessun `.toe` salvato a novembre in Documenti, `C:\gaia` o `D:`: alla riapertura controllare i rig Consolle e Fronte** | salvato il 09/11 alle 16:40 |
 | Gateway laser | codice vecchio in memoria, laser non collegato | avviato alle 15:43 con `c2fd3fb` |
 
 Il laser è stato staccato dalla touring nel pomeriggio.
