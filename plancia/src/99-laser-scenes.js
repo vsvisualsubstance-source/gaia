@@ -8,6 +8,19 @@
 // il primo render avviene prima che questo modulo sia valutato.
 
 // ---- template: figure generate (x, y in -1..1, y in alto)
+// puntini (pioggia, nuvola): ogni punto e' un tratto a parte, con lo spostamento al buio prima;
+// il punto e' ripetuto DOT volte per restare acceso abbastanza da vedersi. Figure pensate per
+// mettere sotto sforzo gli specchi: tanti salti al buio (2026-11-09). Sempre le stesse: seme fisso.
+const LZS_DOT=4;
+function lzsRng(seed){let a=seed>>>0;return()=>{a=(a+0x6D2B79F5)>>>0;let t=a;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296}}
+const lzsDot=(x,y)=>({pts:Array.from({length:LZS_DOT},()=>[+x.toFixed(4),+y.toFixed(4)]),closed:false});
+// punti in ordine di vicinanza: meno strada al buio, piu' punti nel frame
+function lzsNearest(list){const left=[...list],out=[left.shift()];while(left.length){const p=out[out.length-1];let b=0,bd=1e9;left.forEach((q,i)=>{const d=(q[0]-p[0])**2+(q[1]-p[1])**2;if(d<bd){bd=d;b=i}});out.push(left.splice(b,1)[0])}return out}
+function lzsCloud(n=LZS_CLOUD_DOTS){const r=lzsRng(7),out=[];while(out.length<n){const x=r()*2-1,y=r()*2-1,d=x*x+y*y;if(d<=1&&r()<1.15-d)out.push([x,y])}return lzsNearest(out).map(([x,y])=>lzsDot(x,y))}
+// pioggia: ogni goccia cade un numero intero di volte nel giro, cosi' l'animazione si chiude su se stessa
+function lzsRain(frames=LZS_RAIN_FRAMES,n=LZS_RAIN_DROPS){const r=lzsRng(11),drops=Array.from({length:n},()=>({x:r()*1.9-.95,y:r(),v:1+Math.floor(r()*2)}));
+  return Array.from({length:frames},(_,f)=>({strokes:lzsNearest(drops.map(d=>[d.x,1-2*((d.y+d.v*f/frames)%1)])).map(([x,y])=>lzsDot(x,y))}))}
+const LZS_CLOUD_DOTS=70,LZS_RAIN_DROPS=40,LZS_RAIN_FRAMES=50;
 function lzsShape(kind){
   const P=(n,f,closed=false)=>({pts:Array.from({length:n},(_,i)=>f(i/(closed?n:n-1))).map(([x,y])=>[+x.toFixed(4),+y.toFixed(4)]),closed});
   const TAU=Math.PI*2,poly=(k,r=1,rot=Math.PI/2)=>P(k,u=>[r*Math.cos(rot+u*TAU),r*Math.sin(rot+u*TAU)],true);
@@ -24,6 +37,8 @@ function lzsShape(kind){
     case'cuore':return[P(160,u=>{const t=u*TAU,x=16*Math.sin(t)**3,y=13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t);return[x/17,y/17+.1]},true)];
     case'infinito':return[P(160,u=>{const t=u*TAU,d=1+Math.sin(t)**2;return[Math.cos(t)/d,Math.sin(t)*Math.cos(t)/d*1.4]},true)];
     case'scanner':return[{pts:[[-1,0],[1,0]],closed:false}];
+    case'nuvola':return lzsCloud();
+    case'pioggia':return lzsRain()[0].strokes;
     case'griglia':return[-.6,-.2,.2,.6].flatMap(v=>[{pts:[[-.8,v],[.8,v]],closed:false},{pts:[[v,-.8],[v,.8]],closed:false}]);
   }
   return[];
@@ -44,6 +59,8 @@ function lzsTemplates(){
     T('infinito','Infinito',{mode:'cycle',rate:.12},{scale:.8,draw_hz:.4}),
     T('scanner','Scanner',{rgb:[0,1,.5]},{scale:.9,orbit:.8,orbit_hz:.3}),
     T('griglia','Griglia',{rgb:[.2,.6,1]},{rotate:10,scale:.8},{amount:.5,to:'brightness'}),
+    {...T('pioggia','Pioggia',{rgb:[.15,.65,1]},{scale:.9}),frames:lzsRain(),frame_fps:25},
+    T('nuvola','Nuvola di punti',{mode:'cycle',rate:.1},{rotate:25,scale:.85,pulse:.15,pulse_hz:.3}),
   ];
 }
 function laserScenes(){return Array.isArray(L.laserScenes)?L.laserScenes:[]}

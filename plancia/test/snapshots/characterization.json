@@ -3215,7 +3215,9 @@
    "tpl-cuore",
    "tpl-infinito",
    "tpl-scanner",
-   "tpl-griglia"
+   "tpl-griglia",
+   "tpl-pioggia",
+   "tpl-nuvola"
   ]
  },
  "incoming": {
