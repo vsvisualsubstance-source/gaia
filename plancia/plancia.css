@@ -813,3 +813,4 @@ button{cursor:pointer}
 .smx-foot{margin-top:10px;align-items:center;gap:12px;flex-wrap:wrap}
 .tl-chwarn{margin-left:8px;padding:3px 10px;border:1px solid #e5484d;border-radius:6px;background:#e5484d22;color:#ff8a8d;font:600 11px var(--mono);cursor:pointer;animation:recblink 1.2s steps(2) infinite}.tl-chwarn[hidden]{display:none}
 .cs-chwarn{width:100%;margin-bottom:6px;border-color:#e5484d;background:#e5484d22;color:#ff8a8d;font-size:12px}
+.lz-remove{margin-left:auto;min-height:26px;padding:2px 8px}

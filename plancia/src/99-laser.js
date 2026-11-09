@@ -81,7 +81,7 @@ function lzCardHtml(c,d){
   const live=c.streaming?'IN USCITA':c.armed?(c.mode==='off'?'armato':'armato · in attesa della sorgente'):'disarmato';
   const content=['patchdeck','yolo'].includes(c.mode)?lzContentParams(c.mode):{list:[]},srcName=LZ_SRC_LABEL[c.mode]||'';
   return`<div class="lz-card${c.armed?' armed':''}${c.streaming?' live':''}${c.online?'':' off'}">
-    <div class="ar-head"><span class="lz-dot" title="${c.online?'online':'offline'}"></span><b>${esc(c.name||c.id)}</b><span class="lz-id">${esc(c.id)} · ${esc(c.ip||'')}</span></div>
+    <div class="ar-head"><span class="lz-dot" title="${c.online?'online':'offline'}"></span><b>${esc(c.name||c.id)}</b><span class="lz-id">${esc(c.id)} · ${esc(c.ip||'')}</span><button class="btn sm danger lz-remove" data-lz="remove" data-lz-c="${c.id}" title="Togli questo laser dal gateway">× Togli</button></div>
     <p class="hint">${c.online?`${esc(c.model||'LaserCube')} fw ${esc(c.fw||'?')} · ${c.charging?'in carica':c.battery!=null?`batteria ${c.battery}%`:''} · ${c.temp_c??'?'} °C`:'Il gateway non riceve risposta: rete, alimentazione, modalità LAN Client.'}${warn.length?` · <b class="lz-warn">${warn.join(' · ')}</b>`:''}</p>
     <div class="lz-modes">${LZ_MODES.map(([m,l])=>`<button class="${c.mode===m?'on':''}" data-lz="mode" data-lz-v="${m}" data-lz-c="${c.id}">${l}</button>`).join('')}</div>
     <p class="hint">${esc(LZ_MODE_HINT[c.mode]||'')}${c.mode==='scene'?(c.scene?` <b class="lz-ok">Scena: ${esc(c.scene.name)}</b>`:' <b class="lz-warn">Nessuna scena scelta.</b>'):c.mode!=='off'&&c.mode!=='test'?lzSourceHint(d,c.mode):''}</p>
@@ -96,7 +96,7 @@ function lzCardHtml(c,d){
       <div class="ar-togs"><button class="ar-tog${c.flip_x?' on':''}" data-lz="flip_x" data-lz-c="${c.id}">Specchia X<i>${c.flip_x?'ON':'OFF'}</i></button><button class="ar-tog${c.flip_y?' on':''}" data-lz="flip_y" data-lz-c="${c.id}">Capovolgi Y<i>${c.flip_y?'ON':'OFF'}</i></button></div>
       ${lzSlider(c.id,'rotate','Rotazione (gradi)',c.rotate??0,-180,180,1)}${lzSlider(c.id,'keystone_x','Trapezio orizzontale',c.keystone_x??0,-.5,.5)}${lzSlider(c.id,'keystone_y','Trapezio verticale',c.keystone_y??0,-.5,.5)}
       ${lzSlider(c.id,'pps','Punti al secondo',c.pps??30000,6000,35000,1000)}
-      <div class="lz-row"><button class="btn sm ghost" data-lz="rename" data-lz-c="${c.id}">Rinomina</button><button class="btn sm ghost" data-lz="ip" data-lz-c="${c.id}">Cambia IP</button><button class="btn sm ghost" data-lz="remove" data-lz-c="${c.id}">Togli</button></div></details>
+      <div class="lz-row"><button class="btn sm ghost" data-lz="rename" data-lz-c="${c.id}">Rinomina</button><button class="btn sm ghost" data-lz="ip" data-lz-c="${c.id}">Cambia IP</button></div></details>
     <details class="ar-cal lz-sec" data-sec="color"><summary>Colore e scansione</summary>
       ${lzSlider(c.id,'gain_r','Rosso',c.gain_r??1)}${lzSlider(c.id,'gain_g','Verde',c.gain_g??1)}${lzSlider(c.id,'gain_b','Blu',c.gain_b??1)}
       ${lzSlider(c.id,'color_min','Soglia minima dei diodi',c.color_min??0,0,.3)}${lzSlider(c.id,'blank_shift','Blank shift (campioni)',c.blank_shift??0,0,10,1)}
