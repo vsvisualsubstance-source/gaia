@@ -40,6 +40,14 @@ const groupsPayload=list=>list.map(g=>({group:g.group,kind:g.kind,label:g.label|
 const groupsFromTD=list=>(Array.isArray(list)?list:[]).filter(x=>x&&x.group&&x.kind!=='none')
   .map(x=>({group:x.group,kind:x.kind,label:x.label||x.group,...(x.builtin?{bind:x.td_group}:{})}));
 
+// Pianta e patch di TD a confronto (solo fixture create da Plancia, uid p-...): il reimport
+// automatico si fa solo se coincidono. 2026-11-09: una DMX con un'altra patch ha tolto da sole
+// 5 barre della consolle dal progetto, perche' risultavano gia' inviate (su un'altra macchina).
+function tdPatchDiff(local,tdList){
+  const td=new Set((tdList||[]).map(x=>x&&x.uid).filter(u=>typeof u==='string'&&u.startsWith('p-'))),mine=new Set((local||[]).map(f=>f.id));
+  return{missing:(local||[]).filter(f=>!td.has(f.id)).map(f=>f.name||f.id),extra:[...td].filter(u=>!mine.has(u))};
+}
+
 // ---- UI (solo nel browser) ----
 // Lista: quella del layout; se manca, quella che TD pubblica; poi i default.
 function groupsOf(){
@@ -118,5 +126,5 @@ function sendGroupsToTD(){
 }
 
 if(typeof module==='object'&&module.exports){
-  module.exports={DEFAULT_GROUPS,GROUP_RESERVED,normGroupName,validateGroups,groupsPayload,groupsFromTD};
+  module.exports={tdPatchDiff,DEFAULT_GROUPS,GROUP_RESERVED,normGroupName,validateGroups,groupsPayload,groupsFromTD};
 }

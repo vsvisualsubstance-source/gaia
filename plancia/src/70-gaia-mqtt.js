@@ -199,7 +199,10 @@ function tdParamsChanged(id,old){
   // le cancellerebbe dal layout condiviso al primo tablet che si apre
   if(!G.tdAutoSynced&&Array.isArray(p.params?.dmx_fixtures)){G.tdAutoSynced=true;
     const pending=(L.fixtures||[]).filter(f=>FIX_TYPES[f.type]?.ch&&!f._synced).length;
-    if(pending)showInfo(`Pianta con ${pending} fixture non ancora mandate a DMX Master: non la reimporto da TD (⇩ TD per farlo a mano).`);else importFromTD(true)}
+    if(pending)showInfo(`Pianta con ${pending} fixture non ancora mandate a DMX Master: non la reimporto da TD (⇩ TD per farlo a mano).`);
+    else{const local=(L.fixtures||[]).filter(f=>FIX_TYPES[f.type]?.ch),diff=tdPatchDiff(local,p.params.dmx_fixtures);
+      if(local.length&&(diff.missing.length||diff.extra.length))showInfo(`La patch di DMX Master è diversa dalla Pianta (${diff.missing.length} luci mancano in TD, ${diff.extra.length} ci sono solo in TD): non la reimporto da sola. ⇩ TD la importa, ⇪ TD manda la Pianta.`);
+      else importFromTD(true)}}
   syncHeadSelectors();
   if(old.cues!==JSON.stringify(p.params?.show_cues))refreshShowTimelines();
   if(old.scenes!==JSON.stringify(p.params?.show_scene_catalog))refreshTdSceneWidgets();
