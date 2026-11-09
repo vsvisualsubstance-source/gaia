@@ -38,6 +38,12 @@ MAX_BLANK_SPEED = 450.0  # al buio (= BLANK_STEP a 9 kpps)
 CORNER_TIME = 0.00033     # secondi di sosta sugli spigoli vivi
 PRE_TIME = 0.00033       # secondi al buio fermi prima di riaccendere
 MIN_REFRESH = 25      # sotto questo ridisegno al secondo il frame viene sfoltito
+# Fasci (2026-11-09): pochi punti fermi e lontani hanno una figura grande, quindi STATIC_SPAN
+# non li vede, ma ogni raggio resta quasi sempre sullo stesso posto. Si misura la parte del
+# frame passata accesa nella stessa casella e, oltre il limite, si abbassa tutto in proporzione.
+# Il limite e' quello del punto fermo (STATIC_GAIN): sotto, da circa 7 fasci in su, non cambia nulla.
+SPOT_CELL = 0.04
+MAX_SPOT_SHARE = STATIC_GAIN
 
 DEFAULTS = {
     "zone": [-1.0, -1.0, 1.0, 1.0],   # x0, y0, x1, y1
@@ -82,8 +88,28 @@ def render(points, cfg, pps):
         k *= 1.03 * len(path) / budget
     else:
         path = path[:budget - 1] + [(path[0][0], path[0][1], 0, 0, 0)]
-    path = _blank_shift(path, int(c["blank_shift"]))
+    path = _blank_shift(_limit_spots(path), int(c["blank_shift"]))
     return b"".join(_dac(p) for p in path)
+
+
+def _limit_spots(path):
+    """Abbassa il frame se un punto riceve piu' di MAX_SPOT_SHARE del tempo. Il frame gia'
+    attenuato come punto fermo (STATIC_SPAN) non si abbassa due volte."""
+    cells = {}
+    xs, ys = [], []
+    for p in path:
+        if _lit(p):
+            key = (int((p[0] + 1) / SPOT_CELL), int((p[1] + 1) / SPOT_CELL))
+            cells[key] = cells.get(key, 0) + 1
+            xs.append(p[0])
+            ys.append(p[1])
+    if not cells or max(max(xs) - min(xs), max(ys) - min(ys)) < STATIC_SPAN:
+        return path
+    share = max(cells.values()) / len(path)
+    if share <= MAX_SPOT_SHARE:
+        return path
+    k = MAX_SPOT_SHARE / share
+    return [(p[0], p[1], p[2] * k, p[3] * k, p[4] * k) for p in path]
 
 
 def _blank_shift(path, n):

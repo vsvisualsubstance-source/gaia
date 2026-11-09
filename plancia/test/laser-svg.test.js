@@ -60,3 +60,34 @@ test('figure di taratura: pulite e dentro i bordi', () => {
   }
   assert.equal(new Set(ids).size, 5);
 });
+
+test('disegno a mano: tratto dritto a due punti, curva conservata', () => {
+  const line = Array.from({ length: 50 }, (_, i) => [-.5 + i / 49, .2]);
+  assert.equal(c.lzsInk(line).pts.length, 2);
+  const curve = Array.from({ length: 80 }, (_, i) => [Math.cos(i / 80 * 3) * .8, Math.sin(i / 80 * 3) * .8]);
+  const n = c.lzsInk(curve).pts.length;
+  assert.ok(n > 8 && n < 40, 'punti della curva: ' + n);
+});
+
+test('disegno a mano: un tocco e un giro chiuso', () => {
+  const dot = c.lzsInk([[.1, .1], [.1005, .1]], [1, 0, 0]);
+  assert.equal(dot.pts.length, 4);
+  assert.deepEqual(Array.from(dot.rgb), [1, 0, 0]);
+  const ring = Array.from({ length: 60 }, (_, i) => [Math.cos(i / 59 * 6.2) * .5, Math.sin(i / 59 * 6.2) * .5]);
+  assert.equal(c.lzsInk(ring).closed, true);
+  assert.equal(c.lzsInk([]), null);
+});
+
+test('il foglio da disegno e le figure di fascio sono leggere', () => {
+  const ink = [c.lzsInk([[-.8, -.8], [.8, -.8], [.8, .8]], [0, 1, 0])];
+  assert.equal(c.lzsWeight(c.lzsInkScene(ink, 'x', 'y')).level, 'leggera');
+  assert.equal(c.lzsInkScene(ink, 'x', 'y').anim.scale, 1);
+  for (const k of ['ventaglio', 'onda-fasci', 'stella-fasci', 'foglio', 'cono', 'tunnel-fasci']) {
+    const st = c.lzsBeamStrokes(k);
+    assert.ok(st.length, k);
+    assert.equal(c.lzsWeight({ strokes: st, anim: { scale: { cono: .5, 'tunnel-fasci': .55 }[k] || .9 } }).level, 'leggera', k);
+  }
+  assert.equal(c.lzsBeamStrokes('ventaglio').length, 8);
+  assert.equal(c.lzsBeamStrokes('cono')[0].closed, true);
+  assert.equal(c.lzsBeamStrokes('tunnel-fasci')[0].closed, false);
+});

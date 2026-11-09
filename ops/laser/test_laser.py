@@ -103,6 +103,20 @@ class TestScene(unittest.TestCase):
         x0, y0, x1, y1 = [(v + 1) * 0.5 * P.DAC_MAX for v in box]
         return [s for s in out if (s[2] or s[3] or s[4]) and x0 <= s[0] <= x1 and y0 <= s[1] <= y1]
 
+    def test_pochi_fasci_fermi_vengono_attenuati(self):
+        def beams(n, repeat=300):
+            pts = []
+            for i in range(n):
+                x = -0.8 + 1.6 * i / max(1, n - 1)
+                pts += [(x, 0, 0, 0, 0)] + [(x, 0, 255, 255, 255)] * repeat
+            return pts
+        peak = lambda pts: max(s[2] for s in unpack(R.render(pts, {"max_intensity": 1.0}, 30000)))
+        full = P.DAC_MAX
+        self.assertLess(peak(beams(2)), full * 0.5, "due fasci fermi a piena potenza")
+        self.assertGreater(peak(beams(10, 30)), full * 0.95, "dieci fasci: non si deve abbassare")
+        one = unpack(R.render(beams(1), {"max_intensity": 1.0}, 30000))
+        self.assertAlmostEqual(max(s[2] for s in one) / full, R.STATIC_GAIN, delta=0.01)   # non due volte
+
     def test_maschera_taglia_anche_una_linea_di_due_punti(self):
         line = [(-0.8, 0, 0, 0, 0), (-0.8, 0, 255, 255, 255), (0.8, 0, 255, 255, 255)]
         out = unpack(R.render(line, {"max_intensity": 1.0, "masks": [[-0.2, -0.2, 0.2, 0.2]]}, 30000))

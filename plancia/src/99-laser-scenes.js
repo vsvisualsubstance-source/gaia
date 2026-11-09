@@ -51,10 +51,11 @@ function lzsShape(kind){
     case'pioggia':return lzsRain()[0].strokes;
     case'griglia':return[-.6,-.2,.2,.6].flatMap(v=>[{pts:[[-.8,v],[.8,v]],closed:false},{pts:[[v,-.8],[v,.8]],closed:false}]);
   }
-  return[];
+  return lzsBeamStrokes(kind);
 }
 function lzsTemplates(){
   const T=(id,name,color,anim={},audio={amount:0,to:'scale'})=>({id:'tpl-'+id,name,template:true,strokes:lzsShape(id),color:{mode:'fixed',rgb:[1,1,1],palette:[[1,0,0],[0,1,0],[0,0,1]],rate:.2,...color},anim:{rotate:0,scale:.7,pulse:0,pulse_hz:.5,orbit:0,orbit_hz:.2,draw_hz:0,...anim},audio});
+  const B=(...a)=>({...T(...a),beam:true});
   return[
     T('cerchio','Cerchio',{rgb:[0,1,.4]},{pulse:.3,pulse_hz:.5},{amount:.6,to:'scale'}),
     T('quadrato','Quadrato rotante',{rgb:[0,.5,1]},{rotate:45}),
@@ -73,6 +74,12 @@ function lzsTemplates(){
     T('nuvola','Nuvola di punti',{mode:'cycle',rate:.1},{rotate:25,scale:.85,pulse:.15,pulse_hz:.3}),
     {...T('scintille','Scintille',{mode:'stroke'},{scale:.9}),frames:lzsScintille(),frame_fps:25},
     {...T('coriandoli','Coriandoli',{mode:'stroke'},{scale:.9}),frames:lzsCoriandoli(),frame_fps:25},
+    B('ventaglio','Ventaglio di fasci',{rgb:[0,1,.4]},{scale:.9,pulse:.7,pulse_hz:.25,pulse_shape:'ease'}),
+    B('onda-fasci','Onda di fasci',{mode:'palette',palette:[[0,.9,1],[0,.36,.4],[0,.1,.12],[0,.1,.12]],rate:.75},{scale:.9}),
+    B('stella-fasci','Stella di fasci',{mode:'cycle',rate:.1},{scale:.8,rotate:30}),
+    B('foglio','Foglio di luce',{rgb:[.2,.5,1]},{scale:.9,swing:10,swing_hz:.2,swing_shape:'ease'}),
+    B('cono','Cono',{rgb:[1,0,.3]},{scale:.5,pulse:.5,pulse_hz:.2,pulse_shape:'ease'}),
+    B('tunnel-fasci','Tunnel aperto',{mode:'cycle',rate:.08},{scale:.55,rotate:120}),
   ];
 }
 function laserScenes(){return Array.isArray(L.laserScenes)?L.laserScenes:[]}
@@ -207,6 +214,41 @@ function lzsCalScenes(){
     S('angoli','Quattro angoli',[[-1,-1],[1,-1],[1,1],[-1,1]].map(([x,y])=>({pts:[[x*.9,y*.9],[x*.9,y*.7],[x*.9,y*.9],[x*.7,y*.9]],closed:false}))),
     S('griglia','Griglia 3×3',[frame(.45),line([-.15,-.45],[-.15,.45]),line([.15,-.45],[.15,.45]),line([-.45,-.15],[.45,-.15]),line([-.45,.15],[.45,.15])])];
 }
+// effetti di fascio: figure pensate per il raggio nel fumo, non per la superficie. Pochi punti
+// tenuti accesi (ventaglio, onda, stella) o linee che spazzano (foglio, cono, tunnel). Il gateway
+// abbassa da solo i frame con pochi raggi fermi (laser_render._limit_spots).
+function lzsBeamStrokes(kind){
+  const n=8,dot=(x,y)=>({pts:Array.from({length:12},()=>[+x.toFixed(4),+y.toFixed(4)]),closed:false});
+  const arc=(deg,k)=>({pts:Array.from({length:k},(_,i)=>{const a=i/(deg<360?k-1:k)*deg*Math.PI/180;return[+Math.cos(a).toFixed(4),+Math.sin(a).toFixed(4)]}),closed:deg>=360});
+  switch(kind){
+    case'ventaglio':case'onda-fasci':return Array.from({length:n},(_,i)=>dot(i/(n-1)*2-1,0));
+    case'stella-fasci':return Array.from({length:n},(_,i)=>dot(Math.cos(i/n*Math.PI*2),Math.sin(i/n*Math.PI*2)));
+    case'foglio':return[{pts:[[-1,0],[1,0]],closed:false}];
+    case'cono':return[arc(360,96)];
+    case'tunnel-fasci':return[arc(290,80)];
+  }
+  return[];
+}
+function lzsBeamHint(){return'Effetto di fascio: si vede nel fumo e il raggio arriva lontano. Prima di armare, con la zona di sicurezza tienilo sopra le teste delle persone.'}
+// disegno a mano: da tratto del dito (x, y in -1..1) a linea leggera per il laser. Via i punti
+// troppo vicini e quelli allineati (Douglas-Peucker); un tocco senza movimento diventa un puntino;
+// un tratto che torna vicino a dove era partito si chiude.
+function lzsInk(raw,rgb=null){
+  if(!raw?.length)return null;
+  const R=p=>[+p[0].toFixed(4),+p[1].toFixed(4)],pts=[R(raw[0])];
+  for(const p of raw){const l=pts[pts.length-1];if(Math.hypot(p[0]-l[0],p[1]-l[1])>=.008)pts.push(R(p))}
+  if(pts.length<2)return{pts:Array.from({length:4},()=>[...pts[0]]),closed:false,rgb};
+  const seg=(p,a,b)=>{const ux=b[0]-a[0],uy=b[1]-a[1],L=ux*ux+uy*uy,t=L?Math.max(0,Math.min(1,((p[0]-a[0])*ux+(p[1]-a[1])*uy)/L)):0;return Math.hypot(p[0]-a[0]-t*ux,p[1]-a[1]-t*uy)};
+  const keep=new Set([0,pts.length-1]),todo=[[0,pts.length-1]];
+  while(todo.length){const[i,j]=todo.pop();let far=-1,fd=.005;for(let k=i+1;k<j;k++){const d=seg(pts[k],pts[i],pts[j]);if(d>fd){fd=d;far=k}}if(far>=0){keep.add(far);todo.push([i,far],[far,j])}}
+  const out=pts.filter((_,i)=>keep.has(i)),f=out[0],l=out[out.length-1];
+  let run=0;for(let i=1;i<out.length;i++)run+=Math.hypot(out[i][0]-out[i-1][0],out[i][1]-out[i-1][1]);
+  if(out.length>3&&run>.3&&Math.hypot(f[0]-l[0],f[1]-l[1])<.05){out.pop();return{pts:out,closed:true,rgb}}
+  return{pts:out,closed:false,rgb};
+}
+function lzsInkPoints(ink){return ink.reduce((n,s)=>n+s.pts.length,0)}
+// scala 1: il foglio e' tutto il campo del cubo
+function lzsInkScene(ink,name,id){return{id,name,strokes:ink,color:{mode:'stroke',rgb:[1,1,1],palette:[[1,0,0],[0,1,0],[0,0,1]],rate:.2},anim:{rotate:0,scale:1,pulse:0,pulse_hz:.5,orbit:0,orbit_hz:.2,draw_hz:0},audio:{amount:0,to:'scale'}}}
 // --- fine calcolo puro ---
 async function lzsImportSvg(file){
   const txt=await file.text(),doc=new DOMParser().parseFromString(txt,'image/svg+xml'),root=doc.querySelector('svg');
@@ -251,9 +293,9 @@ function lzScenesHtml(d){
   return`<div class="lzs"><div class="lzs-top"><b>Scene laser</b><span class="hint">tocca una scena per mandarla a</span>
       <span class="lzs-tg">${lzsTargets(d).map(id=>`<button class="${LZS_TARGET===id?'on':''}" data-lzs="target" data-lzs-v="${id}">${id==='all'?'Tutti':esc(id)}</button>`).join('')}</span>
       <button class="btn sm${LZS_FLASH?' on':''}" data-lzs="flash" title="FLASH: tieni premuta una scena per proiettarla sopra quella attiva, si toglie quando la lasci (su tutti i cubi in modalità Scene)">FLASH</button>
-      <button class="btn sm ghost" data-lzs="svg">+ Importa SVG</button><button class="btn sm ghost" data-lzs="ilda" title="File ILDA (.ild), anche animati">+ ILDA</button><button class="btn sm ghost" data-lzs="text">+ Testo</button><button class="btn sm ghost" data-lzs="reset" title="Rimette i template mancanti">Template</button></div>
+      <button class="btn sm ghost" data-lzs="svg">+ Importa SVG</button><button class="btn sm ghost" data-lzs="ilda" title="File ILDA (.ild), anche animati">+ ILDA</button><button class="btn sm ghost" data-lzs="text">+ Testo</button><button class="btn sm ghost" data-lzs="draw" title="Disegna con il dito: ogni tratto è una linea del laser">+ Disegna</button><button class="btn sm ghost" data-lzs="reset" title="Rimette i template mancanti">Template</button></div>
     <div class="lzs-cal"><span class="hint">Taratura</span>${lzsCalScenes().map(c=>`<button class="btn sm ghost" data-lzs="cal" data-lzs-v="${c.id}" title="Manda ${esc(c.name)} a ${LZS_TARGET==='all'?'tutti i cubi':LZS_TARGET}: armare resta manuale. Leggi spigoli e bordi per regolare posizione, scala e trapezio.">${esc(c.name)}</button>`).join('')}</div>
-    <div class="lzs-grid">${laserScenes().map(s=>`<div class="lzs-tile${running.has(s.id)?' on':''}">${(w=>w.level==='leggera'?'':`<i class="lzs-w ${w.level}" title="${esc(lzsWeightText(w,s))}">${w.k}×</i>`)(lzsWeight(s))}<button class="lzs-go" data-lzs="apply" data-lzs-v="${esc(s.id)}" title="Manda a ${LZS_TARGET==='all'?'tutti i cubi':LZS_TARGET} (passa in modalità Scene)">
+    <div class="lzs-grid">${laserScenes().map(s=>`<div class="lzs-tile${running.has(s.id)?' on':''}">${(w=>w.level==='leggera'?'':`<i class="lzs-w ${w.level}" title="${esc(lzsWeightText(w,s))}">${w.k}×</i>`)(lzsWeight(s))}${s.beam?`<i class="lzs-b" title="${esc(lzsBeamHint())}">fumo</i>`:''}<button class="lzs-go" data-lzs="apply" data-lzs-v="${esc(s.id)}" title="Manda a ${LZS_TARGET==='all'?'tutti i cubi':LZS_TARGET} (passa in modalità Scene)">
         <canvas data-lzs-cv="${esc(s.id)}" width="120" height="120"></canvas><span>${esc(s.name)}</span>${running.has(s.id)?`<em>${running.get(s.id).join(' ')}</em>`:''}</button>
         <button class="lzs-ed" data-lzs="edit" data-lzs-v="${esc(s.id)}" title="Modifica">✎</button></div>`).join('')||'<p class="hint">Nessuna scena: tocca Template.</p>'}</div></div>`;
 }
@@ -270,6 +312,7 @@ function lzsDown(e,el,w){
   else if(a==='apply'&&s){lzsApply(s);showInfo(`Laser: "${s.name}" a ${LZS_TARGET==='all'?'tutti i cubi':LZS_TARGET} (modalità Scene; armare resta manuale).`)}
   else if(a==='cal'){const c=lzsCalScenes().find(x=>x.id===v);if(c){lzsApply(c);showInfo(`Laser: taratura "${c.name}" a ${LZS_TARGET==='all'?'tutti i cubi':LZS_TARGET} (modalità Scene; armare resta manuale).`)}}
   else if(a==='edit'&&s)openLaserSceneEditor(s);
+  else if(a==='draw'){openLaserDraw(el,w);return}
   else if(a==='reset'){const have=new Set(laserScenes().map(x=>x.id)),add=lzsTemplates().filter(x=>!have.has(x.id));
     L.laserScenes=[...laserScenes(),...add];save();showInfo(add.length?`Aggiunti ${add.length} template.`:'Tutti i template ci sono già.')}
   else if(a==='text'){uiPrompt('Testo da proiettare (meglio corto: poche parole):','GAIA').then(t=>{if(!t)return;
@@ -286,6 +329,47 @@ function lzsDown(e,el,w){
       catch(err){showError('SVG: '+err.message)}};inp.click();return}
   paintLaser(el,w,true);
 }
+// foglio da disegno: il riquadro e' tutto il campo del cubo, zona e maschere restano del gateway
+function openLaserDraw(el,w){
+  const s=$('#scrim'),MAX=1800,ink=[],id='drw-'+uid();let cur=null,target=LZS_TARGET;s.hidden=false;
+  s.innerHTML=`<div class="sheet" role="dialog" aria-label="Disegno laser">
+    <div class="top"><h3>Disegno a mano</h3><button class="btn ghost" id="ldClose">Chiudi</button></div>
+    <div class="lzs-dr-grid"><canvas id="ldCv" width="640" height="640"></canvas><div>
+      <label>Nome<input id="ldName" value="Disegno"></label>
+      <label>Colore del tratto<input type="color" id="ldCol" value="#00ff66"></label>
+      <div class="row"><button class="btn sm ghost" id="ldUndo">Togli ultimo</button><button class="btn sm ghost" id="ldClear">Cancella tutto</button></div>
+      <p class="hint" id="ldN"></p><p class="hint lzs-wtxt" id="ldW"></p>
+      <p class="hint">Il riquadro è tutto il campo del cubo. Meglio poche linee: ogni tratto in più pesa sugli specchi.</p>
+      <label class="chk"><input id="ldLive" type="checkbox"> In diretta sui cubi, a ogni tratto (armare resta manuale)</label>
+      <div class="row"><span class="lzs-tg" id="ldTg"></span><button class="btn" id="ldTry">Prova sui cubi</button></div>
+    </div></div>
+    <div class="cue-editor-actions"><button class="btn ghost" id="ldCancel">Annulla</button><button class="btn primary" id="ldSave">Salva</button></div>
+  </div>`;
+  const cv=$('#ldCv'),g=cv.getContext('2d'),W=cv.width,X=v=>(v+1)/2*W,Y=v=>(1-v)/2*W;
+  const hex=c=>'#'+c.map(x=>Math.round(x*255).toString(16).padStart(2,'0')).join(''),unhex=h=>[1,3,5].map(i=>+(parseInt(h.slice(i,i+2),16)/255).toFixed(3));
+  const trace=(pts,closed,col)=>{g.strokeStyle=col;g.fillStyle=col;g.beginPath();pts.forEach((p,i)=>i?g.lineTo(X(p[0]),Y(p[1])):g.moveTo(X(p[0]),Y(p[1])));if(closed)g.closePath();g.stroke();if(pts.every(p=>p[0]===pts[0][0]&&p[1]===pts[0][1])){g.beginPath();g.arc(X(pts[0][0]),Y(pts[0][1]),5,0,7);g.fill()}};
+  const paint=()=>{g.fillStyle='#05070a';g.fillRect(0,0,W,W);g.strokeStyle='#ffffff1c';g.lineWidth=1;g.beginPath();g.moveTo(W/2,0);g.lineTo(W/2,W);g.moveTo(0,W/2);g.lineTo(W,W/2);g.stroke();
+    g.lineWidth=4;g.lineCap=g.lineJoin='round';ink.forEach(st=>trace(st.pts,st.closed,hex(st.rgb)));if(cur)trace(cur,false,$('#ldCol').value)};
+  const scene=()=>lzsInkScene(ink,$('#ldName').value.trim()||'Disegno',id);
+  const info=()=>{const n=lzsInkPoints(ink),box=$('#ldW');$('#ldN').textContent=`${ink.length} linee · ${n} punti`;if(ink.length){const r=lzsWeight(scene());box.textContent=lzsWeightText(r,scene());box.className='hint lzs-wtxt '+r.level}else{box.textContent='';box.className='hint lzs-wtxt'}};
+  const send=()=>{if(!ink.length)return;if(!lzDev()){showError('Laser gateway non collegato.');return}lzsApply(scene(),target)};
+  const at=e=>{const r=cv.getBoundingClientRect(),c=v=>Math.max(-1,Math.min(1,v));return[c((e.clientX-r.left)/r.width*2-1),c(1-(e.clientY-r.top)/r.height*2)]};
+  cv.onpointerdown=e=>{e.preventDefault();cv.setPointerCapture(e.pointerId);cur=[at(e)];paint()};
+  cv.onpointermove=e=>{if(!cur)return;cur.push(at(e));paint()};
+  const end=()=>{if(!cur)return;const st=lzsInk(cur,unhex($('#ldCol').value));cur=null;
+    if(st&&lzsInkPoints(ink)+st.pts.length>MAX)showError('Disegno pieno: togli qualche tratto.');
+    else if(st){ink.push(st);info();if($('#ldLive').checked)send()}
+    paint()};
+  cv.onpointerup=cv.onpointercancel=end;
+  const tg=$('#ldTg'),d=lzDev(),paintTg=()=>{tg.innerHTML=lzsTargets(d).map(t=>`<button class="${target===t?'on':''}" data-t="${esc(t)}">${t==='all'?'Tutti':esc(t)}</button>`).join('')};paintTg();
+  tg.onclick=e=>{const b=e.target.closest('[data-t]');if(b){target=b.dataset.t;paintTg()}};
+  $('#ldUndo').onclick=()=>{ink.pop();info();paint();if(ink.length&&$('#ldLive').checked)send()};
+  $('#ldClear').onclick=()=>{ink.length=0;info();paint()};
+  $('#ldTry').onclick=()=>{if(!ink.length){showError('Disegna almeno un tratto.');return}send();showInfo(`Laser: prova del disegno su ${target==='all'?'tutti i cubi':target} (non salvata).`)};
+  $('#ldClose').onclick=$('#ldCancel').onclick=closeSheet;
+  $('#ldSave').onclick=()=>{if(!ink.length){showError('Disegna almeno un tratto.');return}const sc=scene();L.laserScenes=[...laserScenes(),sc];save();paintLaser(el,w,true);openLaserSceneEditor(sc)};
+  info();paint();
+}
 function openLaserSceneEditor(orig){
   const sc=JSON.parse(JSON.stringify(orig)),s=$('#scrim');s.hidden=false;
   const C={mode:'fixed',rgb:[1,1,1],palette:[[1,0,0],[0,1,0],[0,0,1]],rate:.2,...sc.color},A={rotate:0,scale:.8,pulse:0,pulse_hz:.5,orbit:0,orbit_hz:.2,draw_hz:0,pulse_shape:'sine',swing:0,swing_hz:.25,swing_shape:'sine',...sc.anim},U={amount:0,to:'scale',...sc.audio};
@@ -298,7 +382,7 @@ function openLaserSceneEditor(orig){
     <div class="lzs-ed-grid"><canvas id="lsPrev" width="260" height="260"></canvas><div>
       <label>Nome<input id="lsName" value="${esc(sc.name)}"></label>
       <p class="hint">${sc.strokes.length} linee · ${n} punti${nf?` · animazione di ${nf} frame a ${sc.frame_fps||25} fps`:''}${sc.template?' · template':''}. Anteprima qui accanto; il gateway applica poi zona e intensità di ogni cubo.</p>
-      <p class="hint lzs-wtxt" id="lsWeight"></p>
+      <p class="hint lzs-wtxt" id="lsWeight"></p>${sc.beam?`<p class="hint lzs-bhint">${esc(lzsBeamHint())}</p>`:''}
       <label>Colore<select id="lsCm">${[['fixed','Fisso'],['cycle','Arcobaleno che scorre'],['palette','Palette a turno'],['stroke','Colori dell\'SVG']].map(([k,t])=>`<option value="${k}"${C.mode===k?' selected':''}>${t}</option>`).join('')}</select></label>
       <div class="two"><label>Colore fisso<input type="color" id="lsRgb" value="${hex(C.rgb)}"></label><label>Palette<span class="lzs-pal">${C.palette.slice(0,4).map((c,i)=>`<input type="color" data-pal="${i}" value="${hex(c)}">`).join('')}</span></label></div>
       ${sl('lsRate','Velocità colore (giri/s)',C.rate,0,2,.01)}

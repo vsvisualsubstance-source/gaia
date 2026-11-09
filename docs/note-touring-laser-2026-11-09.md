@@ -51,4 +51,7 @@ Conclusione: nessuna prova che il DHCP abbia causato gli errori. Il server DHCP 
 - Render 3D della Plancia: laser proiettato su un piano.
 - Scene nuove: Pioggia, Nuvola di punti, Scintille, Coriandoli.
 - Zone di sicurezza a forma (cerchio, ovale, trapezio, esagono, disegnata) e maschere a forma, tagliate esattamente sui bordi.
+- Effetti di fascio: Ventaglio, Onda di fasci, Stella di fasci, Foglio di luce, Cono, Tunnel aperto, segnati "fumo" nella libreria. Si ottengono col pulsante Template.
+- Limite del tempo su un punto nel gateway: se un punto riceve più del 15% del tempo del frame, tutto il frame si abbassa in proporzione. Non è una certificazione di sicurezza: la zona sopra le teste resta obbligatoria.
+- Disegno a mano: "+ Disegna" nelle scene, con diretta sui cubi facoltativa.
 - Nessuna di queste è stata ancora provata sul laser vero nella versione finale.

@@ -3219,7 +3219,13 @@
    "tpl-pioggia",
    "tpl-nuvola",
    "tpl-scintille",
-   "tpl-coriandoli"
+   "tpl-coriandoli",
+   "tpl-ventaglio",
+   "tpl-onda-fasci",
+   "tpl-stella-fasci",
+   "tpl-foglio",
+   "tpl-cono",
+   "tpl-tunnel-fasci"
   ]
  },
  "incoming": {
