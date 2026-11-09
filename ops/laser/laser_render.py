@@ -29,6 +29,13 @@ CORNER_DWELL = 1      # punti ripetuti sugli spigoli vivi
 CORNER_COS = math.cos(math.radians(45))
 STATIC_SPAN = 0.04
 STATIC_GAIN = 0.15
+# Velocita' degli specchi costante (2026-11-09): col passo fisso, alzando i pps gli specchi
+# andavano piu' veloci in proporzione, e gli spigoli non riuscivano a seguire. Sopra 12 kpps
+# il passo si stringe; sotto resta LIT_STEP/BLANK_STEP, come prima.
+MAX_LIT_SPEED = 144.0    # spazio -1..1 al secondo a raggio acceso (= LIT_STEP a 12 kpps)
+MAX_BLANK_SPEED = 600.0  # al buio
+CORNER_TIME = 0.0003     # secondi di sosta sugli spigoli vivi
+PRE_TIME = 0.00025       # secondi al buio fermi prima di riaccendere
 MIN_REFRESH = 25      # sotto questo ridisegno al secondo il frame viene sfoltito
 
 DEFAULTS = {
@@ -60,8 +67,12 @@ def render(points, cfg, pps):
         return None
     budget = max(64, int(pps / MIN_REFRESH))
     k = 1.0
+    lit_step = min(LIT_STEP, MAX_LIT_SPEED / max(1, pps))
+    blank_step = min(BLANK_STEP, MAX_BLANK_SPEED / max(1, pps))
+    corner = max(CORNER_DWELL, round(CORNER_TIME * pps))
+    pre = max(PRE_DWELL, round(PRE_TIME * pps))
     for _ in range(4):
-        path = _interpolate(pts, LIT_STEP * k, BLANK_STEP * k)
+        path = _interpolate(pts, lit_step * k, blank_step * k, corner, pre)
         if len(path) <= budget:
             break
         k *= len(path) / budget
@@ -120,10 +131,10 @@ def _lit(p):
     return p[2] > 0 or p[3] > 0 or p[4] > 0
 
 
-def _interpolate(pts, lit_step, blank_step):
+def _interpolate(pts, lit_step, blank_step, corner=CORNER_DWELL, pre=PRE_DWELL):
     """Percorso chiuso: dall'ultimo punto torna al primo al buio, cosi' il
     frame ripetuto in ciclo resta continuo."""
-    path = [(pts[0][0], pts[0][1], 0, 0, 0)] * PRE_DWELL
+    path = [(pts[0][0], pts[0][1], 0, 0, 0)] * pre
     prev = path[-1]
     seq = pts + [(pts[0][0], pts[0][1], 0, 0, 0)]
     for i, q in enumerate(seq):
@@ -136,7 +147,7 @@ def _interpolate(pts, lit_step, blank_step):
             for j in range(1, n2 + 1):
                 t = j / n2
                 path.append((prev[0] + (q[0] - prev[0]) * t, prev[1] + (q[1] - prev[1]) * t, 0, 0, 0))
-            path.extend([(q[0], q[1], 0, 0, 0)] * PRE_DWELL)
+            path.extend([(q[0], q[1], 0, 0, 0)] * pre)
             path.append(q)
         else:
             for j in range(1, n + 1):
@@ -144,7 +155,7 @@ def _interpolate(pts, lit_step, blank_step):
                 path.append((prev[0] + (q[0] - prev[0]) * t, prev[1] + (q[1] - prev[1]) * t,
                              q[2], q[3], q[4]))
         if lit and i + 1 < len(seq) and _sharp(prev, q, seq[i + 1]):
-            path.extend([q] * CORNER_DWELL)
+            path.extend([q] * corner)
         prev = q
     return path
 

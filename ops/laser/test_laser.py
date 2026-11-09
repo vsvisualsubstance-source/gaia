@@ -99,6 +99,24 @@ SQUARE = {"id": "q", "name": "Quadrato", "strokes": [{"pts": [[-.5, -.5], [.5, -
 
 
 class TestScene(unittest.TestCase):
+    def test_velocita_specchi_e_spigoli_non_dipendono_dai_pps(self):
+        side = 0.3
+        sq = [(-side, -side), (side, -side), (side, side), (-side, side), (-side, -side)]
+        sq = [(x, y, 255, 255, 255) for x, y in sq]
+        full = {"max_intensity": 1.0}
+        def stats(pps):
+            lit = [s for s in unpack(R.render(sq, full, pps)) if s[2]]
+            gaps = [max(abs(a[0] - b[0]), abs(a[1] - b[1])) for a, b in zip(lit, lit[1:])]
+            return max(gaps), gaps.count(0)
+        g12, _ = stats(12000)
+        g30, stop30 = stats(30000)
+        speed = lambda g, pps: g / (0.5 * P.DAC_MAX) * pps
+        self.assertLessEqual(speed(g30, 30000), R.MAX_LIT_SPEED * 1.2, "a 30 kpps gli specchi non corrono di piu'")
+        self.assertAlmostEqual(speed(g30, 30000) / speed(g12, 12000), 1.0, delta=0.25)
+        # 3 spigoli interni: sosta in proporzione ai pps (0,3 ms = 9 campioni a 30 kpps)
+        self.assertGreaterEqual(stop30, 3 * 9 - 3)
+        self.assertLess(stats(12000)[1], stop30)
+
     def test_clean_limits_and_rejects(self):
         with self.assertRaises(ValueError):
             SC.clean_scene({"strokes": []})
