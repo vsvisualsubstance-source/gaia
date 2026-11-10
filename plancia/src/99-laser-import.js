@@ -17,21 +17,24 @@ function ildaStrokes(points){
   for(const p of points){
     if(p.lit){
       const rgb=p.rgb.map(v=>+v.toFixed(3));
-      if(!cur||cur.rgb.join()!==rgb.join()){cur={pts:prev?[prev]:[],closed:false,rgb};strokes.push(cur)}
+      if(!cur||cur.rgb.join()!==rgb.join()){cur={pts:prev?[prev]:[],closed:false,rgb,n:0};strokes.push(cur)}
+      cur.n++;
       const last=cur.pts[cur.pts.length-1];if(!last||last[0]!==p.x||last[1]!==p.y)cur.pts.push([p.x,p.y]);
     }else cur=null;
     prev=[p.x,p.y];
   }
-  return strokes.filter(s=>s.pts.length>1);
+  // punto acceso fermo per piu' campioni = fascio o puntino: si tiene ripetuto, come i template di fascio
+  return strokes.filter(s=>s.pts.length>1||s.n>1).map(({n,...s})=>s.pts.length>1?s:{...s,pts:Array.from({length:n},()=>[...s.pts[0]])});
 }
 function lzsParseIlda(buf,name='ILDA'){
   const dv=new DataView(buf),frames=[];let off=0,palette=ildaDefaultPalette(),total=0;
   while(off+32<=dv.byteLength&&frames.length<ILDA_MAX_FRAMES){
-    if(String.fromCharCode(dv.getUint8(off),dv.getUint8(off+1),dv.getUint8(off+2),dv.getUint8(off+3))!=='ILDA')throw new Error('non è un file ILDA (manca l\'intestazione "ILDA")');
+    // file rovinato a meta': si tengono i frame buoni letti fin li'
+    if(String.fromCharCode(dv.getUint8(off),dv.getUint8(off+1),dv.getUint8(off+2),dv.getUint8(off+3))!=='ILDA'){if(frames.length)break;throw new Error('non è un file ILDA (manca l\'intestazione "ILDA")')}
     const fmt=dv.getUint8(off+7),n=dv.getUint16(off+24);off+=32;
     if(!n)break;                                         // sezione vuota = fine del file
     const size={0:8,1:6,2:3,4:10,5:8}[fmt];if(!size)throw new Error(`formato ILDA ${fmt} non supportato`);
-    if(off+n*size>dv.byteLength)throw new Error('file ILDA troncato');
+    if(off+n*size>dv.byteLength){if(frames.length)break;throw new Error('file ILDA troncato')}
     if(fmt===2){palette=[];for(let i=0;i<n;i++)palette.push([0,1,2].map(k=>dv.getUint8(off+i*3+k)/255));off+=n*size;continue}
     const pts=[],is3d=fmt===0||fmt===4,st=is3d?6:4;
     for(let i=0;i<n;i++){const o=off+i*size,status=dv.getUint8(o+st),blank=!!(status&0x40);
@@ -45,7 +48,8 @@ function lzsParseIlda(buf,name='ILDA'){
     total+=k;frames.push({strokes});
   }
   if(!frames.length)throw new Error('nessun frame disegnabile nel file');
-  return{id:'ilda-'+uid(),name,strokes:frames[0].strokes,...(frames.length>1?{frames,frame_fps:25}:{}),
+  const beam=frames.every(f=>f.strokes.every(s=>s.pts.every(p=>p[0]===s.pts[0][0]&&p[1]===s.pts[0][1])));  // solo punti fermi: effetto di fascio
+  return{id:'ilda-'+uid(),name,strokes:frames[0].strokes,...(frames.length>1?{frames,frame_fps:25}:{}),...(beam?{beam:true}:{}),
     color:{mode:'stroke',rgb:[1,1,1],palette:[[1,0,0],[0,1,0],[0,0,1]],rate:.2},
     anim:{rotate:0,scale:.8,pulse:0,pulse_hz:.5,orbit:0,orbit_hz:.2,draw_hz:0},audio:{amount:0,to:'scale'}};
 }

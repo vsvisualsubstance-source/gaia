@@ -25,6 +25,7 @@ const STATE_FILE = process.env.PLANCIA_STATE_FILE || path.join(__dirname, 'data'
 const PLAN_DIR = path.join(path.dirname(STATE_FILE), 'plans'), PLAN_MAX = 20 * 1024 * 1024;
 const fixtureLib = createLibrary({ dir: path.join(path.dirname(STATE_FILE), 'fixture-lib') });
 const audioLib = require('./audio-lib');
+const laserLib = require('./laser-lib');
 const STATIC_ASSETS = {
   '/app.js': { file: 'app.js', contentType: 'text/javascript; charset=utf-8' },
   '/plancia.css': { file: 'plancia.css', contentType: 'text/css; charset=utf-8' }
@@ -268,6 +269,11 @@ const server = http.createServer((req, res) => {
     const reply = (code, obj) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(obj)); };
     const job = u.pathname === '/api/audio/library' ? audioLib.library(q.get('refresh') === '1').then(tracks => ({ tracks })) : audioLib.track(q.get('id') || '').then(track => ({ track }));
     job.then(out => reply(200, { ok: true, ...out }), err => reply(404, { ok: false, error: err.message }));
+  } else if (req.url.split('?')[0] === '/api/laser-lib') {
+    // libreria di scene laser su disco (laser-lib.js): indice, oppure una scena con ?id=
+    const id = new URL(req.url, 'http://plancia').searchParams.get('id');
+    const reply = (code, obj) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(obj)); };
+    (id ? laserLib.scene(id).then(scene => ({ scene })) : laserLib.index()).then(out => reply(200, { ok: true, ...out }), err => reply(404, { ok: false, error: err.message }));
   } else if (req.url.split('?')[0] === '/vendor/mqtt.min.js') {
     // stesso mqtt.js che usano le pagine web di Gaia: niente CDN, funziona anche senza internet
     res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'max-age=86400' });

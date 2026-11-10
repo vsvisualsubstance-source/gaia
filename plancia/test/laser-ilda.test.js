@@ -3,7 +3,25 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 global.uid = () => 'x';
-const { lzsParseIlda } = require('../src/99-laser-import');
+const { lzsParseIlda, ildaStrokes } = require('../src/99-laser-import');
+
+test('libreria laser: rifiuta id che escono dalla cartella, miniatura leggera', async () => {
+  const lib = require('../laser-lib'), { preview } = require('../laser-lib-build');
+  for (const id of ['../state', 'a/b', 'index', '']) await assert.rejects(lib.scene(id), /non valida/);
+  const long = { pts: Array.from({ length: 1000 }, (_, i) => [i / 1000, 0]), rgb: [1, 0, 0] }, dot = { pts: [[.1, .2], [.1, .2]], rgb: [1, 1, 1] };
+  const p = preview([long, dot]);
+  assert.ok(p.reduce((n, s) => n + s.pts.length, 0) <= 180);
+  assert.equal(p[1].pts.length, 2);
+});
+
+test('punti fermi accesi: restano come fascio, un campione isolato no', () => {
+  const P = (x, lit) => ({ x, y: 0, lit, rgb: [1, 1, 1] });
+  const st = ildaStrokes([P(.5, false), P(.5, true), P(.5, true), P(.5, true), P(.9, false), P(.2, false), P(.2, true)]);
+  assert.equal(st.length, 1);
+  assert.equal(st[0].pts.length, 3);
+  assert.deepEqual(st[0].pts[0], [.5, 0]);
+  assert.equal('n' in st[0], false);
+});
 
 // sezione ILDA: intestazione di 32 byte + record
 function section(fmt, records, size, write) {

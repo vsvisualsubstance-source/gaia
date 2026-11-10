@@ -591,6 +591,10 @@ button{cursor:pointer}
 .lzs-tg{display:inline-flex;gap:3px}.lzs-tg button{min-width:44px;padding:5px 8px;border:1px solid var(--line2);border-radius:6px;background:var(--panel);color:var(--dim);font:600 12px var(--mono,monospace);cursor:pointer}
 .lzs-tg button.on{border-color:#ff365c;color:#ff365c}
 .lzs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px}
+.ll-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(116px,1fr));gap:6px;max-height:62vh;overflow:auto;margin:8px 0;align-content:start}
+.ll-tile{position:relative;display:grid;justify-items:center;gap:2px;padding:6px;border:1px solid var(--line);border-radius:7px;background:var(--panel2);color:inherit;font:inherit}
+.ll-tile.on{border-color:#ffb23e;box-shadow:0 0 0 2px #ffb23e inset}.ll-tile.in{opacity:.5}
+.ll-tile canvas{width:104px;height:104px;border-radius:5px}.ll-tile b{font-size:13px}.ll-tile span{font-size:11px;color:var(--dim)}
 .lzs-tile{position:relative}
 .lzs-go{width:100%;display:grid;gap:4px;padding:5px;border:1px solid var(--line2);border-radius:8px;background:var(--panel);color:var(--fg);cursor:pointer;text-align:center}
 .lzs-go canvas{width:100%;aspect-ratio:1;border-radius:5px;display:block}

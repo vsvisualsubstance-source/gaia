@@ -325,7 +325,7 @@ function lzScenesHtml(d){
   return`<div class="lzs"><div class="lzs-top"><b>Scene laser</b><span class="hint">tocca una scena per mandarla a</span>
       <span class="lzs-tg">${lzsTargets(d).map(id=>`<button class="${LZS_TARGET===id?'on':''}" data-lzs="target" data-lzs-v="${id}">${id==='all'?'Tutti':esc(id)}</button>`).join('')}</span>
       <button class="btn sm${LZS_FLASH?' on':''}" data-lzs="flash" title="FLASH: tieni premuta una scena per proiettarla sopra quella attiva, si toglie quando la lasci (su tutti i cubi in modalità Scene)">FLASH</button>
-      <button class="btn sm ghost" data-lzs="svg">+ Importa SVG</button><button class="btn sm ghost" data-lzs="ilda" title="File ILDA (.ild), anche animati">+ ILDA</button><button class="btn sm ghost" data-lzs="text">+ Testo</button><button class="btn sm ghost" data-lzs="draw" title="Disegna con il dito: ogni tratto è una linea del laser">+ Disegna</button><button class="btn sm ghost" data-lzs="reset" title="Rimette i template mancanti">Template</button></div>
+      <button class="btn sm ghost" data-lzs="svg">+ Importa SVG</button><button class="btn sm ghost" data-lzs="lib" title="Sfoglia la libreria ILDA e aggiungi al progetto le scene che vuoi">+ Libreria</button><button class="btn sm ghost" data-lzs="ilda" title="File ILDA (.ild), anche animati">+ ILDA</button><button class="btn sm ghost" data-lzs="text">+ Testo</button><button class="btn sm ghost" data-lzs="draw" title="Disegna con il dito: ogni tratto è una linea del laser">+ Disegna</button><button class="btn sm ghost" data-lzs="reset" title="Rimette i template mancanti">Template</button></div>
     <div class="lzs-cal"><span class="hint">Taratura</span>${lzsCalScenes().map(c=>`<button class="btn sm ghost" data-lzs="cal" data-lzs-v="${c.id}" title="Manda ${esc(c.name)} a ${LZS_TARGET==='all'?'tutti i cubi':LZS_TARGET}: armare resta manuale. Leggi spigoli e bordi per regolare posizione, scala e trapezio.">${esc(c.name)}</button>`).join('')}</div>
     <div class="lzs-grid">${laserScenes().map(s=>`<div class="lzs-tile${running.has(s.id)?' on':''}">${(w=>w.level==='leggera'?'':`<i class="lzs-w ${w.level}" title="${esc(lzsWeightText(w,s))}">${w.k}×</i>`)(lzsWeight(s))}${s.beam?`<i class="lzs-b" title="${esc(lzsBeamHint())}">fumo</i>`:''}<button class="lzs-go" data-lzs="apply" data-lzs-v="${esc(s.id)}" title="Manda a ${LZS_TARGET==='all'?'tutti i cubi':LZS_TARGET} (passa in modalità Scene)">
         <canvas data-lzs-cv="${esc(s.id)}" width="120" height="120"></canvas><span>${esc(s.name)}</span>${running.has(s.id)?`<em>${running.get(s.id).join(' ')}</em>`:''}</button>
@@ -349,6 +349,7 @@ function lzsDown(e,el,w){
     L.laserScenes=[...laserScenes(),...add];save();showInfo(add.length?`Aggiunti ${add.length} template.`:'Tutti i template ci sono già.')}
   else if(a==='text'){uiPrompt('Testo da proiettare (meglio corto: poche parole):','GAIA').then(t=>{if(!t)return;
     try{const sc=lzsTextScene(t);L.laserScenes=[...laserScenes(),sc];save();paintLaser(el,w,true);openLaserSceneEditor(sc)}catch(err){showError('Testo: '+err.message)}});return}
+  else if(a==='lib'){openLaserLib(el,w);return}
   else if(a==='ilda'){const inp=document.createElement('input');inp.type='file';inp.accept='.ild,.ilda';
     inp.onchange=async()=>{const f=inp.files?.[0];if(!f)return;
       try{const sc=lzsParseIlda(await f.arrayBuffer(),f.name.replace(/\.ilda?$/i,'')),n=(sc.frames||[sc]).reduce((k,fr)=>k+fr.strokes.reduce((a,s)=>a+s.pts.length,0),0),fit=lzsFitOnImport(sc);
@@ -360,6 +361,38 @@ function lzsDown(e,el,w){
         showInfo(`SVG "${sc.name}": ${sc.strokes.length} linee, ${n} punti.${fit}`);openLaserSceneEditor(sc)}
       catch(err){showError('SVG: '+err.message)}};inp.click();return}
   paintLaser(el,w,true);
+}
+// libreria su disco: si sfoglia l'indice, nel progetto vengono copiate solo le scene scelte
+const LZS_LIB_FILTERS=[['all','Tutte',()=>true],['still','Fisse',i=>i.frames<2],['anim','Animate',i=>i.frames>1],['beam','Fasci',i=>i.beam],['light','Leggere',i=>i.level==='leggera']];
+async function openLaserLib(el,w){
+  const s=$('#scrim');s.hidden=false;s.innerHTML='<div class="sheet" role="dialog" aria-label="Libreria laser"><p class="hint">Carico la libreria…</p></div>';
+  let items=[];
+  try{const r=await(await fetch('/api/laser-lib')).json();if(!r.ok)throw new Error(r.error);items=r.items||[]}
+  catch(e){closeSheet();showError('Libreria laser: '+e.message);return}
+  if(!items.length){closeSheet();showInfo('Libreria laser vuota: si riempie con laser-lib-build.js.');return}
+  const sel=new Set();let filter='all';
+  const shown=()=>items.filter(LZS_LIB_FILTERS.find(f=>f[0]===filter)[2]),has=id=>laserScenes().some(x=>x.libId===id);
+  const paint=()=>{
+    const list=shown(),kb=[...sel].reduce((a,id)=>a+(items.find(i=>i.id===id)?.bytes||0),0)/1024;
+    s.innerHTML=`<div class="sheet ll-sheet" role="dialog" aria-label="Libreria laser">
+      <div class="top"><h3>Libreria laser</h3><button class="btn ghost" id="llClose">Chiudi</button></div>
+      <div class="row">${LZS_LIB_FILTERS.map(([k,t,fn])=>`<button class="btn sm${filter===k?' primary':' ghost'}" data-ll-f="${k}">${t} · ${items.filter(fn).length}</button>`).join('')}<span style="flex:1"></span><button class="btn sm ghost" id="llAll">Seleziona visibili</button></div>
+      <div class="ll-grid">${list.map(i=>`<button class="ll-tile${sel.has(i.id)?' on':''}${has(i.id)?' in':''}" data-ll="${esc(i.id)}"${has(i.id)?' disabled':''}><canvas width="104" height="104" data-ll-cv="${esc(i.id)}"></canvas><b>${esc(i.name.replace(/^ILDA /,''))}</b><span>${i.frames>1?`${i.frames} frame`:'fissa'}${i.beam?' · fumo':''}${has(i.id)?' · nel progetto':''}</span>${i.level==='leggera'?'':`<i class="lzs-w ${i.level}"></i>`}</button>`).join('')}</div>
+      <div class="cue-editor-actions"><span class="hint">${sel.size?`${sel.size} scelte · ${kb<1024?Math.round(kb)+' KB':(kb/1024).toFixed(1)+' MB'} nel progetto`:'Tocca le scene da aggiungere al progetto'}</span><button class="btn primary" id="llAdd"${sel.size?'':' disabled'}>Aggiungi al progetto</button></div>
+    </div>`;
+    const q=x=>s.querySelector(x);
+    s.querySelectorAll('[data-ll-cv]').forEach(cv=>{const it=items.find(i=>i.id===cv.dataset.llCv);lzsDraw(cv,{strokes:it.preview,color:{mode:'stroke',rgb:[1,1,1],palette:[[1,1,1]],rate:0},anim:{rotate:0,scale:.95,pulse:0,pulse_hz:0,orbit:0,orbit_hz:0,draw_hz:0},audio:{amount:0,to:'scale'}},0)});
+    q('#llClose').onclick=closeSheet;
+    s.querySelectorAll('[data-ll-f]').forEach(b=>b.onclick=()=>{filter=b.dataset.llF;paint()});
+    q('#llAll').onclick=()=>{const free=list.filter(i=>!has(i.id));if(free.every(i=>sel.has(i.id)))free.forEach(i=>sel.delete(i.id));else free.forEach(i=>sel.add(i.id));paint()};
+    s.querySelectorAll('[data-ll]').forEach(b=>b.onclick=()=>{const id=b.dataset.ll;sel.has(id)?sel.delete(id):sel.add(id);const top=q('.ll-grid').scrollTop;paint();q('.ll-grid').scrollTop=top});
+    q('#llAdd').onclick=async()=>{
+      if(kb>3072&&!await uiConfirm(`Il progetto cresce di ${(kb/1024).toFixed(1)} MB, e lo stato condiviso si rallenta. Aggiungere lo stesso?`,{ok:'Aggiungi'}))return;
+      try{const got=await Promise.all([...sel].map(async id=>{const r=await(await fetch('/api/laser-lib?id='+encodeURIComponent(id))).json();if(!r.ok)throw new Error(r.error);return{...r.scene,id:'ilda-'+uid()}}));
+        L.laserScenes=[...laserScenes(),...got];save();closeSheet();paintLaser(el,w,true);showInfo(`${got.length} scene aggiunte al progetto dalla libreria.`)}
+      catch(e){showError('Libreria laser: '+e.message)}};
+  };
+  paint();
 }
 // foglio da disegno: il riquadro e' tutto il campo del cubo, zona e maschere restano del gateway
 function openLaserDraw(el,w){

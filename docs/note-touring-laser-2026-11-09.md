@@ -57,6 +57,7 @@ Conclusione: nessuna prova che il DHCP abbia causato gli errori. Il server DHCP 
 - Disegno a mano: "+ Disegna" nelle scene, con diretta sui cubi facoltativa.
 - Ruota Tinta (10/11): sceglie il colore delle figure, al centro restano i colori della scena. Sulla touring servono il riavvio del gateway laser e quello del bridge Plancia.
 - Adatta (10/11): all'import di SVG e ILDA imposta la Dimensione per una figura pulita, se basta scendere fino a 0,5. Sotto quel valore il pulsante Adatta nella scena propone di togliere le linee piccole.
+- Libreria ILDA (10/11): `+ Libreria` nelle scene sfoglia `plancia/data/laser-lib` (131 scene da ShowNET Extended Set, 11 MB, fuori da git). Per averla sulla touring: copiare i file `.ild` via Drive e lanciare `node laser-lib-build.js "<cartella>"`, poi riavviare il bridge. Solo 19 sono effetti di fascio: da provare nel fumo e con la zona di sicurezza.
 - Nessuna di queste è stata ancora provata sul laser vero nella versione finale.
 
 ## Da verificare: flusso tra progetto, pagina Altro e TD (10/11)
