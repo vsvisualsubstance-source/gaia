@@ -2,7 +2,15 @@
 
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
-const { layeredVideoState, videoCommands, clockPosition } = require('../video-timeline');
+const { layeredVideoState, videoCommands, clockPosition, videoCueTable } = require('../video-timeline');
+
+test('tabella delle patch: solo le cue che caricano, senza doppioni, in ordine di primo uso', () => {
+  const r = videoCueTable([{ time: 30, deck: 'b', patch: 7 }, { time: 10, deck: 'A', patch: 3, label: 'Intro' }, { time: 50, deck: 'A', patch: 7 }, { time: 60, show: 'A' }, { time: 70, deck: 'A', patch: null }],
+    n => ({ 3: 'Nebbia', 7: 'Onde' })[n]);
+  assert.deepEqual(r.cues.map(c => [c.time, c.deck, c.patch, c.name, c.label]), [[10, 'A', 3, 'Nebbia', 'Intro'], [30, 'B', 7, 'Onde', ''], [50, 'A', 7, 'Onde', '']]);
+  assert.deepEqual(r.patches, [{ patch: 3, name: 'Nebbia', first_time: 10, uses: 1, decks: ['A'] }, { patch: 7, name: 'Onde', first_time: 30, uses: 2, decks: ['B', 'A'] }]);
+  assert.deepEqual(videoCueTable(undefined), { cues: [], patches: [] });
+});
 
 const CUES = [
   { time: 0, label: 'Intro', deck: 'A', patch: 10, show: 'A', fx: { edge: 0.2 } },

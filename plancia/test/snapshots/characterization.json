@@ -1279,6 +1279,56 @@
     }
    ]
   },
+  "patchdeck": {
+   "name": "PatchDeck",
+   "pages": [
+    {
+     "name": "PatchDeck",
+     "widgets": [
+      [
+       "patchdeck",
+       0,
+       0,
+       8,
+       6,
+       "",
+       "push",
+       "Deck A"
+      ],
+      [
+       "patchdeck",
+       8,
+       0,
+       8,
+       6,
+       "",
+       "push",
+       "Deck B"
+      ],
+      [
+       "tddevice",
+       0,
+       6,
+       9,
+       4,
+       "",
+       "push",
+       "FX e servizi"
+      ],
+      [
+       "tddevice",
+       9,
+       6,
+       7,
+       4,
+       "",
+       "push",
+       "Controller"
+      ]
+     ]
+    }
+   ]
+  },
   "regia": {
    "name": "Regia luci",
    "pages": [

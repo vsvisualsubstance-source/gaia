@@ -389,6 +389,8 @@ wss.on('connection', ws => {
         return;
       }
       saveSharedState(m.state, ws, m.clientRevision);
+    } else if (m.type === 'video_cue_table_send') {
+      videoTimeline?.sendTable();
     } else if (m.type === 'head_motion') {
       if (m.action === 'play') headMotion.play(m.scene, m.bpm); else if (m.action === 'stop') headMotion.stop();
     } else if (m.type === 'chase') {

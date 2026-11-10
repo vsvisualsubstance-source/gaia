@@ -79,6 +79,7 @@ TPL.gaia={name:'Gaia live',desc:'Agent Gaia (mood, pensieri, chat), PatchDeck V8
 // Console (2026-10-21, scelta dell'operatore): Regia luci = eseguire lo show
 // a mano (pila scene GO/BACK, scene, master e gruppi); Luci = colore delle
 // singole luci (palette per fixture).
+TPL.patchdeck={name:'PatchDeck',desc:'La sola pagina PatchDeck: due deck video, FX e servizi, Controller V8.',pages:()=>TPL.gaia.pages().filter(p=>p.name==='PatchDeck')};
 TPL.regia={name:'Regia luci',desc:'Console di regia: pila scene con GO/BACK, scene di DMX Master, render, master e fader di gruppo, blackout e flash.',pages:()=>[P('Regia',[
   W('cuestack',0,0,4,6,{label:'Scene GO',color:SWATCH[3]}),
   W('scenes',4,0,6,4,{label:'Scene · DMX Master',addr:'/dmx/scene',items:sceneList,cols:3,value:0}),
