@@ -4,6 +4,17 @@ const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const { layeredVideoState, videoCommands, clockPosition, videoCueTable } = require('../video-timeline');
 
+test('patch in errore: la cue non la carica, il deck resta com era', () => {
+  const { dropBlockedPatches } = require('../video-timeline');
+  const st = { patchA: 5, patchB: 7 };
+  assert.deepEqual(dropBlockedPatches(st, { patches: [{ patch: 5, state: 'error' }, { patch: 7, state: 'ready' }] }, { patchA: 2, patchB: null }), [5]);
+  assert.deepEqual([st.patchA, st.patchB], [2, 7]);
+  const nn = { patchA: 5, patchB: null };
+  assert.deepEqual(dropBlockedPatches(nn, null, { patchA: 2 }), []);
+  assert.equal(nn.patchA, 5);
+  assert.deepEqual(dropBlockedPatches(nn, { patches: [{ patch: 5, state: 'missing' }] }, { patchA: 2 }), []);
+});
+
 test('tabella delle patch: solo le cue che caricano, senza doppioni, in ordine di primo uso', () => {
   const r = videoCueTable([{ time: 30, deck: 'b', patch: 7 }, { time: 10, deck: 'A', patch: 3, label: 'Intro' }, { time: 50, deck: 'A', patch: 7 }, { time: 60, show: 'A' }, { time: 70, deck: 'A', patch: null }],
     n => ({ 3: 'Nebbia', 7: 'Onde' })[n]);

@@ -83,6 +83,14 @@ function videoCommands(prev, next, opts = {}) {
   return out;
 }
 
+// Patch in errore secondo PatchDeck (nome diverso dalla tabella, memoria non allocata; nota TD 74):
+// la cue non la carica, il deck resta com'e'. Ritorna i numeri fermati.
+function dropBlockedPatches(st, report, sent) {
+  const bad = new Set(((report && report.patches) || []).filter(p => p.state === 'error').map(p => +p.patch)), hit = [];
+  for (const d of ['A', 'B']) if (bad.has(+st['patch' + d])) { hit.push(+st['patch' + d]); st['patch' + d] = sent['patch' + d] ?? null; }
+  return hit;
+}
+
 // posizione stimata del clock: estrapolazione dall'ultimo stato ricevuto
 function clockPosition(clock, now) {
   if (!clock) return null;
@@ -115,8 +123,8 @@ function startVideoTimeline({ preload = +(process.env.VIDEO_PRELOAD_S ?? 2), get
   try { mqtt = require('mqtt'); } catch { log('Timeline video: pacchetto mqtt mancante (npm install), disattivata'); return null; }
   const client = mqtt.connect(url, { clientId: `plancia-bridge-video-${process.pid}`, reconnectPeriod: 3000, connectTimeout: 5000 });
   const empty = () => ({ patchA: null, patchB: null, showA: null, showB: null, fx: {}, mix: null });
-  const matrixTopic = `gaia/devices/${deviceId}/patchdeck_matrix`;
-  let clock = null, sent = empty(), wasActive = false, status = {}, lastKey = '', lastSentAt = 0, hasMix = false, labels = null, table = null, tableKey = null;
+  const matrixTopic = `gaia/devices/${deviceId}/patchdeck_matrix`, preloadTopic = `gaia/devices/${deviceId}/patch_preload`;
+  let clock = null, sent = empty(), wasActive = false, status = {}, lastKey = '', lastSentAt = 0, hasMix = false, labels = null, table = null, tableKey = null, preloadReport = null, blocked = [];
   const labelOf = n => (Array.isArray(labels) ? labels[n - 1] : labels?.[n] ?? labels?.[String(n)]) || '';
   // si pubblica solo se cambia il contenuto; force = anche se uguale (collegamento, pulsante)
   const publishTable = (doc, force) => {
@@ -126,10 +134,11 @@ function startVideoTimeline({ preload = +(process.env.VIDEO_PRELOAD_S ?? 2), get
     table = { patches: body.patches.length, cues: body.cues.length, at: Date.now() };
     client.publish(CUE_TABLE_TOPIC, JSON.stringify({ v: 1, ts: table.at, device_id: deviceId, ...body }), { retain: true });
   };
-  client.on('connect', () => { log(`Timeline video: MQTT ${url} collegato, PatchDeck = ${deviceId}`); client.subscribe([clockTopic, matrixTopic]); publishTable(getDoc() || {}, true); });
+  client.on('connect', () => { log(`Timeline video: MQTT ${url} collegato, PatchDeck = ${deviceId}`); client.subscribe([clockTopic, matrixTopic, preloadTopic]); publishTable(getDoc() || {}, true); });
   client.on('error', e => log('Timeline video MQTT:', e.message));
   client.on('message', (topic, payload) => {
     if (topic === matrixTopic) { try { const m = JSON.parse(payload); hasMix = !!m.fx_params?.deck_mix; labels = m.patch_labels ?? labels; } catch { /* ignora */ } return; }
+    if (topic === preloadTopic) { try { preloadReport = JSON.parse(payload); } catch { /* ignora */ } return; }
     if (topic !== clockTopic) return;
     try { const p = JSON.parse(payload); if (Number.isFinite(+p.pos)) clock = { ...p, receivedAt: Date.now() }; } catch { /* ignora */ }
   });
@@ -144,6 +153,7 @@ function startVideoTimeline({ preload = +(process.env.VIDEO_PRELOAD_S ?? 2), get
       // riaccendendo la timeline si riparte da zero: si rimanda tutto lo stato
       if (!wasActive) sent = empty();
       st = layeredVideoState(doc.cues, t, { preload });
+      blocked = dropBlockedPatches(st, preloadReport, sent);
       cmds = videoCommands(sent, st, { mix: hasMix });
       if (cmds.length && client.connected) {
         cmds.forEach(send);
@@ -152,7 +162,8 @@ function startVideoTimeline({ preload = +(process.env.VIDEO_PRELOAD_S ?? 2), get
     }
     wasActive = active && t != null;
     const cue = st && st.cue >= 0 ? doc.cues[st.cue] : null;
-    status = { table, active, mqtt: client.connected, clock: fresh, playing: !!clock?.playing, t: t == null ? null : +t.toFixed(2), cue: st ? st.cue : -1, label: cue?.label || '', deck: { a: sent.patchA, b: sent.patchB, showA: sent.showA, showB: sent.showB, mix: sent.mix }, mixReady: hasMix };
+    if (!active) blocked = [];
+    status = { table, blocked, active, mqtt: client.connected, clock: fresh, playing: !!clock?.playing, t: t == null ? null : +t.toFixed(2), cue: st ? st.cue : -1, label: cue?.label || '', deck: { a: sent.patchA, b: sent.patchB, showA: sent.showA, showB: sent.showB, mix: sent.mix }, mixReady: hasMix };
     // ai tablet: subito se cambia qualcosa (non il tempo), altrimenti ogni 0,5 s
     const key = JSON.stringify({ ...status, t: null });
     if (key !== lastKey || cmds.length || now - lastSentAt > 500) { lastKey = key; lastSentAt = now; broadcast({ type: 'video', state: status, sent: cmds }); }
@@ -160,4 +171,4 @@ function startVideoTimeline({ preload = +(process.env.VIDEO_PRELOAD_S ?? 2), get
   return { stop: () => { clearInterval(timer); client.end(true); }, status: () => status, sendTable: () => publishTable(getDoc() || {}, true) };
 }
 
-module.exports = { FX, MIX_OF, CUE_TABLE_TOPIC, videoCueTable, layeredVideoState, videoCommands, clockPosition, startVideoTimeline };
+module.exports = { FX, MIX_OF, CUE_TABLE_TOPIC, videoCueTable, dropBlockedPatches, layeredVideoState, videoCommands, clockPosition, startVideoTimeline };

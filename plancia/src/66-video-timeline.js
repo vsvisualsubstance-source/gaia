@@ -18,11 +18,26 @@ function pdPatchInfo(n,dev=pdDevice()){
 function videoCueText(c){
   return[c.deck&&c.patch?`${c.deck} ← ${pdPatchInfo(c.patch).label}`:'',c.show?VIDEO_SHOW[c.show]+(+c.fade>0&&(c.show==='A'||c.show==='B')?` in ${+c.fade}s`:''):'',Object.keys(c.fx||{}).length?'FX':''].filter(Boolean).join(' · ');
 }
+// stato di precarico di ogni patch, dichiarato da PatchDeck (patch_preload, nota TD 74)
+const VP_STATE={ready:['✓','pronta'],loading:['…','in caricamento'],missing:['?','non in memoria: parte da fredda'],error:['!','in errore: la cue non la carica']};
+function videoPatchState(n){const r=G.pdPreload||{};return(r[pdDevice()]||Object.values(r)[0])?.patches?.find(x=>+x.patch===+n)||null}
+function vpBadge(n){const p=n?videoPatchState(n):null,v=p&&VP_STATE[p.state];return v?`<i class="vp-st ${p.state}" title="${esc(v[1]+(p.error?' · '+p.error:''))}">${v[0]}</i>`:''}
+let VP_ERR_KEY='';
+function paintVideoPreload(el){
+  const list=[...new Set(videoDoc().cues.filter(c=>c.patch).map(c=>+c.patch))].map(n=>[n,videoPatchState(n)]).filter(x=>x[1]);
+  const sig=JSON.stringify(list),box=el.querySelector('[data-trk="video"]');
+  if(box&&box._vp!==sig){box._vp=sig;box.querySelectorAll('[data-vp]').forEach(i=>{i.innerHTML=vpBadge(+i.dataset.vp)})}
+  const bad=list.filter(x=>x[1].state==='error'),key=bad.map(x=>x[0]+':'+x[1].error).join();
+  if(key!==VP_ERR_KEY){VP_ERR_KEY=key;if(bad.length)showError(`PatchDeck: ${bad.map(([n,p])=>`patch ${n}${p.error?' ('+p.error+')':''}`).join(', ')} in errore. La cue non la carica.`)}
+  if(!list.length)return'';
+  if(bad.length)return`⚠ ${bad.length} patch in errore · `;
+  return`${list.filter(x=>x[1].state==='ready').length}/${list.length} pronte · `;
+}
 // traccia video sotto le cue luci della timeline /show
 function videoLaneHtml(w,D){
   const cues=[...videoDoc().cues].sort((a,b)=>a.time-b.time);
   const blocks=cues.map((c,i)=>{const e=cues[i+1]?.time??D;
-    return`<div class="tl-blk tl-vblk" data-ci="${videoDoc().cues.indexOf(c)}" style="left:${c.time/D*100}%;width:${Math.max(0,e-c.time)/D*100}%;--ic:${c.deck==='B'?SWATCH[4]:SWATCH[1]}"><span>${esc(c.label||'Video')}</span><em>${esc(videoCueText(c))}</em></div>`}).join('');
+    return`<div class="tl-blk tl-vblk" data-ci="${videoDoc().cues.indexOf(c)}" style="left:${c.time/D*100}%;width:${Math.max(0,e-c.time)/D*100}%;--ic:${c.deck==='B'?SWATCH[4]:SWATCH[1]}"><span>${c.patch?`<i data-vp="${+c.patch}" class="vp-w">${vpBadge(c.patch)}</i>`:''}${esc(c.label||'Video')}</span><em>${esc(videoCueText(c))}</em></div>`}).join('');
   return`<div class="tl-trk"><div class="tl-vhead"><span class="k">VIDEO</span>
     <button class="tl-live tl-vlive" data-act="vlive"${w.readonly?' disabled':''} title="VIDEO · TIMELINE: PatchDeck segue la timeline (la esegue il bridge su OPS). LIVE: comandi tu dal tablet">—</button>
     ${w.readonly?'':'<button class="tl-vcue" data-act="vcue" title="Elenco delle cue video">CUE</button>'}
@@ -41,7 +56,7 @@ function paintVideoLane(el,w,D,t){
   if(b.textContent!==txt){b.textContent=txt;b.classList.toggle('is-tl',on);b.classList.toggle('is-live',!on)}
   const st=VIDEO_ST,msg=!st?'bridge: nessuno stato':!st.mqtt?'bridge senza MQTT':!st.clock?'nessun orologio dello show':
     on?(st.cue>=0?`cue ${st.cue+1}${st.label?' · '+st.label:''}`:'prima della prima cue'):'PatchDeck dal tablet';
-  const s=el.querySelector(".tl-vvst");if(s&&s.textContent!==msg)s.textContent=msg;
+  const full=paintVideoPreload(el)+msg,s=el.querySelector(".tl-vvst");if(s&&s.textContent!==full)s.textContent=full;
   const ph=el.querySelector('.tl-vph');if(ph&&D>0)ph.style.left=Math.max(0,Math.min(1,t/D))*100+'%';
 }
 function openVideoCueEditor(w,cues,meta={}){
@@ -52,7 +67,7 @@ function openVideoCueEditor(w,cues,meta={}){
     <label>Posizione<input class="vc-time" value="${esc(formatCueTime(+c.time||0))}" inputmode="decimal"></label>
     <label>Nome<input class="vc-label" value="${esc(c.label||'')}" placeholder="es. Intro video"></label>
     <label>Deck<select class="vc-deck">${opt('',c.deck,'—')}${opt('A',c.deck,'A')}${opt('B',c.deck,'B')}</select></label>
-    <label>Patch<button type="button" class="vc-pbtn">${c.patch?`${pdPatchInfo(c.patch).img?`<img src="${pdPatchInfo(c.patch).img}" alt="">`:''}<span>${esc(pdPatchInfo(c.patch).label)}</span>`:'<span>— scegli —</span>'}</button><input type="hidden" class="vc-patch" value="${esc(c.patch??'')}"></label>
+    <label>Patch<button type="button" class="vc-pbtn">${c.patch?`${pdPatchInfo(c.patch).img?`<img src="${pdPatchInfo(c.patch).img}" alt="">`:''}<span>${esc(pdPatchInfo(c.patch).label)}</span>${vpBadge(c.patch)}`:'<span>— scegli —</span>'}</button><input type="hidden" class="vc-patch" value="${esc(c.patch??'')}"></label>
     <label>Mostra<select class="vc-show">${Object.entries(VIDEO_SHOW).map(([k,t])=>opt(k,c.show,t)).join('')}</select></label>
     <label>Fade (s)<input class="vc-fade" type="number" min="0" max="60" step="0.5" value="${+c.fade>0?+c.fade:''}" placeholder="stacco" title="Dissolvenza verso il deck mostrato (solo A o solo B); vuoto = stacco netto"></label>
     <button class="btn sm danger vc-del" title="Togli">×</button>

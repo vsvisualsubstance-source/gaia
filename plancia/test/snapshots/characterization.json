@@ -3732,6 +3732,7 @@
     "gaia/devices/+/heads_motion",
     "gaia/devices/+/heads_state",
     "gaia/devices/+/laser_preview",
+    "gaia/devices/+/patch_preload",
     "gaia/devices/+/patch_thumb/+",
     "gaia/devices/+/patchdeck_matrix",
     "gaia/devices/+/show_scenes",

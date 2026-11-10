@@ -34,6 +34,13 @@ async function main() {
     await svc('inactive', 'inactive');
     await sleep(600);
     check(!JSON.parse(await state('fx')).on, 'si spegne quando DMX Master lo spegne');
+    await p.ev(`(()=>{const T=window.__planciaTest;T.L.videoTimeline={active:false,cues:[{time:0,label:'Uno',deck:'A',patch:1,show:'A',fx:{}},{time:20,label:'Due',deck:'A',patch:5,show:null,fx:{}}]};T.render();
+      T.gIn('gaia/devices/td-pd-pc-win/patch_preload',{v:1,device_id:'td-pd-pc-win',patches:[{patch:1,state:'ready',name:'a',error:''},{patch:5,state:'error',name:'b',error:'nome diverso'}]});return 1})()`);
+    await open('Timeline');
+    await sleep(2000);
+    const vp = await p.ev(`JSON.stringify({ok:document.querySelectorAll('[data-trk="video"] .vp-st.ready').length,bad:document.querySelectorAll('[data-trk="video"] .vp-st.error').length,st:document.querySelector('.tl-vvst').textContent,toast:document.querySelector('#toast').textContent})`);
+    const v = JSON.parse(vp);
+    check(v.ok === 1 && v.bad === 1 && /1 patch in errore/.test(v.st) && /patch 5/.test(v.toast), `stato del precarico accanto alle cue (${vp})`);
     await open('Show');
     await sleep(1800);
     check(await p.ev(`!!document.querySelector('[data-act="mute-chase"]')`), 'il pulsante c\'è anche nella pagina Show');

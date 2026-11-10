@@ -326,6 +326,7 @@ for(const name of TD_STATE_TOPICS)onMqtt('gaia/devices/+/'+name,(p,seg,obj)=>{
 });
 onMqtt('gaia/devices/+/patchdeck_matrix',(p,seg,obj)=>{if(obj)G.pdm[p.device_id||seg[2]]=p});
 // miniatura di una patch PatchDeck (retained, una per topic): JPEG base64 -> data URL
+onMqtt('gaia/devices/+/patch_preload',(p,seg,obj)=>{if(obj)(G.pdPreload=G.pdPreload||{})[p.device_id||seg[2]]=p});
 onMqtt('gaia/devices/+/patch_thumb/+',(p,seg,obj)=>{if(obj&&p.data){const n=+(p.patch||seg[4]);(G.pdThumb[seg[2]]=G.pdThumb[seg[2]]||{})[n]={label:p.label||'',url:`data:${p.mime||'image/jpeg'};base64,${p.data}`};G.thumbV=(G.thumbV||0)+1}});
 onMqtt('gaia/devices/+/dmx_layout',(p,seg,obj)=>{if(obj)dmxLayoutApply(p)});
 onMqtt('gaia/devices/+/dmx_rigs',(p,seg,obj)=>{if(obj)dmxRigsApply(p)});
