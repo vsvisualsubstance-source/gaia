@@ -139,7 +139,7 @@ function chaseLaneHtml(w,D){
   const cues=[...chaseDoc().cues].sort((a,b)=>a.time-b.time);
   const blocks=cues.map((c,i)=>{const e=cues[i+1]?.time??D,ch=chases().find(x=>x.id===c.chase);
     return`<div class="tl-blk tl-vblk" data-ci="${chaseDoc().cues.indexOf(c)}" style="left:${c.time/D*100}%;width:${Math.max(0,e-c.time)/D*100}%;--ic:${c.chase==='off'||!ch?'#5d6573':'#b18cff'}"><span>${esc(c.label||ch?.name||'Fermo')}</span><em>${esc(c.chase==='off'?'fermo':ch?`${ch.steps.length} step`:'(chase tolto)')}</em></div>`}).join('');
-  return`<div class="tl-trk"><div class="tl-vhead"><span class="k" title="Chase: scene che si alternano a tempo">SEQUENZE</span>
+  return`<div class="tl-trk"><div class="tl-vhead"><span class="k" title="Chase: scene che si alternano a tempo">SEQUENZE</span>${tlMuteHtml('chase')}
     ${w.readonly?'':'<button class="tl-vcue" data-act="ccue" title="Elenco delle cue dei chase">CUE</button>'}
     </div><div class="tl-vlane tl-tlane" data-trk="chase"${w.readonly?'':' title="Tocca un punto: un chase parte da lì. Tocca un blocco per cambiarlo, trascinalo per spostarlo"'}><div class="tl-cues">${blocks}</div><span class="tl-vst tl-cst"></span><div class="tl-ph tl-cph"></div></div></div>`;
 }
@@ -147,7 +147,7 @@ function paintChaseLane(el,w,D,t){
   const s=el.querySelector('.tl-cst');if(!s)return;
   const n=chaseDoc().cues.length,td=tdTimelineDoc(),inTd=chaseTdReady()?(td?.chases?.cues||[]).length:(td?.cues||[]).filter(isChaseCue).length;
   const msg=chaseRun()?chaseStatusText():n?(L.tlTdDirty||!inTd?'da mandare: ⇪ TD':`${inTd} cue in DMX Master`):w.readonly?'':'tocca qui per far partire un chase';
-  if(s.textContent!==msg)s.textContent=msg;
+  const shown=paintTlMute(el,'chase')?'MUTE':msg;if(s.textContent!==shown)s.textContent=shown;
   const ph=el.querySelector('.tl-cph');if(ph&&D>0)ph.style.left=Math.max(0,Math.min(1,t/D))*100+'%';
 }
 // la timeline va a DMX Master con le cue dei chase rigenerate

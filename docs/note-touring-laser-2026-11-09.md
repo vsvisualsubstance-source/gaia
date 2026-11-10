@@ -71,3 +71,10 @@ Dal 10/11, solo su OPS e non ancora su GitHub: scaletta delle scene per progetto
 - Il blocco Scene DMX Master mostra tutte le scene di TD: le scene nascoste per progetto valgono solo nella tabella delle scene. Ipotesi: applicarle anche lì.
 - Scene GO (Regia) ha lo stesso limite: elenca tutte le scene di TD, nell'ordine di TD, senza poterle scegliere né riordinare. Richiesta del 10/11: gestire la selezione in modo più dinamico, oppure avere le scene GO per progetto. Le scene in TD restano in comune fra i progetti: la scaletta va salvata nel progetto, senza cancellare quelle degli altri show.
 - Sempre in Scene GO: BACK segue l'ordine dell'elenco e non l'ultima scena mandata. NEXT vale solo sul browser in cui è stato preparato.
+
+## Da fare: SVG per il laser (10/11)
+
+Consigli LaserCube: meno di 500 punti di ancoraggio, solo tracciati pieni, niente sfumature né ombre. Nella libreria ILDA la regola regge, ma non basta da sola: 16 scene sotto i 500 punti sono comunque medie o pesanti per la strada degli specchi, quindi il calcolo del peso resta il riferimento.
+
+- Idea non ancora fatta: all'import SVG avvisare se il file contiene sfumature, ombre (`filter`) o immagini, che non verranno disegnate.
+- Per chi prepara gli SVG: colore solo sul contorno, niente ombre (se esportate come forme separate diventano linee in più), testi convertiti in tracciati.

@@ -62,7 +62,7 @@ async function main() {
       new MutationObserver(()=>{const b=document.querySelector('.ui-confirm [data-v="1"]');if(b)b.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}))}).observe(document.body,{childList:true,subtree:true});
       const w=T.L.pages.flatMap(p=>p.widgets).find(x=>x.type==='timeline'&&!x.onlyTracks);
       T.openAudioCueEditor(w,[{time:0,label:'Apertura',fade:4,src:{kind:'playlist',id:''}}]);await z(200);
-      const pl=document.querySelector('.ac-pl');pl.value='pl-prova';document.querySelector('#acSave').click();await z(200);
+      document.querySelector('.ac-src').click();await z(150);[...document.querySelectorAll('.ac-list [data-id]')].find(b=>b.dataset.id==='pl-prova').click();await z(150);document.querySelector('#acSave').click();await z(200);
       await T.toggleAudioActive();await z(300);return JSON.stringify(T.audioDoc())})()`);
     const doc = JSON.parse(saved);
     check(doc.active && doc.cues.length === 1 && doc.cues[0].src.id === 'pl-prova', `cue salvata dall'editor e AUDIO in TIMELINE (${doc.cues[0]?.src?.kind})`);

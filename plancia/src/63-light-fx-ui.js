@@ -131,14 +131,31 @@ function fxLaneHtml(w,D){
   const cues=[...fxDoc().cues].sort((a,b)=>a.time-b.time);
   const blocks=cues.map((c,i)=>{const e=cues[i+1]?.time??D,names=(c.effects||[]).map(id=>lightFx().find(f=>f.id===id)?.name||'?');
     return`<div class="tl-blk tl-vblk" data-ci="${fxDoc().cues.indexOf(c)}" style="left:${c.time/D*100}%;width:${Math.max(0,e-c.time)/D*100}%;--ic:${names.length?'#ffb23e':'#5d6573'}"><span>${esc(c.label||names[0]||'Nessuno')}</span><em>${esc(names.length?names.join(' + '):'nessun effetto')}</em></div>`}).join('');
-  return`<div class="tl-trk"><div class="tl-vhead"><span class="k">EFFETTI</span>
+  return`<div class="tl-trk"><div class="tl-vhead"><span class="k">EFFETTI</span>${tlMuteHtml('fx')}
     ${w.readonly?'':'<button class="tl-vcue" data-act="fcue" title="Elenco delle cue degli effetti">CUE</button>'}
     </div><div class="tl-vlane tl-tlane" data-trk="fx"${w.readonly?'':' title="Tocca un punto: quali effetti suonano da lì. Tocca un blocco per cambiarli, trascinalo per spostarlo"'}><div class="tl-cues">${blocks}</div><span class="tl-vst tl-fst"></span><div class="tl-ph tl-fph"></div></div></div>`;
+}
+// Mute delle tracce EFFETTI e SEQUENZE: li esegue DMX Master (servizi show_mute_*), le cue restano.
+// Lo stato vero arriva con lo status di TD: intanto il pulsante mostra subito il tocco.
+const TL_MUTE_SVC={fx:'show_mute_effects',chase:'show_mute_chases'},TL_MUTE_TOUCH={};
+const tlMuteState=k=>G.devices[dmxId()]?.services?.[TL_MUTE_SVC[k]];
+function tlMuteOn(k){const t=TL_MUTE_TOUCH[k];return t&&Date.now()-t.at<3000?t.on:tlMuteState(k)==='active'}
+function tlMuteHtml(k){return`<button class="tl-mute" data-act="mute-${k}" title="Mute: la traccia non suona, le cue restano. Vale finché resta acceso e si azzera al riavvio di DMX Master">M</button>`}
+function tlMuteToggle(k){
+  if(tlMuteState(k)==null){showError('DMX Master non ha il mute di questa traccia: va aggiornato.');return}
+  const on=!tlMuteOn(k);
+  if(devCmd(dmxId(),{action:on?'enable':'disable',service:TL_MUTE_SVC[k]}))TL_MUTE_TOUCH[k]={on,at:Date.now()};
+  else showError('Non collegata a Gaia: mute non inviato.');
+}
+function paintTlMute(el,k){
+  const b=el.querySelector(`[data-act="mute-${k}"]`),on=tlMuteOn(k);if(!b)return on;
+  b.classList.toggle('on',on);b.closest('.tl-trk').classList.toggle('muted',on);b.setAttribute('aria-pressed',on);
+  return on;
 }
 function paintFxLane(el,w,D,t){
   const s=el.querySelector('.tl-fst');if(!s)return;
   const st=fxState(),ids=st?.timeline?.ids||[],msg=ids.length?`▶ ${ids.map(id=>lightFx().find(f=>f.id===id)?.name||id).join(' + ')}`:fxDoc().cues.length?(L.tlTdDirty||!tdTimelineDoc()?.effects?.cues?.length?'da mandare: ⇪ TD':'in DMX Master'):w.readonly?'':'tocca qui per far partire degli effetti';
-  if(s.textContent!==msg)s.textContent=msg;
+  const shown=paintTlMute(el,'fx')?'MUTE':msg;if(s.textContent!==shown)s.textContent=shown;
   const ph=el.querySelector('.tl-fph');if(ph&&D>0)ph.style.left=Math.max(0,Math.min(1,t/D))*100+'%';
 }
 function openFxCueEditor(w,cues,meta={}){
