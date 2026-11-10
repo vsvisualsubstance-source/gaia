@@ -8,6 +8,24 @@ const fixtures = [{ group: 'ledbar' }, { group: 'consolle' }, { group: 'haze' }]
 const red = { palette: 'Red', colors: [[1, 0, 0]] };
 const SG = ['rig_a', 'rig_b', 'ledbar', 'haze', 'blinder', 'consolle', 'heads'];
 
+test('scaletta del progetto: ordine suo, scene sparite ignorate, senza scaletta tutte tranne le nascoste', () => {
+  const { projSceneList } = require('../src/63-scene-matrix.js');
+  const sc = ['a', 'b', 'c'].map((id, index) => ({ id, index }));
+  assert.deepEqual(projSceneList(sc, ['c', 'zzz', 'a'], ['c']).map(s => s.id), ['c', 'a']);
+  assert.deepEqual(projSceneList(sc, undefined, ['b']).map(s => s.id), ['a', 'c']);
+  assert.deepEqual(projSceneList(sc, [], []), []);
+});
+
+test('BACK: la riga sopra la scena attiva; fuori scaletta la riga sopra NEXT', () => {
+  const { csBackPos } = require('../src/63-scene-matrix.js');
+  const l = [{ index: 7 }, { index: 2 }, { index: 5 }];
+  assert.equal(csBackPos(l, 2, 7), 1);
+  assert.equal(csBackPos(l, 0, 2), -1);
+  assert.equal(csBackPos(l, -1, 5), 1);
+  assert.equal(csBackPos(l, -1, 7), 2);
+  assert.equal(csBackPos([], -1, null), -1);
+});
+
 test('colonne: solo i gruppi a colori con luci nel progetto, strobo se serve', () => {
   const cols = smColumns(groups, fixtures, [{ categories: ['strobe'] }]);
   assert.deepEqual(cols.map(c => c.key), ['ledbar', 'consolle', 'strobe']);

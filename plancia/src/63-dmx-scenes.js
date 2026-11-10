@@ -56,14 +56,14 @@ function paletteSceneId(palette){
 // Comando di scena verso TD e attesa dell'esito: done() vero sul nuovo
 // stato pubblicato, oppure un last_error nuovo = rifiutato.
 function tdSceneCommand(param,value,done,timeoutMs=6000){
-  const dev=()=>G.devices[dmxId()]||{},err0=dev().last_error;
+  const dev=()=>G.devices[dmxId()]||{},err0=dev().last_error,isNew=param==='show_scene_capture'&&!tdSceneById(value?.name);
   if(!devCmd(dmxId(),{action:'set',param,value}))return Promise.reject(new Error('Non collegata a Gaia: apri ⋯ → Gaia e collegati prima.'));
   return new Promise((resolve,reject)=>{
     const t0=Date.now();
     const check=()=>{
       const err=dev().last_error;
       if(err&&err!==err0)return reject(new Error(err));
-      if(done())return resolve();
+      if(done()){setlistOnScene(param,value,isNew);return resolve()}
       if(Date.now()-t0>timeoutMs)return reject(new Error('Nessuna conferma da DMX Master entro '+Math.round(timeoutMs/1000)+' s.'));
       setTimeout(check,400);
     };

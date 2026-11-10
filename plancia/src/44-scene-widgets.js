@@ -39,15 +39,16 @@ registerWidget('scenes',{oscAddress:w=>!['dmx-enum','head-presets'].includes(w.m
       if(w.mode==='head-presets')return `<div class="hp">${(w.headPresets||[]).map((p,i)=>`<button data-head-preset="${i}" title="${esc(p.name)}">${esc(p.name)}</button>`).join('')}<button data-act="manage-presets">＋ Gestisci</button></div>`;
       // /dmx/scene con DMX Master: le scene vere di TD (catalogo), senza i
       // colori dei LOOKS locali, che con TD non corrispondono a niente
-      const td=w.addr==='/dmx/scene'&&(!w.mode||w.mode==='push')?tdScenes():[];
-      const it=td.length?td.map(s=>s.label||s.id):(headItems(w)||items(w)),pos=w.addr==='/mh/position'&&(!w.mode||w.mode==='push'),manage=w.addr==='/dmx/scene'&&(!w.mode||w.mode==='push')&&Array.isArray(tdParams().show_scene_catalog),c=colsOf(w,it.length+(manage?1:0)+(pos?2:0)),lk=w.addr==='/dmx/scene'&&!td.length;
+      // (solo quelle della scaletta del progetto; data-i = numero di scena in TD, non la posizione)
+      const isTd=w.addr==='/dmx/scene'&&(!w.mode||w.mode==='push')&&tdScenes().length>0,td=isTd?projScenes():[];
+      const it=isTd?td.map(s=>s.label||s.id):(headItems(w)||items(w)),pos=w.addr==='/mh/position'&&(!w.mode||w.mode==='push'),manage=w.addr==='/dmx/scene'&&(!w.mode||w.mode==='push')&&Array.isArray(tdParams().show_scene_catalog),c=colsOf(w,it.length+(manage?1:0)+(pos?2:0)),lk=w.addr==='/dmx/scene'&&!isTd;
       if(w.mode==='head-select'&&!it.length)return '<div class="dv-empty">In attesa delle teste mobili pubblicate da DMX Master.</div>';
       // scene di TD: striscia con le palette salvate nella scena (front |
       // back, preview della nota TD 37), barretta col primo colore front
       return `<div class="sc" style="grid-template-columns:repeat(${c},minmax(0,1fr))">${it.map((n,i)=>{const look=td.length?tdSceneLook(td[i]):null,ic=look?look.ic:lk&&LOOKS[i]?lookHex(i):'';
-        return `<div class="si" data-i="${i}" title="${esc(n)}"${ic?` style="--ic:${ic}"`:''}><span class="no">${String(i+1).padStart(2,'0')}</span><span class="nm">${esc(n)}</span><i class="chip"></i><i class="prog"></i>${(g=>g?`<i class="pal" style="background:${g}"></i>`:'')(td.length?smLookGrad(td[i])||look?.grad:look?.grad)}</div>`}).join('')}${pos?'<div class="si si-manage" data-act="pos-store" title="Salva in DMX Master la posizione delle teste selezionate"><span class="nm">💾 Salva</span></div><div class="si si-manage" data-act="pos-scene" title="Cattura la posizione attuale come scena teste, da usare in timeline"><span class="nm">📷 Scena</span></div>':''}${manage?'<div class="si si-manage" data-act="manage-scenes" title="Crea, ricattura, rinomina ed elimina le scene di DMX Master"><span class="nm">＋ Scene…</span></div>':''}</div>${lk?'<span class="simtag" title="DMX Master non collegato: look locali della Plancia, solo simulazione">SIMULAZIONE</span>':''}`},
+        return `<div class="si" data-i="${td.length?td[i].index:i}" title="${esc(n)}"${ic?` style="--ic:${ic}"`:''}><span class="no">${String(i+1).padStart(2,'0')}</span><span class="nm">${esc(n)}</span><i class="chip"></i><i class="prog"></i>${(g=>g?`<i class="pal" style="background:${g}"></i>`:'')(td.length?smLookGrad(td[i])||look?.grad:look?.grad)}</div>`}).join('')}${pos?'<div class="si si-manage" data-act="pos-store" title="Salva in DMX Master la posizione delle teste selezionate"><span class="nm">💾 Salva</span></div><div class="si si-manage" data-act="pos-scene" title="Cattura la posizione attuale come scena teste, da usare in timeline"><span class="nm">📷 Scena</span></div>':''}${manage?'<div class="si si-manage" data-act="manage-scenes" title="Crea, ricattura, rinomina ed elimina le scene di DMX Master"><span class="nm">＋ Scene…</span></div>':''}</div>${lk?'<span class="simtag" title="DMX Master non collegato: look locali della Plancia, solo simulazione">SIMULAZIONE</span>':''}`},
   paint(el,w){    if(w.mode==='dmx-enum')paintTdEnum(el,w);
-    else el.querySelectorAll('.si').forEach((n,i)=>n.classList.toggle('on',w.mode==='multi'||w.mode==='head-select'?!!(Array.isArray(w.value)&&+w.value[i]):w.value===i));
+    else el.querySelectorAll('.si').forEach((n,i)=>n.classList.toggle('on',w.mode==='multi'||w.mode==='head-select'?!!(Array.isArray(w.value)&&+w.value[i]):w.value===+n.dataset.i));
   },
   args(w){
       if(w.mode==='head-select'&&w.addr==='/mh/select/heads')return (w.headValues||[]).filter((_,i)=>!!w.value?.[i]);
@@ -80,7 +81,7 @@ registerWidget('scenes',{oscAddress:w=>!['dmx-enum','head-presets'].includes(w.m
     if(repaint&&(w.addr==='/mh/gobo'||w.addr==='/mh/position')&&headSigChanged(w,JSON.stringify(headItems(w))))refresh(w);
     if(w.mode==='dmx-enum'){if(repaint)paintTdEnum(el,w)}
     else if(w.addr==='/dmx/scene'){const k=SH.fade>0?clamp((now-SH.t0)/(SH.fade*1000)):1;
-      el.querySelectorAll('.si').forEach((x,i)=>{const p=x.querySelector('.prog');if(p)p.style.width=(i===SH.scene&&k<1)?k*100+'%':'0'})}
+      el.querySelectorAll('.si').forEach(x=>{const p=x.querySelector('.prog');if(p)p.style.width=(+x.dataset.i===SH.scene&&k<1)?k*100+'%':'0'})}
   },
   help(w){const a=w.addr||'';
       if(w.mode==='dmx-enum')return['Palette del rig','Il colore di tutto il gruppo (rig). Per una luce sola usa la pagina Luci.'];

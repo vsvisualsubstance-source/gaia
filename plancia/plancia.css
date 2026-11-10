@@ -471,6 +471,18 @@ button{cursor:pointer}
 .cs-btns{display:grid;grid-template-columns:1fr 2fr;gap:8px}
 .cs-btns .btn{min-height:64px;font:700 20px/1 inherit;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
 .cs-go small{font:500 11px inherit;opacity:.8}
+/* scaletta delle scene per progetto */
+.cs-setlist{align-self:flex-start;min-height:30px}
+.sl-sheet .sl-list{display:grid;gap:4px;max-height:58vh;overflow:auto;margin:8px 0;align-content:start}
+.sl-sheet h4{margin:8px 0 2px}
+.sl-row{display:grid;grid-template-columns:minmax(0,1fr) 72px 44px 44px;gap:6px;align-items:center;padding:4px 8px;border:1px solid var(--line);border-radius:7px;min-height:46px}
+.sl-row.off{opacity:.65}
+.sl-row .chk{display:flex;align-items:center;gap:8px;min-width:0}
+.sl-row .chk input{width:22px;height:22px;flex:none}
+.sl-row b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sl-no{min-width:20px;text-align:right;color:var(--dim);font-variant-numeric:tabular-nums}
+.sl-row i{height:6px;border-radius:3px}
+.sl-row .btn{min-height:38px;padding:0}
 
 /* ---------- tutorial "?" ---------- */
 #helpBtn{flex:none;font-weight:700;min-width:38px}

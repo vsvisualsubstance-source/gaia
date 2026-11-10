@@ -209,7 +209,7 @@ function projLoad(id){
   ensureStageData(L);
   L._projectId=id;const e=projList().find(x=>x.id===id);L._projectName=e?e.name:'';
   dedupeDmxV8Pages(L);
-  pi=0;selId=null;save();render();initShow();checkProjectModelsSoon();
+  pi=0;selId=null;save();render();initShow();checkProjectModelsSoon();checkProjectPatchSoon();
   return true;
 }
 function projDelete(id){

@@ -64,9 +64,63 @@ function smLookGrad(scene){
   const cols=smColumns(groupsOf(),L.fixtures).filter(c=>c.kind==='color');if(!cols.length||!scene)return'';
   return dmxGradient(cols.map(c=>{const x=smCell(scene,c);return x?.colors?.length?[x.colors,false]:[[[.17,.18,.21]],true]}));
 }
+// Scaletta del progetto (L.sceneSetlist: id delle scene di TD, in ordine). Le scene restano in
+// comune fra i progetti: qui si sceglie solo quali usare e in che ordine. Senza scaletta valgono
+// tutte tranne le nascoste; gli id di scene che in TD non ci sono piu' si ignorano.
+function projSceneList(scenes,setlist,hidden){
+  if(Array.isArray(setlist)){const byId=new Map(scenes.map(s=>[s.id,s]));return setlist.map(id=>byId.get(id)).filter(Boolean)}
+  const h=new Set(hidden||[]);return scenes.filter(s=>!h.has(s.id));
+}
+// BACK di Scene GO: posizione da richiamare, -1 = niente. La scena attiva puo' essere fuori
+// scaletta (timeline, altra pagina): allora la riga sopra NEXT, cioe' l'ultima mandata col GO.
+function csBackPos(list,activePos,next){
+  if(!list.length)return-1;
+  if(activePos>=0)return activePos-1;
+  const n=list.findIndex(s=>s.index===next);
+  return n>0?n-1:list.length-1;
+}
 // --- interfaccia ---
 let SM_SHOW_ALL=false;
 const smHidden=()=>Array.isArray(L.sceneHidden)?L.sceneHidden:[];
+function projScenes(){return projSceneList(tdScenes(),L.sceneSetlist,smHidden())}
+// una scena nuova catturata qui entra in scaletta; una rinominata resta al suo posto in tutti i progetti
+function setlistOnScene(param,value,isNew){
+  if(param==='show_scene_capture'&&isNew&&Array.isArray(L.sceneSetlist)&&!L.sceneSetlist.includes(value.name)){L.sceneSetlist.push(value.name);save();return}
+  if(param!=='show_scene_rename')return;
+  const fix=d=>{if(!Array.isArray(d?.sceneSetlist)||!d.sceneSetlist.includes(value.name))return false;d.sceneSetlist=d.sceneSetlist.map(x=>x===value.name?value.to:x);return true};
+  if(fix(L))save();
+  for(const p of projList()){const snap=store.get('plancia.project.'+p.id);if(fix(snap))store.set('plancia.project.'+p.id,snap)}
+}
+function openSceneSetlist(draft){
+  const all=tdScenes(),byId=new Map(all.map(x=>[x.id,x]));
+  draft=(draft||projScenes().map(x=>x.id)).filter(id=>byId.has(id));
+  const rest=all.filter(x=>!draft.includes(x.id)),s=$('#scrim'),top=s.querySelector('.sl-list')?.scrollTop||0;s.hidden=false;
+  const row=(sc,pos)=>`<div class="sl-row${pos<0?' off':''}" data-sl="${esc(sc.id)}">
+    <label class="chk"><input type="checkbox" class="sl-on"${pos<0?'':' checked'}><span class="sl-no">${pos<0?'':pos+1}</span><b>${esc(sc.label||sc.id)}</b></label>
+    <i style="background:${smLookGrad(sc)||'transparent'}"></i>
+    ${pos<0?'':`<button class="btn sm ghost" data-sl-move="-1" aria-label="Sposta su"${pos?'':' disabled'}>↑</button><button class="btn sm ghost" data-sl-move="1" aria-label="Sposta giù"${pos<draft.length-1?'':' disabled'}>↓</button>`}</div>`;
+  s.innerHTML=`<div class="sheet sl-sheet" role="dialog" aria-label="Scaletta delle scene">
+    <div class="top"><h3>Scaletta · ${esc(L._projectName||'progetto')}</h3><button class="btn ghost" id="slCancel">Annulla</button></div>
+    <p class="hint">Quali scene usa questo progetto in Scene GO e nel blocco Scene, e in che ordine. Togliere una scena da qui non la cancella da DMX Master e non cambia gli altri progetti né la timeline.</p>
+    <div class="row"><button class="btn sm" id="slAll">Tutte</button><button class="btn sm" id="slRel" title="Solo le scene che toccano i gruppi di luci di questo progetto">Solo per questi gruppi</button><button class="btn sm ghost" id="slNone">Nessuna</button><span class="hint">${draft.length} di ${all.length}</span></div>
+    <div class="sl-list">${draft.map((id,i)=>row(byId.get(id),i)).join('')}${rest.length&&draft.length?'<h4>Fuori scaletta</h4>':''}${rest.map(x=>row(x,-1)).join('')}</div>
+    <div class="cue-editor-actions"><button class="btn primary" id="slSave">Salva scaletta</button></div>
+  </div>`;
+  const list=s.querySelector('.sl-list');list.scrollTop=top;
+  s.querySelector('#slCancel').onclick=closeSheet;
+  s.querySelector('#slAll').onclick=()=>openSceneSetlist([...draft,...rest.map(x=>x.id)]);
+  s.querySelector('#slNone').onclick=()=>openSceneSetlist([]);
+  s.querySelector('#slRel').onclick=()=>{const cols=smColumns(groupsOf(),L.fixtures,all);openSceneSetlist([...draft,...rest.map(x=>x.id)].filter(id=>smRelevant(byId.get(id),cols)))};
+  s.querySelectorAll('[data-sl]').forEach(r=>{const id=r.dataset.sl;
+    r.querySelector('.sl-on').onchange=e=>openSceneSetlist(e.target.checked?[...draft,id]:draft.filter(x=>x!==id));
+    r.querySelectorAll('[data-sl-move]').forEach(b=>b.onclick=()=>{const a=[...draft],i=a.indexOf(id),j=i+ +b.dataset.slMove;[a[i],a[j]]=[a[j],a[i]];openSceneSetlist(a)});
+  });
+  s.querySelector('#slSave').onclick=()=>{
+    L.sceneSetlist=[...draft];
+    if(smHidden().length)L.sceneHidden=smHidden().filter(id=>!draft.includes(id)); // messa in scaletta = non piu' nascosta
+    save();closeSheet();refreshTdSceneWidgets();showInfo(`Scaletta salvata: ${draft.length} scene.`);
+  };
+}
 function smChip(cell){
   if(!cell)return'<span class="smx-none">—</span>';
   if(cell.text)return`<span class="smx-txt">${esc(cell.text)}</span>`;
@@ -137,7 +191,9 @@ async function smRowMenu(sceneId){
     if(v==='recall')await tdSceneCommand('show_scene_recall',sceneId,()=>tdActiveScene(tdParams())?.id===sceneId);
     else if(v==='rename'){const label=String(await uiPrompt('Nome da mostrare',sc.label||sc.id)||'').trim();if(!label)return;
       await tdSceneCommand('show_scene_update',{name:sceneId,label,categories:sc.categories||[],...((sc.only||[]).length?{only:sc.only}:{})},()=>(tdSceneById(sceneId)?.label||'')===label)}
-    else if(v==='hide'){L.sceneHidden=hid?smHidden().filter(x=>x!==sceneId):[...smHidden(),sceneId];save()}
+    else if(v==='hide'){L.sceneHidden=hid?smHidden().filter(x=>x!==sceneId):[...smHidden(),sceneId];
+      if(Array.isArray(L.sceneSetlist)){const rest=L.sceneSetlist.filter(x=>x!==sceneId);L.sceneSetlist=hid?[...rest,sceneId]:rest}
+      save();refreshTdSceneWidgets()}
     else if(v==='delete'){if(!await uiConfirm(`Eliminare "${sc.label||sceneId}" da DMX Master?\nLe scene sono in comune con tutti i progetti.`,{ok:'Elimina'}))return;
       await tdSceneCommand('show_scene_delete',sceneId,()=>!tdSceneById(sceneId))}
     smReopen();
@@ -161,10 +217,11 @@ function openSceneMatrix(){
     </tbody></table></div>
     <div class="row smx-foot"><button class="btn primary" id="smNew">+ Nuova scena</button>
       <label class="chk"><input type="checkbox" id="smAll"${SM_SHOW_ALL?' checked':''}> mostra tutte${off&&!SM_SHOW_ALL?` (${off} nascoste: altri gruppi o nascoste qui)`:''}</label>
-      <span style="flex:1"></span><button class="btn ghost" id="smFull" title="Categorie, teste, strobo, scene dalle palette">Editor completo</button></div>
+      <span style="flex:1"></span><button class="btn ghost" id="smSetlist" title="Quali scene usa questo progetto e in che ordine">☰ Scaletta</button><button class="btn ghost" id="smFull" title="Categorie, teste, strobo, scene dalle palette">Editor completo</button></div>
   </div>`;
   s.querySelector('#smClose').onclick=closeSheet;
   s.querySelector('#smFull').onclick=()=>openSceneEditor();
+  s.querySelector('#smSetlist').onclick=()=>openSceneSetlist();
   s.querySelector('#smNew').onclick=()=>smNewScene(cols);
   s.querySelector('#smAll').onchange=e=>{SM_SHOW_ALL=e.target.checked;openSceneMatrix()};
   s.querySelectorAll('tr[data-sm]').forEach(tr=>{const id=tr.dataset.sm;
@@ -175,5 +232,5 @@ function openSceneMatrix(){
 }
 
 if(typeof module==='object'&&module.exports){
-  module.exports={smKey,smPaletteParam,smColumns,smCell,smRelevant,smPlanEdit};
+  module.exports={smKey,smPaletteParam,smColumns,smCell,smRelevant,smPlanEdit,projSceneList,csBackPos};
 }

@@ -4,6 +4,26 @@ const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const { DEFAULT_GROUPS, normGroupName, validateGroups, groupsPayload, groupsFromTD } = require('../src/62-dmx-groups');
 
+test('invio gruppi: i rig degli altri show restano, tolti solo quelli eliminati a mano', () => {
+  const { groupsToSend } = require('../src/62-dmx-groups');
+  const list = [{ group: 'front', kind: 'chase', label: 'Front', bind: 'rig_a' }, { group: 'consolle', kind: 'chase', label: 'Consolle' }];
+  const td = [{ group: 'front', td_group: 'rig_a', kind: 'chase', label: 'Front', builtin: true },
+    { group: 'consolle', td_group: 'consolle', kind: 'chase', label: 'Consolle' },
+    { group: 'side', td_group: 'side', kind: 'chase', label: 'side' }, { group: 'truss', td_group: 'truss', kind: 'chase', label: 'truss' }];
+  assert.deepEqual(groupsToSend(list, td).map(g => g.group), ['front', 'consolle', 'side', 'truss']);
+  assert.deepEqual(groupsToSend(list, td, ['truss']).map(g => g.group), ['front', 'consolle', 'side']);
+});
+
+test('progetto contro DMX Master: mancanti, in piu, spostate, senza rig', () => {
+  const { projectPatchIssues, patchIssuesText } = require('../src/62-dmx-groups');
+  const local = [{ id: 'p-a', name: 'A', address: 1, group: 'ledbar' }, { id: 'p-b', name: 'B', address: 15, group: 'consolle' }, { id: 'p-c', name: 'C', address: 29, group: 'ledbar' }];
+  const td = [{ uid: 'p-a', address: 1, group: 'ledbar' }, { uid: 'p-b', address: 20, group: 'consolle' }, { uid: 'p-x', address: 99, group: 'ledbar' }];
+  const r = projectPatchIssues(local, td, [{ uid: 'p-b', name: 'B', status: 'missing' }, { uid: 'p-a', status: 'ok' }]);
+  assert.deepEqual([r.missing, r.extra, r.changed, r.noRig], [['C'], ['p-x'], ['B'], ['B']]);
+  assert.match(patchIssuesText(r), /1 luce non è in DMX Master.*1 luce c.è solo.*1 luce ha indirizzo.*1 luce non ha il rig/);
+  assert.equal(patchIssuesText({ missing: [], extra: [], changed: [], noRig: [] }), '');
+});
+
 // dmx_groups come lo pubblica DMX Master il 2026-10-20
 const TD = [
   { group: 'front', td_group: 'rig_a', kind: 'chase', label: 'Front', builtin: true, fixtures: 2 },

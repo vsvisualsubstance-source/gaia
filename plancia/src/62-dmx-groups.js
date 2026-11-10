@@ -48,7 +48,35 @@ function tdPatchDiff(local,tdList){
   return{missing:(local||[]).filter(f=>!td.has(f.id)).map(f=>f.name||f.id),extra:[...td].filter(u=>!mine.has(u))};
 }
 
+// Progetto appena aperto contro DMX Master: la patch di TD non cambia col progetto.
+// local = fixture DMX della Pianta, layout = dmx_layout (status per fixture).
+function projectPatchIssues(local,tdList,layout,norm=x=>x){
+  const list=(tdList||[]).filter(Boolean),td=new Map(list.map(x=>[x.uid,x])),mine=new Set((local||[]).map(f=>f.id));
+  const changed=(local||[]).filter(f=>{const x=td.get(f.id);return x&&(+x.address!==+f.address||norm(x.group)!==norm(f.group))}).map(f=>f.name||f.id);
+  const noRig=(layout||[]).filter(x=>x&&x.status==='missing'&&mine.has(x.uid)).map(x=>x.name||x.uid);
+  return{...tdPatchDiff(local,list),changed,noRig};
+}
+function patchIssuesText(r){
+  const parts=[[r.missing,'non sono in DMX Master'],[r.extra,'ci sono solo in DMX Master'],[r.changed,'hanno indirizzo o gruppo diverso'],[r.noRig,'non hanno il rig in DMX Master']]
+    .filter(([a])=>a.length).map(([a,t])=>`${a.length} luc${a.length>1?'i':'e'} ${a.length>1?t:t.replace('non sono','non è').replace('ci sono','c\'è').replace('hanno','ha')}`);
+  return parts.length?`Progetto e DMX Master non coincidono: ${parts.join(', ')}. ⇪ TD manda la Pianta, ⇩ TD importa da DMX Master.`:'';
+}
+// Da mandare a TD: la lista del progetto piu' i rig che TD ha e il progetto non elenca. TD
+// toglie i rig vuoti fuori lista, e un progetto non deve togliere i rig degli altri show:
+// si tolgono solo quelli eliminati a mano nell'editor (deleted).
+function groupsToSend(list,tdList,deleted=[]){
+  const have=new Set(list.flatMap(g=>[g.group,g.bind].filter(Boolean))),del=new Set(deleted);
+  return groupsPayload([...list,...groupsFromTD(tdList).filter(g=>!g.bind&&!have.has(g.group)&&!del.has(g.group))]);
+}
+
 // ---- UI (solo nel browser) ----
+function checkProjectPatchSoon(){
+  setTimeout(()=>{const id=dmxId(),d=G.devices[id],td=d?.params?.dmx_fixtures;
+    if(!Array.isArray(td)||devAge(d)>=120000)return;
+    const local=(L.fixtures||[]).filter(f=>FIX_TYPES[f.type]?.ch);if(!local.length)return;
+    const msg=patchIssuesText(projectPatchIssues(local,td,DMX_LAYOUT.fixtures,g=>normGroupName(g,groupsOf())));
+    if(msg)setTimeout(()=>showInfo(msg),$('#toast').hidden?0:5200)},1500); // non coprire l'avviso sui modelli
+}
 // Lista: quella del layout; se manca, quella che TD pubblica; poi i default.
 function groupsOf(){
   if(Array.isArray(L.groups)&&L.groups.length)return L.groups;
@@ -71,8 +99,10 @@ function groupOptionsHtml(current){
   if(cur&&!list.some(g=>g.group===cur))opts.push(`<option value="${esc(cur)}" selected>${esc(cur)} (non nella lista gruppi)</option>`);
   return opts.join('');
 }
+const GROUPS_DELETED=new Set(); // eliminati a mano nell'editor aperto
 function openGroupEditor(list){
   const inTD=new Set((tdParams().dmx_groups||[]).map(x=>x.group));
+  if(!list)GROUPS_DELETED.clear();
   list=list||groupsOf().map(g=>({...g}));
   const s=$('#scrim');s.hidden=false;
   const KIND={chase:'chase · palette e audio',level:'level · solo livello',heads:'teste'};
@@ -97,7 +127,7 @@ function openGroupEditor(list){
   s.querySelector('#grpAdd').onclick=()=>{const cur=read();let k=1;while(cur.some(g=>g.group===`rig${k}`))k++;
     cur.push({group:`rig${k}`,kind:'chase',label:'',_new:true});openGroupEditor(cur);
     s.querySelector('.grp-row:last-child .g-name')?.select()};
-  s.querySelectorAll('[data-g-del]').forEach(b=>b.onclick=()=>{const cur=read();cur.splice(+b.dataset.gDel,1);openGroupEditor(cur)});
+  s.querySelectorAll('[data-g-del]').forEach(b=>b.onclick=()=>{const cur=read();GROUPS_DELETED.add(cur.splice(+b.dataset.gDel,1)[0].group);openGroupEditor(cur)});
   s.querySelector('#grpSave').onclick=()=>{
     const cur=read().map(({_new,...g})=>g),errs=validateGroups(cur);
     if(errs.length){showError('Gruppi: '+errs.join(' · '));return}
@@ -107,8 +137,10 @@ function openGroupEditor(list){
 // Manda la lista completa e aspetta il proprio esito (ts nuovo di
 // dmx_groups_result), stesso schema a polling di resolveDuplicates().
 function sendGroupsToTD(){
-  const before=tdParams().dmx_groups_result?.ts;
-  if(!devCmd(dmxId(),{action:'set',param:'dmx_groups',value:groupsPayload(groupsOf())})){
+  const before=tdParams().dmx_groups_result?.ts,tdList=tdParams().dmx_groups;
+  // senza l'elenco di TD non si sa quali rig proteggere: meglio non mandare nulla
+  if(!Array.isArray(tdList)&&Object.keys(tdParams()).length){alert('Gruppi salvati in Plancia. DMX Master non ha ancora pubblicato i suoi rig: riprova tra qualche secondo.');return}
+  if(!devCmd(dmxId(),{action:'set',param:'dmx_groups',value:groupsToSend(groupsOf(),tdList,[...GROUPS_DELETED])})){
     alert('Gruppi salvati in Plancia. Non collegata a Gaia: invio a DMX Master non fatto.');return}
   let tries=0;
   const check=()=>{
@@ -126,5 +158,5 @@ function sendGroupsToTD(){
 }
 
 if(typeof module==='object'&&module.exports){
-  module.exports={tdPatchDiff,DEFAULT_GROUPS,GROUP_RESERVED,normGroupName,validateGroups,groupsPayload,groupsFromTD};
+  module.exports={tdPatchDiff,projectPatchIssues,patchIssuesText,groupsToSend,DEFAULT_GROUPS,GROUP_RESERVED,normGroupName,validateGroups,groupsPayload,groupsFromTD};
 }
