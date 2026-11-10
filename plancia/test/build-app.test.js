@@ -24,7 +24,7 @@ test('app bundle preserves module order and parses as one client scope', () => {
     '/* ---------- simulazione:',
     '/* ---------- ciclo principale ---------- */',
     '/* ---------- impostazioni e template ---------- */',
-    'migrateLegacyHeadSelectors();migrateHeadPresetWidgets();migrateUiShowTimeline();migrateUiConsolePages();migrateUiAudioPage();migrateUiNoChase();migrateUiOneDmxV8();migrateUiLaserPage();migrateUiLaserScenes();migrateUiHeadMotion();migrateUiChase();migrateUiLaserFx();migrateUiLightFx();migrateUiTracks();migrateUiPageGroups();migrateUiTimelinePage();migrateUiHeadPages();migrateUiRigConfig();migrateUiChannelTest();migrateUiAudioTrack();render();',
+    'migrateLegacyHeadSelectors();migrateHeadPresetWidgets();migrateUiShowTimeline();migrateUiConsolePages();migrateUiAudioPage();migrateUiNoChase();migrateUiOneDmxV8();migrateUiLaserPage();migrateUiLaserScenes();migrateUiHeadMotion();migrateUiChase();migrateUiLaserFx();migrateUiLightFx();migrateUiTracks();migrateUiPageGroups();migrateUiTimelinePage();migrateUiHeadPages();migrateUiRigConfig();migrateUiChannelTest();migrateUiAudioTrack();migrateUiLaserTint();render();',
     '/* ---------- avvio ---------- */'
   ].map(marker => bundle.indexOf(marker));
 

@@ -133,6 +133,7 @@ button{cursor:pointer}
 .cw{position:absolute;inset:28px 8px 8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;container-type:size}
 .disc{width:min(100cqw,calc(100cqh - 30px));aspect-ratio:1;border-radius:50%;position:relative;flex:none;
   background:radial-gradient(circle closest-side,#fff,rgba(255,255,255,0)),conic-gradient(from 90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00);box-shadow:0 0 0 1px var(--line2)}
+.cw-tint .disc{width:min(100cqw,100cqh)}
 .disc .mk{position:absolute;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1.5px #000a,0 2px 6px #000a}
 .sws{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
 .sws i{width:18px;height:18px;border-radius:50%;background:var(--s);box-shadow:0 0 0 1px var(--line2)}

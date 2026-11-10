@@ -251,6 +251,11 @@ class TestScene(unittest.TestCase):
         h = SC.apply_fx(pts, SC.clean_fx({"hue": 1 / 3, "bright": 0.5}), 0, 0)[0]   # rosso -> verde, a meta'
         self.assertEqual(h[2:], (0, 127, 0))
         self.assertEqual(SC.apply_fx([(0, 0, 0, 0, 0)], SC.clean_fx({"hue": .5}), 0, 0)[0][2:], (0, 0, 0))  # il buio resta buio
+        verde = SC.clean_fx({"tint_h": 1 / 3, "tint_s": 1})
+        self.assertEqual(SC.apply_fx([(0, 0, 200, 0, 0)], verde, 0, 0)[0][2:], (0, 200, 0))  # tutto verde, stessa luminosita'
+        self.assertEqual(SC.apply_fx([(0, 0, 0, 0, 0)], verde, 0, 0)[0][2:], (0, 0, 0))      # il buio resta buio
+        meta = SC.apply_fx([(0, 0, 200, 0, 0)], SC.clean_fx({"tint_h": 1 / 3, "tint_s": .5}), 0, 0)[0][2:]
+        self.assertEqual(meta, (100, 100, 0))                                                # a meta' strada: mescola
         tp = SC.clean_scene({**SQUARE, "tempo": {"sync": True, "bpm": 120}})
         self.assertAlmostEqual(SC.tempo_rate(tp, 132), 1.1); self.assertEqual(SC.tempo_rate(tp, None), 1.0)
 

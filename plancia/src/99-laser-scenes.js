@@ -206,6 +206,30 @@ function lzsWeightText(w,sc){
   const tip=w.scale!=null&&w.scale<(+sc?.anim?.scale||1)-.01?`Per averla pulita porta la Dimensione a ${w.scale}, oppure togli qualche linea.`:'Togli linee o punti: la Dimensione da sola non basta.';
   return`Figura ${w.level} (${w.k}×): gli specchi devono correre ${w.k} volte oltre il pulito, spigoli e linee possono deformarsi. ${tip}`;
 }
+// Adatta: la Dimensione che rende pulita la figura; sotto LZS_MIN_AUTO non rimpicciolisce da
+// sola e cerca le linee piu' corte da togliere (al massimo un quarto della lunghezza del disegno).
+// {kind:'ok'|'scale'|'choice'|'heavy', scale, strokes?, removed?, lost? (%), small? (Dimensione che basterebbe)}
+const LZS_MIN_AUTO=.5;
+function lzsStrokeLen(st){const p=st.pts||[],q=st.closed&&p.length?[...p,p[0]]:p;let l=0;for(let i=1;i<q.length;i++)l+=Math.hypot(q[i][0]-q[i-1][0],q[i][1]-q[i-1][1]);return l}
+function lzsPrune(strokes,scale,pps){
+  const total=strokes.reduce((a,s)=>a+lzsStrokeLen(s),0)||1,order=strokes.map((s,i)=>[lzsStrokeLen(s),i]).sort((a,b)=>a[0]-b[0]),gone=new Set();
+  let lost=0;
+  for(const[len,i]of order){
+    if((lost+len)/total>.25)return null;
+    gone.add(i);lost+=len;
+    const left=strokes.filter((_,k)=>!gone.has(k));
+    if(lzsFrameTime(left,scale,pps)*LZS_W.refresh<=LZS_W.light)return{strokes:left,removed:gone.size,lost:Math.round(lost/total*100)};
+  }
+  return null;
+}
+function lzsAutoFit(sc,pps=30000){
+  const cur=+sc?.anim?.scale||1,w=lzsWeight(sc,pps);
+  if(w.level==='leggera')return{kind:'ok',scale:cur};
+  if(w.scale!=null&&w.scale>=LZS_MIN_AUTO)return{kind:'scale',scale:w.scale};
+  const target=Math.min(cur,LZS_MIN_AUTO),p=sc.frames?.length?null:lzsPrune(sc.strokes||[],target,pps);
+  if(!p&&w.scale==null)return{kind:'heavy',scale:cur};
+  return{kind:'choice',scale:target,small:w.scale,...(p||{})};
+}
 // figure di taratura: non stanno nella libreria, si mandano con un tocco
 function lzsCalScenes(){
   const line=(a,b)=>({pts:[a,b],closed:false}),frame=r=>({pts:[[-r,-r],[r,-r],[r,r],[-r,r]],closed:true}),ring=r=>({pts:Array.from({length:96},(_,i)=>[+(r*Math.cos(i/96*Math.PI*2)).toFixed(4),+(r*Math.sin(i/96*Math.PI*2)).toFixed(4)]),closed:true});
@@ -284,6 +308,14 @@ async function lzsImportSvg(file){
 function lzsCssRgb(v){const m=/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?/.exec(v||'');if(!m||m[4]==='0')return null;
   const c=[m[1],m[2],m[3]].map(x=>+(x/255).toFixed(3));return c.some(x=>x>0)?c:null}
 
+// all'import: la Dimensione giusta se basta quella; le linee non si toccano senza chiedere
+function lzsFitOnImport(sc){
+  const r=lzsAutoFit(sc);
+  if(r.kind==='ok')return'';
+  if(r.kind==='scale'&&sc.anim){sc.anim.scale=r.scale;return` Dimensione ${r.scale} per averla pulita.`}
+  return' Figura pesante: guarda Adatta nella scena.';
+}
+let LZS_FIT_UNDO=null; // ultimo taglio di linee, per tornare indietro
 // ---- pagina Laser: libreria delle scene, da mandare ai cubi scelti
 let LZS_TARGET='all',LZS_FLASH=false;   // FLASH: la scena solo finche' la tieni premuta
 function lzsTargets(d){return['all',...(d?.laser.cubes||[]).map(c=>c.id)]}
@@ -319,13 +351,13 @@ function lzsDown(e,el,w){
     try{const sc=lzsTextScene(t);L.laserScenes=[...laserScenes(),sc];save();paintLaser(el,w,true);openLaserSceneEditor(sc)}catch(err){showError('Testo: '+err.message)}});return}
   else if(a==='ilda'){const inp=document.createElement('input');inp.type='file';inp.accept='.ild,.ilda';
     inp.onchange=async()=>{const f=inp.files?.[0];if(!f)return;
-      try{const sc=lzsParseIlda(await f.arrayBuffer(),f.name.replace(/\.ilda?$/i,'')),n=(sc.frames||[sc]).reduce((k,fr)=>k+fr.strokes.reduce((a,s)=>a+s.pts.length,0),0);
-        L.laserScenes=[...laserScenes(),sc];save();paintLaser(el,w,true);showInfo(`ILDA "${sc.name}": ${sc.frames?sc.frames.length+' frame':'1 frame'}, ${n} punti.`);openLaserSceneEditor(sc)}
+      try{const sc=lzsParseIlda(await f.arrayBuffer(),f.name.replace(/\.ilda?$/i,'')),n=(sc.frames||[sc]).reduce((k,fr)=>k+fr.strokes.reduce((a,s)=>a+s.pts.length,0),0),fit=lzsFitOnImport(sc);
+        L.laserScenes=[...laserScenes(),sc];save();paintLaser(el,w,true);showInfo(`ILDA "${sc.name}": ${sc.frames?sc.frames.length+' frame':'1 frame'}, ${n} punti.${fit}`);openLaserSceneEditor(sc)}
       catch(err){showError('ILDA: '+err.message)}};inp.click();return}
   else if(a==='svg'){const inp=document.createElement('input');inp.type='file';inp.accept='.svg,image/svg+xml';
     inp.onchange=async()=>{const f=inp.files?.[0];if(!f)return;
-      try{const sc=await lzsImportSvg(f),n=sc.strokes.reduce((k,x)=>k+x.pts.length,0);L.laserScenes=[...laserScenes(),sc];save();paintLaser(el,w,true);
-        showInfo(`SVG "${sc.name}": ${sc.strokes.length} linee, ${n} punti.`);openLaserSceneEditor(sc)}
+      try{const sc=await lzsImportSvg(f),n=sc.strokes.reduce((k,x)=>k+x.pts.length,0),fit=lzsFitOnImport(sc);L.laserScenes=[...laserScenes(),sc];save();paintLaser(el,w,true);
+        showInfo(`SVG "${sc.name}": ${sc.strokes.length} linee, ${n} punti.${fit}`);openLaserSceneEditor(sc)}
       catch(err){showError('SVG: '+err.message)}};inp.click();return}
   paintLaser(el,w,true);
 }
@@ -382,7 +414,7 @@ function openLaserSceneEditor(orig){
     <div class="lzs-ed-grid"><canvas id="lsPrev" width="260" height="260"></canvas><div>
       <label>Nome<input id="lsName" value="${esc(sc.name)}"></label>
       <p class="hint">${sc.strokes.length} linee · ${n} punti${nf?` · animazione di ${nf} frame a ${sc.frame_fps||25} fps`:''}${sc.template?' · template':''}. Anteprima qui accanto; il gateway applica poi zona e intensità di ogni cubo.</p>
-      <p class="hint lzs-wtxt" id="lsWeight"></p>${sc.beam?`<p class="hint lzs-bhint">${esc(lzsBeamHint())}</p>`:''}
+      <p class="hint lzs-wtxt" id="lsWeight"></p><div class="row"><button class="btn sm" id="lsFit" title="Trova la Dimensione che rende pulita la figura">Adatta</button><button class="btn sm ghost" id="lsFitUndo"${LZS_FIT_UNDO?.id===sc.id?'':' hidden'}>Rimetti le linee</button></div>${sc.beam?`<p class="hint lzs-bhint">${esc(lzsBeamHint())}</p>`:''}
       <label>Colore<select id="lsCm">${[['fixed','Fisso'],['cycle','Arcobaleno che scorre'],['palette','Palette a turno'],['stroke','Colori dell\'SVG']].map(([k,t])=>`<option value="${k}"${C.mode===k?' selected':''}>${t}</option>`).join('')}</select></label>
       <div class="two"><label>Colore fisso<input type="color" id="lsRgb" value="${hex(C.rgb)}"></label><label>Palette<span class="lzs-pal">${C.palette.slice(0,4).map((c,i)=>`<input type="color" data-pal="${i}" value="${hex(c)}">`).join('')}</span></label></div>
       ${sl('lsRate','Velocità colore (giri/s)',C.rate,0,2,.01)}
@@ -400,7 +432,7 @@ function openLaserSceneEditor(orig){
     <div class="row"><span class="lzs-tg" id="lsTg"></span><button class="btn" id="lsTry">Prova sui cubi</button></div>
     <div class="cue-editor-actions"><button class="btn danger" id="lsDel">Elimina</button><button class="btn ghost" id="lsDup">Duplica</button><button class="btn primary" id="lsSave">Salva</button></div>
   </div>`;
-  const paintWeight=()=>{const box=$('#lsWeight');if(!box)return;const w=lzsWeight(sc);box.textContent=lzsWeightText(w,sc);box.className='hint lzs-wtxt '+w.level};
+  const paintWeight=()=>{const box=$('#lsWeight');if(!box)return;const w=lzsWeight(sc);box.textContent=lzsWeightText(w,sc);box.className='hint lzs-wtxt '+w.level;$('#lsFit').hidden=w.level==='leggera'};
   const read=()=>{
     sc.name=$('#lsName').value.trim()||'Scena';
     sc.color={...C,mode:$('#lsCm').value,rgb:unhex($('#lsRgb').value),palette:[...s.querySelectorAll('[data-pal]')].map(x=>unhex(x.value)),rate:+$('#lsRate').value};
@@ -419,6 +451,18 @@ function openLaserSceneEditor(orig){
   const anim=()=>{if(!document.body.contains(cv))return;lzsDraw(cv,sc,(performance.now()-t0)/1000,U.amount?(.5+.5*Math.sin(performance.now()/180)):0);requestAnimationFrame(anim)};anim();
   const store=x=>{const i=laserScenes().findIndex(y=>y.id===x.id);const list=[...laserScenes()];if(i<0)list.push(x);else list[i]=x;L.laserScenes=list;save()};
   $('#lsClose').onclick=closeSheet;
+  const setScale=v=>{const x=$('#lsScale');x.value=v;x.oninput()};
+  $('#lsFit').onclick=async()=>{read();const r=lzsAutoFit(sc);
+    if(r.kind==='ok')return;
+    if(r.kind==='scale'){setScale(r.scale);showInfo(`Dimensione ${r.scale}: la figura è pulita.`);return}
+    if(r.kind==='heavy'){showInfo('Troppi punti o linee anche con la Dimensione al minimo: serve un disegno più semplice.');return}
+    const v=await uiChoose('Figura troppo carica per restare grande',[
+      ...(r.strokes?[{label:`Togli ${r.removed} linee piccole (${r.lost}% del disegno), Dimensione ${r.scale}`,value:'prune'}]:[]),
+      ...(r.small!=null?[{label:`Non togliere nulla, Dimensione ${r.small} (più piccola)`,value:'small'}]:[]),
+      {label:'Lascia com\'è',value:'none'}]);
+    if(v==='small')setScale(r.small);
+    else if(v==='prune'){LZS_FIT_UNDO={id:sc.id,strokes:sc.strokes,scale:sc.anim.scale};sc.strokes=r.strokes;sc.anim.scale=r.scale;openLaserSceneEditor(sc)}};
+  $('#lsFitUndo').onclick=()=>{read();const u=LZS_FIT_UNDO;LZS_FIT_UNDO=null;sc.strokes=u.strokes;sc.anim.scale=u.scale;openLaserSceneEditor(sc)};
   $('#lsTry').onclick=()=>{read();if(!d){showError('Laser gateway non collegato.');return}lzsApply(sc,target);showInfo(`Laser: prova di "${sc.name}" su ${target==='all'?'tutti i cubi':target} (non salvata).`)};
   $('#lsSave').onclick=()=>{read();delete sc.template;store(sc);closeSheet();showInfo(`Scena "${sc.name}" salvata nel progetto.`)};
   $('#lsDup').onclick=()=>{read();const c={...JSON.parse(JSON.stringify(sc)),id:'scn-'+uid(),name:sc.name+' (copia)'};delete c.template;store(c);openLaserSceneEditor(c)};
@@ -499,6 +543,13 @@ function migrateUiLaserFx(){
   const pg=L.pages.find(p=>p.name==='Laser'),lw=pg?.widgets.find(w=>w.type==='laser');
   if(pg&&lw&&!pg.widgets.some(w=>String(w.addr||'').startsWith('/laser/'))&&lw.y===0&&lw.h>=10){lw.h=7;pg.widgets.push(...laserFxWidgets(7))}
   L.uiRev=11;save();
+}
+// 2026-11-10: la Tinta del laser da fader a ruota colore (uiRev 20)
+function migrateUiLaserTint(){
+  if((L.uiRev||0)>=20)return;
+  for(const p of L.pages)p.widgets.forEach((w,i)=>{if(w.type==='fader'&&w.addr==='/laser/fx/hue'){
+    const{id,x,y,w:wd,h,label,color,oscChannel}=w;p.widgets[i]={...W('color',x,y,wd,h,{label,color,addr:'/laser/fx/tint',value:{h:0,s:0}}),id,...(oscChannel!=null?{oscChannel}:{})}}});
+  L.uiRev=20;save();
 }
 function migrateUiLaserScenes(){
   if((L.uiRev||0)>=7)return;

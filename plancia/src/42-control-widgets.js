@@ -101,21 +101,28 @@ registerWidget('button',{oscAddress:true,range:{min:'Valore OFF',max:'Valore ON'
     return[w.label||'Pulsante',w.mode==='toggle'?'Acceso/spento a ogni tocco.':'Attivo finché tieni premuto.'];
   }});
 
+// Tinta del laser: stessa ruota, ma manda tinta e saturazione; il centro = colori della scena
+const isLaserTint=w=>w.addr==='/laser/fx/tint';
 registerWidget('color',{size:[4,4],label:'Colore',
-  receive:(w,args)=>{if(args.length>2){const[h,s]=rgb2hsv(+args[0],+args[1],+args[2]);w.value={h,s}}return true},
+  receive:(w,args)=>{if(isLaserTint(w)){w.value={h:+args[0]||0,s:+args[1]||0};return true}if(args.length>2){const[h,s]=rgb2hsv(+args[0],+args[1],+args[2]);w.value={h,s}}return true},
   // teste a ruota: sotto la ruota gli slot del modello (/mh/colorwheel i); il pad resta, TD sceglie lo slot piu' vicino
-  inner:w=>{const wh=(w.addr||'').startsWith('/mh')?headWheel():[];
+  inner:w=>{if(isLaserTint(w))return'<div class="cw cw-tint"><div class="disc"><i class="mk"></i></div></div>';
+    const wh=(w.addr||'').startsWith('/mh')?headWheel():[];
     const fg=(w.addr||'').startsWith('/mh')?headFollowGroups():null;
     return`<div class="cw"><div class="disc"><i class="mk"></i></div>${fg?`<div class="cw-follow" title="Le teste prendono il colore di un gruppo di luci (DMX Master sceglie lo slot più vicino)"><button data-fl="">Fisso</button>${fg.map(g=>`<button data-fl="${esc(g.group)}">segue ${esc(g.label||g.group)}</button>`).join('')}</div>`:''}<div class="sws${wh.length?' whl':''}">${wh.length?wh.map((c,i)=>`<i data-wh="${i}" title="${esc(headSlotName(c.name))}" style="--s:${hex(c.rgb||[1,1,1])}"></i>`).join(''):SWC.map((c,i)=>`<i data-s="${i}" style="--s:${hex(c)}"></i>`).join('')}</div></div>`},
-  tick(el,w,{repaint}){if(!repaint||!(w.addr||'').startsWith('/mh'))return;if(headSigChanged(w,JSON.stringify([headWheel().map(c=>c.rgb),headFollowGroups()])))refresh(w);
+  tick(el,w,{repaint}){
+    // Tinta del laser: segue il gateway (Reset effetti, altri tablet), non mentre la tocchi
+    if(repaint&&isLaserTint(w)&&!el.classList.contains('active')&&Date.now()-(el._tintAt||0)>1500){const fx=lzDev()?.laser?.fx;
+      if(fx?.tint_s!=null&&(Math.abs(fx.tint_s-(w.value?.s??0))>.01||(fx.tint_s>.01&&Math.abs(fx.tint_h-(w.value?.h??0))>.01))){w.value={h:fx.tint_h,s:fx.tint_s};paint(el,w)}return}
+    if(!repaint||!(w.addr||'').startsWith('/mh'))return;if(headSigChanged(w,JSON.stringify([headWheel().map(c=>c.rgb),headFollowGroups()])))refresh(w);
     const cur=headFollow()||'';el.querySelectorAll('[data-fl]').forEach(b=>b.classList.toggle('on',b.dataset.fl===cur))},
   paint(el,w){
     const h=w.value?.h??0,s=w.value?.s??0,mk=el.querySelector('.mk');
     mk.style.left=50+Math.cos(h*2*Math.PI)*s*50+'%';mk.style.top=50+Math.sin(h*2*Math.PI)*s*50+'%';
     mk.style.background=hex(hsv2rgb(h,s,1));
   },
-  valueText:w=>hex(colorRGB(w)).toUpperCase(),
-  args:w=>colorRGB(w).map(x=>+x.toFixed(4)),          // r g b 0..1
+  valueText:w=>isLaserTint(w)&&!(w.value?.s>0)?'Scena':hex(colorRGB(w)).toUpperCase(),
+  args:w=>isLaserTint(w)?[+(w.value?.h||0).toFixed(4),+(w.value?.s||0).toFixed(4)]:colorRGB(w).map(x=>+x.toFixed(4)),          // r g b 0..1
   // un campione sotto la ruota, oppure la ruota (tinta = angolo, saturazione = distanza dal centro)
   onPointer(e,el,w){
     const fl=e.target.closest('[data-fl]');
@@ -126,10 +133,11 @@ registerWidget('color',{size:[4,4],label:'Colore',
     if(sw){const [h,s]=rgb2hsv(...SWC[+sw.dataset.s]);w.value={h,s};paint(el,w);send(w);save();return}
     const r=el.querySelector('.disc').getBoundingClientRect();
     const mv=ev=>{const dx=(ev.clientX-r.left)/r.width*2-1,dy=(ev.clientY-r.top)/r.height*2-1;
-      w.value={h:((Math.atan2(dy,dx)/(2*Math.PI))+1)%1,s:clamp(Math.hypot(dx,dy))};paint(el,w);send(w)};
+      const tint=isLaserTint(w),rad=clamp(Math.hypot(dx,dy));if(tint)el._tintAt=Date.now();
+      w.value={h:((Math.atan2(dy,dx)/(2*Math.PI))+1)%1,s:tint&&rad<.1?0:rad};paint(el,w);send(w)}; // laser: al centro si torna ai colori della scena
     el.classList.add('active');mv(e);el.onpointermove=mv;el.onpointerup=el.onpointercancel=end;
   },
-  help:w=>['Colore',(w.addr||'').startsWith('/mh')?'Colore delle teste selezionate (ruota o RGB secondo il modello).':'Colore del LED wall.']});
+  help:w=>isLaserTint(w)?['Tinta del laser','Scegli il colore sulla ruota: tutte le figure prendono quel colore, senza cambiare la luminosità. Verso il centro si mescola con i colori della scena; al centro restano quelli della scena.']:['Colore',(w.addr||'').startsWith('/mh')?'Colore delle teste selezionate (ruota o RGB secondo il modello).':'Colore del LED wall.']});
 
 registerWidget('label',{oscAddress:false,size:[4,1],label:'Testo',showsValue:false,showsAddr:false,
   inner:()=>'',onPointer:ignorePointer});

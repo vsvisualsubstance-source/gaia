@@ -11,6 +11,11 @@ test('other addresses are not laser commands', () => {
   assert.equal(laserLiveCommand('/laserx/fx/zoom', [1], SCENES), null);
 });
 
+test('ruota colore: tinta e saturazione insieme, e azzera il vecchio spostamento di tinta', () => {
+  assert.deepEqual(laserLiveCommand('/laser/fx/tint', [0.33, 1], SCENES), { action: 'fx', values: { tint_h: 0.33, tint_s: 1, hue: 0 } });
+  assert.deepEqual(laserLiveCommand('/laser/fx/tint', [0.33], SCENES), { skip: true });
+});
+
 test('fx faders, reset and blackout only on press', () => {
   assert.deepEqual(laserLiveCommand('/laser/fx/zoom', [1.5], SCENES), { action: 'fx', values: { zoom: 1.5 } });
   assert.deepEqual(laserLiveCommand('/laser/fx/reset', [1], SCENES), { action: 'fx', reset: true });

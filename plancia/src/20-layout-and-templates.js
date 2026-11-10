@@ -101,7 +101,7 @@ TPL.audio={name:'Audio · reattività',desc:'Audio per gruppo: on/off, kick, sor
 const laserFxWidgets=(y=7)=>[
   W('fader',0,y,2,3,{label:'Rotazione',addr:'/laser/fx/rotate',min:-180,max:180,value:.5,color:SWATCH[2]}),
   W('fader',2,y,2,3,{label:'Zoom',addr:'/laser/fx/zoom',min:.2,max:2,value:(1-.2)/1.8,color:SWATCH[2]}),
-  W('fader',4,y,2,3,{label:'Tinta',addr:'/laser/fx/hue',min:0,max:1,value:0,color:SWATCH[2]}),
+  W('color',4,y,2,3,{label:'Tinta',addr:'/laser/fx/tint',value:{h:0,s:0},color:SWATCH[2]}),
   W('fader',6,y,2,3,{label:'Onda',addr:'/laser/fx/wave',min:0,max:1,value:0,color:SWATCH[2]}),
   W('fader',8,y,2,3,{label:'Velocità onda',addr:'/laser/fx/wave_hz',min:.1,max:4,value:(1-.1)/3.9,color:SWATCH[2]}),
   W('fader',10,y,2,3,{label:'Luminosità',addr:'/laser/fx/bright',min:0,max:1,value:1,color:SWATCH[2]}),

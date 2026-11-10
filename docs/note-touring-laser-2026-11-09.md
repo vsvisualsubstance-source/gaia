@@ -55,6 +55,8 @@ Conclusione: nessuna prova che il DHCP abbia causato gli errori. Il server DHCP 
 - Effetti di fascio: Ventaglio, Onda di fasci, Stella di fasci, Foglio di luce, Cono, Tunnel aperto, segnati "fumo" nella libreria. Si ottengono col pulsante Template.
 - Limite del tempo su un punto nel gateway: se un punto riceve più del 15% del tempo del frame, tutto il frame si abbassa in proporzione. Non è una certificazione di sicurezza: la zona sopra le teste resta obbligatoria.
 - Disegno a mano: "+ Disegna" nelle scene, con diretta sui cubi facoltativa.
+- Ruota Tinta (10/11): sceglie il colore delle figure, al centro restano i colori della scena. Sulla touring servono il riavvio del gateway laser e quello del bridge Plancia.
+- Adatta (10/11): all'import di SVG e ILDA imposta la Dimensione per una figura pulita, se basta scendere fino a 0,5. Sotto quel valore il pulsante Adatta nella scena propone di togliere le linee piccole.
 - Nessuna di queste è stata ancora provata sul laser vero nella versione finale.
 
 ## Da verificare: flusso tra progetto, pagina Altro e TD (10/11)

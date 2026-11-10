@@ -29,6 +29,29 @@ test('una linea dritta resta di due punti, un andata e ritorno no', () => {
   assert.ok(c.lzsSimplify([[0, 0], [1, 0], [.5, 0]]).pts.length >= 3);
 });
 
+test('Adatta: basta la Dimensione, oppure si propone di togliere le linee piu corte', () => {
+  const ringA = r => ({ closed: true, pts: Array.from({ length: 96 }, (_, i) => [r * Math.cos(i / 96 * 6.2832), r * Math.sin(i / 96 * 6.2832)]) });
+  const S = (strokes, scale, extra) => ({ strokes, anim: { scale }, ...extra });
+  assert.equal(c.lzsAutoFit(S([ringA(.3)], .5)).kind, 'ok');
+  const two = [ringA(.95), ringA(.7)];
+  const g = c.lzsAutoFit(S(two, 1));
+  assert.equal(g.kind, 'scale');
+  assert.ok(g.scale >= .5);
+  assert.equal(c.lzsWeight(S(two, g.scale)).level, 'leggera');
+  // poche linee lunghe piu' tanti trattini: senza trattini torna leggera, le lunghe restano
+  const ticks = Array.from({ length: 30 }, (_, i) => ({ pts: [[-.9 + i * .06, (i % 2 ? .9 : -.9)], [-.88 + i * .06, (i % 2 ? .9 : -.9)]] }));
+  const big = [ringA(.7), ringA(.4)];
+  const mix = S([...big, ...ticks], .8), r = c.lzsAutoFit(mix);
+  assert.equal(r.kind, 'choice');
+  assert.ok(r.removed > 0 && r.removed <= 30, 'linee tolte ' + r.removed);
+  assert.equal(r.scale, .5);
+  assert.ok(r.strokes.includes(big[0]) && r.strokes.includes(big[1]));
+  assert.equal(c.lzsWeight(S(r.strokes, r.scale)).level, 'leggera');
+  // animazione: non si tolgono linee, al massimo la Dimensione
+  const anim = c.lzsAutoFit(S([], .8, { frames: [{ strokes: [...big, ...ticks] }] }));
+  assert.equal(anim.strokes, undefined);
+});
+
 // peso delle figure
 const scene = (strokes, scale = 1) => ({ strokes, anim: { scale } });
 const ring = r => ({ closed: true, pts: Array.from({ length: 96 }, (_, i) => [r * Math.cos(i / 96 * 6.2832), r * Math.sin(i / 96 * 6.2832)]) });

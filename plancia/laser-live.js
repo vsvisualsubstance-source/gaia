@@ -3,6 +3,7 @@
 // pulsanti normali (anche assegnati all'APC40 col MIDI learn) comandano il
 // laser gateway. Il bridge li trasforma in comandi MQTT e non li manda a TD.
 //   /laser/fx/<rotate|zoom|hue|wave|wave_hz|bright> v   effetti sopra alle scene
+//   /laser/fx/tint tinta saturazione                    ruota colore (saturazione 0 = colori della scena)
 //   /laser/fx/reset 1                                   effetti a riposo
 //   /laser/flash/<id scena> 1|0                         la scena finche' il pulsante e' premuto
 //   /laser/blackout 1                                   disarma tutti i cubi
@@ -16,6 +17,10 @@ function laserLiveCommand(address, args, scenes) {
   const [, , kind, key] = address.split('/');
   if (kind === 'blackout') return on ? { action: 'blackout' } : { skip: true };
   if (kind === 'fx' && key === 'reset') return on ? { action: 'fx', reset: true } : { skip: true };
+  if (kind === 'fx' && key === 'tint') {        // ruota colore: tinta e saturazione (0 = colori della scena)
+    const s = Number(args?.[1]);
+    return Number.isFinite(v) && Number.isFinite(s) ? { action: 'fx', values: { tint_h: v, tint_s: s, hue: 0 } } : { skip: true };
+  }
   if (kind === 'fx' && FX_KEYS.includes(key) && Number.isFinite(v)) return { action: 'fx', values: { [key]: v } };
   if (kind === 'flash' && key) {
     if (!on) return { action: 'flash', on: false };

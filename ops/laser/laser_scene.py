@@ -179,8 +179,9 @@ def animate(sc, t, level=0.0, kick=0.0):
 # Sopra alla scena (come gli effetti di Liberation), per tutti i cubi in modalita'
 # scene: rotazione aggiunta, zoom, onda, tinta e luminosita'. La zona di sicurezza
 # si applica dopo (laser_render), quindi nemmeno lo zoom ne esce.
-FX_DEFAULTS = {"rotate": 0.0, "zoom": 1.0, "hue": 0.0, "wave": 0.0, "wave_hz": 1.0, "bright": 1.0}
-FX_LIMITS = {"rotate": (-720, 720), "zoom": (0.2, 2.0), "hue": (0, 1), "wave": (0, 1), "wave_hz": (0.05, 8), "bright": (0, 1)}
+# tint_h/tint_s: colore scelto sulla ruota; tint_s 0 = colori della scena, 1 = tutto in quel colore
+FX_DEFAULTS = {"rotate": 0.0, "zoom": 1.0, "hue": 0.0, "wave": 0.0, "wave_hz": 1.0, "bright": 1.0, "tint_h": 0.0, "tint_s": 0.0}
+FX_LIMITS = {"rotate": (-720, 720), "zoom": (0.2, 2.0), "hue": (0, 1), "wave": (0, 1), "wave_hz": (0.05, 8), "bright": (0, 1), "tint_h": (0, 1), "tint_s": (0, 1)}
 
 
 def clean_fx(values, fx=None):
@@ -199,15 +200,20 @@ def apply_fx(pts, fx, t, angle_deg):
     a = math.radians(angle_deg)
     ca, sa, z = math.cos(a), math.sin(a), fx["zoom"]
     wave, wh, hue, br = fx["wave"], fx["wave_hz"], fx["hue"], fx["bright"]
+    ts = fx["tint_s"]
+    tint = colorsys.hsv_to_rgb(fx["tint_h"], 1.0, 1.0)
     out = []
     for x, y, r, g, b in pts:
         px, py = (x * ca - y * sa) * z, (x * sa + y * ca) * z
         if wave:
             px += wave * 0.25 * math.sin(2 * math.pi * (wh * t + py))
-        if (r or g or b) and (hue or br < 1):
+        if (r or g or b) and (hue or br < 1 or ts):
             if hue:
                 h, sv, v = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
                 r, g, b = (int(c * 255) for c in colorsys.hsv_to_rgb((h + hue) % 1.0, sv, v))
+            if ts:                 # il colore cambia, la luminosita' del punto no
+                m = max(r, g, b)
+                r, g, b = int(r + (tint[0] * m - r) * ts), int(g + (tint[1] * m - g) * ts), int(b + (tint[2] * m - b) * ts)
             r, g, b = int(r * br), int(g * br), int(b * br)
         out.append((px, py, r, g, b))
     return out
