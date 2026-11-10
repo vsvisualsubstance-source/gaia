@@ -92,7 +92,7 @@
     "touchdesigner": {
       "cmd": [
         "C:\\Program Files\\Derivative\\TouchDesigner\\bin\\TouchDesigner.exe",
-        "C:/Users/vsvis/Documents/td/DMX/dmx.toe"
+        "C:/Users/vsvis/Documents/td/DMX V8/dmx.toe"
       ],
       "cwd": "C:\\Program Files\\Derivative\\TouchDesigner\\bin",
       "check_script": false,

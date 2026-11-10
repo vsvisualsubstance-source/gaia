@@ -8,8 +8,8 @@
 | Progetti Plancia | 19 | 19 |
 | Rig Consolle e Fronte in TD | presenti | presenti |
 | Barre consolle nella patch | 4 + 1 fronte | 2 (DX, SX) + 1 fronte, tolte di proposito |
-| `dmx.toe` | **TD chiuso a fine giornata e nessun `.toe` salvato a novembre in Documenti, `C:\gaia` o `D:`: alla riapertura controllare i rig Consolle e Fronte** | salvato il 09/11 alle 16:40 |
-| Gateway laser | codice vecchio in memoria, laser non collegato | avviato alle 15:43 con `c2fd3fb` |
+| `dmx.toe` | **dal 10/11 in `C:\Users\vsvis\Documents\td\DMX V8` (Drive solo backup). Il 10/11 i rig Consolle e Fronte mancavano, ricreati alle 11:22 con le 5 barre tornate `ok`: da salvare nel `.toe`. Da tarare: hanno i valori di base** | salvato il 09/11 alle 16:40 |
+| Gateway laser | riavviato il 10/11 alle 07:24 con il codice nuovo, laser non collegato | avviato alle 15:43 con `c2fd3fb` |
 
 Il laser è stato staccato dalla touring nel pomeriggio.
 
@@ -39,7 +39,8 @@ Conclusione: nessuna prova che il DHCP abbia causato gli errori. Il server DHCP 
 ## Cose imparate
 
 - **Riavvio laser sulla touring:** il `disable` via MQTT non ha chiuso il gateway e ha lasciato l'agent senza rispondere ai comandi del laser. Ha funzionato chiudere solo `agent.py` e `gaia-audio`, a gateway già chiuso, poi `Start-ScheduledTask GAIA-OPS-Agent`.
-- **Rig in TD:** se un gruppo è in catalogo ma senza controlli, `dmx_groups` non lo ricrea. Vanno tolti barre e gruppi, poi rimandati. I rig creati vanno salvati nel `.toe`.
+- **Rig in TD:** i rig vivono solo nel `.toe`, le tabelle nei `.tsv`: si possono disallineare. Dal 10/11, solo su OPS, `group_logic.py` ha `restore_missing_rigs()` e `dmx_groups` ricrea il rig che manca senza toccare la patch. Da portare sulla touring e da committare in TD4Gaia. I rig creati vanno salvati nel `.toe`.
+- **Attenzione:** `dmx_groups` in TD toglie i rig vuoti che non sono nella lista ricevuta. Dal 10/11 la Plancia di OPS manda anche i rig degli altri show. Sulla touring, finché non è aggiornata, Salva e invia può ancora toglierli.
 - **Broker sulla touring:** con WSL mirrored si raggiunge solo da `127.0.0.1`. In TD: Brokerhost = `127.0.0.1`.
 - **Reimport da TD:** dal commit `b45c401`, se Pianta e patch sono diverse si ferma e avvisa.
 - **Laser:** riferimento reale 9.000 punti al secondo. A parità di figura la velocità degli specchi è limitata dal ridisegno a 25 Hz. Rete e cubo sono risultati a posto (massimo 30.000 punti, 0 errori).
@@ -55,3 +56,15 @@ Conclusione: nessuna prova che il DHCP abbia causato gli errori. Il server DHCP 
 - Limite del tempo su un punto nel gateway: se un punto riceve più del 15% del tempo del frame, tutto il frame si abbassa in proporzione. Non è una certificazione di sicurezza: la zona sopra le teste resta obbligatoria.
 - Disegno a mano: "+ Disegna" nelle scene, con diretta sui cubi facoltativa.
 - Nessuna di queste è stata ancora provata sul laser vero nella versione finale.
+
+## Da verificare: flusso tra progetto, pagina Altro e TD (10/11)
+
+Dal 10/11, solo su OPS e non ancora su GitHub: scaletta delle scene per progetto (☰ Scaletta in Scene GO e in ▣ Scene, salvata con il progetto), avviso a ogni apertura di progetto se Pianta e TD non coincidono, e "Salva e invia a TD" che non toglie più i rig degli altri show. Resta aperto Colori rig automatico. I punti sotto sono l'analisi di partenza.
+
+**Color Pic, 10/11, solo OPS:** il modello `COLOR PIC 24x3W 14CH` era un segnaposto e l'uscita DMX di queste barre era a zero. Ruoli presi dal profilo Daslight BoomToneDJ ColorPix 24x3W del vecchio show Albergo dei Poveri: `dimmer strobe red green blue mode dimmer2 strobe2 red2 green2 blue2 mode2 macro speed`. Il generatore (`dmx_generator_callbacks1.py`) fa seguire la seconda sezione alla prima. Da confermare sulle barre vere con Test canali. Da portare sulla touring insieme a `group_logic.py`, compilando il modello da dentro TD e non con `dmx_model_update` da remoto. Da committare in TD4Gaia.
+
+- Altro raccoglie le pagine fuori dai menu standard. In Lowtopic 28/11 è solo Colori rig. I blocchi sono salvati nel progetto e non seguono i rig: un rig nuovo va aggiunto a mano.
+- Aprire un progetto cambia la Plancia ma non TD, che tiene la sua patch finché non si preme ⇪ TD. L'avviso di patch diversa parte solo all'apertura della pagina, non al cambio progetto. Ipotesi: avvisare a ogni cambio progetto.
+- Il blocco Scene DMX Master mostra tutte le scene di TD: le scene nascoste per progetto valgono solo nella tabella delle scene. Ipotesi: applicarle anche lì.
+- Scene GO (Regia) ha lo stesso limite: elenca tutte le scene di TD, nell'ordine di TD, senza poterle scegliere né riordinare. Richiesta del 10/11: gestire la selezione in modo più dinamico, oppure avere le scene GO per progetto. Le scene in TD restano in comune fra i progetti: la scaletta va salvata nel progetto, senza cancellare quelle degli altri show.
+- Sempre in Scene GO: BACK segue l'ordine dell'elenco e non l'ultima scena mandata. NEXT vale solo sul browser in cui è stato preparato.
