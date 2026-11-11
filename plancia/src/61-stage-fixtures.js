@@ -759,11 +759,15 @@ registerWidget('stage',{oscAddress:false,
       }));
 },
   // ogni fotogramma: Render (luci, a tempo con level) o Pianta, e la riga di stato
-  tick(el,w,{now,level}){const c=el.querySelector('canvas'),g=c.getContext('2d');if(!c._d)return;g.setTransform(c._d,0,0,c._d,0,0);
+  tick(el,w,{now,level}){const c=el.querySelector('canvas'),g=c.getContext('2d');if(!c._d)return;
+      // laser vero in uscita: Render a 15 fotogrammi al secondo (laserRenderLight, 99-laser.js)
+      const light=w.view!=='plot'&&laserRenderLight();
+      const skip=light&&now-(el._lastDraw||0)<1000/laserRenderLightFps()-4;
+      if(!skip){el._lastDraw=now;g.setTransform(c._d,0,0,c._d,0,0);
       const W=c.width/c._d,H=c.height/c._d;if(w.view==='plot')drawPlot(g,W,H,now,w);
-      else{const v=stageViewOf(w);svClamp(v,'render',W,H);g.setTransform(c._d*v.z,0,0,c._d*v.z,c._d*v.x,c._d*v.y);drawRender(g,W,H,now,level,w);g.setTransform(c._d,0,0,c._d,0,0)}
+      else{const v=stageViewOf(w);svClamp(v,'render',W,H);g.setTransform(c._d*v.z,0,0,c._d*v.z,c._d*v.x,c._d*v.y);drawRender(g,W,H,now,level,w);g.setTransform(c._d,0,0,c._d,0,0)}}
       el.classList.toggle('cam-on',w.view!=='plot');
-      const hud=w.view==='plot'?'':`${SH.blackout?'<b>BLACKOUT</b> · ':''}SC ${SH.scene+1} ${esc((tdScenes().length?tdScenes().find(s=>s.index===SH.scene)?.label:dmxOutputFresh()?'':LOOKS[SH.scene]?.n)||'')} · fade ${SH.fade.toFixed(1)}s · chase ${CHASE[SH.chase]||'Off'}${SH.strobe?' · <b>STROBO</b>':''} · ${esc(dmxOutputSummary())}`;
+      const hud=w.view==='plot'?'':`${light?'<b title="Laser in uscita: Render a 15 fotogrammi al secondo per lasciare GPU e CPU a TD">LEGGERO · laser</b> · ':''}${SH.blackout?'<b>BLACKOUT</b> · ':''}SC ${SH.scene+1} ${esc((tdScenes().length?tdScenes().find(s=>s.index===SH.scene)?.label:dmxOutputFresh()?'':LOOKS[SH.scene]?.n)||'')} · fade ${SH.fade.toFixed(1)}s · chase ${CHASE[SH.chase]||'Off'}${SH.strobe?' · <b>STROBO</b>':''} · ${esc(dmxOutputSummary())}`;
       const h=el.querySelector('.hud');if(h._v!==hud){h.innerHTML=hud;h._v=hud}
       paintSelBar(el,w)},
   help:w=>['Palco','Render: come escono le luci (colori reali da DMX Master). Pianta: posizioni e patch, tocca una luce per nome, indirizzo, modello e colore. In alto: 📐 Spazio = misure di palco, platea, regia e sala; ⇪/⇩ TD scambiano la patch, ▣ Scene, ▤ Modelli (libreria), ▦ Gruppi, 💡 Lampade, ✨ AI.']});

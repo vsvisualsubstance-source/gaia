@@ -237,6 +237,10 @@ function laserPoint(f,z0,v,project){
   if(z<0&&z0>0){const k=z0/(z0-z);x=f.x+(x-f.x)*k;y=f.y+(y-f.y)*k;z=0}
   return project(x,y,Math.max(0,z));
 }
+// un laser vero in uscita: il Render passa in modalita' leggera (meno fotogrammi), per lasciare
+// GPU e CPU a TD DMX quando la Plancia gira sulla stessa macchina dello show
+function laserRenderLightFps(){return 15}
+function laserRenderLight(){const d=G.devices?.[lzDevId()];return!!(d&&!d.offline&&(d.laser?.cubes||[]).some(c=>c.streaming))}
 // raggi veri: dall'uscita del cubo ai punti accesi dell'anteprima, e la figura
 // dove arriva. Orientamento, inclinazione e apertura della fixture dicono solo dove disegnarla.
 function drawRealLaser(g,f,origin,z0,spread,base,distance,project){
@@ -247,12 +251,18 @@ function drawRealLaser(g,f,origin,z0,spread,base,distance,project){
     const{fwd,right,up}=laserAxes(f,base);
     const tg=pts.map(p=>{const o=p[0]/100*distance*tan,q=p[1]/100*distance*tan;
       return laserPoint(f,z0,[0,1,2].map(i=>[f.x,f.y,z0][i]+fwd[i]*distance+right[i]*o+up[i]*q),project)});
-    const lit=pts.map((p,i)=>p[2]?i:-1).filter(i=>i>=0),k=Math.max(1,Math.ceil(lit.length/40));
+    // leggero (11/11, il Render rallentava TD sulla touring durante lo show): niente shadowBlur, che
+    // nel canvas costa piu' di tutto il resto, e un solo tratto per colore invece di uno per segmento.
+    // La luminosita' la da' un secondo passaggio piu' largo e trasparente.
+    const lit=pts.map((p,i)=>p[2]?i:-1).filter(i=>i>=0),k=Math.max(1,Math.ceil(lit.length/24));
+    const byColor=new Map(),add=(col,fn)=>{let p=byColor.get(col);if(!p)byColor.set(col,p=new Path2D());fn(p)};
+    lit.forEach((i,j)=>{if(!(j%k))add('#'+pts[i][2],p=>{p.moveTo(origin.x,origin.y);p.lineTo(tg[i].x,tg[i].y)})});
     g.save();g.globalCompositeOperation='lighter';g.lineWidth=1;g.globalAlpha=.3;
-    lit.forEach((i,j)=>{if(j%k)return;g.strokeStyle='#'+pts[i][2];g.beginPath();g.moveTo(origin.x,origin.y);g.lineTo(tg[i].x,tg[i].y);g.stroke()});
-    g.globalAlpha=.95;g.lineWidth=2;g.shadowBlur=10;
-    for(let i=1;i<pts.length;i++){if(!pts[i][2])continue;
-      g.strokeStyle=g.shadowColor='#'+pts[i][2];g.beginPath();g.moveTo(tg[i-1].x,tg[i-1].y);g.lineTo(tg[i].x,tg[i].y);g.stroke()}
+    for(const [col,p] of byColor){g.strokeStyle=col;g.stroke(p)}
+    byColor.clear();
+    for(let i=1;i<pts.length;i++){if(!pts[i][2])continue;add('#'+pts[i][2],p=>{p.moveTo(tg[i-1].x,tg[i-1].y);p.lineTo(tg[i].x,tg[i].y)})}
+    g.lineCap='round';
+    for(const [w,a] of [[5,.22],[1.8,.95]]){g.lineWidth=w;g.globalAlpha=a;for(const [col,p] of byColor){g.strokeStyle=col;g.stroke(p)}}
     g.restore();
   }
   g.fillStyle=col;g.beginPath();g.arc(origin.x,origin.y,c?.armed?4:3,0,Math.PI*2);g.fill();
