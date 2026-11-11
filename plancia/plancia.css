@@ -674,6 +674,11 @@ button{cursor:pointer}
 .au-xf{display:flex;align-items:center;gap:6px;font:700 13px var(--display);color:var(--dim)}
 .au-xf input{flex:1}
 .au-libbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.au-auto{display:inline-flex;gap:6px;align-items:center;min-width:0}
+.au-auto.on{flex:1 1 100%;order:-1;padding:4px 8px;border:1px solid var(--accent,#ffb23e);border-radius:6px}
+.au-auto-on{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.au-auto-on b{color:var(--accent,#ffb23e);margin-right:4px}
+.au-auto-on .dim{opacity:.6}
 .au-libbar input[type=search]{flex:1;min-width:160px;padding:6px 8px;border:1px solid var(--line2);border-radius:6px;background:var(--panel)}
 .au-libbar select{padding:6px;border:1px solid var(--line2);border-radius:6px;background:var(--panel)}
 .au-libtab{flex:1;overflow:auto;min-height:0;touch-action:pan-y}

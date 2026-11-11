@@ -359,13 +359,35 @@ function auLibHtml(){
     <select data-au-s="view" title="Tutta la libreria o una playlist"></select>
     <button class="btn sm ghost" data-au="plnew" title="Nuova playlist">＋ Playlist</button>
     <button class="btn sm ghost au-plmenu" data-au="plmenu" title="Rinomina, duplica, svuota o elimina la playlist">⋯</button>
+    <span class="au-auto"></span>
     <input type="search" placeholder="Cerca titolo, artista, cartella" data-au-s="q">
     <select data-au-s="folder"></select>
     <span class="au-libn hint"></span>
     <button class="btn sm ghost" data-au="libreload">Aggiorna</button></div>
     <div class="au-libtab"></div></div>`}
+// Autoplay (audio-auto.js nel bridge): suona da solo dalla playlist scelta qui sopra o da tutta
+// la libreria, in ordine o a caso, con dissolvenza. Indipendente dalla timeline.
+function auAutoHtml(){
+  const a=G.audioAuto;
+  if(!a?.active)return`<button class="btn sm au-auto-go" data-au="autogo" title="Suona da solo: dalla playlist scelta (o da tutta la libreria), in ordine o a caso, con dissolvenza tra i brani">▶ AUTO</button>`;
+  const who=x=>x?esc(x.title+(x.artist?' – '+x.artist:'')):'';
+  const msg=a.stopping?'si ferma…':a.waiting?'in attesa: comanda la traccia AUDIO della timeline':a.error?esc(a.error)
+    :a.now?`${a.now.deck} · ${who(a.now)} <span class="dim">${auFmt(a.now.pos)} / ${auFmt(a.now.len)}</span>${a.next?` <span class="dim">→ ${who(a.next)}</span>`:''}`:'carico…';
+  return`<span class="au-auto-on" title="${esc(`${a.sourceName} · ${a.mode==='order'?'in ordine':'a caso'} · dissolvenza ${a.fade} s`)}"><b>AUTO</b> ${msg}</span>
+    <button class="au-btn" data-au="autonext" title="Brano successivo (con dissolvenza)"${a.stopping||a.waiting?' disabled':''}>⏭</button><button class="au-btn" data-au="autostop" title="Ferma l'autoplay (sfuma il brano in onda)"${a.stopping?' disabled':''}>■</button>`}
+async function auAutoStart(){
+  const pl=auPlaylist(AU.lib.view),src=pl?`la playlist "${pl.name}" (${pl.tracks.length} brani)`:`tutta la libreria (${AU.tracks.length} brani)`;
+  const mode=await uiChoose(`Autoplay da ${src}`,[...(pl?[{label:'In ordine',value:'order'}]:[]),{label:'A caso',value:'shuffle'}],
+    {hint:'Suona da solo sui deck A e B, alternandoli, finché non lo fermi. Per cambiare sorgente scegli prima la playlist nella Libreria. Se la traccia AUDIO della timeline è accesa comanda lei e l\'autoplay aspetta.'});
+  if(!mode)return;
+  const fade=await uiChoose('Dissolvenza tra un brano e l\'altro',[0,4,8,12,20].map(s=>({label:s?`${s} s`:'Nessuna (taglio)',value:String(s),on:s===8})));
+  if(fade==null)return;
+  emit({type:'audio_auto',action:'start',source:pl?pl.id:'',mode,fade:+fade},true);
+}
 function auPaintLib(el){
   const box=el.querySelector('.au-lib');if(!box)return;
+  {const ab=box.querySelector('.au-auto'),a=G.audioAuto,h=auAutoHtml(),sig=a?.active?JSON.stringify({...a,now:a.now&&{...a.now,pos:Math.floor(a.now.pos)}}):'off';
+    if(ab&&ab._sig!==sig){ab._sig=sig;ab.innerHTML=h;ab.classList.toggle('on',!!a?.active)}}
   if(AU.lib.view&&!auPlaylist(AU.lib.view))AU.lib.view='';   // playlist eliminata da un altro tablet
   const pl=auPlaylist(AU.lib.view);
   const vs=box.querySelector('[data-au-s=view]'),vsig=JSON.stringify([AU.lib.view,AU.playlists.map(p=>[p.id,p.name,p.tracks.length])]);
@@ -438,6 +460,9 @@ function auDown(e,el,w){
   else if(a==='libreload')auLoadLibrary(true);
   else if(a==='plnew')auNewPlaylist().then(p=>{if(p)AU.lib.view=p.id});
   else if(a==='plmenu')auPlaylistMenu();
+  else if(a==='autogo')auAutoStart();
+  else if(a==='autonext')emit({type:'audio_auto',action:'next'},true);
+  else if(a==='autostop')emit({type:'audio_auto',action:'stop'},true);
   else if(a==='pladd')auAddToPlaylist(b.dataset.id);
   else if(a==='plup'||a==='pldown'){const i=+b.dataset.i,j=a==='plup'?i-1:i+1;
     auSetPlaylist(AU.lib.view,x=>{if(j<0||j>=x.tracks.length)return x;[x.tracks[i],x.tracks[j]]=[x.tracks[j],x.tracks[i]];return x})}
@@ -485,7 +510,7 @@ registerWidget('audiomixer',{size:[4,6],label:'Mixer',showsValue:false,showsAddr
 registerWidget('audiolib',{size:[16,4],label:'Libreria',showsValue:false,showsAddr:false,oscAddress:false,
   inner:auLibHtml,onPointer:auDown,tick:auTick(auPaintLib),
   mounted:()=>{if(!AU.tracks.length&&!AU.libState)auLoadLibrary()},
-  help:()=>['Libreria','Le tracce analizzate (BPM e griglia). Cerca, filtra per cartella, ordina toccando le colonne; A/B carica la traccia sul deck (non su un deck in onda). "Griglia incerta" = BPM o battito da controllare: il sync allinea solo il tempo.']});
+  help:()=>['Libreria','Le tracce analizzate (BPM e griglia). Cerca, filtra per cartella, ordina toccando le colonne; A/B carica la traccia sul deck (non su un deck in onda). "Griglia incerta" = BPM o battito da controllare: il sync allinea solo il tempo. ▶ AUTO suona da solo dalla playlist scelta (o da tutta la libreria), in ordine o a caso, alternando i deck con la dissolvenza scelta: ⏭ passa al brano dopo, ■ sfuma e ferma. Con la traccia AUDIO della timeline accesa comanda la timeline e l\'autoplay aspetta.']});
 
 TPL.consoleaudio={name:'Console Audio',desc:'Due deck con forma d\'onda, BPM, griglia e sync; mixer con EQ, filtro e crossfader; libreria musicale analizzata.',pages:()=>[P('Console Audio',[
   W('audiodeck',0,0,6,6,{label:'Deck A',deck:'A',color:SWATCH[1]}),

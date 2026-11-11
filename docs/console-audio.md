@@ -62,6 +62,34 @@ prova d'ascolto con l'operatore. Non va in produzione in un giorno di show.
   `test/audio-playlists.js`, `test/audio-timeline-live.js` (motore vero,
   orologio finto su un topic MQTT di prova).
 
+### Autoplay (2026-11-11)
+
+**▶ AUTO** nella barra della Libreria: la Console suona da sola, indipendente
+dalla timeline. La esegue il bridge (`plancia/audio-auto.js`), quindi va avanti
+anche a tablet chiusi.
+
+- Sorgente: la vista scelta nella Libreria (una playlist o tutta la libreria).
+  Ordine: "In ordine" (solo playlist, poi ricomincia) o "A caso" (niente
+  ripetizioni finché non sono passati quasi tutti i brani). Dissolvenza: 0, 4,
+  8, 12 o 20 s, mai oltre metà brano.
+- Ha un suo orologio. La coda di brani cresce da sola (il prossimo entra quando
+  alla fine dell'ultimo mancano 45 s) e ogni 100 ms il bridge usa
+  `audioDesired`/`audioCommands` della timeline: deck A e B alternati, il
+  prossimo caricato fermo, correzioni automatiche. Il primo brano parte pieno
+  sul deck libero (se l'altro suona a mano non lo interrompe).
+- ⏭ fa sfumare il brano in onda e entrare il prossimo; ■ sfuma e ferma
+  (subito, se il motore è spento).
+- Se la traccia AUDIO della timeline è accesa con l'orologio dello show vivo,
+  comanda lei: l'autoplay aspetta con l'orologio fermo e poi riprende. Con
+  l'autoplay attivo i controller MIDI non muovono fader e crossfader.
+- Protocollo: pagina → bridge `{type:'audio_auto', action:'start', source,
+  mode:'order'|'shuffle', fade}` | `'next'` | `'stop'`; bridge → pagine
+  `{type:'audio_auto', state:{active, waiting, stopping, sourceName, mode,
+  fade, error, now:{title, artist, deck, pos, len}, next}}`.
+- Prove: `test/audio-auto.test.js` (coda, dissolvenze, avanti, a caso,
+  precedenza della timeline), `test/audio-auto-ui.js` (pagina e bridge di prova,
+  senza motore).
+
 ## Cosa serve
 
 Una console stile Traktor/Serato per la libreria musicale di Gaia:

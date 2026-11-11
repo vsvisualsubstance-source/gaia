@@ -355,9 +355,13 @@ const audioEngine = require('./audio-engine-link').startAudioEngineLink({
   onMessage: s => { for (const c of wss.clients) if (c.readyState === 1) c.send(s); },
 });
 // Timeline AUDIO: brani e playlist sui deck del motore, seguendo l'orologio dello show (layout.audioTimeline)
-require('./audio-timeline').startAudioTimeline({ getDoc: () => persistedState?.layout?.audioTimeline, engine: audioEngine, lib: audioLib, broadcast });
+const audioTl = require('./audio-timeline').startAudioTimeline({ getDoc: () => persistedState?.layout?.audioTimeline, engine: audioEngine, lib: audioLib, broadcast });
+// Autoplay della Console Audio (audio-auto.js): playlist o libreria, in ordine o a caso, indipendente
+// dalla timeline; se la traccia AUDIO sta guidando i deck (accesa e orologio vivo) aspetta
+const audioAuto = require('./audio-auto').startAudioAuto({ engine: audioEngine, lib: audioLib, broadcast,
+  timelineActive: () => { const s = audioTl?.status(); return !!(s && s.active && s.clock); } });
 // Controller DJ (Traktor Kontrol Z1) sulla Console Audio: comandi al motore, LED dallo stato
-const audioMidi = require('./audio-midi').startAudioMidi({ engine: audioEngine, isTimeline: () => !!persistedState?.layout?.audioTimeline?.active });
+const audioMidi = require('./audio-midi').startAudioMidi({ engine: audioEngine, isTimeline: () => !!persistedState?.layout?.audioTimeline?.active || audioAuto.active() });
 const chase = require('./chase-engine').startChase({ broadcast, tdId: () => dmxMaster.id(),
   sendOsc: (address, args) => { const to = routeOf(address, 'default'); if (to) udp.send(encode(address, args), to.port, to.host, () => {}); }
 });
@@ -397,6 +401,7 @@ wss.on('connection', ws => {
   ws.send(hello());
   ws.send(JSON.stringify({ type: 'midi_ports', inputs: midiPorts.ports() }));
   audioLib.playlists().then(playlists => { if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'audio_playlists', playlists })); });
+  ws.send(JSON.stringify({ type: 'audio_auto', state: audioAuto.state() }));
   ws.on('message', data => {
     let m; try { m = JSON.parse(data); } catch { return; }
     if (m.type === 'shared_state') {
@@ -415,6 +420,9 @@ wss.on('connection', ws => {
       // playlist della Console Audio: salvate dal bridge, rimandate a tutti i tablet
       audioLib.savePlaylists(m.playlists).then(playlists => broadcast({ type: 'audio_playlists', playlists }),
         err => { if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'audio_error', message: err.message })); });
+    } else if (m.type === 'audio_auto') {
+      const err = audioAuto.command(m);
+      if (err && ws.readyState === 1) ws.send(JSON.stringify({ type: 'audio_error', message: 'Autoplay: ' + err }));
     } else if (m.type === 'audio') {
       if (!audioEngine.send(m) && ws.readyState === 1) ws.send(JSON.stringify({ type: 'audio_error', message: 'Motore audio non collegato.' }));
     } else if (m.type === 'tempo' && +m.bpm > 0) {
