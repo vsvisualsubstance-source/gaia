@@ -141,6 +141,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 <div class="controls">
   <button class="btn tl" id="tl-start" onclick="tlStart()" title="Riprendi">▶</button>
   <button class="btn tl" id="tl-stop" onclick="tlStop()" title="Pausa">■</button>
+  <button class="btn tl" id="tl-edit" onclick="tlEdit()" title="Modifica la timeline scelta">✎</button>
   <button class="btn audio" id="audio-btn" onclick="toggleAudio()" title="Audio-reattività">🎤</button>
   <input type="range" id="brightness" min="0" max="100" value="100" oninput="onBrightness(this.value)">
   <button class="btn blackout" onclick="blackout()">⏻ OFF</button>
@@ -195,6 +196,11 @@ function blackout() { sendCmd({ action: 'blackout' }); }
 function tlStart() { sendCmd({ action: 'timeline_start' }); }
 function tlStop()  { sendCmd({ action: 'timeline_stop' }); }
 function tlLoad(name) { sendCmd({ action: 'timeline_load', name }); }
+function tlEdit() {
+  const q = new URLSearchParams(location.search);
+  if (lastTimelinePreset) q.set('preset', lastTimelinePreset);
+  location.href = 'dmx-editor.html?' + q.toString();
+}
 function onBrightness(v) { sendCmd({ action: 'set_brightness', value: v / 100 }); }
 function toggleAudio() {
   sendCmd({ action: lastAudioReactive ? 'audio_reactive_stop' : 'audio_reactive_start' });

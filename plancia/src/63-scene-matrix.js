@@ -79,6 +79,20 @@ function csBackPos(list,activePos,next){
   const n=list.findIndex(s=>s.index===next);
   return n>0?n-1:list.length-1;
 }
+// Timeline luci -> timeline semplice di un Raspberry (pi/dmx): un colore per passo, quello del
+// gruppo scelto. Una cue che non colora quel gruppo allunga il passo prima. {steps, palettes}
+function piTimelineFrom(cues,scenes,col,{lastSeconds=10}={}){
+  const byId=new Map(scenes.map(s=>[s.id,s])),list=(cues||[]).filter(c=>c&&c.scene&&Number.isFinite(+c.time)).sort((a,b)=>a.time-b.time);
+  const steps=[],palettes={};
+  list.forEach((c,i)=>{
+    const sc=byId.get(c.scene),rgb=sc&&smCell(sc,col)?.colors?.[0],dur=list[i+1]?Math.max(.1,+list[i+1].time-+c.time):Math.max(.1,+lastSeconds||10);
+    if(!rgb){if(steps.length)steps[steps.length-1].duration=+(steps[steps.length-1].duration+dur).toFixed(2);return}
+    const name=`${sc.label||sc.id} · ${col.label||col.key}`.slice(0,40);
+    palettes[name]=rgb.slice(0,3).map(v=>Math.max(0,Math.min(255,Math.round(+v>1?+v:+v*255))));
+    steps.push({palette:name,duration:+dur.toFixed(2),fade:+Math.min(Math.max(0,+c.fade||0),dur).toFixed(2)});
+  });
+  return{steps,palettes};
+}
 // --- interfaccia ---
 let SM_SHOW_ALL=false;
 const smHidden=()=>Array.isArray(L.sceneHidden)?L.sceneHidden:[];
@@ -199,6 +213,49 @@ async function smRowMenu(sceneId){
     smReopen();
   }catch(e){showError('Scena: '+e.message)}
 }
+function openPiExport(){
+  const rooms=Object.keys(G.dmx||{}).sort(),doc=tdTimelineDoc(),scenes=tdScenes(),cols=smColumns(groupsOf(),L.fixtures,scenes).filter(c=>c.kind==='color');
+  if(!rooms.length){showError('Nessun Raspberry con il servizio DMX collegato.');return}
+  if(!doc?.cues?.length){showError('La timeline di DMX Master è vuota.');return}
+  if(!cols.length){showError('Nessun gruppo di luci a colori in questo progetto.');return}
+  const s=$('#scrim');s.hidden=false;
+  let room=rooms[0],col=cols[0].key,name=(L._projectName||'Show').slice(0,30),last=10,loop=true;
+  const plan=()=>piTimelineFrom(doc.cues,scenes,cols.find(c=>c.key===col),{lastSeconds:last});
+  const hex3=c=>'#'+c.map(v=>v.toString(16).padStart(2,'0')).join('');
+  const preview=()=>{const p=plan(),t=p.steps.reduce((a,x)=>a+x.duration,0);
+    return`<p class="hint">${p.steps.length} passi · ${formatCueTime(t)}</p><div class="px-list">${p.steps.map((x,i)=>`<div class="px-row"><i style="background:${hex3(p.palettes[x.palette])}"></i><b>${i+1}. ${esc(x.palette)}</b><span>${x.duration} s · dissolvenza ${x.fade} s</span></div>`).join('')||'<p class="hint">Nessuna cue colora questo gruppo: scegline un altro.</p>'}</div>`};
+  const paint=()=>{
+    s.innerHTML=`<div class="sheet" role="dialog" aria-label="Esporta su Raspberry">
+      <div class="top"><h3>Esporta su Raspberry</h3><button class="btn ghost" id="pxClose">Chiudi</button></div>
+      <p class="hint">La timeline diventa una sequenza semplice di colori. Sul Raspberry parte dal suo schermo e non segue lo show. Effetti, sequenze, teste e audio non passano. Inviare non accende le luci.</p>
+      <div class="ac-f">Raspberry<div class="px-chips">${rooms.map(r=>`<button class="btn sm${r===room?' primary':' ghost'}" data-px-r="${esc(r)}">${esc(r)}</button>`).join('')}</div></div>
+      <div class="ac-f">Colore preso dal gruppo<div class="px-chips">${cols.map(c=>`<button class="btn sm${c.key===col?' primary':' ghost'}" data-px-c="${esc(c.key)}">${esc(c.label)}</button>`).join('')}</div></div>
+      <div class="two"><label>Nome sul Raspberry<input id="pxName" value="${esc(name)}" maxlength="40"></label><label>Durata ultimo passo (s)<input id="pxLast" type="number" min="0.5" step="0.5" value="${last}"></label></div>
+      <label class="chk"><input type="checkbox" id="pxLoop"${loop?' checked':''}> Riparte da capo alla fine</label>
+      <div id="pxPrev">${preview()}</div>
+      <div class="cue-editor-actions"><button class="btn primary" id="pxSend">Invia al Raspberry</button></div></div>`;
+    const q=x=>s.querySelector(x);
+    q('#pxClose').onclick=closeSheet;
+    q('#pxName').oninput=e=>{name=e.target.value};
+    q('#pxLoop').onchange=e=>{loop=e.target.checked};
+    q('#pxLast').onchange=e=>{last=Math.max(.5,+e.target.value||10);q('#pxPrev').innerHTML=preview()};
+    s.querySelectorAll('[data-px-r]').forEach(b=>b.onclick=()=>{room=b.dataset.pxR;paint()});
+    s.querySelectorAll('[data-px-c]').forEach(b=>b.onclick=()=>{col=b.dataset.pxC;paint()});
+    q('#pxSend').onclick=async()=>{
+      const n=name.trim(),p=plan(),topic=`gaia/dmx/${room}/command`;
+      if(!n){showError('Scrivi il nome della timeline.');return}
+      if(!p.steps.length){showError('Nessun passo da inviare: scegli un altro gruppo.');return}
+      if(G.dmx[room]?.timeline_presets?.[n]&&!await uiConfirm(`"${n}" esiste già su ${room}. Sovrascriverla?`,{ok:'Sovrascrivi'}))return;
+      // prima i colori: il Raspberry rifiuta una timeline con colori che non conosce
+      for(const[pn,rgb]of Object.entries(p.palettes))if(!gPub(topic,{action:'palette_save',name:pn,rgb})){showError('Non collegata a Gaia: apri ⋯ → Gaia.');return}
+      gPub(topic,{action:'timeline_save',name:n,steps:p.steps,loop});
+      q('#pxSend').disabled=true;
+      for(let i=0;i<20;i++){await new Promise(r=>setTimeout(r,400));if(G.dmx[room]?.timeline_presets?.[n]?.steps?.length===p.steps.length){closeSheet();showInfo(`"${n}" è sul Raspberry ${room}: ${p.steps.length} passi. Si avvia dal suo schermo.`);return}}
+      closeSheet();showError(`"${n}" inviata a ${room}, ma il Raspberry non l'ha confermata entro 8 s.`);
+    };
+  };
+  paint();
+}
 const smReopen=()=>{if(!$('#scrim').hidden&&document.querySelector('.smx'))openSceneMatrix()};
 function openSceneMatrix(){
   const scenes=tdScenes(),cols=smColumns(groupsOf(),L.fixtures,scenes),hidden=new Set(smHidden()),active=tdActiveScene(tdParams())?.id;
@@ -232,5 +289,5 @@ function openSceneMatrix(){
 }
 
 if(typeof module==='object'&&module.exports){
-  module.exports={smKey,smPaletteParam,smColumns,smCell,smRelevant,smPlanEdit,projSceneList,csBackPos};
+  module.exports={smKey,smPaletteParam,smColumns,smCell,smRelevant,smPlanEdit,projSceneList,csBackPos,piTimelineFrom};
 }

@@ -39,6 +39,7 @@ input[type=text]{width:100%;background:var(--bg);border:1px solid var(--border);
 .step .rm:hover{color:var(--red)}
 button{background:var(--accent);color:#000;border:none;border-radius:6px;padding:9px 16px;cursor:pointer;font-size:.85rem;font-weight:600}
 button.secondary{background:var(--border);color:var(--text)}
+@media (pointer:coarse){button{min-height:48px;font-size:1rem}.step select,.step input[type=number],input[type=text]{min-height:46px;font-size:1rem}.step .rm{min-width:44px;min-height:44px;font-size:1.3rem}}
 button.green{background:var(--green);color:#02150a}
 button:disabled{opacity:.4;cursor:default}
 .row{display:flex;gap:8px;align-items:center;margin-top:16px;flex-wrap:wrap}
@@ -172,6 +173,7 @@ document.getElementById('subtitle').textContent = `stanza: ${ROOM}`;
 document.getElementById('touch-link').href = `dmx-touch.html?room=${encodeURIComponent(ROOM)}`;
 
 let client = null;
+let openedFromTouch = false;
 let palettes = [];
 let presets = {};       // nome -> {steps, loop}, dalla status live
 let editingOriginalName = null;   // nome del preset in editing, per sapere se e' una rinomina
@@ -404,6 +406,9 @@ function applyStatus(d) {
   if (!FIXTURE || !fixtures[FIXTURE]) FIXTURE = d.default_fixture || Object.keys(fixtures).sort()[0];
   renderFixtureSelect(fixtures);
   renderPresetList();
+  // arrivando dallo schermo touch (✎): si apre subito la timeline scelta, una volta sola
+  const wanted = params.get('preset');
+  if (wanted && presets[wanted] && !openedFromTouch) { openedFromTouch = true; loadIntoEditor(wanted); }
   renderPaletteSwatches(d.palettes_rgb || {});
   applyAudioTune(d);
   applyPowerRange(fixtures[FIXTURE]);

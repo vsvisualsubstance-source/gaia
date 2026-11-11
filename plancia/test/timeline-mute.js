@@ -41,6 +41,14 @@ async function main() {
     const vp = await p.ev(`JSON.stringify({ok:document.querySelectorAll('[data-trk="video"] .vp-st.ready').length,bad:document.querySelectorAll('[data-trk="video"] .vp-st.error').length,st:document.querySelector('.tl-vvst').textContent,toast:document.querySelector('#toast').textContent})`);
     const v = JSON.parse(vp);
     check(v.ok === 1 && v.bad === 1 && /1 patch in errore/.test(v.st) && /patch 5/.test(v.toast), `stato del precarico accanto alle cue (${vp})`);
+    await p.ev(`(()=>{const T=window.__planciaTest,cat=[{id:'r',index:0,label:'Rosso',categories:['palette'],preview:{ledbar:{palette:'R',colors:[[1,0,0]]},rig_a:{palette:'R',colors:[[1,0,0]]},rig_b:{palette:'R',colors:[[1,0,0]]}}}];
+      const d=T.G.devices['td-dmx-win'];d.params={...d.params,show_scene_catalog:cat};T.G.tdTimeline={v:1,cues:[{time:0,scene:'r',fade:1,label:''}]};T.G.dmx={prova:{stanza:'prova',timeline_presets:{},fixtures:{}}};return 1})()`);
+    await sleep(1300);
+    await p.ev(`document.querySelector('[data-act="piexport"]').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true}));1`);
+    await sleep(300);
+    const px = await p.ev(`JSON.stringify({rows:document.querySelectorAll('.px-row').length,room:document.querySelector('[data-px-r]')?.textContent})`);
+    check(/"rows":1/.test(px) && /prova/.test(px), `esporta su Raspberry: anteprima dei passi (${px})`);
+    await p.ev(`document.querySelector('#pxClose').click();1`);
     await open('Show');
     await sleep(1800);
     check(await p.ev(`!!document.querySelector('[data-act="mute-chase"]')`), 'il pulsante c\'è anche nella pagina Show');

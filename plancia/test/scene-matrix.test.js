@@ -26,6 +26,18 @@ test('BACK: la riga sopra la scena attiva; fuori scaletta la riga sopra NEXT', (
   assert.equal(csBackPos([], -1, null), -1);
 });
 
+test('export su Raspberry: un colore per passo, le cue senza colore allungano il passo prima', () => {
+  const { piTimelineFrom } = require('../src/63-scene-matrix.js');
+  const sc = [{ id: 'a', label: 'Rosso', categories: ['palette'], preview: { ledbar: { palette: 'R', colors: [[1, 0, 0], [0, 1, 0]] } } },
+    { id: 'b', label: 'Blu', categories: ['palette'], preview: { ledbar: { palette: 'B', colors: [[0, 0, 255]] } } },
+    { id: 'h', label: 'Teste', categories: ['heads'], preview: { heads: [] } }];
+  const col = { key: 'ledbar', kind: 'color', label: 'LED' };
+  const r = piTimelineFrom([{ time: 30, scene: 'b', fade: 50 }, { time: 0, scene: 'a', fade: 1 }, { time: 10, scene: 'h', fade: 0 }], sc, col, { lastSeconds: 5 });
+  assert.deepEqual(r.steps, [{ palette: 'Rosso · LED', duration: 30, fade: 1 }, { palette: 'Blu · LED', duration: 5, fade: 5 }]);
+  assert.deepEqual(r.palettes, { 'Rosso · LED': [255, 0, 0], 'Blu · LED': [0, 0, 255] });
+  assert.deepEqual(piTimelineFrom([], sc, col), { steps: [], palettes: {} });
+});
+
 test('colonne: solo i gruppi a colori con luci nel progetto, strobo se serve', () => {
   const cols = smColumns(groups, fixtures, [{ categories: ['strobe'] }]);
   assert.deepEqual(cols.map(c => c.key), ['ledbar', 'consolle', 'strobe']);
