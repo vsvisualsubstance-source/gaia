@@ -343,8 +343,10 @@ function lzsDown(e,el,w){
   if(a==='target')LZS_TARGET=v;
   else if(a==='flash')LZS_FLASH=!LZS_FLASH;
   else if(a==='apply'&&s&&LZS_FLASH){lzCmd({action:'flash',on:true,scene:s},'flash');b.classList.add('press');
-    const up=()=>{b.removeEventListener('pointerup',up);b.removeEventListener('pointercancel',up);b.removeEventListener('pointerleave',up);b.classList.remove('press');lzCmd({action:'flash',on:false},'flash')};
-    b.addEventListener('pointerup',up);b.addEventListener('pointercancel',up);b.addEventListener('pointerleave',up);return}
+    // rilascio ascoltato sulla pagina, non sul pulsante: lo stato del laser ridisegna l'elenco ogni
+    // ~2 s e un pulsante sostituito non riceve piu' il pointerup (flash rimasto tenuto, 11/11)
+    const up=()=>{for(const [t,f] of [['pointerup',up],['pointercancel',up]])window.removeEventListener(t,f,true);b.removeEventListener('pointerleave',up);b.classList.remove('press');lzCmd({action:'flash',on:false},'flash')};
+    window.addEventListener('pointerup',up,true);window.addEventListener('pointercancel',up,true);b.addEventListener('pointerleave',up);return}
   else if(a==='apply'&&s){lzsApply(s);showInfo(`Laser: "${s.name}" a ${LZS_TARGET==='all'?'tutti i cubi':LZS_TARGET} (modalità Scene; armare resta manuale).`)}
   else if(a==='cal'){const c=lzsCalScenes().find(x=>x.id===v);if(c){lzsApply(c);showInfo(`Laser: taratura "${c.name}" a ${LZS_TARGET==='all'?'tutti i cubi':LZS_TARGET} (modalità Scene; armare resta manuale).`)}}
   else if(a==='edit'&&s)openLaserSceneEditor(s);

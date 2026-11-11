@@ -50,6 +50,7 @@ MQTT_LOSS_S = 5.0
 # niente sorgente "dmx" (nota TD 51): le scene del gateway fanno gia' lo show
 MODES = ("off", "test", "scene", "patchdeck", "yolo")
 INTERNAL_FPS = 30      # test e scene: frame generati dal gateway
+FLASH_MAX_S = 60       # un flash tenuto piu' di cosi' si chiude da solo (rilascio perso)
 PREVIEW_POINTS = 200    # anteprima per il Render della Plancia: punti per cubo...
 PREVIEW_S = 0.16       # ...e ogni quanto (~6/s, solo mentre un cubo e' in uscita)
 DARK = P.pack_sample(0x800, 0x800, 0, 0, 0) * P.SAMPLES_PER_PACKET   # campioni al buio, al centro
@@ -500,6 +501,9 @@ class Gateway:
             level, kick = self.audio_now()
             self.fx_angle = (self.fx_angle + self.fx["rotate"] * period) % 360.0
             self.fx_angle_y = (self.fx_angle_y + self.fx["rotate_y"] * period) % 360.0 if self.fx["rotate_y"] else 0.0
+            if self.flash and t0 - self.flash_t0 > FLASH_MAX_S:   # rilascio mai arrivato: il flash si chiude da solo
+                log.warning("flash %s tenuto oltre %d s: chiuso", self.flash.get("name"), FLASH_MAX_S)
+                self.flash = None
             for c in list(self.cubes.values()):
                 try:
                     if c.mode == "test" and t0 - c.test_ts > 0.1:
@@ -710,6 +714,10 @@ class Gateway:
         if action == "scene":
             sc = SC.clean_scene(cmd.get("scene"))
             cubes = self._targets(cmd)
+            # chi sceglie una scena la vuole vedere: un flash rimasto tenuto (rilascio perso) la coprirebbe
+            if self.flash:
+                log.info("flash %s chiuso dalla scelta di una scena", self.flash.get("name"))
+                self.flash = None
             for c in cubes:
                 with self.cfg_lock:
                     c.conf["scene"] = sc

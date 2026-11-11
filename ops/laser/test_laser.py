@@ -511,6 +511,13 @@ class TestGateway(unittest.TestCase):
         self.gw.handle({"action": "flash", "on": True, "scene": red})
         self.gw.disarm_all("prova")
         self.assertIsNone(self.gw.flash)                                                   # il blackout chiude il flash
+        # rilascio perso (11/11): scegliere una scena chiude il flash, e dopo FLASH_MAX_S si chiude da solo
+        self.gw.handle({"action": "flash", "on": True, "scene": red})
+        self.gw.handle({"action": "scene", "cube": "c1", "scene": SQUARE})
+        self.assertIsNone(self.gw.flash)
+        self.gw.handle({"action": "flash", "on": True, "scene": red})
+        self.gw.flash_t0 -= G.FLASH_MAX_S + 1
+        self.assertTrue(wait(lambda: self.gw.flash is None))
 
     def test_7_status_payload_is_json(self):
         s = json.loads(json.dumps(self.gw.status_payload()))
