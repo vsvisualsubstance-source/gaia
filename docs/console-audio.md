@@ -206,6 +206,7 @@ cercata per parte del nome (`gaia-audio list` mostra i nomi che vede):
 | `--device` | master | `Main (Traktor Kontrol Z1` |
 | `--cue-device` | cuffia | `Headphone (Traktor Kontrol Z1` |
 | `--tap-device` | **luci**: copia del mix dopo fader e crossfader, *prima* del volume master | `CABLE Input (VB-Audio` |
+| `--vban IP[,IP]` `--vban-name Gaia` | **rete**: lo stesso mix delle luci in UDP col protocollo VBAN (porta 6980) | `192.168.1.73` (PC Win di Controller e PatchDeck) |
 
 Ogni opzione accetta piu' schede in ordine di preferenza, separate da `|`:
 vale la prima collegata, mai la stessa del master per cuffia e luci. Sulla
@@ -213,6 +214,15 @@ touring: `--device "Main (Traktor Kontrol Z1|MOTU|predefinita"`, cioe' la Z1 se 
 altrimenti la MOTU M2, altrimenti l uscita predefinita di Windows (parola `predefinita` o `default` nell elenco; mai VB-Cable, che Windows a volte mette come predefinito). La M2 ha due uscite e la sua presa cuffie ripete il
 master: con la sola M2 il preascolto separato non c'e' (🎧 grigio nella
 console), serve una seconda uscita (Z1, altra scheda) per `--cue-device`.
+
+**Uscita in rete, VBAN (2026-11-11).** Per Controller e PatchDeck, che girano su un altro PC, il motore
+manda lo stesso mix delle luci col protocollo VBAN di VB-Audio (`audio-engine/src/vban.rs`): pacchetti UDP
+da 256 campioni stereo a 16 bit, alla frequenza del motore (48 kHz con la Z1, circa 187 pacchetti al secondo),
+flusso col nome scelto (`--vban-name`, default `Gaia`). Va anche senza scheda audio (clock interno). Piu'
+indirizzi separati da virgola; un PC spento non ferma gli altri. Sul PC che riceve: **VBAN Receptor** (gratuito,
+VB-Audio) con sorgente IP di OPS e nome `Gaia`, uscita su **CABLE Input** di VB-Cable; in TD un **Audio Device In**
+su **CABLE Output** (lo possono leggere insieme Controller e PatchDeck). Latenza in LAN di qualche decina di ms.
+Firewall del PC che riceve: UDP 6980 in ingresso. Nello stato del motore compare come uscita `vban`.
 
 L'uscita luci serve a DMX Master sulla stessa macchina: la DMX legge un
 ingresso audio, e la Z1 non ne ha. Con **VB-Audio Virtual Cable** il motore

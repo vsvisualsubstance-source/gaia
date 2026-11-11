@@ -6,6 +6,10 @@
 //!       --no-audio       senza scheda: clock interno, per le prove
 //!       --cue-device NOME  cuffia su un'uscita a parte (es. "Headphone" della Z1 col driver NI);
 //!                        senza, la cuffia va sui canali 3-4 se l'uscita ne ha almeno 4
+//!       --tap-device NOME  copia del mix per le luci su un'uscita a parte (es. "CABLE Input" di VB-Cable)
+//!       --vban IP[,IP..]   copia del mix in rete col protocollo VBAN (UDP 6980 se manca ":porta"),
+//!                        per Controller e PatchDeck su un altro PC (VBAN Receptor -> VB-Cable)
+//!       --vban-name NOME   nome del flusso VBAN (default "Gaia", al massimo 16 caratteri)
 //!   gaia-audio list                         uscite audio viste
 //!   gaia-audio analyze [cartella|file ...]  BPM, griglia, forma d'onda (tutta la musica se vuoto)
 //!       --force          rianalizza anche quelle in cache
@@ -23,6 +27,7 @@ mod dsp;
 mod engine;
 mod library;
 mod serve;
+mod vban;
 
 use analysis::BpmRange;
 use cpal::traits::{DeviceTrait, HostTrait};
@@ -61,6 +66,8 @@ struct Opts {
     no_audio: bool,
     cue_device: Option<String>,
     tap_device: Option<String>,
+    vban: Option<String>,
+    vban_name: String,
     rest: Vec<String>,
 }
 
@@ -75,6 +82,8 @@ fn parse(args: &[String]) -> Result<Opts, String> {
         no_audio: false,
         cue_device: None,
         tap_device: None,
+        vban: None,
+        vban_name: "Gaia".into(),
         rest: Vec::new(),
     };
     let mut it = args.iter();
@@ -88,6 +97,8 @@ fn parse(args: &[String]) -> Result<Opts, String> {
             "--no-audio" => o.no_audio = true,
             "--cue-device" => o.cue_device = Some(it.next().ok_or("--cue-device senza nome")?.clone()),
             "--tap-device" => o.tap_device = Some(it.next().ok_or("--tap-device senza nome")?.clone()),
+            "--vban" => o.vban = Some(it.next().ok_or("--vban senza indirizzi")?.clone()),
+            "--vban-name" => o.vban_name = it.next().ok_or("--vban-name senza nome")?.chars().take(16).collect(),
             "--range" => {
                 let v = it.next().ok_or("--range senza valori")?;
                 let (a, b) = v.split_once('-').ok_or("--range MIN-MAX")?;
@@ -187,7 +198,7 @@ fn main() -> ExitCode {
             Ok(())
         }
         "analyze" => return analyze(&o),
-        "serve" => serve::serve(serve::ServeOpts { root: o.root, cache: o.cache, port: o.port, device: o.device, no_audio: o.no_audio, cue_device: o.cue_device, tap_device: o.tap_device }),
+        "serve" => serve::serve(serve::ServeOpts { root: o.root, cache: o.cache, port: o.port, device: o.device, no_audio: o.no_audio, cue_device: o.cue_device, tap_device: o.tap_device, vban: o.vban, vban_name: o.vban_name }),
         "grid" => grid(&o),
         "index" => {
             println!("{}", serde_json::to_string_pretty(&library::index(&o.root, &o.cache)).unwrap_or_default());
