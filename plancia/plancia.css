@@ -801,7 +801,22 @@ button{cursor:pointer}
 .rc{display:flex;flex-direction:column;gap:8px;height:calc(100% - 24px);margin-top:24px;min-height:0}
 .rc-groups{display:flex;flex-wrap:wrap;gap:6px}.rc-g{display:flex;flex-direction:column;align-items:flex-start;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:inherit;min-width:92px}
 .rc-g b{font-size:13px}.rc-g small{font:10px var(--mono);color:var(--dim)}.rc-g.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 18%,transparent)}.rc-g.empty{opacity:.6}
-.rc-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.rc-st{margin-left:auto;font-family:var(--mono)}.rc-st.bad{color:var(--bad)}
+.rc-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+/* catalogo palette (63-palette-catalog.js) */
+.pal-sheet{width:min(720px,100%)}
+.pal-list{display:flex;flex-direction:column;gap:6px}
+.pal-row{display:flex;align-items:center;gap:10px;padding:6px 8px;border:1px solid var(--line2);border-radius:8px}
+.pal-sw{display:block;width:120px;height:26px;border-radius:5px;flex:none;border:1px solid var(--line2)}
+.pal-sw.big{width:100%;height:40px}
+.pal-txt{flex:1;min-width:0;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 6px}
+.pal-txt small{flex-basis:100%;color:var(--dim);font-size:11px}
+.pal-tag{font-size:10px;padding:1px 6px;border-radius:9px;border:1px solid var(--line2);color:var(--dim);letter-spacing:.04em}
+.pal-tag.mod{color:#ffb23e;border-color:#ffb23e}.pal-tag.new{color:#5ad18c;border-color:#5ad18c}
+.pal-act{display:flex;gap:2px;flex-wrap:wrap;justify-content:flex-end}
+.pe-cols{display:flex;flex-wrap:wrap;gap:8px}
+.pe-col{display:flex;align-items:center;gap:2px;padding:4px;border:1px solid var(--line2);border-radius:6px}
+.pe-col input[type=color]{width:46px;height:34px;padding:0;border:none;background:none}
+.pe-msg:empty,.pal-msg:empty{display:none}.rc-st{margin-left:auto;font-family:var(--mono)}.rc-st.bad{color:var(--bad)}
 .rc-secs{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;overflow:auto;min-height:0;align-content:start}
 .rc-sec{border:1px solid var(--line);border-radius:6px;padding:6px 10px}.rc-sec h4{margin:0 0 6px;font:600 12px var(--mono);text-transform:uppercase;display:flex;align-items:center;gap:6px;cursor:pointer}.rc-sec h4 .btn{margin-left:auto}
 .rc-sec.closed h4{margin:0}

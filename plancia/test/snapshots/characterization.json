@@ -3760,6 +3760,7 @@
     "gaia/devices/+/dmx_live",
     "gaia/devices/+/dmx_matrix",
     "gaia/devices/+/dmx_output",
+    "gaia/devices/+/dmx_palettes",
     "gaia/devices/+/dmx_patch",
     "gaia/devices/+/dmx_rig_config",
     "gaia/devices/+/dmx_rigs",
@@ -3818,27 +3819,27 @@
    "wall"
   ],
   "simulated": {
-   "hash": "864a2dd9",
+   "hash": "1886b01c",
    "mean": [
-    48.9,
-    29.52,
-    35.61
+    42.86,
+    27.02,
+    32.86
    ]
   },
   "real": {
-   "hash": "4fd8e092",
+   "hash": "f19e24b6",
    "mean": [
-    44.65,
-    41.9,
-    48.59
+    41.07,
+    38.1,
+    44.83
    ]
   },
   "mixed": {
-   "hash": "6c125fbb",
+   "hash": "51ac4d96",
    "mean": [
-    43.71,
-    33.47,
-    40.92
+    39.47,
+    30,
+    36.46
    ]
   }
  },

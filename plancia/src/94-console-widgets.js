@@ -73,6 +73,7 @@ function paintFixGrid(el,w,force){
         <button class="pal-chip" data-fg-sel="all">Seleziona tutte</button><button class="pal-chip" data-fg-sel="odd" title="1ª, 3ª, 5ª... da sinistra (blocchi interi)">Dispari</button><button class="pal-chip" data-fg-sel="even" title="2ª, 4ª, 6ª... da sinistra (blocchi interi)">Pari</button><button class="pal-chip" data-fg-sel="none">Nessuna</button>
         ${hasBlocks?`<button class="pal-chip${single?' on':''}" data-fg-single title="Blocchi aperti: una tessera per luce">Barre singole</button>`:''}
         <button class="pal-chip" data-fg-block="make" title="Le luci selezionate diventano un blocco: si spostano insieme e fanno la stessa cosa nel chase">⊞ Blocco</button>${selF.some(f=>f.block)?'<button class="pal-chip" data-fg-block="free" title="Le luci selezionate escono dal loro blocco">Sciogli</button>':''}
+        <button class="pal-chip" data-fg-palettes title="Catalogo delle palette: nuove, modifica colori, ordine">🎨 Palette</button>
         <button class="pal-chip fg-scene" data-fg-scene title="Salva il colore di adesso come scena di DMX Master">📷 Salva scena</button>
       </div>
       <div class="fg-tiles">${list.length?items.map(it=>{if(it.block){const f=it.fx[0],pals=[...new Set(it.fx.map(fixturePaletteOf))],n=it.fx.filter(x=>sel.has(x.id)).length;
@@ -94,6 +95,7 @@ async function fixGridDown(e,el,w){
   if(t.closest('[data-aud-gain]'))return; // il cursore si gestisce al rilascio (change)
   const btile=t.closest('[data-fg-block-tile]'),mk=t.closest('[data-fg-block]');
   if(t.closest('[data-fg-scene]')){e.preventDefault();await fgSaveScene();return}
+  if(t.closest('[data-fg-palettes]')){e.preventDefault();openPaletteCatalog();return}
   if(btile){e.preventDefault();const fx=list.filter(f=>f.block===btile.dataset.fgBlockTile),allOn=fx.every(f=>sel.has(f.id));
     fx.forEach(f=>allOn?sel.delete(f.id):sel.add(f.id));paintFixGrid(el,w,true);return}
   if(t.closest('[data-fg-single]')){e.preventDefault();FG_SINGLE.set(w.id,!FG_SINGLE.get(w.id));paintFixGrid(el,w,true);return}

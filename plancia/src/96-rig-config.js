@@ -74,7 +74,7 @@ function paintRigConfig(el,w,force){
   const hasCal=(def.calibration?.[g.kind]||[]).length>0,starter=g.starter?def.starters?.[g.kind]?.[g.starter]:null,np=rigPresets(g.kind).length;
   box.innerHTML=`<div class="rc-groups">${def.groups.map(x=>`<button class="rc-g${x.group===g.group?' on':''}${x.fixtures?'':' empty'}" data-rc-g="${esc(x.group)}" title="${esc(`${x.fixtures} luci${x.profiles?.length?': '+x.profiles.join(', '):''}`)}"><b>${esc(x.label||x.group)}${rigStarterPending(x)?' <i class="rc-dot" title="Luci nuove o cambiate">●</i>':''}</b><small>${x.kind==='level'?'livello':'colore'} · ${x.fixtures} luci</small></button>`).join('')}</div>
     <div class="rc-top"><span class="hint">${esc(g.label||g.group)}${g.alias?` (${esc(g.alias)})`:''}: ${g.fixtures?esc(g.profiles.join(', ')):'nessuna luce in patch'}</span>
-      <button class="btn sm ghost" data-rc-act="copy" title="Copia su altri gruppi dello stesso tipo: solo la taratura, oppure tutto">⧉ Copia su…</button><span class="rc-st hint"></span></div>
+      <button class="btn sm ghost" data-rc-act="copy" title="Copia su altri gruppi dello stesso tipo: solo la taratura, oppure tutto">⧉ Copia su…</button><button class="btn sm ghost" data-rc-act="palettes" title="Catalogo delle palette (i colori custom restano qui sotto)">🎨 Palette</button><span class="rc-st hint"></span></div>
     ${rigStarterPending(g)&&starter?`<div class="rc-banner"><span>Le luci di <b>${esc(g.label||g.group)}</b> sono nuove o cambiate (${esc(g.profiles.join(', '))}). Vuoi partire dalla taratura adatta: <b>${esc(starter.label)}</b>?</span>
       <button class="btn sm primary" data-rc-act="starter">Applica la partenza</button><button class="btn sm ghost" data-rc-act="seen">Non ora</button></div>`:''}
     <div class="rc-body">
@@ -99,6 +99,7 @@ async function rigConfigDown(e,el,w){
   if(b.dataset.rcG){RC_UI.sel=b.dataset.rcG;again();return}
   if(b.dataset.rcBool){const f=b.dataset.rcBool,on=!(rigConfigValues()[g.group]||{})[f];b.classList.toggle('on',on);b.textContent=on?'ON':'OFF';rigConfigSend(g.group,{[f]:on});return}
   const act=b.dataset.rcAct;
+  if(act==='palettes'){openPaletteCatalog();return}
   if(act==='reset'){const s=def.kinds[g.kind].sections.find(x=>x.key===b.dataset.rcV),role=b.dataset.rcRole;
     const values=Object.fromEntries(s.fields.filter(f=>rcRole(g.kind,f)===role).map(f=>[f,rcField(g.kind,f).default]).filter(([,v])=>v!==undefined));
     if(!Object.keys(values).length){showInfo('Questa parte non ha valori di base.');return}

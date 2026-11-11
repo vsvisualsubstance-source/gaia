@@ -274,11 +274,12 @@ function openSceneMatrix(){
     </tbody></table></div>
     <div class="row smx-foot"><button class="btn primary" id="smNew">+ Nuova scena</button>
       <label class="chk"><input type="checkbox" id="smAll"${SM_SHOW_ALL?' checked':''}> mostra tutte${off&&!SM_SHOW_ALL?` (${off} nascoste: altri gruppi o nascoste qui)`:''}</label>
-      <span style="flex:1"></span><button class="btn ghost" id="smSetlist" title="Quali scene usa questo progetto e in che ordine">☰ Scaletta</button><button class="btn ghost" id="smFull" title="Categorie, teste, strobo, scene dalle palette">Editor completo</button></div>
+      <span style="flex:1"></span><button class="btn ghost" id="smPalettes" title="Catalogo delle palette: nuove, modifica colori, ordine">🎨 Palette</button><button class="btn ghost" id="smSetlist" title="Quali scene usa questo progetto e in che ordine">☰ Scaletta</button><button class="btn ghost" id="smFull" title="Categorie, teste, strobo, scene dalle palette">Editor completo</button></div>
   </div>`;
   s.querySelector('#smClose').onclick=closeSheet;
   s.querySelector('#smFull').onclick=()=>openSceneEditor();
   s.querySelector('#smSetlist').onclick=()=>openSceneSetlist();
+  s.querySelector('#smPalettes').onclick=()=>openPaletteCatalog();
   s.querySelector('#smNew').onclick=()=>smNewScene(cols);
   s.querySelector('#smAll').onchange=e=>{SM_SHOW_ALL=e.target.checked;openSceneMatrix()};
   s.querySelectorAll('tr[data-sm]').forEach(tr=>{const id=tr.dataset.sm;
