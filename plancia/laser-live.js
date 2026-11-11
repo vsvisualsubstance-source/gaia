@@ -2,12 +2,12 @@
 // Controlli dal vivo del laser come indirizzi OSC della Plancia, cosi' fader e
 // pulsanti normali (anche assegnati all'APC40 col MIDI learn) comandano il
 // laser gateway. Il bridge li trasforma in comandi MQTT e non li manda a TD.
-//   /laser/fx/<rotate|zoom|hue|wave|wave_hz|bright> v   effetti sopra alle scene
+//   /laser/fx/<rotate|rotate_y|zoom|hue|wave|wave_hz|bright> v   effetti sopra alle scene (rotate_y: asse verticale)
 //   /laser/fx/tint tinta saturazione                    ruota colore (saturazione 0 = colori della scena)
 //   /laser/fx/reset 1                                   effetti a riposo
 //   /laser/flash/<id scena> 1|0                         la scena finche' il pulsante e' premuto
 //   /laser/blackout 1                                   disarma tutti i cubi
-const FX_KEYS = ['rotate', 'zoom', 'hue', 'wave', 'wave_hz', 'bright'];
+const FX_KEYS = ['rotate', 'rotate_y', 'zoom', 'hue', 'wave', 'wave_hz', 'bright'];
 
 // null = non e' un controllo del laser
 function laserLiveCommand(address, args, scenes) {

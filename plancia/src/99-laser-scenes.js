@@ -106,12 +106,16 @@ function lzsWave(x,shape='sine'){
 }
 // scena a tempo: il tempo corre con bpm / bpm di riferimento (laser_scene.tempo_rate)
 function lzsTempoRate(sc,bpm){const tp=sc?.tempo;return tp?.sync&&bpm>0?Math.max(.1,Math.min(10,bpm/(+tp.bpm||120))):1}
+// rotazione attorno all'asse verticale, con un filo di prospettiva (laser_scene.spin_y)
+const LZS_PERSPECTIVE=.25;
+function lzsSpinY(x,y,c,s){const f=1/(1-LZS_PERSPECTIVE*x*s);return[x*c*f,y*f]}
 function lzsAnimate(sc,t,level=0,kick=0){
-  const a={rotate:0,scale:.8,pulse:0,pulse_hz:.5,orbit:0,orbit_hz:.2,draw_hz:0,pulse_shape:'sine',swing:0,swing_hz:.25,swing_shape:'sine',...(sc.anim||{})},au={amount:0,to:'scale',...(sc.audio||{})};
+  const a={rotate:0,rotate_y:0,scale:.8,pulse:0,pulse_hz:.5,orbit:0,orbit_hz:.2,draw_hz:0,pulse_shape:'sine',swing:0,swing_hz:.25,swing_shape:'sine',...(sc.anim||{})},au={amount:0,to:'scale',...(sc.audio||{})};
   let s=a.scale*(1-a.pulse*.5+a.pulse*.5*lzsWave(a.pulse_hz*t,a.pulse_shape)),bright=1;
   const react=Math.min(1,level+.5*kick)*au.amount;
   if(au.to==='scale')s*=1+.6*react;else bright=(1-au.amount)+react;
   const ang=(a.rotate*t+a.swing*lzsWave(a.swing_hz*t,a.swing_shape))*Math.PI/180,ca=Math.cos(ang),sa=Math.sin(ang);
+  const ay=(a.rotate_y||0)*t*Math.PI/180,cy=Math.cos(ay),sy=Math.sin(ay);
   const ox=a.orbit*.5*Math.cos(2*Math.PI*a.orbit_hz*t),oy=a.orbit*.5*Math.sin(2*Math.PI*a.orbit_hz*t);
   // animazione (ILDA): il frame del momento, a frame_fps (laser_scene.animate)
   const strokes=sc.frames?.length>1?sc.frames[Math.floor(t*(sc.frame_fps||25))%sc.frames.length].strokes:sc.strokes;
@@ -122,7 +126,7 @@ function lzsAnimate(sc,t,level=0,kick=0){
     if(budget<=0)return;
     const [r,g,b]=lzsStrokeRgb(sc,i,t,strokes).map(v=>Math.max(0,Math.min(255,Math.floor(v*255*bright))));
     const pts=(st.closed?[...st.pts,st.pts[0]]:st.pts).slice(0,budget);budget-=pts.length;
-    pts.forEach(([x,y],j)=>{const px=(x*ca-y*sa)*s+ox,py=(x*sa+y*ca)*s+oy;if(!j)out.push([px,py,0,0,0]);out.push([px,py,r,g,b])});
+    pts.forEach(([x,y],j)=>{if(ay)[x,y]=lzsSpinY(x,y,cy,sy);const px=(x*ca-y*sa)*s+ox,py=(x*sa+y*ca)*s+oy;if(!j)out.push([px,py,0,0,0]);out.push([px,py,r,g,b])});
   });
   return out;
 }
@@ -437,7 +441,7 @@ function openLaserDraw(el,w){
 }
 function openLaserSceneEditor(orig){
   const sc=JSON.parse(JSON.stringify(orig)),s=$('#scrim');s.hidden=false;
-  const C={mode:'fixed',rgb:[1,1,1],palette:[[1,0,0],[0,1,0],[0,0,1]],rate:.2,...sc.color},A={rotate:0,scale:.8,pulse:0,pulse_hz:.5,orbit:0,orbit_hz:.2,draw_hz:0,pulse_shape:'sine',swing:0,swing_hz:.25,swing_shape:'sine',...sc.anim},U={amount:0,to:'scale',...sc.audio};
+  const C={mode:'fixed',rgb:[1,1,1],palette:[[1,0,0],[0,1,0],[0,0,1]],rate:.2,...sc.color},A={rotate:0,rotate_y:0,scale:.8,pulse:0,pulse_hz:.5,orbit:0,orbit_hz:.2,draw_hz:0,pulse_shape:'sine',swing:0,swing_hz:.25,swing_shape:'sine',...sc.anim},U={amount:0,to:'scale',...sc.audio};
   const TP={sync:false,bpm:liveBpm(),...sc.tempo},wv=(id,cur)=>`<select id="${id}">${LZS_WAVES.map(([k,t])=>`<option value="${k}"${k===cur?' selected':''}>${t}</option>`).join('')}</select>`;
   const hex=c=>'#'+c.map(x=>Math.round(x*255).toString(16).padStart(2,'0')).join(''),unhex=h=>[1,3,5].map(i=>+(parseInt(h.slice(i,i+2),16)/255).toFixed(3));
   const sl=(id,label,v,min,max,step)=>`<label class="ar-sl"><span>${label}<b id="${id}V">${(+v).toFixed(step<1?2:0)}</b></span><input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${v}"></label>`;
@@ -452,7 +456,8 @@ function openLaserSceneEditor(orig){
       <div class="two"><label>Colore fisso<input type="color" id="lsRgb" value="${hex(C.rgb)}"></label><label>Palette<span class="lzs-pal">${C.palette.slice(0,4).map((c,i)=>`<input type="color" data-pal="${i}" value="${hex(c)}">`).join('')}</span></label></div>
       ${sl('lsRate','Velocità colore (giri/s)',C.rate,0,2,.01)}
     </div></div>
-    <div class="two">${sl('lsRot','Rotazione (gradi/s)',A.rotate,-360,360,1)}${sl('lsScale','Dimensione',A.scale,.05,1,.01)}</div>
+    <div class="two">${sl('lsRot','Rotazione (gradi/s)',A.rotate,-360,360,1)}${sl('lsRotY','Rotazione Y (gradi/s, gira come una moneta)',A.rotate_y||0,-360,360,1)}</div>
+    ${sl('lsScale','Dimensione',A.scale,.05,1,.01)}
     <div class="two">${sl('lsPulse','Pulsazione',A.pulse,0,1,.01)}${sl('lsPulseHz','Pulsazione (Hz)',A.pulse_hz,0,4,.05)}</div>
     <label>Forma della pulsazione${wv('lsPulseSh',A.pulse_shape)}</label>
     <div class="two">${sl('lsSwing','Oscillazione della rotazione (gradi, 0 = gira e basta)',A.swing,0,180,1)}${sl('lsSwingHz','Oscillazione (Hz)',A.swing_hz,0,4,.05)}</div>
@@ -469,7 +474,7 @@ function openLaserSceneEditor(orig){
   const read=()=>{
     sc.name=$('#lsName').value.trim()||'Scena';
     sc.color={...C,mode:$('#lsCm').value,rgb:unhex($('#lsRgb').value),palette:[...s.querySelectorAll('[data-pal]')].map(x=>unhex(x.value)),rate:+$('#lsRate').value};
-    sc.anim={rotate:+$('#lsRot').value,scale:+$('#lsScale').value,pulse:+$('#lsPulse').value,pulse_hz:+$('#lsPulseHz').value,orbit:+$('#lsOrbit').value,orbit_hz:+$('#lsOrbitHz').value,draw_hz:+$('#lsDraw').value,
+    sc.anim={rotate:+$('#lsRot').value,rotate_y:+$('#lsRotY').value,scale:+$('#lsScale').value,pulse:+$('#lsPulse').value,pulse_hz:+$('#lsPulseHz').value,orbit:+$('#lsOrbit').value,orbit_hz:+$('#lsOrbitHz').value,draw_hz:+$('#lsDraw').value,
       pulse_shape:$('#lsPulseSh').value,swing:+$('#lsSwing').value,swing_hz:+$('#lsSwingHz').value,swing_shape:$('#lsSwingSh').value};
     // a tempo: il riferimento e' il BPM del momento in cui lo si accende
     const on=$('#lsTempo').checked;if(on&&!sc.tempo?.sync){TP.bpm=liveBpm();$('#lsTempoRef').textContent=TP.bpm}sc.tempo={sync:on,bpm:TP.bpm};
@@ -576,6 +581,16 @@ function migrateUiLaserFx(){
   const pg=L.pages.find(p=>p.name==='Laser'),lw=pg?.widgets.find(w=>w.type==='laser');
   if(pg&&lw&&!pg.widgets.some(w=>String(w.addr||'').startsWith('/laser/'))&&lw.y===0&&lw.h>=10){lw.h=7;pg.widgets.push(...laserFxWidgets(7))}
   L.uiRev=11;save();
+}
+// 2026-11-11: fader Rotazione Y accanto alla Rotazione negli effetti dal vivo (uiRev 21):
+// la Rotazione passa da 2 a 1 colonna e la Y prende l'altra
+function migrateUiLaserRotY(){
+  if((L.uiRev||0)>=21)return;
+  for(const p of L.pages){
+    if(p.widgets.some(w=>w.addr==='/laser/fx/rotate_y'))continue;
+    const r=p.widgets.find(w=>w.type==='fader'&&w.addr==='/laser/fx/rotate'&&w.w>=2);if(!r)continue;
+    r.w-=1;p.widgets.push(W('fader',r.x+r.w,r.y,1,r.h,{label:'Rotazione Y',addr:'/laser/fx/rotate_y',min:-180,max:180,value:.5,color:r.color}))}
+  L.uiRev=21;save();
 }
 // 2026-11-10: la Tinta del laser da fader a ruota colore (uiRev 20)
 function migrateUiLaserTint(){

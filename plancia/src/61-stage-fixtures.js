@@ -140,32 +140,95 @@ function svBind(el,w){
 // video del Render (2026-11-07): registra la tela del Palco per far vedere lo show;
 // MP4 se il browser lo sa fare (si manda su WhatsApp), altrimenti WebM; scaricato sul dispositivo
 let renderRec=null;
-function renderRecType(){const MR=window.MediaRecorder;if(!MR?.isTypeSupported)return'';
-  return['video/mp4;codecs=avc1','video/mp4','video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'].find(t=>MR.isTypeSupported(t))||''}
+// con audio: AVC + AAC se il browser lo sa fare (MP4 che si apre ovunque), poi le altre
+function renderRecType(audio){const MR=window.MediaRecorder;if(!MR?.isTypeSupported)return'';
+  const list=audio?['video/mp4;codecs=avc1,mp4a.40.2','video/mp4;codecs=avc1,opus','video/mp4','video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm']
+    :['video/mp4;codecs=avc1','video/mp4','video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'];
+  return list.find(t=>MR.isTypeSupported(t))||''}
 function renderRecPaint(){document.querySelectorAll('.t-stage [data-rec]').forEach(b=>{b.classList.toggle('rec-on',!!renderRec);
   b.textContent=renderRec?`■ ${Math.max(0,Math.ceil((renderRec.until-Date.now())/1000))}s`:'⏺'})}
 function renderRecStop(){const r=renderRec;if(!r)return;clearTimeout(r.timer);clearInterval(r.tick);renderRec=null;renderRecPaint();try{r.mr.stop()}catch{}}
+
+// Audio nel video. Il suono lo fa il motore gaia-audio sulla scheda, non la pagina: durante la
+// registrazione la pagina rispecchia lo stato del motore (audio_state: brano, posizione, play,
+// tempo, gain, fader, crossfader) coi file della libreria (/api/audio/file) in un mix che va
+// solo nel video, mai negli altoparlanti del tablet. Vale per la traccia AUDIO della timeline e
+// per la Console suonata a mano. Prima del volume master, come la copia per le luci; EQ e filtro no.
+const REC_AUDIO_TOL=.25;   // scarto (s) dal motore oltre il quale il deck riparte dalla posizione giusta
+function recAudioOpen(){
+  const AC=window.AudioContext||window.webkitAudioContext;if(!AC||!AU.live)return null;
+  const ctx=new AC(),dest=ctx.createMediaStreamDestination(),lim=ctx.createDynamicsCompressor();
+  lim.threshold.value=-3;lim.knee.value=0;lim.ratio.value=20;lim.attack.value=.003;lim.release.value=.15;lim.connect(dest);
+  const deck=()=>{const g=ctx.createGain();g.gain.value=0;g.connect(lim);return{g,src:null,track:null,off:0,t0:0,rate:1,want:null,busy:false}};
+  ctx.resume?.().catch(()=>{});
+  return{ctx,dest,decks:{A:deck(),B:deck()},buf:new Map(),errors:new Set(),heard:false};
+}
+function recAudioBuf(a,id){
+  if(!a.buf.has(id))a.buf.set(id,fetch('/api/audio/file?id='+encodeURIComponent(id))
+    .then(r=>{if(!r.ok)throw new Error('file non trovato');return r.arrayBuffer()}).then(b=>a.ctx.decodeAudioData(b))
+    .catch(e=>{a.errors.add(e.message||String(e));return null}));
+  return a.buf.get(id)}
+// guadagno del deck come nel motore: gain × fader² × crossfader a potenza costante
+function recAudioGain(s,k){const m=s.mix?.[k];if(!m)return 0;const x=((+s.mix.xfader||0)+1)/2*Math.PI/2;
+  return Math.max(0,(+m.gain||0)*(+m.fader||0)**2*(k==='A'?Math.cos(x):Math.sin(x)))}
+function recAudioPos(d,now){return d.off+(now-d.t0)*d.rate}
+function recAudioHalt(d){if(d.src){try{d.src.stop()}catch{}d.src.disconnect();d.src=null}d.track=null}
+// fa partire il deck dove il motore e' adesso (anche se il file arriva dopo qualche secondo)
+async function recAudioPlay(a,d){
+  if(d.busy)return;d.busy=true;
+  try{for(;;){const w=d.want;if(!w||!w.playing)return;
+      const buf=await recAudioBuf(a,w.track);
+      const cur=d.want;if(!buf||a.closed||!cur||!cur.playing||cur.track!==w.track)return;
+      const now=a.ctx.currentTime,pos=cur.pos+(now-cur.at)*cur.rate;
+      if(pos>=buf.duration)return;
+      recAudioHalt(d);
+      const src=a.ctx.createBufferSource();src.buffer=buf;src.playbackRate.value=cur.rate;src.connect(d.g);src.start(now,Math.max(0,pos));
+      Object.assign(d,{src,track:cur.track,off:Math.max(0,pos),t0:now,rate:cur.rate});a.heard=true;
+      if(d.want===cur||!d.want||d.want.track===cur.track)return}}
+  finally{d.busy=false}}
+function recAudioSync(a,s){
+  if(!a||a.closed)return;const now=a.ctx.currentTime;
+  for(const k of['A','B']){const sd=s.decks?.[k],d=a.decks[k];if(!sd)continue;
+    d.g.gain.setTargetAtTime(recAudioGain(s,k),now,.03);
+    if(sd.track)recAudioBuf(a,sd.track);   // anche fermo: il brano dopo e' gia' pronto quando parte
+    const rate=+sd.rate||1;
+    d.want=sd.track?{track:sd.track,pos:+sd.pos||0,playing:!!sd.playing,rate,at:now}:null;
+    if(!d.want||!d.want.playing){recAudioHalt(d);continue}
+    if(d.src&&d.track===sd.track&&Math.abs(d.rate-rate)<1e-4&&Math.abs(recAudioPos(d,now)-d.want.pos)<REC_AUDIO_TOL)continue;
+    recAudioPlay(a,d)}}
+function recAudioClose(a){if(!a||a.closed)return;a.closed=true;for(const d of Object.values(a.decks))recAudioHalt(d);a.ctx.close?.().catch(()=>{})}
+
 async function renderRecord(el,w){
   if(renderRec){renderRecStop();return}
-  const cv=el.querySelector('canvas'),type=renderRecType();
-  if(!cv?.captureStream||!type){showError('Questo browser non sa registrare video della pagina (serve Chrome o Edge).');return}
+  const cv=el.querySelector('canvas');
+  if(!cv?.captureStream||!renderRecType(false)){showError('Questo browser non sa registrare video della pagina (serve Chrome o Edge).');return}
   if(w.view==='plot'){w.view='render';el.querySelectorAll('.seg [data-v]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.v==='render'));save()}
   const show=allW().find(x=>x.type==='timeline'&&isShowTimeline(x));
   const items=[10,30,60].map(s=>({label:`⏺ ${s} s, quello che succede ora`,value:{s}}));
   if(show)items.push(...[30,60].map(s=>({label:`⏺ ${s} s, show dall'inizio (▶ timeline)`,value:{s,start:true}})));
-  const v=await uiChoose('Video del Render',items,{hint:"Registra il Palco com'è adesso sullo schermo (telecamera e zoom compresi). \"Show dall'inizio\" fa ripartire la timeline: le luci vere la seguono."});
+  const v=await uiChoose('Video del Render',items,{hint:"Registra il Palco com'è adesso sullo schermo (telecamera e zoom compresi). \"Show dall'inizio\" fa ripartire la timeline: le luci vere la seguono. Se il motore audio è collegato, nel video entra anche l'audio della Console e della traccia AUDIO."});
   if(!v)return;
-  const chunks=[],mr=new MediaRecorder(cv.captureStream(30),{mimeType:type,videoBitsPerSecond:4e6});
+  const au=recAudioOpen(),type=renderRecType(!!au)||renderRecType(false);
+  // brani della traccia AUDIO: si preparano subito, cosi' lo show dall'inizio ha il suono dal primo secondo
+  if(au)for(const c of L.audioTimeline?.cues||[])if(c.src?.kind==='track'&&c.src.id)recAudioBuf(au,c.src.id);
+  const stream=new MediaStream([...cv.captureStream(30).getVideoTracks(),...(au?au.dest.stream.getAudioTracks():[])]);
+  let mr;
+  try{mr=new MediaRecorder(stream,{mimeType:type,videoBitsPerSecond:4e6,...(au?{audioBitsPerSecond:192e3}:{})})}
+  catch(e){recAudioClose(au);showError('Registrazione non partita: '+e.message);return}
+  const chunks=[];
   mr.ondataavailable=e=>{if(e.data?.size)chunks.push(e.data)};
-  mr.onstop=()=>{if(!chunks.length){showError('Video vuoto: riprova.');return}
+  mr.onstop=()=>{const heard=!!au?.heard,errs=au?[...au.errors]:[];recAudioClose(au);
+    if(!chunks.length){showError('Video vuoto: riprova.');return}
     const blob=new Blob(chunks,{type:type.split(';')[0]}),a=document.createElement('a'),d=new Date(),p=n=>String(n).padStart(2,'0');
     const name=(L._projectName||'palco').replace(/[^\w\- ]+/g,'-').trim().replace(/\s+/g,'_');
     a.href=URL.createObjectURL(blob);a.download=`render_${name}_${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.${type.includes('mp4')?'mp4':'webm'}`;
     document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),60000);
-    showInfo(`Video del Render salvato: ${a.download} (${(blob.size/1048576).toFixed(1)} MB).`)};
+    const audioMsg=!au?' Senza audio: motore audio non collegato.':heard?' Con audio.':' Senza audio: nessun brano in play durante la registrazione.';
+    showInfo(`Video del Render salvato: ${a.download} (${(blob.size/1048576).toFixed(1)} MB).${audioMsg}${errs.length?' Audio: '+errs.join(', '):''}`)};
   if(v.start&&show){tlAct(show,'start');await playShowClock(show)}
   mr.start(1000);
-  renderRec={mr,until:Date.now()+v.s*1000,timer:setTimeout(renderRecStop,v.s*1000),tick:setInterval(renderRecPaint,500)};renderRecPaint();
+  renderRec={mr,audio:au,until:Date.now()+v.s*1000,timer:setTimeout(renderRecStop,v.s*1000),tick:setInterval(renderRecPaint,500)};renderRecPaint();
+  if(au&&AU.lastState)recAudioSync(au,AU.lastState);
 }
 
 // telecamera del Render (per tablet, non salvata): gira attorno, sali/scendi, viste rapide
@@ -530,7 +593,7 @@ function openFixEditor(w,f){
     f.enabled=$('#feOn').checked; save(); checkDirty()};
   if(isStruct(f)){val2('#feSW',f.w);val2('#feSD',f.d);val2('#feSH',f.h);val2('#feSRot',f.rot||0)}
   if($('#feMount'))$('#feMount').onchange=e=>{const t=trusses().find(x=>x.id===e.target.value);if(t)snapToTruss(f,t);else delete f.mount;val2('#feZ',f.z);save()};
-  ['feSW','feSD','feSH','feSRot','feSource','feSourceRef','feAngle','feSpread','feCube','fePrTarget','fePrThrow'].forEach(id=>{const n=$('#'+id);if(n){n.addEventListener('input',upd);n.addEventListener('change',upd)}});
+  ['feName','feZ','feGroup','feAddr','feUnit','feW','feH','feRot','feSW','feSD','feSH','feSRot','feSource','feSourceRef','feAngle','feSpread','feCube','fePrTarget','fePrThrow'].forEach(id=>{const n=$('#'+id);if(n){n.addEventListener('input',upd);n.addEventListener('change',upd)}});
   ['feBlock','feVert','feLen'].forEach(id=>{const n=$('#'+id);if(n){n.addEventListener('input',upd);n.addEventListener('change',upd)}});
   if($('#feStack'))$('#feStack').onclick=()=>{upd();if(!f.block){showError('Prima dai un nome al blocco.');return}
     // in ordine di indirizzo: la prima in basso

@@ -67,6 +67,20 @@ async function track(id) {
   return { ...summary(t, id), wave: t.wave, wave_rate: 50, cues: await cues(id) };
 }
 
+// File audio di una traccia (per l'audio del video del Render): percorso
+// dell'analisi sotto la cartella della musica, la stessa del motore
+// (GAIA_MUSIC, default di gaia-audio). Mai fuori da quella cartella.
+const ROOT = path.resolve(process.env.GAIA_MUSIC || 'C:\\gaia-docker-cfg\\core-node-0\\musica');
+const AUDIO_TYPES = { '.mp3': 'audio/mpeg', '.flac': 'audio/flac', '.wav': 'audio/wav', '.m4a': 'audio/mp4', '.ogg': 'audio/ogg', '.aiff': 'audio/aiff', '.aif': 'audio/aiff' };
+async function trackFile(id, root = ROOT) {
+  validId(id);
+  const t = JSON.parse(await fs.promises.readFile(path.join(CACHE, id + '.json'), 'utf8'));
+  const base = path.resolve(root), file = path.resolve(base, String(t.path || ''));
+  if (!file.toLowerCase().startsWith(base.toLowerCase() + path.sep)) throw new Error('percorso fuori dalla cartella della musica');
+  const st = await fs.promises.stat(file);
+  return { file, size: st.size, type: AUDIO_TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream' };
+}
+
 // Punti salvati con la traccia (come la collezione di Traktor): cue e hot cue
 // in <id>.cues.json accanto all'analisi, cosi' una nuova analisi non li tocca
 // e li legge anche il motore.
@@ -112,4 +126,4 @@ async function savePlaylists(list) {
   return clean;
 }
 
-module.exports = { CACHE, library, track, cues, saveCues, fromFilename, playlists, savePlaylists, cleanPlaylists };
+module.exports = { CACHE, library, track, trackFile, cues, saveCues, fromFilename, playlists, savePlaylists, cleanPlaylists };

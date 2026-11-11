@@ -48,6 +48,11 @@ async function main() {
     await sleep(100);
     const bp = await p.ev(`JSON.stringify(window.__planciaTest.L.fixtures.filter(f=>f.block==='COL1').map(f=>[f.beamDeg,f.power]))`);
     check(bp === '[[12,2.5],[12,2.5]]', `apertura 12 gradi e intensità 250% su tutto il blocco: ${bp}`);
+    // altezza e nome da soli si salvano (si erano persi i loro ascoltatori)
+    await p.ev(`(()=>{for(const [id,v] of [['feZ','2.4'],['feName','COL1-BASSA']]){const i=document.querySelector('#'+id);i.value=v;i.dispatchEvent(new Event('change',{bubbles:true}))}return 1})()`);
+    await sleep(100);
+    const zn = await p.ev(`JSON.stringify((f=>[f.z,f.name])(window.__planciaTest.L.fixtures.find(f=>f.id==='c1')))`);
+    check(zn === '[2.4,"COL1-BASSA"]', `altezza dal piano e nome salvati cambiandoli da soli: ${zn}`);
     // laser senza cubo e PAR inclinato verso il basso (pozza di luce) per lo screenshot
     await p.ev(`(()=>{const t=window.__planciaTest;t.L.fixtures.push({id:'l1',type:'laser',name:'LASER',x:0,y:-2,z:3,angle:0,spread:40,enabled:true},{id:'p3',type:'par',name:'PAR3',group:'front',universe:1,address:70,x:-1,y:1,z:4,pitch:-60,aim:0,beamDeg:30,enabled:true});return 1})()`);
     await p.ev(`(()=>{document.querySelector('#scrim').hidden=true;return 1})()`);

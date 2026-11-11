@@ -3,6 +3,7 @@
     cd ops/laser && python -m unittest -v test_laser
 """
 import json
+import math
 import os
 import socket
 import subprocess
@@ -200,6 +201,22 @@ class TestScene(unittest.TestCase):
         s["anim"]["rotate"] = 90
         x, y = SC.animate(s, 1.0)[1][:2]                                  # (-.5,-.5) ruotato di 90 gradi
         self.assertAlmostEqual(x, 0.5, places=3); self.assertAlmostEqual(y, -0.5, places=3)
+
+    def test_rotate_y(self):
+        # attorno all'asse verticale: a 90 gradi la figura e' di taglio, a 180 specchiata
+        s = SC.clean_scene({**SQUARE, "anim": {"scale": 1, "rotate_y": 90}})
+        self.assertEqual(SC.clean_scene({**SQUARE, "anim": {"rotate_y": 9999}})["anim"]["rotate_y"], 720)
+        edge = [p for p in SC.animate(s, 1.0) if p[2] or p[3] or p[4]]
+        self.assertTrue(all(abs(p[0]) < 1e-9 for p in edge))                 # una riga verticale
+        mirror = [p for p in SC.animate(s, 2.0) if p[4]]
+        self.assertAlmostEqual(mirror[0][0], 0.5, places=6)                 # (-.5, -.5) -> (.5, -.5)
+        self.assertAlmostEqual(mirror[0][1], -0.5, places=6)
+        x, y = SC.spin_y(0.5, 0.5, math.cos(math.radians(30)), math.sin(math.radians(30)))
+        self.assertGreater(y, 0.5)                                           # il lato che si avvicina si allarga
+        pts = [(0.5, 0.2, 255, 0, 0)]
+        self.assertEqual(SC.clean_fx({"rotate_y": -999})["rotate_y"], -720)
+        r = SC.apply_fx(pts, SC.clean_fx({"rotate_y": 30}), 0, 0, 90)[0]      # effetto dal vivo, accumulato a 90
+        self.assertAlmostEqual(r[0], 0.0, places=6); self.assertAlmostEqual(r[1], 0.2 / (1 - SC.PERSPECTIVE * 0.5))
 
     def test_audio_scale_and_draw(self):
         s = SC.clean_scene({**SQUARE, "audio": {"amount": 1, "to": "scale"}})

@@ -18,6 +18,7 @@ test('ruota colore: tinta e saturazione insieme, e azzera il vecchio spostamento
 
 test('fx faders, reset and blackout only on press', () => {
   assert.deepEqual(laserLiveCommand('/laser/fx/zoom', [1.5], SCENES), { action: 'fx', values: { zoom: 1.5 } });
+  assert.deepEqual(laserLiveCommand('/laser/fx/rotate_y', [-90], SCENES), { action: 'fx', values: { rotate_y: -90 } });
   assert.deepEqual(laserLiveCommand('/laser/fx/reset', [1], SCENES), { action: 'fx', reset: true });
   assert.deepEqual(laserLiveCommand('/laser/fx/reset', [0], SCENES), { skip: true });
   assert.deepEqual(laserLiveCommand('/laser/blackout', [], SCENES), { action: 'blackout' });

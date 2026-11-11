@@ -9,7 +9,7 @@ convertiti nel browser) e il gateway la anima a ogni frame:
    "strokes": [{"pts": [[x, y], ...], "closed": bool, "rgb": [r, g, b] | null}],
    "color": {"mode": "fixed"|"cycle"|"palette"|"stroke", "rgb": [r, g, b],
              "palette": [[r, g, b], ...], "rate": Hz},
-   "anim":  {"rotate": gradi/s, "scale": 0..1, "pulse": 0..1, "pulse_hz": Hz,
+   "anim":  {"rotate": gradi/s, "rotate_y": gradi/s (attorno all'asse verticale), "scale": 0..1, "pulse": 0..1, "pulse_hz": Hz,
              "pulse_shape": forma, "swing": gradi, "swing_hz": Hz, "swing_shape": forma,
              "orbit": 0..1, "orbit_hz": Hz, "draw_hz": Hz (0 = figura intera)},
    "tempo": {"sync": bool, "bpm": BPM di riferimento},
@@ -25,6 +25,15 @@ La stessa matematica e' in plancia/src/99-laser-scenes.js per l'anteprima.
 """
 import colorsys
 import math
+
+PERSPECTIVE = 0.25     # rotazione Y: il lato che si avvicina si allarga un po' (0 = proiezione piatta)
+
+
+def spin_y(x, y, c, s):
+    """Rotazione attorno all'asse verticale (c, s = cos, sin dell'angolo): la figura gira come una
+    moneta, con un filo di prospettiva. A 90 gradi e' di taglio (una riga verticale)."""
+    f = 1.0 / (1.0 - PERSPECTIVE * x * s)
+    return x * c * f, y * f
 
 MAX_POINTS = 2000      # punti di tutta la scena (come arrivano, prima dell'interpolazione)
 MAX_FRAMES = 120       # animazioni (ILDA): frame al massimo
@@ -112,7 +121,7 @@ def clean_scene(s):
         "color": {"mode": c.get("mode") if c.get("mode") in COLOR_MODES else "fixed",
                   "rgb": _rgb(c.get("rgb")), "palette": pal or [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
                   "rate": _num(c.get("rate"), 0, 10, 0.2)},
-        "anim": {"rotate": _num(a.get("rotate"), -720, 720, 0), "scale": _num(a.get("scale"), 0.05, 1, 0.8),
+        "anim": {"rotate": _num(a.get("rotate"), -720, 720, 0), "rotate_y": _num(a.get("rotate_y"), -720, 720, 0), "scale": _num(a.get("scale"), 0.05, 1, 0.8),
                  "pulse": _num(a.get("pulse"), 0, 1, 0), "pulse_hz": _num(a.get("pulse_hz"), 0, 10, 0.5),
                  "orbit": _num(a.get("orbit"), 0, 1, 0), "orbit_hz": _num(a.get("orbit_hz"), 0, 5, 0.2),
                  "draw_hz": _num(a.get("draw_hz"), 0, 5, 0),
@@ -151,6 +160,8 @@ def animate(sc, t, level=0.0, kick=0.0):
         bright = (1 - au["amount"]) + react
     ang = math.radians(a["rotate"] * t + a.get("swing", 0) * wave(a.get("swing_hz", 0) * t, a.get("swing_shape", "sine")))
     ca, sa = math.cos(ang), math.sin(ang)
+    ay = math.radians(a.get("rotate_y", 0) * t)
+    cy, sy = math.cos(ay), math.sin(ay)
     ox = a["orbit"] * 0.5 * math.cos(2 * math.pi * a["orbit_hz"] * t)
     oy = a["orbit"] * 0.5 * math.sin(2 * math.pi * a["orbit_hz"] * t)
     strokes = sc["strokes"]
@@ -167,6 +178,8 @@ def animate(sc, t, level=0.0, kick=0.0):
         pts = pts[:budget]
         budget -= len(pts)
         for j, (x, y) in enumerate(pts):
+            if ay:
+                x, y = spin_y(x, y, cy, sy)
             px = (x * ca - y * sa) * s + ox
             py = (x * sa + y * ca) * s + oy
             if j == 0:
@@ -177,11 +190,11 @@ def animate(sc, t, level=0.0, kick=0.0):
 
 # ---------------------------------------------------------------- effetti dal vivo
 # Sopra alla scena (come gli effetti di Liberation), per tutti i cubi in modalita'
-# scene: rotazione aggiunta, zoom, onda, tinta e luminosita'. La zona di sicurezza
+# scene: rotazione aggiunta (nel piano e attorno all'asse verticale), zoom, onda, tinta e luminosita'. La zona di sicurezza
 # si applica dopo (laser_render), quindi nemmeno lo zoom ne esce.
 # tint_h/tint_s: colore scelto sulla ruota; tint_s 0 = colori della scena, 1 = tutto in quel colore
-FX_DEFAULTS = {"rotate": 0.0, "zoom": 1.0, "hue": 0.0, "wave": 0.0, "wave_hz": 1.0, "bright": 1.0, "tint_h": 0.0, "tint_s": 0.0}
-FX_LIMITS = {"rotate": (-720, 720), "zoom": (0.2, 2.0), "hue": (0, 1), "wave": (0, 1), "wave_hz": (0.05, 8), "bright": (0, 1), "tint_h": (0, 1), "tint_s": (0, 1)}
+FX_DEFAULTS = {"rotate": 0.0, "rotate_y": 0.0, "zoom": 1.0, "hue": 0.0, "wave": 0.0, "wave_hz": 1.0, "bright": 1.0, "tint_h": 0.0, "tint_s": 0.0}
+FX_LIMITS = {"rotate": (-720, 720), "rotate_y": (-720, 720), "zoom": (0.2, 2.0), "hue": (0, 1), "wave": (0, 1), "wave_hz": (0.05, 8), "bright": (0, 1), "tint_h": (0, 1), "tint_s": (0, 1)}
 
 
 def clean_fx(values, fx=None):
@@ -193,17 +206,22 @@ def clean_fx(values, fx=None):
     return out
 
 
-def apply_fx(pts, fx, t, angle_deg):
-    """pts (x, y, r, g, b) -> pts con gli effetti; angle_deg = rotazione accumulata (gradi)."""
-    if fx == FX_DEFAULTS and not angle_deg:
+def apply_fx(pts, fx, t, angle_deg, angle_y_deg=0.0):
+    """pts (x, y, r, g, b) -> pts con gli effetti; angle_deg = rotazione accumulata nel piano,
+    angle_y_deg = attorno all'asse verticale (gradi)."""
+    if fx == FX_DEFAULTS and not angle_deg and not angle_y_deg:
         return pts
     a = math.radians(angle_deg)
     ca, sa, z = math.cos(a), math.sin(a), fx["zoom"]
+    ay = math.radians(angle_y_deg)
+    cy, sy = math.cos(ay), math.sin(ay)
     wave, wh, hue, br = fx["wave"], fx["wave_hz"], fx["hue"], fx["bright"]
     ts = fx["tint_s"]
     tint = colorsys.hsv_to_rgb(fx["tint_h"], 1.0, 1.0)
     out = []
     for x, y, r, g, b in pts:
+        if ay:
+            x, y = spin_y(x, y, cy, sy)
         px, py = (x * ca - y * sa) * z, (x * sa + y * ca) * z
         if wave:
             px += wave * 0.25 * math.sin(2 * math.pi * (wh * t + py))

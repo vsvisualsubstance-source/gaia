@@ -263,6 +263,22 @@ const server = http.createServer((req, res) => {
       try { c = JSON.parse(body); } catch { return reply(400, { ok: false, error: 'JSON non valido' }); }
       audioLib.saveCues(id, c).then(cues => reply(200, { ok: true, cues }), err => reply(404, { ok: false, error: err.message }));
     });
+  } else if (req.url.split('?')[0] === '/api/audio/file') {
+    // file audio di una traccia analizzata: l'audio del video del Render (61-stage-fixtures.js)
+    const id = new URL(req.url, 'http://plancia').searchParams.get('id') || '';
+    audioLib.trackFile(id).then(({ file, size, type }) => {
+      const m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
+      let start = 0, end = size - 1;
+      if (m && (m[1] || m[2])) {
+        start = m[1] ? +m[1] : Math.max(0, size - +m[2]);
+        end = m[1] && m[2] ? Math.min(+m[2], size - 1) : size - 1;
+        if (start > end || start >= size) { res.writeHead(416, { 'content-range': `bytes */${size}` }); res.end(); return; }
+      }
+      const head = { 'content-type': type, 'content-length': end - start + 1, 'accept-ranges': 'bytes', 'cache-control': 'max-age=3600' };
+      if (m && (m[1] || m[2])) res.writeHead(206, { ...head, 'content-range': `bytes ${start}-${end}/${size}` }); else res.writeHead(200, head);
+      if (req.method === 'HEAD') { res.end(); return; }
+      fs.createReadStream(file, { start, end }).on('error', () => res.destroy()).pipe(res);
+    }, err => { res.writeHead(404, { 'content-type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: false, error: err.message })); });
   } else if (req.url.split('?')[0] === '/api/audio/library' || req.url.split('?')[0] === '/api/audio/track') {
     // Console Audio: tracce analizzate da gaia-audio (audio-lib.js)
     const u = new URL(req.url, 'http://plancia'), q = u.searchParams;
