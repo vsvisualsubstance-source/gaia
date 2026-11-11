@@ -631,6 +631,12 @@ def _start_service(key: str) -> bool:
         # anche yolo/mediapipe/voice insieme). Con questo flag non c'e'
         # nessuna finestra da chiudere per sbaglio.
         creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        # "priority" nel manifest (2026-11-11): l'agent parte da un task pianificato, che su Windows
+        # gira a priorita' "sotto la normale" e la passa a tutti i figli. Per il motore audio
+        # vuol dire scatti appena la macchina e' carica: "high" o "above_normal" la alzano.
+        if os.name == "nt":
+            creationflags |= {"high": subprocess.HIGH_PRIORITY_CLASS, "above_normal": subprocess.ABOVE_NORMAL_PRIORITY_CLASS,
+                              "normal": subprocess.NORMAL_PRIORITY_CLASS}.get(defn.get("priority", ""), 0)
         with _procs_lock:
             _procs[key] = subprocess.Popen(
                 cmd, cwd=cwd, env=env, creationflags=creationflags,

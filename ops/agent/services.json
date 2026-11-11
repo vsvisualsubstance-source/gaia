@@ -149,6 +149,7 @@
       "_nota": "2026-10-28: laser gateway, unico mittente verso i LaserCube WiFi (vedi ops/laser/README.md). Pubblica come device 'laser-ops'. MAI kill_tree: il gateway lancia laser_guard.py, che deve sopravvivergli per spegnere i cubi quando terminate() lo chiude senza cleanup."
     },
     "audio": {
+      "priority": "high",
       "cmd": [
         "C:\\gaia\\audio-engine\\target\\release\\gaia-audio.exe",
         "serve",
