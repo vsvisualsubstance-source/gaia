@@ -72,6 +72,17 @@ Dal 10/11, solo su OPS e non ancora su GitHub: scaletta delle scene per progetto
 - Scene GO (Regia) ha lo stesso limite: elenca tutte le scene di TD, nell'ordine di TD, senza poterle scegliere né riordinare. Richiesta del 10/11: gestire la selezione in modo più dinamico, oppure avere le scene GO per progetto. Le scene in TD restano in comune fra i progetti: la scaletta va salvata nel progetto, senza cancellare quelle degli altri show.
 - Sempre in Scene GO: BACK segue l'ordine dell'elenco e non l'ultima scena mandata. NEXT vale solo sul browser in cui è stato preparato.
 
+## 11/11: fps bassi in TD e luci sfocate nel Render
+
+**TD a 17 fps, solo OPS, in prova.** La causa era il Touch In audio (`audio_engine/source_a/touch_in_audio`, da `td-controller-pcmauro` .73:8001).
+- `source_b` è un clone di `source_a`. Il parametro `active` del Touch In è un'espressione che spegne `source_b` quando usa lo stesso mittente. Scrivere `active` a mano su `source_a` la rende costante, il clone riaccende `source_b` e si apre una seconda connessione. Un Touch In spento che nessuno legge non cooka, quindi non chiude il socket: il Touch Out vede `numclients = 2`, e a TD arrivava circa metà dell'audio (Info CHOP: ~50% di campioni ripetuti).
+- Rimedio: forzare un cook del Touch In di `source_b`. Si controlla con `Get-NetTCPConnection -RemoteAddress 192.168.1.73`, che deve mostrare una sola connessione.
+- Anche senza la connessione in più, in TCP il Touch In costava ~20 ms a cook. **In prova solo su OPS:** UDP (Messaging) su entrambi i lati, con il Touch Out della .73 indirizzato a `192.168.1.240` porta 8001. Risultato: Touch In a 2-3 ms, 30/30 fps (entrambi i progetti a 30 fps), ~3,5% di campioni ripetuti, `io_errors` in lenta salita. Salvato in `dmx.64.toe`. **Non è la soluzione definitiva**: restano da provare Audio Stream In/Out, un `queuetarget` più alto oppure il ritorno al TCP. Non portarlo sulla touring finché non si sceglie.
+- Aggiunto `audio_engine/info_touch_in_a` (Info CHOP sul Touch In) per guardare la coda: `read_repeat` e `time_queue_under_min_target` non devono salire.
+- Per le prove: spegnere il Touch In con `par.active.expr = 'False'` e rimettere l'espressione, mai `par.active = 0`.
+
+**Render della Plancia, luci sfocate.** Ogni luce era un alone sfumato in modo lineare, senza un centro: con le luci rivolte al pubblico, il pavimento lucido e l'haze diventava una macchia. Da oggi le sorgenti (PAR, teste, pixel delle barre, blinder) hanno un centro pieno e un alone corto (`lamp()` in `60-stage-rendering.js`). Nebbia, riflessi e pozze di luce restano morbidi. Sulla touring: `git pull --ff-only`, `node build-app.js` in `plancia`, poi ricaricare la pagina.
+
 ## Da fare: SVG per il laser (10/11)
 
 Consigli LaserCube: meno di 500 punti di ancoraggio, solo tracciati pieni, niente sfumature né ombre. Nella libreria ILDA la regola regge, ma non basta da sola: 16 scene sotto i 500 punti sono comunque medie o pesanti per la strada degli specchi, quindi il calcolo del peso resta il riferimento.

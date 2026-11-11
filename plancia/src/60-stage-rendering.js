@@ -78,6 +78,11 @@ function floorPool(g,project,hit,col,a){
   g.save();g.translate(c.x,c.y);g.scale(1,ry/rx);glow(g,0,0,rx,col,a);g.restore();
 }
 function glow(g,x,y,r,col,a){const gr=g.createRadialGradient(x,y,0,x,y,r);gr.addColorStop(0,rgba(col,a));gr.addColorStop(1,rgba(col,0));g.fillStyle=gr;g.fillRect(x-r,y-r,r*2,r*2)}
+// sorgente di una luce (2026-11-11): nucleo pieno e nitido, poi l'alone cade in fretta.
+// glow() resta per nebbia, riflessi e pozze, che devono essere morbidi.
+function lamp(g,x,y,r,col,a){const gr=g.createRadialGradient(x,y,0,x,y,r);
+  gr.addColorStop(0,rgba(col,a));gr.addColorStop(.16,rgba(col,a*.92));gr.addColorStop(.3,rgba(col,a*.32));
+  gr.addColorStop(.55,rgba(col,a*.08));gr.addColorStop(1,rgba(col,0));g.fillStyle=gr;g.fillRect(x-r,y-r,r*2,r*2)}
 const wallVideoPlayers=new Map();
 function wallPreviewMessage(f,state=wallVideoPlayers.get(f.id)){
   if(f.sourceType==='procedural'||!f.sourceType)return'Contenuto LED procedurale.';
@@ -341,7 +346,7 @@ function drawRender(g,W,H,t,level,w){
     if(k<.01)continue;
     // fascio nella direzione vera della luce; rivolta al pubblico: si vede la sorgente piu' forte
     const ab=aimBeam(project,f,f.z||0,H),pw=fixturePower(f);
-    beam(g,p.x,p.y,ab.ang,ab.len,ab.wd,col,.22*k*pw*hz*(1-.6*ab.toward));glow(g,p.x,p.y,10+18*ab.toward,col,.9*Math.min(1,k*pw));
+    beam(g,p.x,p.y,ab.ang,ab.len,ab.wd,col,.22*k*pw*hz*(1-.6*ab.toward));lamp(g,p.x,p.y,10+18*ab.toward,col,.9*Math.min(1,k*pw));
     floorPool(g,project,ab.hit,col,.45*k*pw);addLit(f.x,f.y,f.z,col,k*pw,.5);
   }
   // truss fisso di sempre, solo se il progetto non ha americane sue
@@ -370,7 +375,7 @@ function drawRender(g,W,H,t,level,w){
     const real=live?live.angles:null;
     const col=live?live.color:[p[2],p[3],p[4]],pan=real?real[0]:p[0],tl=real?real[1]:p[1],z=feedback?.zoom??p[6],soft=1-(feedback?.focus??p[7])*.5;
     if(k>.01){
-      if(feedback&&!real)glow(g,x,y,size,col,.95*k);
+      if(feedback&&!real)lamp(g,x,y,size,col,.95*k);
       else{
         let ang,len,floorAt=null; if(tl>=0){ang=pan*1.15;len=H*(.42+.45*tl)}else{ang=Math.PI-pan*1.15;len=H*(.3+.4*-tl)}
         if(project.cam3d){   // stessa direzione della vista dal pubblico, ma nello spazio
@@ -381,7 +386,7 @@ function drawRender(g,W,H,t,level,w){
           if(v[2]<-.05)floorAt=q}
         const gobo=feedback?0:h.gobo,wd=len*(.035+z*.22), subs=gobo===3?[0,1,2].map(j=>[Math.sin(t*.0012+j*2.1)*.06,.35+.2*j,.7]):GOBO[gobo]||GOBO[0];
         for(const [o,wf,a] of subs)beam(g,x,y,ang+o*(.6+z*2.2),len,wd*wf*(.8+soft*.4),col,.42*k*hz*a);
-        glow(g,x,y,size,col,.95*k);addLit(hf.x,hf.y,fixtureZ(hf),col,k,.4);
+        lamp(g,x,y,size,col,.95*k);addLit(hf.x,hf.y,fixtureZ(hf),col,k,.4);
         const ex=x+Math.sin(ang)*len,ey=y+Math.cos(ang)*len;
         if(floorAt){g.save();g.translate(floorAt.x,floorAt.y);g.scale(1,.32);glow(g,0,0,wd*1.1,col,.5*k);g.restore()}
         else if(!project.cam3d&&tl>=0&&ey>fb&&ey<ff+H*.05){g.save();g.translate(ex,ey);g.scale(1,.32);glow(g,0,0,wd*1.1,col,.5*k);g.restore()}
@@ -436,10 +441,10 @@ function drawRender(g,W,H,t,level,w){
         // in piedi (f.vertical): i pixel salgono da f.z verso l'alto, una colonna di luce
         if(f.vertical){const p=project(f.x,f.y,(f.z||0)+(j+.5)*span/px),x=p.x,y=p.y,hh=Math.max(1,p.zs*span/px-1);
           g.fillStyle=kv>.02?rgba(color,1,kv):'#15171c';g.fillRect(x-2,y-hh/2,4,hh);
-          if(kv>.02)glow(g,x,y,10,color,.5*kv);continue}
+          if(kv>.02)lamp(g,x,y,10,color,.5*kv);continue}
         const o=(j+.5-px/2)*span/px,p=project(f.x+ux*o,f.y+uy*o,f.z),x=p.x,y=p.y,sw=Math.max(1,p.scale*span/px*Math.abs(ux)-1);
         g.fillStyle=kv>.02?rgba(color,1,kv):'#15171c';g.fillRect(x-sw/2,y-2,Math.max(2,sw),4);
-        if(kv>.02)glow(g,x,y,10,color,.5*kv)}
+        if(kv>.02)lamp(g,x,y,10,color,.5*kv)}
       const kAvg=kSum/px,pw=fixturePower(f);
       if(kAvg>.02&&ab.toward<.9)beam(g,ab.p.x,ab.p.y,ab.ang,ab.len,ab.wd+ab.p.zs*span*.25,cSum,.16*kAvg*pw*hz*(1-ab.toward));
       floorPool(g,project,ab.hit,cSum,.35*kAvg*pw);addLit(f.x,f.y,(f.z||0)+(f.vertical?span/2:0),cSum,kAvg*pw*vis,f.vertical?.35:span*.4);
@@ -451,7 +456,7 @@ function drawRender(g,W,H,t,level,w){
     for(const f of blinderF){const live=outputOf(f),actual=live?live.level:bl;
       if(actual<=.01)continue;
       const ab=aimBeam(project,f,f.z||0,H),c=live?live.color:[1,.85,.6],pw=fixturePower(f);
-      glow(g,ab.p.x,ab.p.y,Math.max(12,ab.p.scale*1.5)*(.5+.5*ab.toward),c,.55*Math.min(1,actual*pw)*(.3+.7*ab.toward));
+      lamp(g,ab.p.x,ab.p.y,Math.max(12,ab.p.scale*1.5)*(.5+.5*ab.toward),c,.55*Math.min(1,actual*pw)*(.3+.7*ab.toward));
       if(ab.toward<.9)beam(g,ab.p.x,ab.p.y,ab.ang,ab.len,ab.wd,c,.25*actual*pw*(1-ab.toward));
       floorPool(g,project,ab.hit,c,.4*actual*pw);addLit(f.x,f.y,f.z,c,actual*pw,.6)}
     if(!blinderF.length)glow(g,W/2,H*1.05,W*.7,[1,.85,.6],.55*bl);
