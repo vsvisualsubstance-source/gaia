@@ -224,16 +224,29 @@ function laserPreviewPts(cid){
 }
 function laserStateText(c){return!c?'gateway assente':!c.online?'offline':c.streaming?'IN USCITA':c.armed?'armato':'disarmato'}
 function laserStateColor(c){return!c||!c.online?'#5d6573':c.streaming?'#ff365c':c.armed?'#ffb23e':'#8a92a0'}
+// Direzione del laser nello spazio: orientamento in pianta (base, radianti) e inclinazione
+// verticale (f.tilt, gradi: 0 orizzontale, + verso l'alto). Restituisce l'asse avanti e i due
+// assi del piano della figura (destra e su), perpendicolari all'asse.
+function laserAxes(f,base){
+  const tl=clamp(+f.tilt||0,-90,90)*Math.PI/180,ct=Math.cos(tl),st=Math.sin(tl),fx=Math.sin(base),fy=Math.cos(base);
+  return{fwd:[fx*ct,fy*ct,st],right:[fy,-fx,0],up:[-fx*st,-fy*st,ct]};
+}
+// punto nello spazio -> schermo; un raggio che scende sotto il pavimento si ferma sul pavimento
+function laserPoint(f,z0,v,project){
+  let [x,y,z]=v;
+  if(z<0&&z0>0){const k=z0/(z0-z);x=f.x+(x-f.x)*k;y=f.y+(y-f.y)*k;z=0}
+  return project(x,y,Math.max(0,z));
+}
 // raggi veri: dall'uscita del cubo ai punti accesi dell'anteprima, e la figura
-// dove arriva. Orientamento e apertura della fixture dicono solo dove disegnarla.
+// dove arriva. Orientamento, inclinazione e apertura della fixture dicono solo dove disegnarla.
 function drawRealLaser(g,f,origin,z0,spread,base,distance,project){
   const c=laserCubeState(f.cube),pts=c?.streaming?laserPreviewPts(f.cube):null,col=laserStateColor(c);
   if(pts?.length){
     const tan=Math.tan(spread/2);
     // su un piano davanti al laser (prima su un arco attorno al cubo: una griglia piatta si curvava)
-    const fx=Math.sin(base),fy=Math.cos(base);
-    const tg=pts.map(p=>{const o=p[0]/100*distance*tan;
-      return project(f.x+fx*distance+fy*o,f.y+fy*distance-fx*o,Math.max(0,z0+p[1]/100*distance*tan))});
+    const{fwd,right,up}=laserAxes(f,base);
+    const tg=pts.map(p=>{const o=p[0]/100*distance*tan,q=p[1]/100*distance*tan;
+      return laserPoint(f,z0,[0,1,2].map(i=>[f.x,f.y,z0][i]+fwd[i]*distance+right[i]*o+up[i]*q),project)});
     const lit=pts.map((p,i)=>p[2]?i:-1).filter(i=>i>=0),k=Math.max(1,Math.ceil(lit.length/40));
     g.save();g.globalCompositeOperation='lighter';g.lineWidth=1;g.globalAlpha=.3;
     lit.forEach((i,j)=>{if(j%k)return;g.strokeStyle='#'+pts[i][2];g.beginPath();g.moveTo(origin.x,origin.y);g.lineTo(tg[i].x,tg[i].y);g.stroke()});
@@ -250,10 +263,10 @@ function drawRealLaser(g,f,origin,z0,spread,base,distance,project){
 // ventaglio animato che spazza e cambia colore, alla sua altezza e nella sua direzione
 function drawSimLaser(g,f,origin,z0,spread,base,distance,project,t,M){
   if(M<.02)return;
-  const n=9,sweep=Math.sin(t*.0011)*spread*.35,hue=(t*.00012)%1,tilt=Math.sin(t*.0007)*.12;
+  const n=9,sweep=Math.sin(t*.0011)*spread*.35,hue=(t*.00012)%1,wob=Math.sin(t*.0007)*.12,tl=clamp(+f.tilt||0,-90,90)*Math.PI/180;
   g.save();g.globalCompositeOperation='lighter';g.lineWidth=1.3;g.shadowBlur=9;
-  for(let i=0;i<n;i++){const a=base+sweep+(i/(n-1)-.5)*spread,col=hsv2rgb((hue+i*.03)%1,1,1);
-    const tg=project(f.x+Math.sin(a)*distance,f.y+Math.cos(a)*distance,Math.max(0,z0+tilt*distance*(i%2?1:-1)));
+  for(let i=0;i<n;i++){const a=base+sweep+(i/(n-1)-.5)*spread,col=hsv2rgb((hue+i*.03)%1,1,1),e=tl+wob*(i%2?1:-1),ce=Math.cos(e);
+    const tg=laserPoint(f,z0,[f.x+Math.sin(a)*ce*distance,f.y+Math.cos(a)*ce*distance,z0+Math.sin(e)*distance],project);
     g.strokeStyle=rgba(col,.75*M);g.shadowColor=rgba(col,1);g.beginPath();g.moveTo(origin.x,origin.y);g.lineTo(tg.x,tg.y);g.stroke()}
   g.restore();
   g.save();g.fillStyle='#ff365c';g.font='8px JetBrains Mono, monospace';g.textAlign='center';g.fillText('SIM',origin.x,origin.y-7);g.restore();

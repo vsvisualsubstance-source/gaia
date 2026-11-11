@@ -53,6 +53,18 @@ async function main() {
     await sleep(100);
     const zn = await p.ev(`JSON.stringify((f=>[f.z,f.name])(window.__planciaTest.L.fixtures.find(f=>f.id==='c1')))`);
     check(zn === '[2.4,"COL1-BASSA"]', `altezza dal piano e nome salvati cambiandoli da soli: ${zn}`);
+    // laser: inclinazione verticale accanto all'orientamento in pianta
+    await p.ev(`(()=>{const t=window.__planciaTest;t.L.fixtures.push({id:'lt',type:'laser',name:'LASER T',x:0,y:-2,z:3,angle:0,spread:40,enabled:true});
+      t.openFixEditor(t.L.pages[t.L.pages.length-1].widgets[0],t.L.fixtures.find(f=>f.id==='lt'));const i=document.querySelector('#feTilt');i.value='30';i.dispatchEvent(new Event('change',{bubbles:true}));return 1})()`);
+    await sleep(100);
+    check(await p.ev(`window.__planciaTest.L.fixtures.find(f=>f.id==='lt').tilt`) === 30, 'laser: inclinazione 30 gradi salvata cambiandola da sola');
+    await p.ev(`(()=>{const i=document.querySelector('#feTilt');i.value='0';i.dispatchEvent(new Event('change',{bubbles:true}));return 1})()`);
+    check(await p.ev(`!('tilt' in window.__planciaTest.L.fixtures.find(f=>f.id==='lt'))`), 'laser: inclinazione 0 = campo tolto (orizzontale)');
+    const ax = JSON.parse(await p.ev(`(()=>{const T=window.__planciaTest,a=T.laserAxes({tilt:90},0),b=T.laserAxes({tilt:-30},Math.PI/2);
+      const proj=(x,y,z)=>({x,y,z}),hit=T.laserPoint({x:0,y:0},3,[0,6,-3],proj);return JSON.stringify({a:a.fwd.map(v=>+v.toFixed(3)),b:b.fwd.map(v=>+v.toFixed(3)),hit})})()`));
+    check(JSON.stringify(ax.a) === '[0,0,1]' && ax.b[0] > .8 && ax.b[2] === -0.5, `asse del laser: 90 gradi dritto in alto, -30 verso il basso (${JSON.stringify(ax.a)} ${JSON.stringify(ax.b)})`);
+    check(ax.hit.z === 0 && Math.abs(ax.hit.y - 3) < 1e-9, `raggio verso il basso: si ferma sul pavimento (${JSON.stringify(ax.hit)})`);
+    await p.ev(`(()=>{const t=window.__planciaTest;t.L.fixtures=t.L.fixtures.filter(f=>f.id!=='lt');document.querySelector('#scrim').hidden=true;return 1})()`);
     // laser senza cubo e PAR inclinato verso il basso (pozza di luce) per lo screenshot
     await p.ev(`(()=>{const t=window.__planciaTest;t.L.fixtures.push({id:'l1',type:'laser',name:'LASER',x:0,y:-2,z:3,angle:0,spread:40,enabled:true},{id:'p3',type:'par',name:'PAR3',group:'front',universe:1,address:70,x:-1,y:1,z:4,pitch:-60,aim:0,beamDeg:30,enabled:true});return 1})()`);
     await p.ev(`(()=>{document.querySelector('#scrim').hidden=true;return 1})()`);

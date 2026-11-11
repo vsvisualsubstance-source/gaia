@@ -470,7 +470,8 @@ function openFixEditor(w,f){
     <p class="hint">L'altezza dal piano è separata dall'altezza fisica del pannello.</p>`:''}
     ${f.type==='laser'?`<label>LaserCube <em>dal laser gateway (pagina Laser)</em><select id="feCube"></select></label><p class="hint" id="feCubeSt"></p>
     <div class="row"><button class="btn sm" id="feCubeArm">Arma</button><button class="btn sm ghost" id="feCubePage">Pagina Laser</button></div>
-    <div class="two"><label>Orientamento (gradi)<input id="feAngle" type="number" min="-180" max="180" step="1"></label><label>Apertura pattern (gradi)<input id="feSpread" type="number" min="1" max="120" step="1"></label></div>
+    <div class="two"><label>Orientamento (gradi) <em>in pianta</em><input id="feAngle" type="number" min="-180" max="180" step="1"></label><label>Inclinazione (gradi) <em>0 dritto, + in alto, − in basso</em><input id="feTilt" type="number" min="-90" max="90" step="1"></label></div>
+    <label>Apertura pattern (gradi)<input id="feSpread" type="number" min="1" max="120" step="1"></label>
     <p class="hint">Con un cubo collegato il Render mostra i raggi veri: figura e colori che il cubo sta proiettando, attraverso zona e intensità. Orientamento e apertura dicono solo come disegnarli sul palco. Senza cubo resta un disegno di prova.</p>`:''}
     ${FIX_TYPES[f.type].ch?`<label>Gruppo <em>rig di DMX Master · ▦ Gruppi nel Palco</em><select id="feGroup">${groupOptionsHtml(f.group)}</select></label>
     <label>Modello <em>profilo DMX, nota 19</em><span class="md-pick"><select id="feModel"></select><button class="btn sm ghost" id="feModelEdit" title="Canali, colore lampada, ruota colori del modello">✎ Modello</button></span></label>
@@ -509,7 +510,7 @@ function openFixEditor(w,f){
     const hint=$('#fePreviewStatus');hint.dataset.wallId=f.id;hint.textContent=wallPreviewMessage(f);
     $('#feNdiPick').hidden=$('#feSource').value!=='ndi';
   }
-  if($('#feAngle')){val2('#feAngle',f.angle);val2('#feSpread',f.spread)}
+  if($('#feAngle')){val2('#feAngle',f.angle);val2('#feTilt',f.tilt||0);val2('#feSpread',f.spread)}
   if($('#feCube'))bindLaserFixtureEditor(f);
   if($('#feAud')){
     const go=async fields=>{$('#feAudMsg').textContent='Mando a DMX Master…';
@@ -586,14 +587,15 @@ function openFixEditor(w,f){
       const hint=$('#fePreviewStatus');hint.textContent=wallPreviewMessage(f);hint.className='hint preview-status';
       $('#feNdiPick').hidden=f.sourceType!=='ndi';
     }
-    if($('#feAngle')){f.angle=clamp(+$('#feAngle').value||0,-180,180);f.spread=clamp(+$('#feSpread').value||28,1,120)}
+    if($('#feAngle')){f.angle=clamp(+$('#feAngle').value||0,-180,180);f.spread=clamp(+$('#feSpread').value||28,1,120);
+      const tl=Math.round(clamp(+$('#feTilt').value||0,-90,90));if(tl)f.tilt=tl;else delete f.tilt}
     if($('#feCube')){f.cube=$('#feCube').value||undefined;laserFixtureStatus(f)}
     {const b=$('#feBlock').value.trim().toUpperCase().slice(0,24);if(b)f.block=b;else delete f.block}
     if($('#feVert')){f.vertical=$('#feVert').checked||undefined;if(!f.vertical)delete f.vertical;const w=+$('#feLen').value;if(w>0)f.w=clamp(w,.2,4)}
     f.enabled=$('#feOn').checked; save(); checkDirty()};
   if(isStruct(f)){val2('#feSW',f.w);val2('#feSD',f.d);val2('#feSH',f.h);val2('#feSRot',f.rot||0)}
   if($('#feMount'))$('#feMount').onchange=e=>{const t=trusses().find(x=>x.id===e.target.value);if(t)snapToTruss(f,t);else delete f.mount;val2('#feZ',f.z);save()};
-  ['feName','feZ','feGroup','feAddr','feUnit','feW','feH','feRot','feSW','feSD','feSH','feSRot','feSource','feSourceRef','feAngle','feSpread','feCube','fePrTarget','fePrThrow'].forEach(id=>{const n=$('#'+id);if(n){n.addEventListener('input',upd);n.addEventListener('change',upd)}});
+  ['feName','feZ','feGroup','feAddr','feUnit','feW','feH','feRot','feSW','feSD','feSH','feSRot','feSource','feSourceRef','feAngle','feTilt','feSpread','feCube','fePrTarget','fePrThrow'].forEach(id=>{const n=$('#'+id);if(n){n.addEventListener('input',upd);n.addEventListener('change',upd)}});
   ['feBlock','feVert','feLen'].forEach(id=>{const n=$('#'+id);if(n){n.addEventListener('input',upd);n.addEventListener('change',upd)}});
   if($('#feStack'))$('#feStack').onclick=()=>{upd();if(!f.block){showError('Prima dai un nome al blocco.');return}
     // in ordine di indirizzo: la prima in basso
