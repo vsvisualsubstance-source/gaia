@@ -223,6 +223,11 @@ indirizzi separati da virgola; un PC spento non ferma gli altri. Sul PC che rice
 VB-Audio) con sorgente IP di OPS e nome `Gaia`, uscita su **CABLE Input** di VB-Cable; in TD un **Audio Device In**
 su **CABLE Output** (lo possono leggere insieme Controller e PatchDeck). Latenza in LAN di qualche decina di ms.
 Firewall del PC che riceve: UDP 6980 in ingresso. Nello stato del motore compare come uscita `vban`.
+Si accende e si spegne al volo (comando `net.vban` con `value` true/false, pulsante **VBAN** nella Libreria
+della Console, con il livello del segnale); vale in tutti i modi (LIVE, PLAYLIST, TIMELINE) e non dipende piu'
+dalla scheda delle luci. **Thread audio in tempo reale** (12/11): cpal con la feature `realtime`, cioe' MMCSS
+"Pro Audio" di Windows (priorita' 21 contro 15 di prima), senza permessi di amministratore; prima il thread
+della scheda girava a priorita' normale e con la macchina carica poteva perdere qualche blocco (scatti dopo 40 min).
 
 L'uscita luci serve a DMX Master sulla stessa macchina: la DMX legge un
 ingresso audio, e la Z1 non ne ha. Con **VB-Audio Virtual Cable** il motore

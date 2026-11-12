@@ -226,6 +226,8 @@ struct Ctx {
     cache: PathBuf,
     tx: Sender<Msg>,
     clients: Clients,
+    /// uscita VBAN (None = non configurata): si accende e spegne con net.vban
+    vban: Option<crate::vban::Queue>,
 }
 
 fn handle_text(ctx: &Arc<Ctx>, text: &str) {
@@ -233,6 +235,18 @@ fn handle_text(ctx: &Arc<Ctx>, text: &str) {
         Ok(v) => v,
         Err(_) => return,
     };
+    if v.get("cmd").and_then(Value::as_str) == Some("net.vban") {
+        // copia del mix in rete: accesa o spenta dalla Plancia, in qualunque modo (live, playlist, timeline)
+        match (&ctx.vban, v.get("value").and_then(Value::as_bool)) {
+            (Some(q), Some(on)) => {
+                q.set_on(on);
+                println!("rete: VBAN {}", if on { "acceso" } else { "spento" });
+            }
+            (None, _) => error_msg(&ctx.clients, "VBAN non configurato nel motore (opzione --vban)."),
+            (_, None) => error_msg(&ctx.clients, "net.vban: serve value true/false"),
+        }
+        return;
+    }
     if v.get("cmd").and_then(Value::as_str) == Some("deck.load") {
         let (Some(k), Some(id)) = (deck(&v), v.get("track").or(v.get("id")).and_then(Value::as_str)) else {
             error_msg(&ctx.clients, "deck.load: servono deck e track");
@@ -571,7 +585,7 @@ fn null_clock(engine: Arc<Mutex<Engine>>, run: Arc<AtomicBool>, vban: Option<cra
     });
 }
 
-fn state_json(s: crate::engine::Snapshot, out: &OutputInfo, cue: &Option<OutputInfo>, tap: &Option<OutputInfo>, vban: &Option<OutputInfo>) -> String {
+fn state_json(s: crate::engine::Snapshot, out: &OutputInfo, cue: &Option<OutputInfo>, tap: &Option<OutputInfo>, vban: &Option<OutputInfo>, net: Option<&crate::vban::Queue>) -> String {
     let [da, db] = s.decks;
     let [ma, mb] = s.mix;
     json!({
@@ -583,7 +597,8 @@ fn state_json(s: crate::engine::Snapshot, out: &OutputInfo, cue: &Option<OutputI
         "outputs": std::iter::once(json!({"kind": if out.ok { "wasapi" } else { "none" }, "role": "master", "device": out.device, "rate": out.rate, "ok": out.ok, "error": out.error}))
             .chain(cue.iter().map(|c| json!({"kind": "wasapi", "role": "cue", "device": c.device, "rate": c.rate, "ok": c.ok, "error": c.error})))
             .chain(tap.iter().map(|c| json!({"kind": "wasapi", "role": "lights", "device": c.device, "rate": c.rate, "ok": c.ok, "error": c.error})))
-            .chain(vban.iter().map(|c| json!({"kind": "vban", "role": "network", "device": c.device, "rate": c.rate, "ok": c.ok, "error": c.error})))
+            .chain(vban.iter().map(|c| json!({"kind": "vban", "role": "network", "device": c.device, "rate": c.rate, "ok": c.ok, "error": c.error,
+                "on": net.map(|q| q.is_on()).unwrap_or(false), "level": net.map(|q| (q.take_peak() * 1000.0).round() / 1000.0).unwrap_or(0.0)})))
             .collect::<Vec<_>>(),
     })
     .to_string()
@@ -596,7 +611,9 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
     let clients: Clients = Arc::new(Mutex::new(Vec::new()));
 
     let listener = TcpListener::bind(("127.0.0.1", o.port)).map_err(|e| format!("porta {}: {e}", o.port))?;
-    let ctx = Arc::new(Ctx { root: o.root.clone(), cache: o.cache.clone(), tx, clients: clients.clone() });
+    // coda VBAN creata qui: la usano sia i comandi (net.vban) sia l'uscita
+    let vban_early = o.vban.as_ref().map(|_| crate::vban::new_queue(true));
+    let ctx = Arc::new(Ctx { root: o.root.clone(), cache: o.cache.clone(), tx, clients: clients.clone(), vban: vban_early.clone() });
     {
         let ctx = ctx.clone();
         thread::spawn(move || {
@@ -635,7 +652,7 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
                 (None, Some(OutputInfo { device: spec.clone(), rate: 0.0, ok: false, error: Some(e) }))
             }
             Ok(targets) => {
-                let q: crate::vban::Queue = Arc::new(Mutex::new(VecDeque::new()));
+                let q = vban_early.clone().unwrap_or_else(|| crate::vban::new_queue(true));
                 let label = format!("VBAN \"{}\" -> {}", o.vban_name, targets.iter().map(|t| t.to_string()).collect::<Vec<_>>().join(", "));
                 match crate::vban::start(q.clone(), targets, o.vban_name.clone(), vban_rate.clone(), Arc::new(AtomicBool::new(true))) {
                     Ok(()) => {
@@ -722,7 +739,7 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
 
     loop {
         match orx.recv_timeout(Duration::from_millis(200)) {
-            Ok(Out::State(s)) => broadcast(&clients, &state_json(s, &info, &cue_info, &tap_info, &vban_info)),
+            Ok(Out::State(s)) => broadcast(&clients, &state_json(s, &info, &cue_info, &tap_info, &vban_info, vban_q.as_ref())),
             Ok(Out::SaveCues { id, cue, hot }) => {
                 if let Err(e) = save_cues(&o.cache, &id, cue, &hot) {
                     error_msg(&clients, &format!("punti della traccia non salvati: {e}"));
@@ -790,7 +807,7 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
             eprintln!("luci: {e}");
             tap_stream = None;
             if let Ok(mut en) = engine.lock() {
-                en.set_tap_ext(false);
+                en.set_tap_ext(vban_q.is_some());   // il VBAN non dipende dalla scheda delle luci
             }
             if let Some(c) = tap_info.as_mut() {
                 c.ok = false;

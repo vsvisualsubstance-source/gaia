@@ -48,7 +48,7 @@ async function auFetchTrack(deck,id){
 }
 // stato dal motore vero: e' lui la fonte di verita'
 function auApplyState(s){
-  const now=performance.now();AU.liveAt=now;AU.live=true;AU.master=s.master==='B'?'B':'A';AU.out=s.outputs?.[0]||null;AU.cueOut=(s.outputs||[]).find(o=>o.role==='cue')||null;AU.lightsOut=(s.outputs||[]).find(o=>o.role==='lights')||null;AU.phones=!!s.headphones;AU.meterM=+s.meters?.master||0;AU.meterL=+(s.meters?.master_l??s.meters?.master)||0;AU.meterR=+(s.meters?.master_r??s.meters?.master)||0;
+  const now=performance.now();AU.liveAt=now;AU.live=true;AU.master=s.master==='B'?'B':'A';AU.out=s.outputs?.[0]||null;AU.cueOut=(s.outputs||[]).find(o=>o.role==='cue')||null;AU.lightsOut=(s.outputs||[]).find(o=>o.role==='lights')||null;AU.netOut=(s.outputs||[]).find(o=>o.role==='network')||null;AU.phones=!!s.headphones;AU.meterM=+s.meters?.master||0;AU.meterL=+(s.meters?.master_l??s.meters?.master)||0;AU.meterR=+(s.meters?.master_r??s.meters?.master)||0;
   for(const k of['A','B']){const sd=s.decks?.[k],d=AU.decks[k];if(!sd)continue;
     for(const f of['playing','tempo','range','keylock','sync','cue','nudge','preview','scrub','snap'])if(sd[f]!=null)d[f]=sd[f];
     d.phaseErr=sd.phase_err??null;
@@ -359,6 +359,7 @@ function auLibHtml(){
     <select data-au-s="view" title="Tutta la libreria o una playlist"></select>
     <button class="btn sm ghost" data-au="plnew" title="Nuova playlist">＋ Playlist</button>
     <button class="btn sm ghost au-plmenu" data-au="plmenu" title="Rinomina, duplica, svuota o elimina la playlist">⋯</button>
+    <span class="au-modes"></span>
     <span class="au-auto"></span>
     <input type="search" placeholder="Cerca titolo, artista, cartella" data-au-s="q">
     <select data-au-s="folder"></select>
@@ -367,9 +368,28 @@ function auLibHtml(){
     <div class="au-libtab"></div></div>`}
 // Autoplay (audio-auto.js nel bridge): suona da solo dalla playlist scelta qui sopra o da tutta
 // la libreria, in ordine o a caso, con dissolvenza. Indipendente dalla timeline.
+// Chi comanda i deck (12/11): LIVE = a mano, PLAYLIST = autoplay, TIMELINE = traccia AUDIO dello
+// show. La timeline ha sempre la precedenza: accesa, l'autoplay aspetta e il live non conta.
+function auMode(){return L.audioTimeline?.active?'timeline':G.audioAuto?.active?'playlist':'live'}
+function auModesHtml(){
+  const m=auMode(),n=AU.netOut,b=(k,l,t)=>`<button class="au-mode${m===k?' on':''}" data-au="mode" data-k="${k}" title="${t}">${l}</button>`;
+  const lv=n?.on?Math.round(Math.min(1,+n.level||0)*100):0;
+  return`<span class="au-mode-seg">${b('live','LIVE','A mano: deck, fader e crossfader li muovi tu')}${b('playlist','PLAYLIST','Autoplay: suona da solo dalla playlist o dalla libreria')}${b('timeline','TIMELINE','La traccia AUDIO della timeline dello show: ha sempre la precedenza')}</span>`+
+    (n?`<button class="au-vban${n.on?' on':''}${n.ok===false?' bad':''}" data-au="vban" title="${esc(`Copia del mix in rete (VBAN) per Controller e PatchDeck: ${n.device||''}${n.error?' · '+n.error:''}. Vale in tutti i modi.`)}">VBAN ${n.on?'ON':'OFF'}<i style="width:${lv}%"></i></button>`:'');
+}
+async function auModeSet(k){
+  const m=auMode();if(k===m)return;
+  if(m==='timeline'){   // la timeline comanda: per uscirne si spegne la traccia AUDIO
+    if(!await uiConfirm(`La traccia AUDIO della timeline sta comandando i deck.\nSpegnerla e passare a ${k==='live'?'LIVE (a mano)':'PLAYLIST'}?`,{ok:'Spegni la timeline audio'}))return;
+    L.audioTimeline={...audioDoc(),active:false};save();refreshShowTimelines();
+  }
+  if(k==='live'){if(G.audioAuto?.active)emit({type:'audio_auto',action:'stop'},true);showInfo('AUDIO LIVE: la Console a mano.');return}
+  if(k==='playlist'){if(!G.audioAuto?.active)auAutoStart();return}
+  if(k==='timeline')toggleAudioActive();
+}
 function auAutoHtml(){
   const a=G.audioAuto;
-  if(!a?.active)return`<button class="btn sm au-auto-go" data-au="autogo" title="Suona da solo: dalla playlist scelta (o da tutta la libreria), in ordine o a caso, con dissolvenza tra i brani">▶ AUTO</button>`;
+  if(!a?.active)return'';   // si parte da PLAYLIST nella barra dei modi
   const who=x=>x?esc(x.title+(x.artist?' – '+x.artist:'')):'';
   const msg=a.stopping?'si ferma…':a.waiting?'in attesa: comanda la traccia AUDIO della timeline':a.error?esc(a.error)
     :a.now?`${a.now.deck} · ${who(a.now)} <span class="dim">${auFmt(a.now.pos)} / ${auFmt(a.now.len)}</span>${a.next?` <span class="dim">→ ${who(a.next)}</span>`:''}`:'carico…';
@@ -386,6 +406,8 @@ async function auAutoStart(){
 }
 function auPaintLib(el){
   const box=el.querySelector('.au-lib');if(!box)return;
+  {const mb=box.querySelector('.au-modes'),n=AU.netOut,msig=JSON.stringify([auMode(),n&&[n.on,n.ok,Math.round((+n.level||0)*20)]]);
+    if(mb&&mb._sig!==msig){mb._sig=msig;mb.innerHTML=auModesHtml()}}
   {const ab=box.querySelector('.au-auto'),a=G.audioAuto,h=auAutoHtml(),sig=a?.active?JSON.stringify({...a,now:a.now&&{...a.now,pos:Math.floor(a.now.pos)}}):'off';
     if(ab&&ab._sig!==sig){ab._sig=sig;ab.innerHTML=h;ab.classList.toggle('on',!!a?.active)}}
   if(AU.lib.view&&!auPlaylist(AU.lib.view))AU.lib.view='';   // playlist eliminata da un altro tablet
@@ -461,6 +483,8 @@ function auDown(e,el,w){
   else if(a==='plnew')auNewPlaylist().then(p=>{if(p)AU.lib.view=p.id});
   else if(a==='plmenu')auPlaylistMenu();
   else if(a==='autogo')auAutoStart();
+  else if(a==='mode')auModeSet(b.dataset.k);
+  else if(a==='vban'){if(AU.netOut)auCmd({cmd:'net.vban',value:!AU.netOut.on})}
   else if(a==='autonext')emit({type:'audio_auto',action:'next'},true);
   else if(a==='autostop')emit({type:'audio_auto',action:'stop'},true);
   else if(a==='pladd')auAddToPlaylist(b.dataset.id);

@@ -19,8 +19,9 @@ async function main() {
     await p.ev(`(()=>{const T=window.__planciaTest;T.L.pages.push(...T.TPL.consoleaudio.pages());T.render();
       const tabs=document.querySelectorAll('#tabs > *');tabs[tabs.length-1].click();return 1})()`);
     await sleep(1500);
-    check(/AUTO/.test(await bar()), `fermo: pulsante ▶ AUTO nella Libreria (${await bar()})`);
-    check(await click('[data-au="autogo"]') === 1, 'tocco su AUTO');
+    const modes = () => p.ev(`[...document.querySelectorAll('.au-mode')].map(b=>(b.classList.contains('on')?'*':'')+b.textContent).join('|')`);
+    check(await modes() === '*LIVE|PLAYLIST|TIMELINE', `fermo: modi LIVE (acceso), PLAYLIST, TIMELINE (${await modes()})`);
+    check(await click('[data-au="mode"][data-k="playlist"]') === 1, 'tocco su PLAYLIST');
     await sleep(200);
     const opts = await p.ev(`[...document.querySelectorAll('.ui-confirm [data-i]')].map(b=>b.textContent).join('|')`);
     check(opts === 'A caso', `da tutta la libreria solo "A caso" (${opts})`);
@@ -29,6 +30,7 @@ async function main() {
     let txt = '';
     for (let i = 0; i < 20 && !/motore audio non collegato/.test(txt); i++) { await sleep(150); txt = await bar(); }
     check(/AUTO/.test(txt) && /motore audio non collegato/.test(txt), `il bridge l'ha avviato e dice che manca il motore (${txt.trim()})`);
+    check(/\*PLAYLIST/.test(await modes()), 'modo PLAYLIST acceso');
     check(await p.ev(`(()=>{const a=window.__planciaTest.G.audioAuto;return a&&a.active&&a.mode==='shuffle'&&a.fade===12&&a.sourceName==='Tutta la libreria'})()`), 'stato dal bridge: a caso, 12 s, tutta la libreria');
     // stato in onda (come dal bridge col motore vero): brano, posizione, prossimo
     await p.ev(`(()=>{window.__planciaTest.G.audioAuto=({active:true,mode:'order',fade:8,source:'pl',sourceName:'Sera',waiting:false,stopping:false,error:'',
@@ -44,8 +46,16 @@ async function main() {
     await sleep(300);
     await click('[data-au="autostop"]');
     let off = false;
-    for (let i = 0; i < 20 && !off; i++) { await sleep(150); off = /▶ AUTO/.test(await bar()); }
-    check(off, `■: il bridge ferma l'autoplay e torna ▶ AUTO (${(await bar()).trim()})`);
+    for (let i = 0; i < 20 && !off; i++) { await sleep(150); off = (await modes()).startsWith('*LIVE'); }
+    check(off, `■: il bridge ferma l'autoplay e torna LIVE (${await modes()})`);
+    // VBAN: pulsante dallo stato del motore, comando net.vban al tocco
+    await p.ev(`(()=>{const T=window.__planciaTest;T.AU.netOut={role:'network',device:'VBAN "Gaia" -> 192.168.1.73:6980',ok:true,on:true,level:.6};return 1})()`);
+    await sleep(300);
+    check(/VBAN ON/.test(await p.ev(`document.querySelector('.au-vban')?.textContent||''`)) && await p.ev(`document.querySelector('.au-vban i').style.width`) === '60%', 'pulsante VBAN ON con livello 60%');
+    // timeline accesa: comanda lei
+    await p.ev(`(()=>{const T=window.__planciaTest;T.L.audioTimeline={active:true,cues:[]};return 1})()`);
+    await sleep(300);
+    check((await modes()).includes('*TIMELINE'), `traccia AUDIO accesa: modo TIMELINE (${await modes()})`);
     check(!p.problems.length, `nessun errore nella pagina${p.problems.length ? ': ' + p.problems.join('; ') : ''}`);
   } finally { p.close(); }
   process.exitCode = fail.length ? 1 : 0;

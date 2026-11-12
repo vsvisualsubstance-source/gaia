@@ -15,7 +15,7 @@
 
 use std::collections::VecDeque;
 use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -70,15 +70,49 @@ pub fn parse_targets(s: &str) -> Result<Vec<SocketAddr>, String> {
     Ok(out)
 }
 
-/// coda tra la callback audio (push) e il thread che spedisce
-pub type Queue = Arc<Mutex<VecDeque<f32>>>;
+/// coda tra la callback audio (push) e il thread che spedisce, con l'interruttore
+/// (acceso/spento dalla Plancia, comando net.vban) e il picco del segnale mandato
+pub struct Net {
+    pub q: Mutex<VecDeque<f32>>,
+    pub on: AtomicBool,
+    peak: AtomicU32,
+}
+pub type Queue = Arc<Net>;
+
+pub fn new_queue(on: bool) -> Queue {
+    Arc::new(Net { q: Mutex::new(VecDeque::new()), on: AtomicBool::new(on), peak: AtomicU32::new(0) })
+}
+
+impl Net {
+    pub fn set_on(&self, on: bool) {
+        self.on.store(on, Ordering::Relaxed);
+        if !on {
+            if let Ok(mut q) = self.q.lock() {
+                q.clear();
+            }
+        }
+    }
+    pub fn is_on(&self) -> bool {
+        self.on.load(Ordering::Relaxed)
+    }
+    /// picco dall'ultima lettura (0..1), poi si riparte da zero
+    pub fn take_peak(&self) -> f32 {
+        f32::from_bits(self.peak.swap(0, Ordering::Relaxed))
+    }
+}
 
 pub fn push(q: &Queue, samples: &[f32]) {
-    if let Ok(mut q) = q.lock() {
-        q.extend(samples.iter().copied());
-        let over = q.len().saturating_sub(MAX_QUEUE);
+    if !q.is_on() {
+        return;
+    }
+    // per float non negativi l'ordine dei bit e' quello dei valori: fetch_max basta
+    let p = samples.iter().fold(0f32, |m, s| m.max(s.abs())).min(1.0);
+    q.peak.fetch_max(p.to_bits(), Ordering::Relaxed);
+    if let Ok(mut d) = q.q.lock() {
+        d.extend(samples.iter().copied());
+        let over = d.len().saturating_sub(MAX_QUEUE);
         if over > 0 {
-            q.drain(..over + over % CHANNELS);
+            d.drain(..over + over % CHANNELS);
         }
     }
 }
@@ -98,19 +132,19 @@ pub fn start(q: Queue, targets: Vec<SocketAddr>, name: String, rate: Arc<Mutex<f
                     eprintln!("VBAN: frequenza {r} Hz non prevista dal protocollo, niente invio");
                     warned = true;
                 }
-                if let Ok(mut q) = q.lock() {
-                    q.clear();
+                if let Ok(mut d) = q.q.lock() {
+                    d.clear();
                 }
                 thread::sleep(Duration::from_millis(50));
                 continue;
             };
             loop {
                 buf.clear();
-                if let Ok(mut q) = q.lock() {
-                    if q.len() < MAX_FRAMES * CHANNELS {
+                if let Ok(mut d) = q.q.lock() {
+                    if d.len() < MAX_FRAMES * CHANNELS {
                         break;
                     }
-                    buf.extend(q.drain(..MAX_FRAMES * CHANNELS));
+                    buf.extend(d.drain(..MAX_FRAMES * CHANNELS));
                 } else {
                     break;
                 }
@@ -155,16 +189,23 @@ mod tests {
         assert_eq!(t[0].port(), PORT);
         assert_eq!(t[1].port(), 7000);
         assert!(parse_targets("").is_err());
-        let q: Queue = Arc::new(Mutex::new(VecDeque::new()));
+        let q = new_queue(true);
         push(&q, &vec![0.1; MAX_QUEUE + 10]);
-        assert_eq!(q.lock().unwrap().len(), MAX_QUEUE);
+        assert_eq!(q.q.lock().unwrap().len(), MAX_QUEUE);
+        assert!((q.take_peak() - 0.1).abs() < 1e-6);
+        assert_eq!(q.take_peak(), 0.0, "il picco riparte da zero dopo la lettura");
+        q.set_on(false);
+        assert!(q.q.lock().unwrap().is_empty(), "spento: coda svuotata");
+        push(&q, &[0.5, 0.5]);
+        assert!(q.q.lock().unwrap().is_empty(), "spento: niente in coda");
+        assert_eq!(q.take_peak(), 0.0);
     }
 
     #[test]
     fn sends_real_packets() {
         let rx = UdpSocket::bind("127.0.0.1:0").unwrap();
         rx.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
-        let q: Queue = Arc::new(Mutex::new(VecDeque::new()));
+        let q = new_queue(true);
         let run = Arc::new(AtomicBool::new(true));
         start(q.clone(), vec![rx.local_addr().unwrap()], "Prova".into(), Arc::new(Mutex::new(48000.0)), run.clone()).unwrap();
         push(&q, &vec![0.25; MAX_FRAMES * CHANNELS * 2]);

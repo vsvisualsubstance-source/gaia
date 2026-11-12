@@ -675,6 +675,14 @@ button{cursor:pointer}
 .au-xf input{flex:1}
 .au-libbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .au-auto{display:inline-flex;gap:6px;align-items:center;min-width:0}
+.au-modes{display:inline-flex;gap:8px;align-items:center}
+.au-mode-seg{display:inline-flex;border:1px solid var(--line2);border-radius:6px;overflow:hidden}
+.au-mode{background:none;border:none;padding:5px 10px;font:inherit;font-size:11px;letter-spacing:.08em;color:var(--dim);cursor:pointer}
+.au-mode+.au-mode{border-left:1px solid var(--line2)}
+.au-mode.on{background:var(--accent,#ffb23e);color:#111;font-weight:700}
+.au-vban{position:relative;overflow:hidden;background:none;border:1px solid var(--line2);border-radius:6px;padding:5px 10px;font:inherit;font-size:11px;letter-spacing:.06em;color:var(--dim);cursor:pointer;min-width:84px}
+.au-vban.on{color:#5ad18c;border-color:#5ad18c}.au-vban.bad{color:var(--bad);border-color:var(--bad)}
+.au-vban i{position:absolute;left:0;bottom:0;height:3px;background:#5ad18c;transition:width .08s linear}
 .au-auto.on{flex:1 1 100%;order:-1;padding:4px 8px;border:1px solid var(--accent,#ffb23e);border-radius:6px}
 .au-auto-on{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .au-auto-on b{color:var(--accent,#ffb23e);margin-right:4px}
