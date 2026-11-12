@@ -191,11 +191,26 @@ function auDrawWave(cv,d,col){
   mark(d.cue,'#ff5d5d');d.hot.forEach(t=>t!=null&&mark(t,'#4fd18b'));
   g.fillStyle=col;g.fillRect(W/2-1,0,2,H);
 }
+// Griglia per frasi della panoramica (12/11): una riga ogni N battute (4 battiti), con N tra 4 e 64
+// scelto perche' le righe stiano ad almeno 9 px; ogni quarta riga piu' marcata (sezioni lunghe).
+// Senza griglia affidabile (BPM incerto) niente righe: meglio nessuna che sbagliata.
+const AU_PHRASE_BARS=[4,8,16,32,64];
+function auPhraseGrid(d,W,minPx=9){
+  const p=auPeriod(d),sec=d.track?.seconds;if(!p||!sec||!W||!auGridOk(d))return[];
+  const pxBar=4*p/sec*W,n=AU_PHRASE_BARS.find(b=>b*pxBar>=minPx)||64,step=n*4*p,fb=d.track.first_beat;
+  const out=[];let k=Math.ceil(-fb/step);
+  for(let t=fb+k*step;t<sec;t+=step,k++)if(t>=0)out.push({x:t/sec*W,strong:k%4===0,bars:n});
+  return out;
+}
 function auDrawOver(cv,d,col){
   const g=auCanvas(cv),W=cv.width,H=cv.height;if(!W)return;g.clearRect(0,0,W,H);
   if(!d.track||!d.wave)return;
-  if(!d.overImg||d.overImg.width!==W){const o=document.createElement('canvas');o.width=W;o.height=H;const og=o.getContext('2d'),ov=d.wave.overview;
-    og.fillStyle='#5b6372';for(let x=0;x<W;x++){const v=ov[Math.floor(x/W*ov.length)]/255;og.fillRect(x,H/2-v*H/2,1,v*H)}d.overImg=o}
+  const gsig=[W,d.track.bpm,d.track.first_beat,auGridOk(d)].join();
+  if(!d.overImg||d.overImg.width!==W||d.overImg._g!==gsig){const o=document.createElement('canvas');o.width=W;o.height=H;o._g=gsig;const og=o.getContext('2d'),ov=d.wave.overview;
+    og.fillStyle='#5b6372';for(let x=0;x<W;x++){const v=ov[Math.floor(x/W*ov.length)]/255;og.fillRect(x,H/2-v*H/2,1,v*H)}
+    const ph=auPhraseGrid(d,W);
+    for(const l of ph)og.fillStyle=l.strong?'rgba(255,255,255,.9)':'rgba(110,185,255,.55)',og.fillRect(Math.round(l.x)-(l.strong?1:0),0,l.strong?2:1,H);
+    d.overImg=o}
   g.drawImage(d.overImg,0,0);
   const px=d.pos/d.track.seconds*W;g.fillStyle='rgba(12,14,17,.55)';g.fillRect(0,0,px,H);
   g.fillStyle='#ff5d5d';g.fillRect(d.cue/d.track.seconds*W,0,2,H);
@@ -209,6 +224,7 @@ function auDeckHtml(w){
   const k=w.deck||'A';
   return`<div class="au au-deck" data-deck="${k}">
   <div class="au-head"><b class="au-letter">${k}</b><div class="au-title"><span class="t"></span><span class="a"></span></div>
+    <div class="au-dur" title="Tempo che manca alla fine (con il tempo del deck) e durata del brano"><b></b><i></i></div>
     <div class="au-bpm"><b></b><i></i></div></div>
   <canvas class="au-wave" data-au="wave" title="Trascina per spostare la traccia sotto la testina; rotella: scorri, Ctrl+rotella: zoom"></canvas><canvas class="au-over" data-au="seek"></canvas>
   <div class="au-time"><span class="el"></span><span class="st"></span>
@@ -244,6 +260,10 @@ function auPaintDeck(el,w){
   const set=(sel,txt)=>{const e=box.querySelector(sel);if(e&&e.textContent!==txt)e.textContent=txt};
   set('.au-title .t',d.track?d.track.title:(d.loading?'carico…':'Scegli una traccia dalla libreria: pulsante A o B'));
   set('.au-title .a',d.track?d.track.artist:'');
+  // conto alla rovescia: secondi di traccia che mancano diviso la velocita' del deck (accelerato finisce prima)
+  {const rate=Math.max(.01,1+d.tempo*d.range),left=d.track?Math.max(0,(d.track.seconds-d.pos)/rate):0;
+    set('.au-dur b',d.track?'-'+auFmt(left):'');set('.au-dur i',d.track?auFmt(d.track.seconds):'');
+    box.querySelector('.au-dur')?.classList.toggle('end',!!d.track&&left<30)}
   set('.au-bpm b',d.track?.bpm?auBpm(d).toFixed(2):'—');
   set('.au-bpm i',`${d.tempo*d.range>=0?'+':''}${(d.tempo*d.range*100).toFixed(1)}%`);
   set('.au-time .el',d.playing?auFmt(d.pos):auFmtFine(d.pos));set('.au-time .zm',d.zoom+' s');
