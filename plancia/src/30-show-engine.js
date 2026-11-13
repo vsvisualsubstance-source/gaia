@@ -453,10 +453,13 @@ function fireCue(w,i){
 const SHOW_CLOCK_STATE='gaia/show/clock/state',SHOW_CLOCK_COMMAND='gaia/show/clock/command';
 const showClock={id:`plancia-${Math.random().toString(36).slice(2)}`,state:null,receivedAt:0,
   osc:null,authority:false,hasMqtt:false,minRtt:null,rtts:[],pings:new Map(),pingSeq:0};
+// master: il TD DMX scelto, oppure un orologio con priorita' piu' alta (motore audio di OPS, prio 2,
+// docs/show-clock.md). "live" = almeno due seq dallo stesso master: solo allora, se tace, si continua a contare
 onMqtt(SHOW_CLOCK_STATE,(p,seg,obj)=>{
-  if(obj&&p.v===1&&p.master===dmxId()&&Number.isFinite(+p.pos)&&typeof p.playing==='boolean'){
-    const oldLength=showClock.state?.length;
-    showClock.state={...p,pos:+p.pos,playing:p.playing};showClock.receivedAt=now();showClock.authority=true;showClock.hasMqtt=true;
+  if(obj&&p.v===1&&(p.master===dmxId()||+p.prio>1)&&Number.isFinite(+p.pos)&&typeof p.playing==='boolean'){
+    const oldLength=showClock.state?.length,prev=showClock.state;
+    const live=!!prev&&prev.master===p.master&&(!!prev.live||prev.seq!==p.seq);
+    showClock.state={...p,pos:+p.pos,playing:p.playing,live};showClock.receivedAt=now();showClock.authority=true;showClock.hasMqtt=true;
     if(oldLength!==p.length)refreshShowTimelines();
   }
 });
@@ -481,7 +484,8 @@ function showClockSample(){
 }
 function showClockPosition(sample=showClockSample()){
   if(!sample)return null;
-  const s=sample.state,elapsed=Math.min(showClockAge(sample),3500);
+  // volano: uno stato vivo continua a contare fino a 10 minuti se il master tace
+  const s=sample.state,elapsed=Math.min(showClockAge(sample),s.live?600000:3500);
   const compensation=sample.source==='mqtt'?(showClock.minRtt||0)/2:0;
   const rate=Number.isFinite(+s.rate)?+s.rate:1;
   return clamp((+s.pos||0)+(s.playing?(elapsed+compensation)/1000*rate:0),0,

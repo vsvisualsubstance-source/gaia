@@ -14,7 +14,7 @@
 // riavviato si sistemano da soli. Con la timeline in TIMELINE il bridge comanda
 // deck e fader (tempo naturale, niente sync, crossfader al centro).
 
-const { clockPosition } = require('./video-timeline');
+const { clockPosition, clockReceive, clockAlive, clockUsable } = require('./video-timeline');
 
 const DECKS = ['A', 'B'];
 const PRELOAD_S = 30;        // il brano successivo si carica (fermo) sull'altro deck
@@ -113,7 +113,7 @@ function startAudioTimeline({ getDoc, engine, lib, broadcast, url = process.env.
   client.on('connect', () => client.subscribe(clockTopic));
   client.on('error', e => log('Timeline audio MQTT:', e.message));
   client.on('message', (topic, payload) => {
-    try { const p = JSON.parse(payload); if (topic === clockTopic && Number.isFinite(+p.pos)) clock = { ...p, receivedAt: Date.now() }; } catch { /* ignora */ }
+    try { const p = JSON.parse(payload); if (topic === clockTopic && Number.isFinite(+p.pos)) clock = clockReceive(clock, p); } catch { /* ignora */ }
   });
   // durate e playlist: dalla cache dell'analisi, ogni 2 s (sono in memoria nel modulo)
   const refresh = async () => {
@@ -128,8 +128,8 @@ function startAudioTimeline({ getDoc, engine, lib, broadcast, url = process.env.
   const libTimer = setInterval(refresh, 2000);
   const timer = setInterval(() => {
     const doc = getDoc() || {}, active = !!doc.active, now = Date.now();
-    const fresh = !!clock && now - clock.receivedAt < 5000;
-    const t = fresh ? clockPosition(clock, now) : null;
+    const fresh = clockAlive(clock, now);
+    const t = clockUsable(clock, now) ? clockPosition(clock, now) : null;
     const eng = engine.state(), up = engine.up() && !!eng;
     let cmds = [], seg = -1, segs = null;
     if (active && t != null && up) {

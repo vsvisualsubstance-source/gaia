@@ -10,7 +10,7 @@
 // La prova dal vivo ha la precedenza sulla timeline finche' non si ferma.
 
 const { hmPoint } = require('./src/63-head-motion');
-const { clockPosition } = require('./video-timeline');
+const { clockPosition, clockReceive, clockAlive, clockUsable } = require('./video-timeline');
 
 // scena attiva al tempo t: l'ultima cue <= t ('off' = fermo), -1 prima della prima
 function headMotionAt(cues, t) {
@@ -27,7 +27,7 @@ function startHeadMotion({ getDoc, getScenes, sendOsc, broadcast, rate = 30, url
     client = mqtt.connect(url, { clientId: `plancia-bridge-heads-${process.pid}`, reconnectPeriod: 3000, connectTimeout: 5000 });
     client.on('connect', () => client.subscribe(clockTopic));
     client.on('error', e => log('Movimento teste MQTT:', e.message));
-    client.on('message', (topic, payload) => { try { const p = JSON.parse(payload); if (Number.isFinite(+p.pos)) clock = { ...p, receivedAt: Date.now() }; } catch { /* ignora */ } });
+    client.on('message', (topic, payload) => { try { const p = JSON.parse(payload); if (Number.isFinite(+p.pos)) clock = clockReceive(clock, p); } catch { /* ignora */ } });
   }
   let live = null, current = null, lastSent = '', lastEcho = 0, status = {}, lastStatus = '', lastStatusAt = 0;
   // all'avvio di una scena: tutte le teste selezionate e velocita' dei motori
@@ -37,7 +37,7 @@ function startHeadMotion({ getDoc, getScenes, sendOsc, broadcast, rate = 30, url
   };
   const timer = setInterval(() => {
     const now = Date.now(), doc = getDoc() || {}, scenes = getScenes() || [];
-    const fresh = !!clock && now - clock.receivedAt < 5000, tClock = fresh ? clockPosition(clock, now) : null;
+    const fresh = clockAlive(clock, now), tClock = clockUsable(clock, now) ? clockPosition(clock, now) : null;
     let sc = null, t = 0, bpm = +doc.bpm || 120, cue = -1, source = 'off';
     if (live) { sc = live.scene; t = (now - live.startedAt) / 1000; bpm = live.bpm || bpm; source = 'live'; }
     else if (doc.active && doc.engine === 'ops' && tClock != null) {   // col motore di DMX Master la traccia la esegue TD

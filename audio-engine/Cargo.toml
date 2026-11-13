@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 cpal = { version = "0.18.2", features = ["realtime"] }   # thread audio in tempo reale (MMCSS "Pro Audio" su Windows)
 rayon = "1.12.0"
+rumqttc = { version = "0.25.1", default-features = false }
 rustfft = "6.4.1"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"

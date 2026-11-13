@@ -8,7 +8,9 @@
 
 use crate::dsp::{self, Biquad, Kind};
 use serde::Serialize;
-use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, OnceLock};
+use std::time::Instant;
 use std::sync::mpsc::{Receiver, SyncSender};
 
 pub const HOT: usize = 8;
@@ -316,9 +318,55 @@ impl Strip {
     }
 }
 
+/// istante monotono comune (secondi dall'avvio del processo, contatore ad alta precisione):
+/// lo usano il thread audio e l'orologio dello show
+pub fn mono() -> f64 {
+    static EPOCH: OnceLock<Instant> = OnceLock::new();
+    EPOCH.get_or_init(Instant::now).elapsed().as_secs_f64()
+}
+
+/// campioni prodotti, istante del blocco e frequenza dell'uscita, letti senza lock
+/// dall'orologio dello show (clock.rs) per correggersi sul clock della scheda audio.
+/// La coppia (campioni, istante) e' scritta sotto un contatore di sequenza.
+#[derive(Default)]
+pub struct AudioCounter {
+    seq: AtomicU64,
+    frames: AtomicU64,
+    at: AtomicU64,
+    /// f64 in bit
+    pub fs: AtomicU64,
+}
+
+impl AudioCounter {
+    pub fn store(&self, frames: u64, at: f64) {
+        self.seq.fetch_add(1, Ordering::AcqRel);
+        self.frames.store(frames, Ordering::Release);
+        self.at.store(at.to_bits(), Ordering::Release);
+        self.seq.fetch_add(1, Ordering::Release);
+    }
+
+    /// (campioni, istante) dell'ultimo blocco, coerenti fra loro
+    pub fn load(&self) -> Option<(u64, f64)> {
+        for _ in 0..8 {
+            let s1 = self.seq.load(Ordering::Acquire);
+            if s1 & 1 == 1 {
+                std::hint::spin_loop();
+                continue;
+            }
+            let f = self.frames.load(Ordering::Acquire);
+            let a = f64::from_bits(self.at.load(Ordering::Acquire));
+            if self.seq.load(Ordering::Acquire) == s1 {
+                return Some((f, a));
+            }
+        }
+        None
+    }
+}
+
 pub struct Engine {
     fs: f64,
     frames: u64,
+    pub counter: Arc<AudioCounter>,
     decks: [Deck; 2],
     strips: [Strip; 2],
     master: usize,
@@ -357,9 +405,12 @@ const PLL_SNAP: f64 = 0.08;
 
 impl Engine {
     pub fn new(fs: f64, rx: Receiver<Msg>, tx: SyncSender<Out>) -> Self {
+        let counter = Arc::new(AudioCounter::default());
+        counter.fs.store(fs.to_bits(), Ordering::Relaxed);
         Engine {
             fs,
             frames: 0,
+            counter,
             decks: [Deck::new(), Deck::new()],
             strips: [Strip::new(fs), Strip::new(fs)],
             master: 0,
@@ -417,6 +468,7 @@ impl Engine {
     pub fn set_rate(&mut self, fs: f64) {
         if (fs - self.fs).abs() > 0.5 {
             self.fs = fs;
+            self.counter.fs.store(fs.to_bits(), Ordering::Relaxed);
             for s in &mut self.strips {
                 s.update_eq(fs);
             }
@@ -1018,6 +1070,7 @@ impl Engine {
         }
         self.headphones = ch >= 4 || self.hp_ext;
         self.frames += frames as u64;
+        self.counter.store(self.frames, mono());
         if self.frames >= self.next_snapshot {
             self.next_snapshot = self.frames + (self.fs / SNAPSHOT_HZ) as u64;
             let s = self.snapshot();

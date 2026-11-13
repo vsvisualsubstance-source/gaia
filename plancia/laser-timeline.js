@@ -11,7 +11,7 @@
 // (una cue 'all' vale per tutti i cubi), quindi seek e loop si ricalcolano da
 // soli. ARMARE resta sempre manuale: la timeline sceglie solo cosa proiettare.
 
-const { clockPosition } = require('./video-timeline');
+const { clockPosition, clockReceive, clockAlive, clockUsable } = require('./video-timeline');
 
 // stato per cubo al tempo t: {c1: {mode, scene}, ...}, cue = indice dell'ultima cue <= t
 function layeredLaserState(cues, t, cubeIds) {
@@ -55,14 +55,14 @@ function startLaserTimeline({ getDoc, getScenes, broadcast, url = process.env.PL
     try {
       const p = JSON.parse(payload);
       if (topic === statusTopic) { cubeIds = (p.laser?.cubes || []).map(c => c.id); return; }
-      if (topic === clockTopic && Number.isFinite(+p.pos)) clock = { ...p, receivedAt: Date.now() };
+      if (topic === clockTopic && Number.isFinite(+p.pos)) clock = clockReceive(clock, p);
     } catch { /* ignora */ }
   });
   const send = o => client.publish(`gaia/device/${deviceId}/command`, JSON.stringify(o));
   const timer = setInterval(() => {
     const doc = getDoc() || {}, active = !!doc.active, now = Date.now();
-    const fresh = !!clock && now - clock.receivedAt < 5000;
-    const t = fresh ? clockPosition(clock, now) : null;
+    const fresh = clockAlive(clock, now);
+    const t = clockUsable(clock, now) ? clockPosition(clock, now) : null;
     let st = null, cmds = [];
     if (active && t != null && cubeIds.length) {
       if (!wasActive) sent = {};                   // riaccesa: si rimanda tutto

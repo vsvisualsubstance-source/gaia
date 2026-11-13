@@ -36,6 +36,10 @@ pub struct ServeOpts {
     /// copia del mix in rete (VBAN, vban.rs): indirizzi "IP[:porta],..." e nome del flusso
     pub vban: Option<String>,
     pub vban_name: String,
+    /// orologio dello show (clock.rs): nome del master e broker MQTT
+    pub clock: Option<String>,
+    pub clock_broker: String,
+    pub clock_topic: String,
 }
 
 type Clients = Arc<Mutex<Vec<Sender<String>>>>;
@@ -609,6 +613,11 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
     let (otx, orx) = mpsc::sync_channel::<Out>(256);
     let engine = Arc::new(Mutex::new(Engine::new(48000.0, rx, otx)));
     let clients: Clients = Arc::new(Mutex::new(Vec::new()));
+    if let Some(id) = &o.clock {
+        let (host, port) = crate::clock::parse_broker(&o.clock_broker)?;
+        let counter = engine.lock().map_err(|_| "motore")?.counter.clone();
+        crate::clock::start(crate::clock::ClockOpts { id: id.clone(), topic: o.clock_topic.clone(), host, port }, counter);
+    }
 
     let listener = TcpListener::bind(("127.0.0.1", o.port)).map_err(|e| format!("porta {}: {e}", o.port))?;
     // coda VBAN creata qui: la usano sia i comandi (net.vban) sia l'uscita

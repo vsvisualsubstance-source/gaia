@@ -92,6 +92,18 @@ function dropBlockedPatches(st, report, sent) {
 }
 
 // posizione stimata del clock: estrapolazione dall'ultimo stato ricevuto
+// Orologio dello show nei follower del bridge (docs/show-clock.md). Uno stato "vivo" (almeno due seq
+// dallo stesso master) continua a contare fino a CLOCK_FLYWHEEL_MS se il master tace: lo show va avanti
+// e il prossimo stato riallinea. Quello rimasto nel broker (retained, forse vecchio di ore) vale 5 s.
+const CLOCK_FRESH_MS = 5000, CLOCK_FLYWHEEL_MS = 600000;
+function clockReceive(prev, p, now = Date.now()) {
+  const live = !!prev && prev.master === p.master && (!!prev.live || prev.seq !== p.seq);
+  return { ...p, receivedAt: now, live };
+}
+function clockAlive(clock, now) { return !!clock && now - clock.receivedAt < CLOCK_FRESH_MS; }
+function clockUsable(clock, now) {
+  return clockAlive(clock, now) || (!!clock && !!clock.live && now - clock.receivedAt < CLOCK_FLYWHEEL_MS);
+}
 function clockPosition(clock, now) {
   if (!clock) return null;
   let t = +clock.pos || 0;
@@ -140,14 +152,14 @@ function startVideoTimeline({ preload = +(process.env.VIDEO_PRELOAD_S ?? 2), get
     if (topic === matrixTopic) { try { const m = JSON.parse(payload); hasMix = !!m.fx_params?.deck_mix; labels = m.patch_labels ?? labels; } catch { /* ignora */ } return; }
     if (topic === preloadTopic) { try { preloadReport = JSON.parse(payload); } catch { /* ignora */ } return; }
     if (topic !== clockTopic) return;
-    try { const p = JSON.parse(payload); if (Number.isFinite(+p.pos)) clock = { ...p, receivedAt: Date.now() }; } catch { /* ignora */ }
+    try { const p = JSON.parse(payload); if (Number.isFinite(+p.pos)) clock = clockReceive(clock, p); } catch { /* ignora */ }
   });
   const send = o => client.publish(`gaia/device/${deviceId}/command`, JSON.stringify(o));
   const timer = setInterval(() => {
     const doc = getDoc() || {}, active = !!doc.active, now = Date.now();
     publishTable(doc, false);
-    const fresh = !!clock && now - clock.receivedAt < 5000;
-    const t = fresh ? clockPosition(clock, now) : null;
+    const fresh = clockAlive(clock, now);
+    const t = clockUsable(clock, now) ? clockPosition(clock, now) : null;
     let st = null, cmds = [];
     if (active && t != null) {
       // riaccendendo la timeline si riparte da zero: si rimanda tutto lo stato
@@ -171,4 +183,4 @@ function startVideoTimeline({ preload = +(process.env.VIDEO_PRELOAD_S ?? 2), get
   return { stop: () => { clearInterval(timer); client.end(true); }, status: () => status, sendTable: () => publishTable(getDoc() || {}, true) };
 }
 
-module.exports = { FX, MIX_OF, CUE_TABLE_TOPIC, videoCueTable, dropBlockedPatches, layeredVideoState, videoCommands, clockPosition, startVideoTimeline };
+module.exports = { FX, MIX_OF, CUE_TABLE_TOPIC, videoCueTable, dropBlockedPatches, layeredVideoState, videoCommands, clockPosition, clockReceive, clockAlive, clockUsable, CLOCK_FLYWHEEL_MS, startVideoTimeline };

@@ -1,5 +1,6 @@
 # build di cargo (il binario si copia sulla touring, non va nel repo)
 /target
+/target-clock
 /cache
 /cache-analyze.log
 /serve.log*

@@ -10,6 +10,9 @@
 //!       --vban IP[,IP..]   copia del mix in rete col protocollo VBAN (UDP 6980 se manca ":porta"),
 //!                        per Controller e PatchDeck su un altro PC (VBAN Receptor -> VB-Cable)
 //!       --vban-name NOME   nome del flusso VBAN (default "Gaia", al massimo 16 caratteri)
+//!       --clock ID         fa da master dell'orologio dello show (clock.rs) con questo nome
+//!       --clock-broker H:P broker MQTT dell'orologio (default 127.0.0.1:11883)
+//!       --clock-topic T    prefisso dei topic (default gaia/show/clock; altro solo per le prove)
 //!   gaia-audio list                         uscite audio viste
 //!   gaia-audio analyze [cartella|file ...]  BPM, griglia, forma d'onda (tutta la musica se vuoto)
 //!       --force          rianalizza anche quelle in cache
@@ -22,6 +25,7 @@
 //! GAIA_AUDIO_CACHE o ./cache).
 
 mod analysis;
+mod clock;
 mod decode;
 mod dsp;
 mod engine;
@@ -68,6 +72,9 @@ struct Opts {
     tap_device: Option<String>,
     vban: Option<String>,
     vban_name: String,
+    clock: Option<String>,
+    clock_broker: String,
+    clock_topic: String,
     rest: Vec<String>,
 }
 
@@ -84,6 +91,9 @@ fn parse(args: &[String]) -> Result<Opts, String> {
         tap_device: None,
         vban: None,
         vban_name: "Gaia".into(),
+        clock: None,
+        clock_broker: "127.0.0.1:11883".into(),
+        clock_topic: clock::TOPIC.into(),
         rest: Vec::new(),
     };
     let mut it = args.iter();
@@ -99,6 +109,9 @@ fn parse(args: &[String]) -> Result<Opts, String> {
             "--tap-device" => o.tap_device = Some(it.next().ok_or("--tap-device senza nome")?.clone()),
             "--vban" => o.vban = Some(it.next().ok_or("--vban senza indirizzi")?.clone()),
             "--vban-name" => o.vban_name = it.next().ok_or("--vban-name senza nome")?.chars().take(16).collect(),
+            "--clock" => o.clock = Some(it.next().ok_or("--clock senza nome")?.clone()),
+            "--clock-broker" => o.clock_broker = it.next().ok_or("--clock-broker HOST:PORTA")?.clone(),
+            "--clock-topic" => o.clock_topic = it.next().ok_or("--clock-topic senza prefisso")?.trim_end_matches('/').to_string(),
             "--range" => {
                 let v = it.next().ok_or("--range senza valori")?;
                 let (a, b) = v.split_once('-').ok_or("--range MIN-MAX")?;
@@ -198,7 +211,7 @@ fn main() -> ExitCode {
             Ok(())
         }
         "analyze" => return analyze(&o),
-        "serve" => serve::serve(serve::ServeOpts { root: o.root, cache: o.cache, port: o.port, device: o.device, no_audio: o.no_audio, cue_device: o.cue_device, tap_device: o.tap_device, vban: o.vban, vban_name: o.vban_name }),
+        "serve" => serve::serve(serve::ServeOpts { root: o.root, cache: o.cache, port: o.port, device: o.device, no_audio: o.no_audio, cue_device: o.cue_device, tap_device: o.tap_device, vban: o.vban, vban_name: o.vban_name, clock: o.clock, clock_broker: o.clock_broker, clock_topic: o.clock_topic }),
         "grid" => grid(&o),
         "index" => {
             println!("{}", serde_json::to_string_pretty(&library::index(&o.root, &o.cache)).unwrap_or_default());
