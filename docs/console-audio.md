@@ -233,6 +233,14 @@ La touring manda lo stesso flusso (`--vban 192.168.1.73 --vban-name Gaia`): in t
 e la .73 prende il suo IP dalla riserva del DHCP della touring, quindi la stessa configurazione della .73 vale con
 OPS e con la touring. A casa la .73 non e' raggiungibile dalla touring (rotta .64/27 sul cavo del laser).
 
+**Sorgente luci della DMX Master (13/11).** Su OPS e sulla touring la DMX legge **CABLE Output** (copia luci del
+motore), non piu' il Touch In 8001 dal Controller: in TCP costava ~50 ms a cook (DMX a 13 fps) e riportava a OPS il
+suo stesso mix. **Da fare, scenario inverso:** quando l'audio master entra nel Controller (mixer del DJ sul PC .73),
+il Controller lo manda alla DMX Master in **VBAN al contrario**, cosi' tutto il giro audio usa una sola tecnologia.
+Lato DMX su OPS/touring VB-Cable e' gia' occupato dalla copia luci del motore: la strada e' un ingresso VBAN nel
+motore (`--vban-in`, sorgente luci scelta fra Console e rete), senza un secondo cavo virtuale. Su una DMX senza
+motore (PC Win, Mac, Pi) basta un ricevitore VBAN verso un cavo virtuale.
+
 L'uscita luci serve a DMX Master sulla stessa macchina: la DMX legge un
 ingresso audio, e la Z1 non ne ha. Con **VB-Audio Virtual Cable** il motore
 suona su "CABLE Input" e la DMX ascolta "CABLE Output" (sorgente
