@@ -228,6 +228,10 @@ della Console, con il livello del segnale); vale in tutti i modi (LIVE, PLAYLIST
 dalla scheda delle luci. **Thread audio in tempo reale** (12/11): cpal con la feature `realtime`, cioe' MMCSS
 "Pro Audio" di Windows (priorita' 21 contro 15 di prima), senza permessi di amministratore; prima il thread
 della scheda girava a priorita' normale e con la macchina carica poteva perdere qualche blocco (scatti dopo 40 min).
+**In esercizio (13/11, nota OPS 61):** ricezione configurata sul PC .73, Controller e PatchDeck leggono CABLE Output.
+La touring manda lo stesso flusso (`--vban 192.168.1.73 --vban-name Gaia`): in tournee e' .240 sulla LAN dello show
+e la .73 prende il suo IP dalla riserva del DHCP della touring, quindi la stessa configurazione della .73 vale con
+OPS e con la touring. A casa la .73 non e' raggiungibile dalla touring (rotta .64/27 sul cavo del laser).
 
 L'uscita luci serve a DMX Master sulla stessa macchina: la DMX legge un
 ingresso audio, e la Z1 non ne ha. Con **VB-Audio Virtual Cable** il motore
