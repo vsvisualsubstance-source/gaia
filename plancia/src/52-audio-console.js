@@ -48,7 +48,7 @@ async function auFetchTrack(deck,id){
 }
 // stato dal motore vero: e' lui la fonte di verita'
 function auApplyState(s){
-  const now=performance.now();AU.liveAt=now;AU.live=true;AU.master=s.master==='B'?'B':'A';AU.out=s.outputs?.[0]||null;AU.cueOut=(s.outputs||[]).find(o=>o.role==='cue')||null;AU.lightsOut=(s.outputs||[]).find(o=>o.role==='lights')||null;AU.netOut=(s.outputs||[]).find(o=>o.role==='network')||null;AU.phones=!!s.headphones;AU.meterM=+s.meters?.master||0;AU.meterL=+(s.meters?.master_l??s.meters?.master)||0;AU.meterR=+(s.meters?.master_r??s.meters?.master)||0;
+  const now=performance.now();AU.liveAt=now;AU.live=true;AU.master=s.master==='B'?'B':'A';AU.out=s.outputs?.[0]||null;AU.cueOut=(s.outputs||[]).find(o=>o.role==='cue')||null;AU.lightsOut=(s.outputs||[]).find(o=>o.role==='lights')||null;AU.netOut=(s.outputs||[]).find(o=>o.role==='network')||null;AU.lightsIn=(s.inputs||[]).find(o=>o.role==='lights_in')||null;AU.phones=!!s.headphones;AU.meterM=+s.meters?.master||0;AU.meterL=+(s.meters?.master_l??s.meters?.master)||0;AU.meterR=+(s.meters?.master_r??s.meters?.master)||0;
   for(const k of['A','B']){const sd=s.decks?.[k],d=AU.decks[k];if(!sd)continue;
     for(const f of['playing','tempo','range','keylock','sync','cue','nudge','preview','scrub','snap'])if(sd[f]!=null)d[f]=sd[f];
     d.phaseErr=sd.phase_err??null;
@@ -395,7 +395,17 @@ function auModesHtml(){
   const m=auMode(),n=AU.netOut,b=(k,l,t)=>`<button class="au-mode${m===k?' on':''}" data-au="mode" data-k="${k}" title="${t}">${l}</button>`;
   const lv=n?.on?Math.round(Math.min(1,+n.level||0)*100):0;
   return`<span class="au-mode-seg">${b('live','LIVE','A mano: deck, fader e crossfader li muovi tu')}${b('playlist','PLAYLIST','Autoplay: suona da solo dalla playlist o dalla libreria')}${b('timeline','TIMELINE','La traccia AUDIO della timeline dello show: ha sempre la precedenza')}</span>`+
-    (n?`<button class="au-vban${n.on?' on':''}${n.ok===false?' bad':''}" data-au="vban" title="${esc(`Copia del mix in rete (VBAN) per Controller e PatchDeck: ${n.device||''}${n.error?' · '+n.error:''}. Vale in tutti i modi.`)}">VBAN ${n.on?'ON':'OFF'}<i style="width:${lv}%"></i></button>`:'');
+    (n?`<button class="au-vban${n.on?' on':''}${n.ok===false?' bad':''}" data-au="vban" title="${esc(`Copia del mix in rete (VBAN) per Controller e PatchDeck: ${n.device||''}${n.error?' · '+n.error:''}. Vale in tutti i modi.`)}">VBAN ${n.on?'ON':'OFF'}<i style="width:${lv}%"></i></button>`:'')+
+    auLightsHtml();
+}
+// Sorgente delle luci (copia per DMX Master su VB-Cable): mix della Console o audio dalla rete (VBAN dal
+// Controller, nota OPS 62). Con RETE scelta e rete muta il motore torna da solo sulla Console: bordo rosso.
+function auLightsHtml(){
+  const i=AU.lightsIn;if(!i)return'';
+  const net=i.source==='net',live=i.using==='net',lv=Math.round(Math.min(1,+i.level||0)*100);
+  const who=i.from?`${i.stream||'?'} da ${i.from}${i.rate?` · ${Math.round(i.rate/100)/10} kHz`:''}`:'nessun flusso ricevuto';
+  const t=`Luci (copia per DMX Master): ${net?'dalla RETE':'dalla CONSOLE'}. Ingresso ${i.device}: ${who}${i.lost?` · ${i.lost} pacchetti persi`:''}${i.other?` · ATTENZIONE: anche ${i.other} manda un flusso con questo nome (ignorato)`:''}${net&&!live?' · rete muta: le luci usano la Console':''}. Tocca per cambiare.`;
+  return`<button class="au-vban au-lin${net?' on':''}${net&&!live?' bad':''}" data-au="lightsrc" title="${esc(t)}">LUCI ← ${net?'RETE':'CONSOLE'}<i style="width:${i.ok?lv:0}%"></i></button>`;
 }
 async function auModeSet(k){
   const m=auMode();if(k===m)return;
@@ -426,7 +436,7 @@ async function auAutoStart(){
 }
 function auPaintLib(el){
   const box=el.querySelector('.au-lib');if(!box)return;
-  {const mb=box.querySelector('.au-modes'),n=AU.netOut,msig=JSON.stringify([auMode(),n&&[n.on,n.ok,Math.round((+n.level||0)*20)]]);
+  {const mb=box.querySelector('.au-modes'),n=AU.netOut,li=AU.lightsIn,msig=JSON.stringify([auMode(),n&&[n.on,n.ok,Math.round((+n.level||0)*20)],li&&[li.source,li.using,li.ok,li.from,li.stream,li.lost,Math.round((+li.level||0)*20)]]);
     if(mb&&mb._sig!==msig){mb._sig=msig;mb.innerHTML=auModesHtml()}}
   {const ab=box.querySelector('.au-auto'),a=G.audioAuto,h=auAutoHtml(),sig=a?.active?JSON.stringify({...a,now:a.now&&{...a.now,pos:Math.floor(a.now.pos)}}):'off';
     if(ab&&ab._sig!==sig){ab._sig=sig;ab.innerHTML=h;ab.classList.toggle('on',!!a?.active)}}
@@ -505,6 +515,7 @@ function auDown(e,el,w){
   else if(a==='autogo')auAutoStart();
   else if(a==='mode')auModeSet(b.dataset.k);
   else if(a==='vban'){if(AU.netOut)auCmd({cmd:'net.vban',value:!AU.netOut.on})}
+  else if(a==='lightsrc'){if(AU.lightsIn)auCmd({cmd:'lights.source',value:AU.lightsIn.source==='net'?'console':'net'})}
   else if(a==='autonext')emit({type:'audio_auto',action:'next'},true);
   else if(a==='autostop')emit({type:'audio_auto',action:'stop'},true);
   else if(a==='pladd')auAddToPlaylist(b.dataset.id);

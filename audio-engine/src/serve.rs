@@ -36,6 +36,10 @@ pub struct ServeOpts {
     /// copia del mix in rete (VBAN, vban.rs): indirizzi "IP[:porta],..." e nome del flusso
     pub vban: Option<String>,
     pub vban_name: String,
+    /// ingresso VBAN per le luci (vban_in.rs): "NOME[:porta]" ("*" = qualsiasi nome)
+    pub vban_in: Option<String>,
+    /// all'avvio luci dalla rete invece che dalla Console
+    pub lights_net: bool,
     /// orologio dello show (clock.rs): nome del master e broker MQTT
     pub clock: Option<String>,
     pub clock_broker: String,
@@ -232,6 +236,8 @@ struct Ctx {
     clients: Clients,
     /// uscita VBAN (None = non configurata): si accende e spegne con net.vban
     vban: Option<crate::vban::Queue>,
+    /// ingresso VBAN (None = non configurato): sorgente delle luci con lights.source
+    vin: Option<crate::vban_in::Shared>,
 }
 
 fn handle_text(ctx: &Arc<Ctx>, text: &str) {
@@ -248,6 +254,18 @@ fn handle_text(ctx: &Arc<Ctx>, text: &str) {
             }
             (None, _) => error_msg(&ctx.clients, "VBAN non configurato nel motore (opzione --vban)."),
             (_, None) => error_msg(&ctx.clients, "net.vban: serve value true/false"),
+        }
+        return;
+    }
+    if v.get("cmd").and_then(Value::as_str) == Some("lights.source") {
+        // sorgente della copia per le luci: mix della Console o audio dalla rete (VBAN in)
+        match (&ctx.vin, v.get("value").and_then(Value::as_str)) {
+            (Some(i), Some(s @ ("net" | "console"))) => {
+                i.set_net(s == "net");
+                println!("luci: sorgente {}", if s == "net" { "rete (VBAN)" } else { "Console" });
+            }
+            (None, _) => error_msg(&ctx.clients, "Ingresso VBAN non configurato nel motore (opzione --vban-in)."),
+            (_, _) => error_msg(&ctx.clients, "lights.source: serve value \"net\" o \"console\""),
         }
         return;
     }
@@ -511,7 +529,8 @@ fn open_tap(want: &str, rate: f64, tap: Hp, err_tx: Sender<String>, master: &str
     Ok((stream, OutputInfo { device: name, rate: fs, ok: true, error: None }))
 }
 
-fn open_output(want: &Option<String>, engine: &Arc<Mutex<Engine>>, err_tx: Sender<String>, hp: Hp, tap: Hp, vban: Option<crate::vban::Queue>, vban_rate: Arc<Mutex<f64>>) -> Result<(cpal::Stream, OutputInfo), String> {
+#[allow(clippy::too_many_arguments)]
+fn open_output(want: &Option<String>, engine: &Arc<Mutex<Engine>>, err_tx: Sender<String>, hp: Hp, tap: Hp, vban: Option<crate::vban::Queue>, vban_rate: Arc<Mutex<f64>>, vin: Option<crate::vban_in::Shared>) -> Result<(cpal::Stream, OutputInfo), String> {
     let dev = find_device(want)?;
     let name = dev.description().map(|n| n.to_string()).unwrap_or_else(|_| "?".into());
     let sup = dev.default_output_config().map_err(|e| e.to_string())?;
@@ -527,6 +546,7 @@ fn open_output(want: &Option<String>, engine: &Arc<Mutex<Engine>>, err_tx: Sende
         *r = fs;
     }
     let eng = engine.clone();
+    let mut net_buf: Vec<f32> = Vec::with_capacity(8192);
     let stream = dev
         .build_output_stream(
             cfg,
@@ -539,8 +559,11 @@ fn open_output(want: &Option<String>, engine: &Arc<Mutex<Engine>>, err_tx: Sende
                         }
                     }
                     if e.tap_ext() {
+                        // luci: dalla rete se scelta e viva, altrimenti il mix della Console
+                        let frames = e.tap_buf.len() / 2;
+                        let from_net = vin.as_ref().is_some_and(|i| i.pull(&mut net_buf, frames, fs, Instant::now()));
                         if let Ok(mut q) = tap.lock() {
-                            q.push(&e.tap_buf);
+                            q.push(if from_net { &net_buf } else { &e.tap_buf });
                         }
                         if let Some(v) = &vban {
                             crate::vban::push(v, &e.tap_buf);
@@ -589,7 +612,15 @@ fn null_clock(engine: Arc<Mutex<Engine>>, run: Arc<AtomicBool>, vban: Option<cra
     });
 }
 
-fn state_json(s: crate::engine::Snapshot, out: &OutputInfo, cue: &Option<OutputInfo>, tap: &Option<OutputInfo>, vban: &Option<OutputInfo>, net: Option<&crate::vban::Queue>) -> String {
+fn state_json(s: crate::engine::Snapshot, out: &OutputInfo, cue: &Option<OutputInfo>, tap: &Option<OutputInfo>, vban: &Option<OutputInfo>, net: Option<&crate::vban::Queue>, vin: Option<&crate::vban_in::Shared>) -> String {
+    let input = vin.map(|i| {
+        let st = i.status(Instant::now());
+        let name = if i.filter.is_empty() { "*".to_string() } else { i.filter.clone() };
+        json!({"kind": "vban", "role": "lights_in", "device": format!("VBAN \"{name}\" :{}", i.port),
+            "ok": st.fresh, "from": st.from.map(|a| a.ip().to_string()), "other": st.other.map(|a| a.ip().to_string()), "stream": st.name, "rate": st.rate,
+            "level": (st.level * 1000.0).round() / 1000.0, "lost": st.lost, "underruns": st.underruns,
+            "source": if st.net { "net" } else { "console" }, "using": if st.net && st.fresh { "net" } else { "console" }})
+    });
     let [da, db] = s.decks;
     let [ma, mb] = s.mix;
     json!({
@@ -604,6 +635,7 @@ fn state_json(s: crate::engine::Snapshot, out: &OutputInfo, cue: &Option<OutputI
             .chain(vban.iter().map(|c| json!({"kind": "vban", "role": "network", "device": c.device, "rate": c.rate, "ok": c.ok, "error": c.error,
                 "on": net.map(|q| q.is_on()).unwrap_or(false), "level": net.map(|q| (q.take_peak() * 1000.0).round() / 1000.0).unwrap_or(0.0)})))
             .collect::<Vec<_>>(),
+        "inputs": input.into_iter().collect::<Vec<_>>(),
     })
     .to_string()
 }
@@ -622,7 +654,25 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
     let listener = TcpListener::bind(("127.0.0.1", o.port)).map_err(|e| format!("porta {}: {e}", o.port))?;
     // coda VBAN creata qui: la usano sia i comandi (net.vban) sia l'uscita
     let vban_early = o.vban.as_ref().map(|_| crate::vban::new_queue(true));
-    let ctx = Arc::new(Ctx { root: o.root.clone(), cache: o.cache.clone(), tx, clients: clients.clone(), vban: vban_early.clone() });
+    // ingresso VBAN per le luci: il thread riceve subito, la callback audio legge se scelto
+    let vin: Option<crate::vban_in::Shared> = match &o.vban_in {
+        None => None,
+        Some(spec) => {
+            let (name, port) = crate::vban_in::parse_spec(spec)?;
+            let i = crate::vban_in::Input::new(&name, port, o.lights_net);
+            match crate::vban_in::start(i.clone()) {
+                Ok(()) => {
+                    println!("rete: ingresso VBAN \"{}\" sulla porta {port}, luci da {}", if name.is_empty() { "*" } else { &name }, if o.lights_net { "rete" } else { "Console" });
+                    Some(i)
+                }
+                Err(e) => {
+                    eprintln!("{e}");
+                    None
+                }
+            }
+        }
+    };
+    let ctx = Arc::new(Ctx { root: o.root.clone(), cache: o.cache.clone(), tx, clients: clients.clone(), vban: vban_early.clone(), vin: vin.clone() });
     {
         let ctx = ctx.clone();
         thread::spawn(move || {
@@ -681,7 +731,7 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
             info.error = Some("senza audio (--no-audio)".into());
             return;
         }
-        match open_output(&o.device, &engine, err_tx.clone(), hp.clone(), tap.clone(), vban_q.clone(), vban_rate.clone()) {
+        match open_output(&o.device, &engine, err_tx.clone(), hp.clone(), tap.clone(), vban_q.clone(), vban_rate.clone(), vin.clone()) {
             Ok((s, i)) => {
                 null_run.store(false, Ordering::Relaxed);
                 println!("uscita: {} ({} Hz)", i.device, i.rate);
@@ -748,7 +798,7 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
 
     loop {
         match orx.recv_timeout(Duration::from_millis(200)) {
-            Ok(Out::State(s)) => broadcast(&clients, &state_json(s, &info, &cue_info, &tap_info, &vban_info, vban_q.as_ref())),
+            Ok(Out::State(s)) => broadcast(&clients, &state_json(s, &info, &cue_info, &tap_info, &vban_info, vban_q.as_ref(), vin.as_ref())),
             Ok(Out::SaveCues { id, cue, hot }) => {
                 if let Err(e) = save_cues(&o.cache, &id, cue, &hot) {
                     error_msg(&clients, &format!("punti della traccia non salvati: {e}"));

@@ -52,6 +52,16 @@ async function main() {
     await p.ev(`(()=>{const T=window.__planciaTest;T.AU.netOut={role:'network',device:'VBAN "Gaia" -> 192.168.1.73:6980',ok:true,on:true,level:.6};return 1})()`);
     await sleep(300);
     check(/VBAN ON/.test(await p.ev(`document.querySelector('.au-vban')?.textContent||''`)) && await p.ev(`document.querySelector('.au-vban i').style.width`) === '60%', 'pulsante VBAN ON con livello 60%');
+    // sorgente luci: RETE scelta ma muta -> bordo rosso (il motore usa la Console); poi viva
+    await p.ev(`(()=>{const T=window.__planciaTest;T.AU.lightsIn={role:'lights_in',device:'VBAN "Controller" :6980',ok:false,from:null,stream:'',rate:0,level:0,lost:0,source:'net',using:'console'};return 1})()`);
+    await sleep(300);
+    const lin = () => p.ev(`(()=>{const b=document.querySelector('.au-lin');return b?JSON.stringify({t:b.textContent,bad:b.classList.contains('bad'),on:b.classList.contains('on'),title:b.title}):''})()`);
+    let L1 = JSON.parse(await lin() || '{}');
+    check(L1.t === 'LUCI ← RETE' && L1.bad && /rete muta/.test(L1.title), `luci dalla rete ma muta: rosso (${L1.t})`);
+    await p.ev(`(()=>{const T=window.__planciaTest;T.AU.lightsIn={...T.AU.lightsIn,ok:true,from:'192.168.1.73',stream:'Controller',rate:48000,level:.5,using:'net'};return 1})()`);
+    await sleep(300);
+    L1 = JSON.parse(await lin() || '{}');
+    check(L1.on && !L1.bad && /Controller da 192.168.1.73/.test(L1.title), 'luci dalla rete viva: verde, mittente nel suggerimento');
     // timeline accesa: comanda lei
     await p.ev(`(()=>{const T=window.__planciaTest;T.L.audioTimeline={active:true,cues:[]};return 1})()`);
     await sleep(300);

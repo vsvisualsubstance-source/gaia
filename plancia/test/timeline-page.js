@@ -30,7 +30,7 @@ async function main() {
     const live = JSON.parse(await p.ev(`(async()=>{const T=window.__planciaTest,z=ms=>new Promise(r=>setTimeout(r,ms)),pub=[];
       T.L=T.demoProjectLayout();T.render();await z(300);
       const d=T.G.devices['td-dmx-win']={...(T.G.devices['td-dmx-win']||{}),services:{show_active:'inactive'}};
-      const was={ok:T.G.ok,client:T.G.client};T.G.ok=true;T.G.client={publish:(t,b)=>pub.push([t,JSON.parse(b)])};
+      const was={ok:T.G.ok,client:T.G.client};T.G.ok=true;T.G.client={publish:(t,b)=>{if(!t.endsWith('/ping'))pub.push([t,JSON.parse(b)])}};   // il ping dell'orologio (ogni 2 s) non conta
       T.showClock.authority=true;T.showClock.state={playing:false,position:0,active:false,seq:1};T.showClock.receivedAt=Date.now();
       const w=T.L.pages.find(p=>p.name==='Timeline').widgets.find(x=>x.type==='timeline');
       [...document.querySelectorAll('#groups > *')].find(b=>b.textContent==='Show').click();await z(200);

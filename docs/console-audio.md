@@ -235,11 +235,23 @@ OPS e con la touring. A casa la .73 non e' raggiungibile dalla touring (rotta .6
 
 **Sorgente luci della DMX Master (13/11).** Su OPS e sulla touring la DMX legge **CABLE Output** (copia luci del
 motore), non piu' il Touch In 8001 dal Controller: in TCP costava ~50 ms a cook (DMX a 13 fps) e riportava a OPS il
-suo stesso mix. **Da fare, scenario inverso:** quando l'audio master entra nel Controller (mixer del DJ sul PC .73),
-il Controller lo manda alla DMX Master in **VBAN al contrario**, cosi' tutto il giro audio usa una sola tecnologia.
-Lato DMX su OPS/touring VB-Cable e' gia' occupato dalla copia luci del motore: la strada e' un ingresso VBAN nel
-motore (`--vban-in`, sorgente luci scelta fra Console e rete), senza un secondo cavo virtuale. Su una DMX senza
-motore (PC Win, Mac, Pi) basta un ricevitore VBAN verso un cavo virtuale.
+suo stesso mix.
+
+**Ingresso VBAN per le luci (13/11, nota OPS 62).** Quando l'audio master entra nel Controller (mixer del DJ sul
+PC .73), il Controller lo manda al motore in **VBAN al contrario** e la copia per le luci (VB-Cable -> DMX Master)
+la prende dalla rete invece che dalla Console: tutto il giro audio usa una sola tecnologia, niente Touch In.
+- Motore: `--vban-in NOME[:porta]` (`audio-engine/src/vban_in.rs`; OPS e touring: `--vban-in Controller`, porta
+  6980; `*` = qualsiasi nome). Accetta ogni formato PCM VBAN, frequenza e canali; ricampiona alla frequenza del
+  motore tenendo ~40 ms di coda. Un mittente alla volta: il primo vivo tiene il posto, un altro con lo stesso nome
+  e' ignorato e segnalato (`other`).
+- Sorgente luci: pulsante **LUCI ← CONSOLE / RETE** nella Libreria (comando `lights.source` `net`/`console`;
+  all'avvio Console, `--lights-net` per partire dalla rete). Con RETE scelta e rete muta da 0,5 s le luci tornano
+  da sole sulla Console (bordo rosso): mai luci al buio per un cavo.
+- Il VBAN in uscita resta il mix della Console.
+- Stato del motore: `inputs[]` con `role: lights_in`, `from`, `stream`, `rate`, `level`, `lost`, `source`, `using`.
+- Firewall del PC col motore: UDP 6980 in ingresso per `gaia-audio.exe` (un blocco del programma vince sul
+  permesso: se Windows ha creato "gaia-audio, Blocca" va tolto).
+- Su una DMX senza motore (PC Win, Mac, Pi) basta un ricevitore VBAN verso un cavo virtuale.
 
 L'uscita luci serve a DMX Master sulla stessa macchina: la DMX legge un
 ingresso audio, e la Z1 non ne ha. Con **VB-Audio Virtual Cable** il motore

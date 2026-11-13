@@ -10,6 +10,9 @@
 //!       --vban IP[,IP..]   copia del mix in rete col protocollo VBAN (UDP 6980 se manca ":porta"),
 //!                        per Controller e PatchDeck su un altro PC (VBAN Receptor -> VB-Cable)
 //!       --vban-name NOME   nome del flusso VBAN (default "Gaia", al massimo 16 caratteri)
+//!       --vban-in NOME[:P] ingresso VBAN (es. "Controller", "*" = qualsiasi; porta 6980) come
+//!                        sorgente delle luci al posto della Console (comando lights.source)
+//!       --lights-net       all'avvio luci dalla rete (se viva; muta = Console)
 //!       --clock ID         fa da master dell'orologio dello show (clock.rs) con questo nome
 //!       --clock-broker H:P broker MQTT dell'orologio (default 127.0.0.1:11883)
 //!       --clock-topic T    prefisso dei topic (default gaia/show/clock; altro solo per le prove)
@@ -32,6 +35,7 @@ mod engine;
 mod library;
 mod serve;
 mod vban;
+mod vban_in;
 
 use analysis::BpmRange;
 use cpal::traits::{DeviceTrait, HostTrait};
@@ -72,6 +76,8 @@ struct Opts {
     tap_device: Option<String>,
     vban: Option<String>,
     vban_name: String,
+    vban_in: Option<String>,
+    lights_net: bool,
     clock: Option<String>,
     clock_broker: String,
     clock_topic: String,
@@ -91,6 +97,8 @@ fn parse(args: &[String]) -> Result<Opts, String> {
         tap_device: None,
         vban: None,
         vban_name: "Gaia".into(),
+        vban_in: None,
+        lights_net: false,
         clock: None,
         clock_broker: "127.0.0.1:11883".into(),
         clock_topic: clock::TOPIC.into(),
@@ -109,6 +117,8 @@ fn parse(args: &[String]) -> Result<Opts, String> {
             "--tap-device" => o.tap_device = Some(it.next().ok_or("--tap-device senza nome")?.clone()),
             "--vban" => o.vban = Some(it.next().ok_or("--vban senza indirizzi")?.clone()),
             "--vban-name" => o.vban_name = it.next().ok_or("--vban-name senza nome")?.chars().take(16).collect(),
+            "--vban-in" => o.vban_in = Some(it.next().ok_or("--vban-in senza nome")?.clone()),
+            "--lights-net" => o.lights_net = true,
             "--clock" => o.clock = Some(it.next().ok_or("--clock senza nome")?.clone()),
             "--clock-broker" => o.clock_broker = it.next().ok_or("--clock-broker HOST:PORTA")?.clone(),
             "--clock-topic" => o.clock_topic = it.next().ok_or("--clock-topic senza prefisso")?.trim_end_matches('/').to_string(),
@@ -211,7 +221,7 @@ fn main() -> ExitCode {
             Ok(())
         }
         "analyze" => return analyze(&o),
-        "serve" => serve::serve(serve::ServeOpts { root: o.root, cache: o.cache, port: o.port, device: o.device, no_audio: o.no_audio, cue_device: o.cue_device, tap_device: o.tap_device, vban: o.vban, vban_name: o.vban_name, clock: o.clock, clock_broker: o.clock_broker, clock_topic: o.clock_topic }),
+        "serve" => serve::serve(serve::ServeOpts { root: o.root, cache: o.cache, port: o.port, device: o.device, no_audio: o.no_audio, cue_device: o.cue_device, tap_device: o.tap_device, vban: o.vban, vban_name: o.vban_name, vban_in: o.vban_in, lights_net: o.lights_net, clock: o.clock, clock_broker: o.clock_broker, clock_topic: o.clock_topic }),
         "grid" => grid(&o),
         "index" => {
             println!("{}", serde_json::to_string_pretty(&library::index(&o.root, &o.cache)).unwrap_or_default());
