@@ -68,6 +68,9 @@ async function startPlancia({ hooks = false, state = process.env.PLANCIA_STATE |
     if (process.platform === 'win32') {
       try { execFileSync('powershell', ['-NoProfile', '-Command', `Get-CimInstance Win32_Process -Filter "Name='msedge.exe' or Name='chrome.exe'" | ? { $_.CommandLine -match '${path.basename(tmp)}' } | % { Stop-Process -Id $_.ProcessId -Force }`], { stdio: 'ignore' }); } catch { /* niente da chiudere */ }
     }
+    // cartella della prova (copia della Plancia + profilo del browser, ~60 MB): via, se no si accumulano
+    // in %TEMP% (14/11: 2248 cartelle, 134 GB). Su Windows il browser appena chiuso tiene i file un attimo.
+    try { fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }); } catch { /* resta: la toglie la prossima pulizia */ }
   };
   process.on('exit', close);
   const bridge = spawn(process.execPath, ['bridge.js'], { cwd: app, stdio: 'ignore', env: {
