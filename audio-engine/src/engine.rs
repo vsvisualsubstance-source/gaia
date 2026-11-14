@@ -6,7 +6,7 @@
 //! tempo e fase sulle griglie, master. Il keylock per ora e' solo la scelta
 //! salvata (fase 2: signalsmith-stretch).
 
-use crate::dsp::{self, Biquad, Kind};
+use crate::dsp::{self, Biquad, Isolator};
 use serde::Serialize;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
@@ -279,7 +279,8 @@ struct Strip {
     filter: f64,
     fader: f64,
     cue: bool,
-    eq: [[Biquad; 2]; 3],
+    /// EQ a isolatore, uno per canale (sinistro, destro)
+    eq: [Isolator; 2],
     filt: [Biquad; 2],
     filt_on: bool,
     /// guadagno lineare attuale (inseguimento morbido, niente click)
@@ -292,15 +293,14 @@ struct Strip {
 
 impl Strip {
     fn new(fs: f64) -> Self {
-        let mut s = Strip { gain: 1.0, hi: 0.0, mid: 0.0, lo: 0.0, filter: 0.0, fader: 1.0, cue: false, eq: [[Biquad::unity(); 2]; 3], filt: [Biquad::unity(); 2], filt_on: false, g: 0.0, gc: 0.0, ramp: None, peak: 0.0 };
+        let mut s = Strip { gain: 1.0, hi: 0.0, mid: 0.0, lo: 0.0, filter: 0.0, fader: 1.0, cue: false, eq: [Isolator::new(fs); 2], filt: [Biquad::unity(); 2], filt_on: false, g: 0.0, gc: 0.0, ramp: None, peak: 0.0 };
         s.update_eq(fs);
         s
     }
     fn update_eq(&mut self, fs: f64) {
-        for ch in 0..2 {
-            self.eq[0][ch].set(Kind::LowShelf, fs, dsp::EQ_LOW_HZ, 0.7, dsp::eq_db(self.lo));
-            self.eq[1][ch].set(Kind::Peak, fs, dsp::EQ_MID_HZ, 0.8, dsp::eq_db(self.mid));
-            self.eq[2][ch].set(Kind::HighShelf, fs, dsp::EQ_HIGH_HZ, 0.7, dsp::eq_db(self.hi));
+        for i in self.eq.iter_mut() {
+            i.set_rate(fs);
+            i.set_knobs(self.lo, self.mid, self.hi);
         }
         match dsp::filter_setting(self.filter) {
             Some((k, f)) => {
@@ -995,10 +995,8 @@ impl Engine {
                 } else {
                     continue;
                 }
-                for eq in st.eq.iter_mut() {
-                    a = eq[0].run(a);
-                    b = eq[1].run(b);
-                }
+                a = st.eq[0].run(a);
+                b = st.eq[1].run(b);
                 if st.filt_on {
                     a = st.filt[0].run(a);
                     b = st.filt[1].run(b);
