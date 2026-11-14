@@ -51,6 +51,24 @@ async function main() {
       check(Math.abs(s.a - s.b) < 0.01, `SYNC: BPM di B = A (${s.a.toFixed(2)} / ${s.b.toFixed(2)})`);
       let dp = Math.abs(s.pa - s.pb); dp = Math.min(dp, 1 - dp);
       check(dp < 0.01, `SYNC: B in fase con A (scarto ${(dp * 100).toFixed(2)}% di battito)`);
+      // misuratore di fase: ~0 col SYNC; FINE +6 si legge come +6 ms; due tocchi rapidi = +2 (non piu' azzerati)
+      const ph0 = await p.ev(`window.__planciaTest.auPhaseMs('B')`);
+      check(ph0 != null && Math.abs(ph0) < 1.5, `fase di B dal misuratore: ${ph0?.toFixed(2)} ms`);
+      await p.ev(`(()=>{window.__planciaTest.auCmd({cmd:'deck.trim',deck:'B',ms:6});return 1})()`);
+      const ph6 = await p.ev(`window.__planciaTest.auPhaseMs('B')`);
+      check(Math.abs(ph6 - 6 - ph0) < 0.5, `FINE +6 ms si vede: ${ph6.toFixed(2)} ms`);
+      await p.ev(`(()=>{window.__planciaTest.auCmd({cmd:'deck.trim',deck:'B',ms:0});return 1})()`);
+      const tb = await p.ev(`(()=>{const r=document.querySelector('.au-deck[data-deck=B] [data-au=trim][data-v="1"]').getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2}})()`);
+      for (let i = 0; i < 2; i++) {
+        await p.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: tb.x, y: tb.y, button: 'left', buttons: 1, clickCount: 1 });
+        await p.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: tb.x, y: tb.y, button: 'left', buttons: 0, clickCount: 1 });
+        await sleep(120);
+      }
+      await sleep(200);
+      const fine = await p.ev(`[window.__planciaTest.AU.decks.B.trimMs,document.querySelector('.au-deck[data-deck=B] [data-au=trim0]').textContent]`);
+      check(fine[0] === 2 && /\+2 ms/.test(fine[1]), `due tocchi rapidi su FINE ›: ${fine[0]} ms ("${fine[1]}")`);
+      const phShot = arg('--shot-phase');
+      if (phShot) { await p.shot(path.resolve(phShot)); console.log('screenshot: ' + path.resolve(phShot)); }
     }
     if (pick) {
       // trascinare la forma d'onda del deck A (fermo, zoom 4 s): 120 px a sinistra = traccia avanti
