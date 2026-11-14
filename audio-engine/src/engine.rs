@@ -829,6 +829,10 @@ impl Engine {
         d.playing = false;
         d.preview = false;
         d.nudge = 0.0;
+        // FINE e' della traccia (griglia appena fuori): non passa alla prossima (14/11, si sommava fino a ±50 ms)
+        d.trim = 0.0;
+        d.phase_off = 0.0;
+        d.nudging = false;
         d.scrub = false;
         if d.sync {
             self.sync_tempo(k);
@@ -1269,6 +1273,18 @@ mod tests {
         assert_eq!(e.master, 0);
         assert_eq!(e.decks[0].tempo, tempo_a, "il master comanda, non cambia");
         assert!((e.decks[1].bpm() - e.decks[0].bpm()).abs() < 0.01, "B al tempo del master: {} vs {}", e.decks[1].bpm(), e.decks[0].bpm());
+    }
+
+    #[test]
+    fn fine_si_azzera_caricando() {
+        let (mut e, tx, _o) = engine();
+        tx.send(Msg::Loaded { deck: 1, track: clicks("a", 120.0, 0.0, 20.0), cue: 0.0, hot: [None; HOT], start: None, play: false, force: false }).unwrap();
+        run(&mut e, 0.01);
+        e.command(Cmd::Trim(1, -30.0));
+        assert!((e.decks[1].trim + 0.03).abs() < 1e-9);
+        tx.send(Msg::Loaded { deck: 1, track: clicks("b", 124.0, 0.0, 20.0), cue: 0.0, hot: [None; HOT], start: None, play: false, force: false }).unwrap();
+        run(&mut e, 0.01);
+        assert_eq!(e.decks[1].trim, 0.0, "traccia nuova: FINE a zero");
     }
 
     #[test]
