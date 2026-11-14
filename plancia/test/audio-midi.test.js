@@ -27,7 +27,9 @@ test('Z1: FX accende e spegne il filtro, ricordando la manopola', () => {
 test('Z1: centro (cuffia, cue mix, crossfader) e timeline', () => {
   const st = fresh();
   st.cue.B = true;
-  assert.deepEqual(z1Commands(cc(3, 2, 127), st), [{ cmd: 'mix.set', ch: 'B', values: { cue: false } }]);
+  // tasti cuffia a interruttore: il valore e' lo stato voluto, anche lo 0 (prima scartato)
+  assert.deepEqual(z1Commands(cc(3, 2, 0), st), [{ cmd: 'mix.set', ch: 'B', values: { cue: false } }], 'B spenta con 0');
+  assert.deepEqual(z1Commands(cc(3, 2, 127), st), [{ cmd: 'mix.set', ch: 'B', values: { cue: true } }], '127 = accesa, anche se lo era gia');
   assert.deepEqual(z1Commands(cc(3, 1, 127), st), [{ cmd: 'mix.set', ch: 'A', values: { cue: true } }]);
   assert.deepEqual(z1Commands(cc(3, 0, 127), st)[0].values, { cue_mix: 1 });
   assert.deepEqual(z1Commands(cc(3, 5, 0), st)[0].values, { xfader: -1 });

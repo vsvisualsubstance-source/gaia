@@ -62,10 +62,14 @@ function z1Commands(m, st) {
   if (m.ch === 3) {
     switch (m.n) {
       case 0: return [{ cmd: 'mix.set', values: { cue_mix: round(m.v / 127) } }];
-      case 1: case 2: { // cuffia A / B (alla pressione): inverte lo stato che ha il motore
-        if (m.v < 64) return [];
+      case 1: case 2: { // cuffia A / B
+        // La Z1 ha questi tasti a INTERRUTTORE: a ogni pressione manda il suo stato nuovo
+        // (127 acceso, 0 spento), niente al rilascio (visto nel registro diag il 14/11).
+        // Prima lo 0 si scartava come "rilascio" e il 127 invertiva: pressioni perse,
+        // doppio tocco e LED sfasato. Ora il valore e' lo stato voluto; il LED si
+        // riallinea dopo ogni pressione (startAudioMidi), cosi' Z1 e motore restano pari.
         const k = m.n === 1 ? 'A' : 'B';
-        return [{ cmd: 'mix.set', ch: k, values: { cue: !st.cue[k] } }];
+        return [{ cmd: 'mix.set', ch: k, values: { cue: m.v >= 64 } }];
       }
       case 5: return st.timeline ? [] : [{ cmd: 'mix.set', values: { xfader: round(bipolar(m.v)) } }];
     }
@@ -177,6 +181,9 @@ function startAudioMidi({ engine, isTimeline = () => false, log = console.log, t
       if (Z1_PORT.test(port || '')) {
         st.timeline = !!isTimeline();
         for (const c of z1Commands(m, st)) engine.send(c);
+        // tasto cuffia: la Z1 ha gia' cambiato il suo LED da sola; si rimanda lo stato vero
+        // del motore al prossimo giro dei LED (anche se per noi "non e' cambiato")
+        if (m.kind === 'cc' && m.ch === 3 && (m.n === 1 || m.n === 2)) delete sent[`3:${m.n}`];
         return true;
       }
       if (LPD8_PORT.test(port || '')) {
