@@ -91,7 +91,8 @@ function midiActions(m, layout, state, { laserId = 'laser-ops', clockTopic = 'ga
 // Senza nessun ingresso la libreria MIDI scrive un avviso a ogni controllo:
 // allora si controlla ogni idleMs invece che ogni pollMs (meno righe nel log;
 // con rtpMIDI attivo c'e' sempre almeno una porta).
-function startMidiIn({ onMessage, onPorts = () => {}, exclude = [], log = console.log, pollMs = 3000, idleMs = 15000 }) {
+// timed(nome, fn): misura le chiamate sincrone al MIDI di Windows (diag.js)
+function startMidiIn({ onMessage, onPorts = () => {}, exclude = [], log = console.log, pollMs = 3000, idleMs = 15000, timed = (w, f) => f() }) {
   let easymidi;
   try { easymidi = require('easymidi'); } catch { return { ports: () => [], stop() {} }; }
   const want = (process.env.MIDI_IN ?? '').trim();
@@ -102,7 +103,7 @@ function startMidiIn({ onMessage, onPorts = () => {}, exclude = [], log = consol
   const wanted = name => !ex.includes(name.toLowerCase()) && (!names || names.some(n => name.toLowerCase().includes(n)));
   const scan = () => {
     let list = [];
-    try { list = easymidi.getInputs(); } catch { /* nessun dispositivo */ }
+    try { list = timed('MIDI elenco porte', () => easymidi.getInputs()); } catch { /* nessun dispositivo */ }
     let changed = false;
     for (const name of list) if (!open.has(name) && wanted(name)) {
       try {

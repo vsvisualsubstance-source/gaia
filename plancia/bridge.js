@@ -354,6 +354,8 @@ function laserLive(address, args) {
 const audioEngine = require('./audio-engine-link').startAudioEngineLink({
   onMessage: s => { for (const c of wss.clients) if (c.readyState === 1) c.send(s); },
 });
+// diagnostica dei blocchi dei controller (diag.js): MIDI ricevuto, bridge fermo, motore muto
+const diag = require('./diag').startDiag({ engineStateAt: () => audioEngine.stateAt() });
 // Timeline AUDIO: brani e playlist sui deck del motore, seguendo l'orologio dello show (layout.audioTimeline)
 const audioTl = require('./audio-timeline').startAudioTimeline({ getDoc: () => persistedState?.layout?.audioTimeline, engine: audioEngine, lib: audioLib, broadcast });
 // Autoplay della Console Audio (audio-auto.js): playlist o libreria, in ordine o a caso, indipendente
@@ -361,7 +363,7 @@ const audioTl = require('./audio-timeline').startAudioTimeline({ getDoc: () => p
 const audioAuto = require('./audio-auto').startAudioAuto({ engine: audioEngine, lib: audioLib, broadcast,
   timelineActive: () => { const s = audioTl?.status(); return !!(s && s.active && s.clock); } });
 // Controller DJ (Traktor Kontrol Z1) sulla Console Audio: comandi al motore, LED dallo stato
-const audioMidi = require('./audio-midi').startAudioMidi({ engine: audioEngine, isTimeline: () => !!persistedState?.layout?.audioTimeline?.active || audioAuto.active() });
+const audioMidi = require('./audio-midi').startAudioMidi({ engine: audioEngine, timed: diag.timed, isTimeline: () => !!persistedState?.layout?.audioTimeline?.active || audioAuto.active() });
 const chase = require('./chase-engine').startChase({ broadcast, tdId: () => dmxMaster.id(),
   sendOsc: (address, args) => { const to = routeOf(address, 'default'); if (to) udp.send(encode(address, args), to.port, to.host, () => {}); }
 });
@@ -378,6 +380,7 @@ try {
   midiMqtt.on('error', () => { /* riprova da solo */ });
 } catch { /* pacchetto mqtt mancante: PANIC/GO/BACK solo OSC */ }
 function onMidi(m, port) {
+  diag.midi(port, m);
   broadcast({ type: 'midi_in', port, ...m });
   // la Z1 comanda la Console Audio; le sue mappature "Impara MIDI" restano possibili
   audioMidi.onMidi(m, port);
@@ -395,7 +398,7 @@ function onMidi(m, port) {
 // nessuna esclusione automatica: un controller (es. APC40) ha lo stesso nome in
 // ingresso e in uscita, e la Plancia non rimanda in MIDI cio' che arriva dal MIDI
 // (niente anelli). Con una porta virtuale di loopback limitare con MIDI_IN.
-const midiPorts = midiIn.startMidiIn({ onMessage: onMidi, onPorts: inputs => broadcast({ type: 'midi_ports', inputs }) });
+const midiPorts = midiIn.startMidiIn({ onMessage: onMidi, timed: diag.timed, onPorts: inputs => broadcast({ type: 'midi_ports', inputs }) });
 
 wss.on('connection', ws => {
   ws.send(hello());

@@ -140,7 +140,7 @@ function z1Leds(state, st) {
   return out;
 }
 
-function startAudioMidi({ engine, isTimeline = () => false, log = console.log }) {
+function startAudioMidi({ engine, isTimeline = () => false, log = console.log, timed = (w, f) => f() }) {
   const st = { fx: { A: true, B: true }, filter: { A: 0, B: 0 }, cue: { A: false, B: false }, timeline: false };
   const lpd = { timeline: false, eng: null, pads: {} };
   let holdT = null;   // ripetizione del pad FINE tenuto
@@ -160,13 +160,13 @@ function startAudioMidi({ engine, isTimeline = () => false, log = console.log })
     const s = engine.state();
     if (!s) return;
     st.cue = { A: !!s.mix?.A?.cue, B: !!s.mix?.B?.cue };
-    if (!openOut()) return;
+    if (!timed('MIDI apertura uscita Z1', openOut)) return;
     const want = z1Leds(s, st);
     try {
       for (const [k, v] of Object.entries(want)) {
         if (sent[k] === v) continue;
         const [ch, cc] = k.split(':').map(Number);
-        out.send('cc', { controller: cc, value: v, channel: ch - 1 });
+        timed('MIDI LED Z1', () => out.send('cc', { controller: cc, value: v, channel: ch - 1 }));
         sent[k] = v;
       }
     } catch { try { out.close(); } catch { /* gia' chiusa */ } out = null; }
