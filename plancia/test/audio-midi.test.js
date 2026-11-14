@@ -49,14 +49,12 @@ test('Z1: LED dallo stato del motore', () => {
 const lp = () => ({ timeline: false, eng: { decks: { A: { cue: 12.5 }, B: { cue: 3 } } }, pads: {} });
 const note = (n, v) => ({ kind: 'note', ch: 10, n, v, on: v > 0 });
 
-test('LPD8 NOTE: play, CUE tenuto, SYNC, STOP per riga', () => {
+test('LPD8 NOTE: play, CUE tenuto per riga', () => {
   const st = lp();
   assert.deepEqual(lpd8Commands(note(40, 100), st), [{ cmd: 'deck.play', deck: 'A' }]);
   assert.deepEqual(lpd8Commands(note(40, 0), st), []);
   assert.deepEqual(lpd8Commands(note(37, 90), st), [{ cmd: 'deck.cue_down', deck: 'B' }]);
   assert.deepEqual(lpd8Commands(note(37, 0), st), [{ cmd: 'deck.cue_up', deck: 'B' }]);
-  assert.deepEqual(lpd8Commands(note(42, 60), st), [{ cmd: 'deck.sync', deck: 'A' }]);
-  assert.deepEqual(lpd8Commands(note(43, 60), st), [{ cmd: 'deck.play', deck: 'A', value: false }, { cmd: 'deck.seek', deck: 'A', pos: 12.5 }]);
 });
 
 test('LPD8 CC: hot cue, la forza che cambia non ripete', () => {
@@ -67,18 +65,26 @@ test('LPD8 CC: hot cue, la forza che cambia non ripete', () => {
   assert.deepEqual(lpd8Commands(cc(10, 15, 1), st), [{ cmd: 'deck.hotcue', deck: 'B', n: 3, op: 'go' }]);
 });
 
-test('LPD8 jog: conta lo scatto, mai la velocita', () => {
+test('LPD8 pad 3 e 4: FINE -1 / +1 ms, tenuto segnato per ripetere', () => {
   const st = lp(); st.eng.decks.B.trim_ms = 3; st.now = 1000;
-  assert.deepEqual(lpd8Commands(cc(1, 73, 90), st), [], 'K4: il primo messaggio fa da riferimento');
-  assert.deepEqual(lpd8Commands(cc(1, 73, 92), st), [{ cmd: 'deck.trim', deck: 'B', ms: 5 }], 'K4 +2 scatti = +2 ms dal FINE del motore');
-  // girando svelto lo stato del motore e' ancora quello di prima: si parte dal proprio
-  assert.deepEqual(lpd8Commands(cc(1, 73, 95), st), [{ cmd: 'deck.trim', deck: 'B', ms: 8 }]);
-  st.now = 5000; st.eng.decks.B.trim_ms = 8;
-  assert.deepEqual(lpd8Commands(cc(1, 77, 10), st), []);
-  assert.deepEqual(lpd8Commands(cc(1, 77, 6), st), [{ cmd: 'deck.trim', deck: 'B', ms: 7 }], 'K8: 4 scatti = -1 ms');
-  assert.deepEqual(lpd8Commands(cc(1, 71, 0), st), []);
-  assert.deepEqual(lpd8Commands(cc(1, 71, 127), st), [{ cmd: 'deck.trim', deck: 'A', ms: 50 }], 'fino a +50 ms');
-  for (const n of [71, 73, 76, 77]) for (const v of [0, 64, 127]) assert.ok(lpd8Commands(cc(1, n, v), st).every(c => c.cmd === 'deck.trim'), 'nessun nudge dalle manopole');
+  assert.deepEqual(lpd8Commands(note(39, 100), st), [{ cmd: 'deck.trim', deck: 'B', ms: 4 }], 'pad 4 di B: +1 dal FINE del motore');
+  assert.equal(st.hold?.deck, 'B');
+  assert.deepEqual(lpd8Commands(note(39, 0), st), []);
+  assert.equal(st.hold, null, 'rilasciato: niente ripetizione');
+  // tocchi rapidi: lo stato del motore e' ancora quello di prima, si parte dal proprio
+  assert.deepEqual(lpd8Commands(note(38, 100), st), [{ cmd: 'deck.trim', deck: 'B', ms: 3 }], 'pad 3 di B: -1');
+  lpd8Commands(note(38, 0), st);
+  assert.deepEqual(lpd8Commands(note(42, 100), st), [{ cmd: 'deck.trim', deck: 'A', ms: -1 }], 'pad 3 di A');
+  st.timeline = true;
+  assert.deepEqual(lpd8Commands(note(42, 0), st), []);
+  assert.equal(st.hold, null, 'rilascio con la timeline: la ripetizione si ferma lo stesso');
+  st.timeline = false; st.now = 9000; st.eng.decks.A.trim_ms = 50;
+  assert.deepEqual(lpd8Commands(note(43, 100), st), [], 'oltre +50 ms niente');
+});
+
+test('LPD8 manopole: mai nudge, K2 K4 K7 K8 libere', () => {
+  const st = lp();
+  for (const n of [71, 73, 76, 77]) for (const v of [0, 64, 127]) assert.deepEqual(lpd8Commands(cc(1, n, v), st), []);
 });
 
 test('LPD8 manopole e timeline', () => {

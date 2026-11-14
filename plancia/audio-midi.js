@@ -16,16 +16,16 @@
 // Akai LPD8 mk2 (porta "LPD8 mk2"), programma di fabbrica, letta dal vivo il
 // 2026-11-05: riga di sopra = deck A, riga di sotto = deck B.
 //   pad modo NOTE (note 40-43 sopra, 36-39 sotto, qualsiasi canale):
-//     1° ▶/❚❚, 2° CUE (stile CDJ, tenuto = preascolto), 3° SYNC, 4° STOP (ferma e torna al cue)
+//     1° ▶/❚❚, 2° CUE (stile CDJ, tenuto = preascolto), 3° FINE −1 ms, 4° FINE +1 ms
+//     (14/11: al posto di SYNC e STOP, che restano in Plancia). FINE = fase del deck
+//     spostata di poco, come col piatto: la velocita' non cambia e il SYNC la tiene;
+//     tenuto continua (dopo 0,45 s, ogni 90 ms). Fino a ±50 ms.
 //   pad modo CC (canale 10, CC 16-19 sopra, 12-15 sotto; valore = forza, 0 = rilascio):
 //     hot cue 1-4 del deck (vuoto = salva, pieno = salta)
-//   manopole K1-K8 (canale 1, CC 70-77): K1 tempo A, K2 jog A, K3 tempo B,
-//     K4 jog B, K5 volume cuffia, K6 master, K7 jog fine A, K8 jog fine B
-//   JOG (14/11, come il piatto): conta di quanto giri, non dove sta la manopola;
-//     ogni scatto sposta la fase del deck (FINE) di 1 ms (K2/K4) o 0,25 ms (K7/K8),
-//     fino a ±50 ms. La velocita' non cambia mai e il SYNC tiene la nuova posizione.
-//     Prima K2/K4 erano un nudge assoluto: lasciata fuori centro, la manopola teneva
-//     il deck spinto (anche del 2%) e sospendeva l'aggancio -> il mix perdeva il tempo.
+//   manopole K1-K8 (canale 1, CC 70-77): K1 tempo A, K3 tempo B, K5 volume cuffia,
+//     K6 master; K2 K4 K7 K8 libere (14/11). Prima K2/K4 erano un nudge assoluto:
+//     lasciata fuori centro, la manopola teneva il deck spinto (anche del 2%) e
+//     sospendeva l'aggancio -> il mix perdeva il tempo. Mai piu' nudge da manopola.
 // Con la traccia AUDIO in TIMELINE i comandi dei deck dell'LPD8 si ignorano
 // (li comanda la timeline); cuffia e master restano a mano.
 
@@ -77,18 +77,13 @@ const LPD8_PORT = /lpd8/i;
 const LPD_ROWS = { 40: ['A', 0], 41: ['A', 1], 42: ['A', 2], 43: ['A', 3], 36: ['B', 0], 37: ['B', 1], 38: ['B', 2], 39: ['B', 3] };
 const LPD_CC_PADS = { 16: ['A', 0], 17: ['A', 1], 18: ['A', 2], 19: ['A', 3], 12: ['B', 0], 13: ['B', 1], 14: ['B', 2], 15: ['B', 3] };
 
-// jog: lo scatto della manopola (differenza dal valore di prima) sposta la fase fine del deck.
-// Il primo messaggio di una manopola fa solo da riferimento. La fase di partenza e' quella del
-// motore, salvo un jog appena fatto (lo stato del motore puo' essere di prima: girando svelto
-// si perderebbero scatti).
-const JOG_MS = { 2: 1, 4: 1, 7: 0.25, 8: 0.25 };
-function lpdJog(k, v, st) {
-  st.knobs = st.knobs || {}; st.trim = st.trim || {};
-  const prev = st.knobs[k]; st.knobs[k] = v;
-  if (st.timeline || prev == null || prev === v) return [];
-  const deck = k === 2 || k === 7 ? 'A' : 'B', now = st.now ?? Date.now(), mine = st.trim[deck];
+// FINE: sposta la fase fine del deck di `step` ms. Si parte dal valore del motore, salvo un passo
+// appena fatto (lo stato del motore puo' essere di prima: col pad tenuto si perderebbero passi).
+function lpdTrimStep(deck, step, st) {
+  st.trim = st.trim || {};
+  const now = st.now ?? Date.now(), mine = st.trim[deck];
   const cur = mine && now - mine.at < 600 ? mine.ms : +st.eng?.decks?.[deck]?.trim_ms || 0;
-  const ms = Math.max(-50, Math.min(50, Math.round((cur + (v - prev) * JOG_MS[k]) * 100) / 100));
+  const ms = Math.max(-50, Math.min(50, Math.round((cur + step) * 100) / 100));
   st.trim[deck] = { ms, at: now };
   return ms === cur ? [] : [{ cmd: 'deck.trim', deck, ms }];
 }
@@ -102,16 +97,21 @@ function lpd8Commands(m, st) {
   if (pad) {
     const key = pad.join(':'), was = !!st.pads[key];
     st.pads[key] = down;
+    if (!down && st.hold?.key === key) st.hold = null;   // sempre, anche con la timeline
     if (st.timeline) return [];
     const [mode, deck, i] = pad;
     if (down === was) return [];      // forza che cambia mentre il pad e' tenuto
     if (mode === 'c') return down ? [{ cmd: 'deck.hotcue', deck, n: i, op: 'go' }] : [];
     if (i === 1) return [{ cmd: down ? 'deck.cue_down' : 'deck.cue_up', deck }];
+    // FINE −/+: st.hold = pad tenuto, per la ripetizione (startAudioMidi)
+    if (i >= 2) {
+      const step = i === 2 ? -1 : 1;
+      if (!down) return [];
+      st.hold = { key, deck, step };
+      return lpdTrimStep(deck, step, st);
+    }
     if (!down) return [];
-    if (i === 0) return [{ cmd: 'deck.play', deck }];
-    if (i === 2) return [{ cmd: 'deck.sync', deck }];
-    const cue = st.eng?.decks?.[deck]?.cue;
-    return [{ cmd: 'deck.play', deck, value: false }, ...(Number.isFinite(cue) ? [{ cmd: 'deck.seek', deck, pos: cue }] : [])];
+    return [{ cmd: 'deck.play', deck }];
   }
   if (m.kind === 'cc' && m.ch === 1 && m.n >= 70 && m.n <= 77) {
     const k = m.n - 69, x = m.v / 127;
@@ -119,7 +119,6 @@ function lpd8Commands(m, st) {
       case 1: case 3: return st.timeline ? [] : [{ cmd: 'deck.tempo', deck: k === 1 ? 'A' : 'B', value: round(bipolar(m.v)) }];
       case 5: return [{ cmd: 'mix.set', values: { cue_level: round(x) } }];
       case 6: return [{ cmd: 'mix.set', values: { master: round(x) } }];
-      case 2: case 4: case 7: case 8: return lpdJog(k, m.v, st);
     }
   }
   return [];
@@ -144,6 +143,7 @@ function z1Leds(state, st) {
 function startAudioMidi({ engine, isTimeline = () => false, log = console.log }) {
   const st = { fx: { A: true, B: true }, filter: { A: 0, B: 0 }, cue: { A: false, B: false }, timeline: false };
   const lpd = { timeline: false, eng: null, pads: {} };
+  let holdT = null;   // ripetizione del pad FINE tenuto
   let out = null, outTried = 0, sent = {};
   const openOut = () => {
     if (out || Date.now() - outTried < 10000) return out;
@@ -182,12 +182,23 @@ function startAudioMidi({ engine, isTimeline = () => false, log = console.log })
       if (LPD8_PORT.test(port || '')) {
         lpd.timeline = !!isTimeline();
         lpd.eng = engine.state();
+        const was = lpd.hold;
         for (const c of lpd8Commands(m, lpd)) engine.send(c);
+        // pad FINE tenuto: ripete dopo 0,45 s ogni 90 ms, finche' non si rilascia
+        if (lpd.hold !== was) {
+          clearTimeout(holdT); clearInterval(holdT); holdT = null;
+          const h = lpd.hold;
+          if (h) holdT = setTimeout(() => { holdT = setInterval(() => {
+            if (lpd.hold !== h || isTimeline()) { clearInterval(holdT); return; }
+            lpd.eng = engine.state();
+            for (const c of lpdTrimStep(h.deck, h.step, lpd)) engine.send(c);
+          }, 90); }, 450);
+        }
         return true;
       }
       return false;
     },
-    stop() { clearInterval(leds); try { out?.close(); } catch { /* niente */ } },
+    stop() { clearInterval(leds); clearTimeout(holdT); clearInterval(holdT); try { out?.close(); } catch { /* niente */ } },
   };
 }
 
