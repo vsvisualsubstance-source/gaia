@@ -67,15 +67,24 @@ test('LPD8 CC: hot cue, la forza che cambia non ripete', () => {
   assert.deepEqual(lpd8Commands(cc(10, 15, 1), st), [{ cmd: 'deck.hotcue', deck: 'B', n: 3, op: 'go' }]);
 });
 
+test('LPD8 jog: conta lo scatto, mai la velocita', () => {
+  const st = lp(); st.eng.decks.B.trim_ms = 3; st.now = 1000;
+  assert.deepEqual(lpd8Commands(cc(1, 73, 90), st), [], 'K4: il primo messaggio fa da riferimento');
+  assert.deepEqual(lpd8Commands(cc(1, 73, 92), st), [{ cmd: 'deck.trim', deck: 'B', ms: 5 }], 'K4 +2 scatti = +2 ms dal FINE del motore');
+  // girando svelto lo stato del motore e' ancora quello di prima: si parte dal proprio
+  assert.deepEqual(lpd8Commands(cc(1, 73, 95), st), [{ cmd: 'deck.trim', deck: 'B', ms: 8 }]);
+  st.now = 5000; st.eng.decks.B.trim_ms = 8;
+  assert.deepEqual(lpd8Commands(cc(1, 77, 10), st), []);
+  assert.deepEqual(lpd8Commands(cc(1, 77, 6), st), [{ cmd: 'deck.trim', deck: 'B', ms: 7 }], 'K8: 4 scatti = -1 ms');
+  assert.deepEqual(lpd8Commands(cc(1, 71, 0), st), []);
+  assert.deepEqual(lpd8Commands(cc(1, 71, 127), st), [{ cmd: 'deck.trim', deck: 'A', ms: 50 }], 'fino a +50 ms');
+  for (const n of [71, 73, 76, 77]) for (const v of [0, 64, 127]) assert.ok(lpd8Commands(cc(1, n, v), st).every(c => c.cmd === 'deck.trim'), 'nessun nudge dalle manopole');
+});
+
 test('LPD8 manopole e timeline', () => {
   const st = lp();
   assert.deepEqual(lpd8Commands(cc(1, 70, 127), st), [{ cmd: 'deck.tempo', deck: 'A', value: 1 }]);
-  assert.deepEqual(lpd8Commands(cc(1, 73, 0), st), [{ cmd: 'deck.nudge', deck: 'B', value: -0.04 }]);
-  assert.deepEqual(lpd8Commands(cc(1, 71, 64), st), [{ cmd: 'deck.nudge', deck: 'A', value: 0 }]);
   assert.deepEqual(lpd8Commands(cc(1, 74, 127), st), [{ cmd: 'mix.set', values: { cue_level: 1 } }]);
-  assert.deepEqual(lpd8Commands(cc(1, 76, 0), st), [{ cmd: 'deck.trim', deck: 'A', ms: -20 }], 'K7 fase fine A');
-  assert.deepEqual(lpd8Commands(cc(1, 77, 64), st), [{ cmd: 'deck.trim', deck: 'B', ms: 0 }], 'K8 al centro');
-  assert.deepEqual(lpd8Commands(cc(1, 77, 127), st), [{ cmd: 'deck.trim', deck: 'B', ms: 20 }]);
   st.timeline = true;
   assert.deepEqual(lpd8Commands(note(40, 100), st), [], 'timeline: niente play');
   assert.deepEqual(lpd8Commands(cc(1, 70, 10), st), [], 'timeline: niente tempo');

@@ -19,9 +19,13 @@
 //     1° ▶/❚❚, 2° CUE (stile CDJ, tenuto = preascolto), 3° SYNC, 4° STOP (ferma e torna al cue)
 //   pad modo CC (canale 10, CC 16-19 sopra, 12-15 sotto; valore = forza, 0 = rilascio):
 //     hot cue 1-4 del deck (vuoto = salva, pieno = salta)
-//   manopole K1-K8 (canale 1, CC 70-77): K1 tempo A, K2 nudge A, K3 tempo B,
-//     K4 nudge B, K5 volume cuffia, K6 master, K7 fase fine A, K8 fase fine B
-//     (al centro 0, ai lati fino a 20 ms avanti/indietro; il SYNC la mantiene)
+//   manopole K1-K8 (canale 1, CC 70-77): K1 tempo A, K2 jog A, K3 tempo B,
+//     K4 jog B, K5 volume cuffia, K6 master, K7 jog fine A, K8 jog fine B
+//   JOG (14/11, come il piatto): conta di quanto giri, non dove sta la manopola;
+//     ogni scatto sposta la fase del deck (FINE) di 1 ms (K2/K4) o 0,25 ms (K7/K8),
+//     fino a ±50 ms. La velocita' non cambia mai e il SYNC tiene la nuova posizione.
+//     Prima K2/K4 erano un nudge assoluto: lasciata fuori centro, la manopola teneva
+//     il deck spinto (anche del 2%) e sospendeva l'aggancio -> il mix perdeva il tempo.
 // Con la traccia AUDIO in TIMELINE i comandi dei deck dell'LPD8 si ignorano
 // (li comanda la timeline); cuffia e master restano a mano.
 
@@ -73,6 +77,22 @@ const LPD8_PORT = /lpd8/i;
 const LPD_ROWS = { 40: ['A', 0], 41: ['A', 1], 42: ['A', 2], 43: ['A', 3], 36: ['B', 0], 37: ['B', 1], 38: ['B', 2], 39: ['B', 3] };
 const LPD_CC_PADS = { 16: ['A', 0], 17: ['A', 1], 18: ['A', 2], 19: ['A', 3], 12: ['B', 0], 13: ['B', 1], 14: ['B', 2], 15: ['B', 3] };
 
+// jog: lo scatto della manopola (differenza dal valore di prima) sposta la fase fine del deck.
+// Il primo messaggio di una manopola fa solo da riferimento. La fase di partenza e' quella del
+// motore, salvo un jog appena fatto (lo stato del motore puo' essere di prima: girando svelto
+// si perderebbero scatti).
+const JOG_MS = { 2: 1, 4: 1, 7: 0.25, 8: 0.25 };
+function lpdJog(k, v, st) {
+  st.knobs = st.knobs || {}; st.trim = st.trim || {};
+  const prev = st.knobs[k]; st.knobs[k] = v;
+  if (st.timeline || prev == null || prev === v) return [];
+  const deck = k === 2 || k === 7 ? 'A' : 'B', now = st.now ?? Date.now(), mine = st.trim[deck];
+  const cur = mine && now - mine.at < 600 ? mine.ms : +st.eng?.decks?.[deck]?.trim_ms || 0;
+  const ms = Math.max(-50, Math.min(50, Math.round((cur + (v - prev) * JOG_MS[k]) * 100) / 100));
+  st.trim[deck] = { ms, at: now };
+  return ms === cur ? [] : [{ cmd: 'deck.trim', deck, ms }];
+}
+
 // messaggio dell'LPD8 -> comandi. st: {timeline, eng (stato del motore), pads: {chiave: premuto}}
 function lpd8Commands(m, st) {
   // pad: pressione e rilascio (in CC il valore e' la forza, 0 = rilascio)
@@ -97,12 +117,9 @@ function lpd8Commands(m, st) {
     const k = m.n - 69, x = m.v / 127;
     switch (k) {
       case 1: case 3: return st.timeline ? [] : [{ cmd: 'deck.tempo', deck: k === 1 ? 'A' : 'B', value: round(bipolar(m.v)) }];
-      // nudge: al centro 0, ai lati spinge o frena fino al 4%
-      case 2: case 4: return st.timeline ? [] : [{ cmd: 'deck.nudge', deck: k === 2 ? 'A' : 'B', value: round(bipolar(m.v) * 0.04) }];
       case 5: return [{ cmd: 'mix.set', values: { cue_level: round(x) } }];
       case 6: return [{ cmd: 'mix.set', values: { master: round(x) } }];
-      // fase fine: sposta il deck di qualche ms rispetto al master e ci resta (passi da 0,5 ms)
-      case 7: case 8: return st.timeline ? [] : [{ cmd: 'deck.trim', deck: k === 7 ? 'A' : 'B', ms: Math.round(bipolar(m.v) * 40) / 2 }];
+      case 2: case 4: case 7: case 8: return lpdJog(k, m.v, st);
     }
   }
   return [];
