@@ -98,3 +98,12 @@ test('LPD8 manopole e timeline', () => {
   assert.deepEqual(lpd8Commands(cc(1, 70, 10), st), [], 'timeline: niente tempo');
   assert.equal(lpd8Commands(cc(1, 75, 50), st).length, 1, 'timeline: master a mano');
 });
+
+test('Z1 VU: al massimo ogni 200 ms e solo con cambi di almeno 3 passi', () => {
+  const { meterDue } = require('../audio-midi');
+  assert.equal(meterDue(50, undefined, 0), true, 'primo invio');
+  assert.equal(meterDue(90, { v: 50, at: 1000 }, 1100), false, 'troppo presto');
+  assert.equal(meterDue(52, { v: 50, at: 1000 }, 1300), false, 'cambio piccolo');
+  assert.equal(meterDue(53, { v: 50, at: 1000 }, 1300), true);
+  assert.equal(meterDue(0, { v: 1, at: 1000 }, 1300), true, 'silenzio: si spegne');
+});

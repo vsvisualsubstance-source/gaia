@@ -363,7 +363,7 @@ const audioTl = require('./audio-timeline').startAudioTimeline({ getDoc: () => p
 const audioAuto = require('./audio-auto').startAudioAuto({ engine: audioEngine, lib: audioLib, broadcast,
   timelineActive: () => { const s = audioTl?.status(); return !!(s && s.active && s.clock); } });
 // Controller DJ (Traktor Kontrol Z1) sulla Console Audio: comandi al motore, LED dallo stato
-const audioMidi = require('./audio-midi').startAudioMidi({ engine: audioEngine, timed: diag.timed, isTimeline: () => !!persistedState?.layout?.audioTimeline?.active || audioAuto.active() });
+const audioMidi = require('./audio-midi').startAudioMidi({ engine: audioEngine, timed: diag.timed, note: diag.note, isTimeline: () => !!persistedState?.layout?.audioTimeline?.active || audioAuto.active() });
 const chase = require('./chase-engine').startChase({ broadcast, tdId: () => dmxMaster.id(),
   sendOsc: (address, args) => { const to = routeOf(address, 'default'); if (to) udp.send(encode(address, args), to.port, to.host, () => {}); }
 });

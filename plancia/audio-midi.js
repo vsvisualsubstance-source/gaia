@@ -144,18 +144,24 @@ function z1Leds(state, st) {
   return out;
 }
 
-function startAudioMidi({ engine, isTimeline = () => false, log = console.log, timed = (w, f) => f() }) {
+// VU meter della Z1 (3:3, 3:4): al massimo 5 volte al secondo e solo se cambiano di almeno 3 passi.
+// 14/11/2026: con ~30 messaggi al secondo (ogni 66 ms) la Z1 si e' piantata suonando: niente MIDI
+// ne' in entrata ne' in uscita (VU fermi) finche' non si e' rimessa in modalita' MIDI (MODE + i due CUE).
+const METER_MS = 200, METER_STEP = 3;
+const meterDue = (v, last, now) => last == null || (now - last.at >= METER_MS && (Math.abs(v - last.v) >= METER_STEP || (v === 0 && last.v !== 0)));
+
+function startAudioMidi({ engine, isTimeline = () => false, log = console.log, timed = (w, f) => f(), note = () => {} }) {
   const st = { fx: { A: true, B: true }, filter: { A: 0, B: 0 }, cue: { A: false, B: false }, timeline: false };
   const lpd = { timeline: false, eng: null, pads: {} };
   let holdT = null;   // ripetizione del pad FINE tenuto
-  let out = null, outTried = 0, sent = {};
+  let out = null, outTried = 0, sent = {}, meterAt = {};
   const openOut = () => {
     if (out || Date.now() - outTried < 10000) return out;
     outTried = Date.now();
     try {
       const easymidi = require('easymidi');
       const name = easymidi.getOutputs().find(n => Z1_PORT.test(n));
-      if (name) { out = new easymidi.Output(name); sent = {}; log(`Console Audio: LED su ${name}`); }
+      if (name) { out = new easymidi.Output(name); sent = {}; meterAt = {}; log(`Console Audio: LED su ${name}`); }
     } catch { out = null; }
     return out;
   };
@@ -165,13 +171,17 @@ function startAudioMidi({ engine, isTimeline = () => false, log = console.log, t
     if (!s) return;
     st.cue = { A: !!s.mix?.A?.cue, B: !!s.mix?.B?.cue };
     if (!timed('MIDI apertura uscita Z1', openOut)) return;
-    const want = z1Leds(s, st);
+    const want = z1Leds(s, st), now = Date.now();
     try {
       for (const [k, v] of Object.entries(want)) {
         if (sent[k] === v) continue;
+        const meter = k === '3:3' || k === '3:4';
+        if (meter && !meterDue(v, meterAt[k], now)) continue;
         const [ch, cc] = k.split(':').map(Number);
         timed('MIDI LED Z1', () => out.send('cc', { controller: cc, value: v, channel: ch - 1 }));
         sent[k] = v;
+        if (meter) meterAt[k] = { v, at: now };
+        note(`-> Z1 cc ch${ch} ${cc} ${v}`);
       }
     } catch { try { out.close(); } catch { /* gia' chiusa */ } out = null; }
   }, 66);
@@ -209,4 +219,4 @@ function startAudioMidi({ engine, isTimeline = () => false, log = console.log, t
   };
 }
 
-module.exports = { z1Commands, z1Leds, meterLed, lpd8Commands, startAudioMidi };
+module.exports = { z1Commands, z1Leds, meterLed, meterDue, lpd8Commands, startAudioMidi };
