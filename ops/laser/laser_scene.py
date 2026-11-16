@@ -59,7 +59,8 @@ def wave(x, shape="sine"):
 
 
 def tempo_rate(sc, bpm):
-    """Quanto corre l'orologio della scena: 1, o bpm / bpm di riferimento se a tempo."""
+    """Quanto corre l'orologio della scena: 1, o bpm / bpm di riferimento se a tempo.
+    Scena composta: 1 (ogni livello corre col suo, vedi animate)."""
     tp = sc.get("tempo") or {}
     if not tp.get("sync") or not bpm:
         return 1.0
@@ -99,10 +100,35 @@ def _clean_strokes(raw, limit):
     return strokes, total
 
 
+MAX_LAYERS = 4         # scena composta: livelli al massimo (ognuno toglie tempo di disegno agli altri)
+
+
+def _clean_layers(s):
+    """Scena composta (16/11): {"id", "name", "layers": [{"scene": {scena}, "x", "y", "scale",
+    "rotate", "bright"}]}. Ogni livello e' una scena normale con la sua animazione (anche a tempo),
+    poi spostata, scalata, ruotata e attenuata. Niente composte dentro composte."""
+    layers = []
+    for ly in (s.get("layers") or [])[:MAX_LAYERS]:
+        if not isinstance(ly, dict) or not isinstance(ly.get("scene"), dict) or ly["scene"].get("layers"):
+            continue
+        try:
+            sub = clean_scene(ly["scene"])
+        except ValueError:
+            continue
+        layers.append({"scene": sub, "x": _num(ly.get("x"), -1, 1, 0.0), "y": _num(ly.get("y"), -1, 1, 0.0),
+                       "scale": _num(ly.get("scale"), 0.05, 2, 1.0), "rotate": _num(ly.get("rotate"), -360, 360, 0.0),
+                       "bright": _num(ly.get("bright"), 0, 1, 1.0)})
+    if not layers:
+        raise ValueError("scena composta senza livelli")
+    return {"id": str(s.get("id") or "")[:64], "name": str(s.get("name") or "Composta")[:64], "layers": layers}
+
+
 def clean_scene(s):
     """Valida e limita una scena arrivata via MQTT; ValueError se inservibile."""
     if not isinstance(s, dict):
         raise ValueError("scena non valida")
+    if s.get("layers") is not None:
+        return _clean_layers(s)
     frames, budget = [], MAX_FRAME_POINTS
     for f in (s.get("frames") or [])[:MAX_FRAMES]:
         st, n = _clean_strokes((f or {}).get("strokes") if isinstance(f, dict) else None, min(MAX_POINTS, budget))
@@ -147,9 +173,21 @@ def _stroke_rgb(sc, i, t, strokes=None):
     return c["rgb"]
 
 
-def animate(sc, t, level=0.0, kick=0.0):
+def animate(sc, t, level=0.0, kick=0.0, bpm=None):
     """Punti (x, y, r, g, b) del frame al tempo t (s). level 0..1 = audio,
-    kick 0..1 = lampo del colpo (decade). Colori 0..255 per laser_render."""
+    kick 0..1 = lampo del colpo (decade). Colori 0..255 per laser_render.
+    Scena composta: i livelli uno dopo l'altro (il render salta al buio fra uno e l'altro);
+    bpm serve ai livelli a tempo."""
+    if sc.get("layers"):
+        out = []
+        for ly in sc["layers"]:
+            sub = ly["scene"]
+            r = math.radians(ly["rotate"])
+            cr, sr, k, br = math.cos(r), math.sin(r), ly["scale"], ly["bright"]
+            for x, y, cr_, cg, cb in animate(sub, t * tempo_rate(sub, bpm), level, kick):
+                out.append(((x * cr - y * sr) * k + ly["x"], (x * sr + y * cr) * k + ly["y"],
+                            int(cr_ * br), int(cg * br), int(cb * br)))
+        return out
     a, au = sc["anim"], sc["audio"]
     s = a["scale"] * (1 - a["pulse"] * 0.5 + a["pulse"] * 0.5 * wave(a["pulse_hz"] * t, a.get("pulse_shape", "sine")))
     bright = 1.0

@@ -109,7 +109,20 @@ function lzsTempoRate(sc,bpm){const tp=sc?.tempo;return tp?.sync&&bpm>0?Math.max
 // rotazione attorno all'asse verticale, con un filo di prospettiva (laser_scene.spin_y)
 const LZS_PERSPECTIVE=.25;
 function lzsSpinY(x,y,c,s){const f=1/(1-LZS_PERSPECTIVE*x*s);return[x*c*f,y*f]}
-function lzsAnimate(sc,t,level=0,kick=0){
+// ---- scena composta (16/11): livelli che puntano ad altre scene, {ref,x,y,scale,rotate,bright}.
+// Al gateway e all'anteprima va con le scene dentro (come laser-compose.js del bridge).
+const LZS_MAX_LAYERS=4;
+function lzsResolve(sc,scenes=laserScenes()){
+  if(!sc||!Array.isArray(sc.layers)||sc.layers.some(l=>l.scene))return sc;
+  const by=new Map(scenes.map(s=>[s.id,s]));
+  return{id:sc.id,name:sc.name,layers:sc.layers.map(l=>({l,s:by.get(l.ref)})).filter(x=>x.s&&!x.s.layers)
+    .map(({l,s})=>({scene:s,x:+l.x||0,y:+l.y||0,scale:l.scale??1,rotate:+l.rotate||0,bright:l.bright??1}))};
+}
+function lzsAnimate(sc,t,level=0,kick=0,bpm=0){
+  if(sc?.layers){const out=[];
+    for(const ly of lzsResolve(sc).layers){const r=ly.rotate*Math.PI/180,cr=Math.cos(r),sr=Math.sin(r),k=ly.scale,b=ly.bright;
+      for(const [x,y,R,G,B] of lzsAnimate(ly.scene,t*lzsTempoRate(ly.scene,bpm),level,kick))out.push([(x*cr-y*sr)*k+ly.x,(x*sr+y*cr)*k+ly.y,Math.floor(R*b),Math.floor(G*b),Math.floor(B*b)])}
+    return out}
   const a={rotate:0,rotate_y:0,scale:.8,pulse:0,pulse_hz:.5,orbit:0,orbit_hz:.2,draw_hz:0,pulse_shape:'sine',swing:0,swing_hz:.25,swing_shape:'sine',...(sc.anim||{})},au={amount:0,to:'scale',...(sc.audio||{})};
   let s=a.scale*(1-a.pulse*.5+a.pulse*.5*lzsWave(a.pulse_hz*t,a.pulse_shape)),bright=1;
   const react=Math.min(1,level+.5*kick)*au.amount;
@@ -133,8 +146,8 @@ function lzsAnimate(sc,t,level=0,kick=0){
 function lzsDraw(cv,sc,t,level=0){
   const g=cv.getContext('2d'),W=cv.width,H=cv.height,k=Math.min(W,H)/2*.92;
   g.fillStyle='#05070a';g.fillRect(0,0,W,H);
-  if(!sc?.strokes?.length)return;
-  const pts=lzsAnimate(sc,t*lzsTempoRate(sc,liveBpm()),level);g.lineWidth=Math.max(1.2,W/90);g.lineCap='round';
+  if(!sc?.strokes?.length&&!sc?.layers?.length)return;
+  const pts=lzsAnimate(sc,t*lzsTempoRate(sc,liveBpm()),level,0,liveBpm());g.lineWidth=Math.max(1.2,W/90);g.lineCap='round';
   for(let i=1;i<pts.length;i++){const p=pts[i],q=pts[i-1];if(!(p[2]||p[3]||p[4]))continue;
     g.strokeStyle=`rgb(${p[2]},${p[3]},${p[4]})`;g.beginPath();g.moveTo(W/2+q[0]*k,H/2-q[1]*k);g.lineTo(W/2+p[0]*k,H/2-p[1]*k);g.stroke()}
 }
@@ -198,7 +211,13 @@ function lzsFrameTime(strokes,scale,pps){
   return t;
 }
 // {k, level:'leggera'|'media'|'pesante', scale: dimensione per stare nel pulito (null = non basta)}
+// composta: tutti i livelli nello stesso giro degli specchi, con le loro dimensioni e posizioni
+function lzsLayerStrokes(sc){
+  return lzsResolve(sc).layers.flatMap(ly=>{const sub=ly.scene,s=(+sub.anim?.scale||.8)*ly.scale,r=ly.rotate*Math.PI/180,cr=Math.cos(r),sr=Math.sin(r);
+    return(sub.frames?.length?sub.frames[0].strokes:sub.strokes||[]).map(st=>({closed:st.closed,pts:st.pts.map(([x,y])=>[(x*cr-y*sr)*s+ly.x,(x*sr+y*cr)*s+ly.y])}))});
+}
 function lzsWeight(sc,pps=30000){
+  if(sc?.layers){const k=+(lzsFrameTime(lzsLayerStrokes(sc),1,pps)*LZS_W.refresh).toFixed(2);return{k,level:k<=LZS_W.light?'leggera':k<=LZS_W.heavy?'media':'pesante',scale:null}}
   const frames=sc?.frames?.length?sc.frames.map(f=>f.strokes):[sc?.strokes||[]],s=+sc?.anim?.scale||1;
   const heavy=frames.reduce((b,f)=>lzsFrameTime(f,s,pps)>lzsFrameTime(b,s,pps)?f:b,frames[0]);
   const k=lzsFrameTime(heavy,s,pps)*LZS_W.refresh,half=lzsFrameTime(heavy,s/2,pps)*LZS_W.refresh,slope=(k-half)/(s/2),fixed=k-slope*s;
@@ -207,6 +226,7 @@ function lzsWeight(sc,pps=30000){
 }
 function lzsWeightText(w,sc){
   if(w.level==='leggera')return`Figura leggera (${w.k}×): il laser la disegna pulita.`;
+  if(sc?.layers)return`Figura ${w.level} (${w.k}×): i livelli si disegnano tutti nello stesso giro degli specchi. Rimpicciolisci i livelli o togline uno.`;
   const tip=w.scale!=null&&w.scale<(+sc?.anim?.scale||1)-.01?`Per averla pulita porta la Dimensione a ${w.scale}, oppure togli qualche linea.`:'Togli linee o punti: la Dimensione da sola non basta.';
   return`Figura ${w.level} (${w.k}×): gli specchi devono correre ${w.k} volte oltre il pulito, spigoli e linee possono deformarsi. ${tip}`;
 }
@@ -329,27 +349,29 @@ function lzScenesHtml(d){
   return`<div class="lzs"><div class="lzs-top"><b>Scene laser</b><span class="hint">tocca una scena per mandarla a</span>
       <span class="lzs-tg">${lzsTargets(d).map(id=>`<button class="${LZS_TARGET===id?'on':''}" data-lzs="target" data-lzs-v="${id}">${id==='all'?'Tutti':esc(id)}</button>`).join('')}</span>
       <button class="btn sm${LZS_FLASH?' on':''}" data-lzs="flash" title="FLASH: tieni premuta una scena per proiettarla sopra quella attiva, si toglie quando la lasci (su tutti i cubi in modalità Scene)">FLASH</button>
-      <button class="btn sm ghost" data-lzs="svg">+ Importa SVG</button><button class="btn sm ghost" data-lzs="lib" title="Sfoglia la libreria ILDA e aggiungi al progetto le scene che vuoi">+ Libreria</button><button class="btn sm ghost" data-lzs="ilda" title="File ILDA (.ild), anche animati">+ ILDA</button><button class="btn sm ghost" data-lzs="text">+ Testo</button><button class="btn sm ghost" data-lzs="draw" title="Disegna con il dito: ogni tratto è una linea del laser">+ Disegna</button><button class="btn sm ghost" data-lzs="reset" title="Rimette i template mancanti">Template</button></div>
+      <button class="btn sm ghost" data-lzs="svg">+ Importa SVG</button><button class="btn sm ghost" data-lzs="lib" title="Sfoglia la libreria ILDA e aggiungi al progetto le scene che vuoi">+ Libreria</button><button class="btn sm ghost" data-lzs="ilda" title="File ILDA (.ild), anche animati">+ ILDA</button><button class="btn sm ghost" data-lzs="text">+ Testo</button><button class="btn sm ghost" data-lzs="draw" title="Disegna con il dito: ogni tratto è una linea del laser">+ Disegna</button><button class="btn sm ghost" data-lzs="comp" title="Più scene insieme sullo stesso laser (es. linee + punti), ognuna con la sua animazione">+ Composta</button><button class="btn sm ghost" data-lzs="reset" title="Rimette i template mancanti">Template</button></div>
     <div class="lzs-cal"><span class="hint">Taratura</span>${lzsCalScenes().map(c=>`<button class="btn sm ghost" data-lzs="cal" data-lzs-v="${c.id}" title="Manda ${esc(c.name)} a ${LZS_TARGET==='all'?'tutti i cubi':LZS_TARGET}: armare resta manuale. Leggi spigoli e bordi per regolare posizione, scala e trapezio.">${esc(c.name)}</button>`).join('')}</div>
-    <div class="lzs-grid">${laserScenes().map(s=>`<div class="lzs-tile${running.has(s.id)?' on':''}">${(w=>w.level==='leggera'?'':`<i class="lzs-w ${w.level}" title="${esc(lzsWeightText(w,s))}">${w.k}×</i>`)(lzsWeight(s))}${s.beam?`<i class="lzs-b" title="${esc(lzsBeamHint())}">fumo</i>`:''}<button class="lzs-go" data-lzs="apply" data-lzs-v="${esc(s.id)}" title="Manda a ${LZS_TARGET==='all'?'tutti i cubi':LZS_TARGET} (passa in modalità Scene)">
+    <div class="lzs-grid">${laserScenes().map(s=>`<div class="lzs-tile${running.has(s.id)?' on':''}">${(w=>w.level==='leggera'?'':`<i class="lzs-w ${w.level}" title="${esc(lzsWeightText(w,s))}">${w.k}×</i>`)(lzsWeight(s))}${s.beam?`<i class="lzs-b" title="${esc(lzsBeamHint())}">fumo</i>`:''}${s.layers?`<i class="lzs-b lzs-c" title="Scena composta: ${esc(lzsResolve(s).layers.map(l=>l.scene.name).join(' + '))}">${s.layers.length} livelli</i>`:''}<button class="lzs-go" data-lzs="apply" data-lzs-v="${esc(s.id)}" title="Manda a ${LZS_TARGET==='all'?'tutti i cubi':LZS_TARGET} (passa in modalità Scene)">
         <canvas data-lzs-cv="${esc(s.id)}" width="120" height="120"></canvas><span>${esc(s.name)}</span>${running.has(s.id)?`<em>${running.get(s.id).join(' ')}</em>`:''}</button>
         <button class="lzs-ed" data-lzs="edit" data-lzs-v="${esc(s.id)}" title="Modifica">✎</button></div>`).join('')||'<p class="hint">Nessuna scena: tocca Template.</p>'}</div></div>`;
 }
 function lzsSig(){return[LZS_TARGET,LZS_FLASH,laserScenes().map(s=>[s.id,s.name,s.anim?.scale])]}
-function lzsApply(s,target=LZS_TARGET){lzCmd({action:'scene',cube:target,scene:s},'scene')}
+function lzsApply(s,target=LZS_TARGET){lzCmd({action:'scene',cube:target,scene:lzsResolve(s)},'scene')}
 function lzsDown(e,el,w){
   const b=e.target.closest('[data-lzs]');if(!b)return;e.preventDefault();
   const a=b.dataset.lzs,v=b.dataset.lzsV,s=laserScenes().find(x=>x.id===v);
   if(a==='target')LZS_TARGET=v;
   else if(a==='flash')LZS_FLASH=!LZS_FLASH;
-  else if(a==='apply'&&s&&LZS_FLASH){lzCmd({action:'flash',on:true,scene:s},'flash');b.classList.add('press');
+  else if(a==='apply'&&s&&LZS_FLASH){lzCmd({action:'flash',on:true,scene:lzsResolve(s)},'flash');b.classList.add('press');
     // rilascio ascoltato sulla pagina, non sul pulsante: lo stato del laser ridisegna l'elenco ogni
     // ~2 s e un pulsante sostituito non riceve piu' il pointerup (flash rimasto tenuto, 11/11)
     const up=()=>{for(const [t,f] of [['pointerup',up],['pointercancel',up]])window.removeEventListener(t,f,true);b.removeEventListener('pointerleave',up);b.classList.remove('press');lzCmd({action:'flash',on:false},'flash')};
     window.addEventListener('pointerup',up,true);window.addEventListener('pointercancel',up,true);b.addEventListener('pointerleave',up);return}
   else if(a==='apply'&&s){lzsApply(s);showInfo(`Laser: "${s.name}" a ${LZS_TARGET==='all'?'tutti i cubi':LZS_TARGET} (modalità Scene; armare resta manuale).`)}
   else if(a==='cal'){const c=lzsCalScenes().find(x=>x.id===v);if(c){lzsApply(c);showInfo(`Laser: taratura "${c.name}" a ${LZS_TARGET==='all'?'tutti i cubi':LZS_TARGET} (modalità Scene; armare resta manuale).`)}}
-  else if(a==='edit'&&s)openLaserSceneEditor(s);
+  else if(a==='edit'&&s)(s.layers?openLaserCompEditor:openLaserSceneEditor)(s);
+  else if(a==='comp'){const base=laserScenes().filter(x=>!x.layers);if(!base.length){showError('Prima serve almeno una scena normale.');return}
+    openLaserCompEditor({id:'cmp-'+uid(),name:'Composta',layers:base.slice(0,2).map((x,i)=>({ref:x.id,x:0,y:0,scale:i?.6:1,rotate:0,bright:1}))},true);return}
   else if(a==='draw'){openLaserDraw(el,w);return}
   else if(a==='reset'){const have=new Set(laserScenes().map(x=>x.id)),add=lzsTemplates().filter(x=>!have.has(x.id));
     L.laserScenes=[...laserScenes(),...add];save();showInfo(add.length?`Aggiunti ${add.length} template.`:'Tutti i template ci sono già.')}
@@ -506,9 +528,54 @@ function openLaserSceneEditor(orig){
   $('#lsTry').onclick=()=>{read();if(!d){showError('Laser gateway non collegato.');return}lzsApply(sc,target);showInfo(`Laser: prova di "${sc.name}" su ${target==='all'?'tutti i cubi':target} (non salvata).`)};
   $('#lsSave').onclick=()=>{read();delete sc.template;store(sc);closeSheet();showInfo(`Scena "${sc.name}" salvata nel progetto.`)};
   $('#lsDup').onclick=()=>{read();const c={...JSON.parse(JSON.stringify(sc)),id:'scn-'+uid(),name:sc.name+' (copia)'};delete c.template;store(c);openLaserSceneEditor(c)};
-  $('#lsDel').onclick=async()=>{const used=laserDoc().cues.filter(c=>c.scene===sc.id).length;
-    if(used&&!await uiConfirm(`"${sc.name}" è usata da ${used} cue della traccia LASER. Eliminarla?`,{ok:'Elimina'}))return;
+  $('#lsDel').onclick=async()=>{const used=laserDoc().cues.filter(c=>c.scene===sc.id).length,comps=laserScenes().filter(x=>x.layers?.some(l=>l.ref===sc.id)).map(x=>x.name);
+    const why=[used?`da ${used} cue della traccia LASER`:'',comps.length?`dalle scene composte ${comps.join(', ')} (il suo livello sparisce)`:''].filter(Boolean).join(' e ');
+    if(why&&!await uiConfirm(`"${sc.name}" è usata ${why}. Eliminarla?`,{ok:'Elimina'}))return;
     L.laserScenes=laserScenes().filter(x=>x.id!==sc.id);save();closeSheet()};
+}
+
+// editor della scena composta: per ogni livello la scena, posizione, dimensione, rotazione, luminosita'
+function openLaserCompEditor(orig,isNew=false){
+  const sc=JSON.parse(JSON.stringify(orig)),s=$('#scrim');s.hidden=false;
+  const base=()=>laserScenes().filter(x=>!x.layers&&x.id!==sc.id);
+  const sl=(i,k,label,v,min,max,step)=>`<label class="ar-sl"><span>${label}<b data-v="${i}:${k}">${(+v).toFixed(step<1?2:0)}</b></span><input type="range" data-ly="${i}:${k}" min="${min}" max="${max}" step="${step}" value="${v}"></label>`;
+  const d=lzDev();let target=LZS_TARGET;
+  const paint=()=>{
+    s.innerHTML=`<div class="sheet" role="dialog" aria-label="Scena composta">
+      <div class="top"><h3>Scena composta</h3><button class="btn ghost" id="lcClose">Chiudi</button></div>
+      <div class="lzs-ed-grid"><canvas id="lcPrev" width="260" height="260"></canvas><div>
+        <label>Nome<input id="lcName" value="${esc(sc.name)}"></label>
+        <p class="hint">Più scene sullo stesso laser, ognuna con la sua animazione, colore e audio. Il laser le disegna una dopo l'altra nello stesso giro: ogni livello in più rende tutto più pesante.</p>
+        <p class="hint lzs-wtxt" id="lcWeight"></p>
+      </div></div>
+      ${sc.layers.map((l,i)=>`<div class="lzs-ly"><div class="row"><b>Livello ${i+1}</b><select data-lyref="${i}">${base().map(x=>`<option value="${esc(x.id)}"${x.id===l.ref?' selected':''}>${esc(x.name)}</option>`).join('')}${base().some(x=>x.id===l.ref)?'':'<option selected value="">(scena tolta)</option>'}</select><span style="flex:1"></span><button class="btn sm ghost" data-lydel="${i}"${sc.layers.length<2?' disabled':''}>Togli</button></div>
+        <div class="two">${sl(i,'x','Posizione orizzontale',l.x,-1,1,.01)}${sl(i,'y','Posizione verticale',l.y,-1,1,.01)}</div>
+        <div class="two">${sl(i,'scale','Dimensione',l.scale,.05,2,.01)}${sl(i,'rotate','Rotazione (gradi)',l.rotate,-180,180,1)}</div>
+        ${sl(i,'bright','Luminosità',l.bright,0,1,.01)}</div>`).join('')}
+      <div class="row"><button class="btn sm" id="lcAdd"${sc.layers.length>=LZS_MAX_LAYERS?' disabled':''}>+ Livello</button><span class="hint">al massimo ${LZS_MAX_LAYERS}. Animazione, colore e audio di ogni livello si cambiano nella sua scena.</span></div>
+      <div class="row"><span class="lzs-tg" id="lcTg"></span><button class="btn" id="lcTry">Prova sui cubi</button></div>
+      <div class="cue-editor-actions"><button class="btn danger" id="lcDel"${isNew?' hidden':''}>Elimina</button><button class="btn ghost" id="lcDup"${isNew?' hidden':''}>Duplica</button><button class="btn primary" id="lcSave">Salva</button></div>
+    </div>`;
+    const q=x=>s.querySelector(x),weight=()=>{const w=lzsWeight(sc),b=q('#lcWeight');b.textContent=lzsWeightText(w,sc);b.className='hint lzs-wtxt '+w.level};weight();
+    q('#lcName').oninput=e=>{sc.name=e.target.value.trim()||'Composta'};
+    s.querySelectorAll('[data-ly]').forEach(r=>r.oninput=()=>{const [i,k]=r.dataset.ly.split(':');sc.layers[+i][k]=+r.value;s.querySelector(`[data-v="${i}:${k}"]`).textContent=(+r.value).toFixed(+r.step<1?2:0);weight()});
+    s.querySelectorAll('[data-lyref]').forEach(r=>r.onchange=()=>{sc.layers[+r.dataset.lyref].ref=r.value;weight()});
+    s.querySelectorAll('[data-lydel]').forEach(b=>b.onclick=()=>{sc.layers.splice(+b.dataset.lydel,1);paint()});
+    q('#lcAdd').onclick=()=>{const b=base();if(!b.length)return;sc.layers.push({ref:b[0].id,x:0,y:0,scale:.6,rotate:0,bright:1});paint()};
+    const tg=q('#lcTg'),paintTg=()=>{tg.innerHTML=lzsTargets(d).map(id=>`<button class="${target===id?'on':''}" data-t="${id}">${id==='all'?'Tutti':esc(id)}</button>`).join('')};paintTg();
+    tg.onclick=e=>{const b=e.target.closest('[data-t]');if(b){target=b.dataset.t;paintTg()}};
+    const store=x=>{const i=laserScenes().findIndex(y=>y.id===x.id),list=[...laserScenes()];if(i<0)list.push(x);else list[i]=x;L.laserScenes=list;save()};
+    q('#lcClose').onclick=closeSheet;
+    q('#lcTry').onclick=()=>{if(!d){showError('Laser gateway non collegato.');return}if(!lzsResolve(sc).layers.length){showError('Nessun livello valido.');return}lzsApply(sc,target);showInfo(`Laser: prova di "${sc.name}" su ${target==='all'?'tutti i cubi':target} (non salvata).`)};
+    q('#lcSave').onclick=()=>{sc.layers=sc.layers.filter(l=>base().some(x=>x.id===l.ref));if(!sc.layers.length){showError('Nessun livello valido: scegli le scene.');paint();return}store(sc);closeSheet();showInfo(`Scena composta "${sc.name}" salvata nel progetto.`)};
+    q('#lcDup').onclick=()=>{const c={...JSON.parse(JSON.stringify(sc)),id:'cmp-'+uid(),name:sc.name+' (copia)'};store(c);openLaserCompEditor(c)};
+    q('#lcDel').onclick=async()=>{const used=laserDoc().cues.filter(c=>c.scene===sc.id).length;
+      if(used&&!await uiConfirm(`"${sc.name}" è usata da ${used} cue della traccia LASER. Eliminarla?`,{ok:'Elimina'}))return;
+      L.laserScenes=laserScenes().filter(x=>x.id!==sc.id);save();closeSheet()};
+    const cv=q('#lcPrev'),t0=performance.now();
+    const anim=()=>{if(!document.body.contains(cv))return;lzsDraw(cv,sc,(performance.now()-t0)/1000);requestAnimationFrame(anim)};anim();
+  };
+  paint();
 }
 
 // ---- timeline LASER (terza riga della timeline dello show, la esegue il bridge)

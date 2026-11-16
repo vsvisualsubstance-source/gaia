@@ -29,3 +29,12 @@ test('comandi: scena prima della modalita\', solo cio\' che cambia, scene sconos
   const ghost = { cubes: { c1: { mode: null, scene: 'sparita' } } };
   assert.deepEqual(laserCommands({}, ghost, scenes), []);
 });
+
+test('scena composta: al gateway con le scene dentro, livelli rotti saltati', () => {
+  const { laserCommands } = require('../laser-timeline');
+  const a = { id: 'a', name: 'Linee', strokes: [{ pts: [[0, 0], [1, 0]] }] };
+  const c = { id: 'c', name: 'Linee e punti', layers: [{ ref: 'a', x: .2, scale: .5 }, { ref: 'tolta' }, { ref: 'c' }] };
+  const cmds = laserCommands({}, { cubes: { c1: { mode: 'scene', scene: 'c' } } }, [a, c]);
+  const sc = cmds.find(x => x.action === 'scene').scene;
+  assert.deepEqual(sc, { id: 'c', name: 'Linee e punti', layers: [{ scene: a, x: .2, y: 0, scale: .5, rotate: 0, bright: 1 }] });
+});

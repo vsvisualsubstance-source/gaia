@@ -1,4 +1,5 @@
 'use strict';
+const { resolveLaserScene } = require('./laser-compose');
 // Controlli dal vivo del laser come indirizzi OSC della Plancia, cosi' fader e
 // pulsanti normali (anche assegnati all'APC40 col MIDI learn) comandano il
 // laser gateway. Il bridge li trasforma in comandi MQTT e non li manda a TD.
@@ -25,7 +26,7 @@ function laserLiveCommand(address, args, scenes) {
   if (kind === 'flash' && key) {
     if (!on) return { action: 'flash', on: false };
     const scene = (scenes || []).find(s => s.id === decodeURIComponent(key));
-    return scene ? { action: 'flash', on: true, scene } : { skip: true };
+    return scene ? { action: 'flash', on: true, scene: resolveLaserScene(scene, scenes) } : { skip: true };
   }
   return { skip: true };                        // /laser/... sconosciuto: non va a TD
 }

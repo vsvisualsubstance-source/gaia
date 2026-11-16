@@ -32,11 +32,12 @@ function layeredLaserState(cues, t, cubeIds) {
 
 // comandi per passare da prev a next: prima la scena (cosi' passando a "scene"
 // il contenuto e' gia' pronto), poi la modalita'. Scene sconosciute: saltate.
+const { resolveLaserScene } = require('./laser-compose');
 function laserCommands(prev, next, scenes) {
   const out = [], byId = new Map((scenes || []).map(s => [s.id, s]));
   for (const [id, n] of Object.entries(next.cubes)) {
     const p = prev[id] || {};
-    if (n.scene && n.scene !== p.scene && byId.has(n.scene)) out.push({ action: 'scene', cube: id, scene: byId.get(n.scene), mode: false });
+    if (n.scene && n.scene !== p.scene && byId.has(n.scene)) out.push({ action: 'scene', cube: id, scene: resolveLaserScene(byId.get(n.scene), scenes), mode: false });
     if (n.mode && n.mode !== p.mode) out.push({ action: 'mode', cube: id, value: n.mode });
   }
   return out;

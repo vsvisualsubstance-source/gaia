@@ -276,6 +276,30 @@ class TestScene(unittest.TestCase):
         tp = SC.clean_scene({**SQUARE, "tempo": {"sync": True, "bpm": 120}})
         self.assertAlmostEqual(SC.tempo_rate(tp, 132), 1.1); self.assertEqual(SC.tempo_rate(tp, None), 1.0)
 
+    def test_composta_livelli(self):
+        dot = {"id": "p", "name": "Punto", "strokes": [{"pts": [[0, 0], [0, 0]]}], "color": {"rgb": [1, 0, 0]}, "anim": {"scale": 1}}
+        line = {"id": "l", "name": "Linea", "strokes": [{"pts": [[-1, 0], [1, 0]]}], "color": {"rgb": [0, 1, 0]},
+                "anim": {"scale": 1, "rotate": 90}, "tempo": {"sync": True, "bpm": 120}}
+        sc = SC.clean_scene({"id": "c", "name": "Linee e punti", "layers": [
+            {"scene": line, "scale": 0.5},
+            {"scene": dot, "x": 0.5, "y": -0.25, "bright": 0.5},
+            {"scene": {"layers": [{"scene": dot}]}},          # composta dentro composta: scartata
+            {"scene": {"strokes": []}}]})                      # inservibile: scartata
+        self.assertEqual(len(sc["layers"]), 2)
+        self.assertEqual(SC.tempo_rate(sc, 140), 1.0)          # la composta non ha un suo tempo
+        pts = SC.animate(sc, 0.0, bpm=120)
+        self.assertEqual(len(pts), 6)                         # 2+1 della linea, 2+1 del punto (attacchi al buio)
+        self.assertAlmostEqual(pts[1][0], -0.5)                # linea a meta' dimensione
+        self.assertEqual(pts[4][:2], (0.5, -0.25))             # punto spostato
+        self.assertEqual(pts[4][2:], (127, 0, 0))              # e a meta' luminosita'
+        # il livello a tempo corre col BPM: a 240 BPM in 0,5 s la linea ha fatto 90 gradi (a 120: 45)
+        a = SC.animate(sc, 0.5, bpm=240)[1]
+        self.assertAlmostEqual(a[0], 0.0, places=6); self.assertAlmostEqual(a[1], -0.5)
+        with self.assertRaises(ValueError):
+            SC.clean_scene({"layers": []})
+        many = SC.clean_scene({"layers": [{"scene": dot}] * 9})
+        self.assertEqual(len(many["layers"]), SC.MAX_LAYERS)
+
 
 class TestRender(unittest.TestCase):
     def test_zone_keeps_beam_inside(self):
@@ -475,6 +499,19 @@ class TestGateway(unittest.TestCase):
         self.assertAlmostEqual(level, 0.8); self.assertGreater(kick, 0.5)
         self.assertTrue(self.gw.handle({"action": "mode", "cube": "all", "value": "off"})["ok"])
         self.assertFalse(self.cube.armed)
+        self.assertTrue(wait(lambda: not self.emu.output, 1.0))
+
+    def test_9a_composite_scene_streams(self):
+        self.assertTrue(wait(self.cube.online))
+        comp = {"id": "lp", "name": "Linee e punti", "layers": [{"scene": SQUARE, "scale": 0.5}, {"scene": {**SQUARE, "color": {"rgb": [1, 0, 0]}}, "x": 0.2}]}
+        self.assertTrue(self.gw.handle({"action": "scene", "cube": "c1", "scene": comp})["ok"])
+        self.assertEqual(self.cube.summary()["scene"], {"id": "lp", "name": "Linee e punti"})
+        self.gw.handle({"action": "arm", "cube": "c1"})
+        self.assertTrue(wait(lambda: len(lit(self.emu.played)) > 2000))
+        on = lit(self.emu.take_played())
+        self.assertTrue(any(s[4] > 0 and s[2] == 0 for s in on))       # il quadrato blu
+        self.assertTrue(any(s[2] > 0 and s[4] == 0 for s in on))       # e quello rosso, nello stesso giro
+        self.gw.handle({"action": "mode", "cube": "all", "value": "off"})
         self.assertTrue(wait(lambda: not self.emu.output, 1.0))
 
     def test_9b_bpm_from_tap_then_show_clock(self):

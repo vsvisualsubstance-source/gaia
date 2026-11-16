@@ -33,6 +33,18 @@ const { startPlancia, sleep } = require('./browser-harness');
     assert.equal(await p.ev(`document.querySelector('#lsFit').hidden`), true, 'Adatta nascosto su figura leggera');
     await p.ev(`document.querySelector('#lsClose').click();window.__planciaTest.L.laserScenes=window.__planciaTest.L.laserScenes.filter(x=>x.id!=='fit');1`);
     await sleep(300);
+    // scena composta: due scene insieme, anteprima disegnata, salvata con il segno dei livelli
+    await p.ev(`document.querySelector('[data-lzs="comp"]').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true}));1`);
+    await sleep(500);
+    assert.equal(await p.ev(`document.querySelectorAll('.lzs-ly').length`), 2, 'composta nuova con due livelli');
+    assert.ok(await p.ev(`(()=>{const c=document.querySelector('#lcPrev'),d=c.getContext('2d').getImageData(0,0,c.width,c.height).data;let n=0;for(let i=0;i<d.length;i+=4)if(d[i]+d[i+1]+d[i+2]>60)n++;return n>50})()`), 'anteprima della composta vuota');
+    assert.match(await p.ev(`document.querySelector('#lcWeight').textContent`), /Figura/, 'peso della composta');
+    await p.ev(`document.querySelector('#lcAdd').click();1`); await sleep(200);
+    assert.equal(await p.ev(`document.querySelectorAll('.lzs-ly').length`), 3, '+ Livello');
+    await p.ev(`document.querySelector('#lcSave').click();1`); await sleep(1500);
+    assert.equal(await p.ev(`window.__planciaTest.L.laserScenes.filter(x=>x.layers).map(x=>x.layers.length).join()`), '3', 'composta salvata nel progetto');
+    assert.match(await p.ev(`document.querySelector('.lzs-c')?.textContent||''`), /3 livelli/, 'segno dei livelli sulla miniatura');
+    await p.ev(`window.__planciaTest.L.laserScenes=window.__planciaTest.L.laserScenes.filter(x=>!x.layers);1`);
     await p.ev(`document.querySelector('#helpBtn').click();1`);
     await sleep(800);
     const step=()=>p.ev(`document.querySelector('.tour-tip')?.innerText.split(String.fromCharCode(10)).join(' | ').slice(0,160)`);

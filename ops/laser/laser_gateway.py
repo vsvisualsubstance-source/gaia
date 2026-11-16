@@ -513,9 +513,9 @@ class Gateway:
                         c.scene_t += (t0 - c.scene_last) * (SC.tempo_rate(sc, self.bpm_now()) if sc else 1.0)
                         c.scene_last = t0
                         if self.flash:          # il flash suona dall'inizio finche' e' tenuto, la scena sotto continua
-                            pts = SC.animate(self.flash, (t0 - self.flash_t0) * SC.tempo_rate(self.flash, self.bpm_now()), level, kick)
+                            pts = SC.animate(self.flash, (t0 - self.flash_t0) * SC.tempo_rate(self.flash, self.bpm_now()), level, kick, self.bpm_now())
                         else:
-                            pts = SC.animate(sc, c.scene_t, level, kick)
+                            pts = SC.animate(sc, c.scene_t, level, kick, self.bpm_now())
                         pts = SC.apply_fx(pts, self.fx, t0, self.fx_angle, self.fx_angle_y)
                         c.set_frame(render(pts, c.conf, c.pps))
                 except Exception as e:          # una scena rotta non deve fermare gli altri cubi
