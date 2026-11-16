@@ -378,8 +378,11 @@ fn find_device_avoid(want: &Option<String>, avoid: Option<&str>) -> Result<cpal:
     }
 }
 
-/// cuffia tra la callback del master e quella dell'uscita cuffia: le due uscite
-/// della stessa scheda hanno lo stesso clock, basta un piccolo buffer (~25 ms)
+/// cuffia tra la callback del master e quella dell'uscita cuffia (e copia per le luci):
+/// piccolo buffer tenuto al livello giusto. 16/11: senza controllo il livello saliva
+/// (le due uscite non consumano esattamente allo stesso ritmo) fino a HP_MAX, ~190 ms:
+/// cuffia in ritardo sul master. Ora la lettura accelera o rallenta di poco (al massimo
+/// HP_ADJ) finche' il buffer torna intorno a HP_TARGET.
 struct HpRing {
     q: VecDeque<f32>,
     primed: bool,
@@ -389,8 +392,12 @@ struct HpRing {
     frac: f64,
 }
 type Hp = Arc<Mutex<HpRing>>;
-const HP_TARGET: usize = 2 * 1024;
+const HP_TARGET: usize = 2 * 768;
 const HP_MAX: usize = 2 * 8192;
+/// correzione massima della velocita' di lettura (0,5%: non si sente in cuffia)
+const HP_ADJ: f64 = 0.005;
+/// frame di scarto per arrivare alla correzione massima
+const HP_GAIN_FRAMES: f64 = 400.0;
 
 impl HpRing {
     fn new() -> Self {
@@ -409,38 +416,15 @@ impl HpRing {
         }
     }
     /// riempie l'uscita cuffia (stereo sui primi due canali); a vuoto silenzio e si riparte dal livello giusto
+    /// riempie l'uscita, con interpolazione lineare a passo step (frequenze diverse) corretto
+    /// di poco per tenere il buffer intorno a HP_TARGET (orologi che non coincidono)
     fn pull(&mut self, out: &mut [f32], ch: usize) {
-        if (self.step - 1.0).abs() > 1e-9 {
-            return self.pull_resampled(out, ch);
-        }
         let frames = out.len() / ch.max(1);
         out.fill(0.0);
-        if !self.primed {
-            if self.q.len() < HP_TARGET + 2 * frames {
-                return;
-            }
-            self.primed = true;
-        }
-        if self.q.len() < 2 * frames {
-            self.primed = false;
-            return;
-        }
-        for f in 0..frames {
-            let (l, r) = (self.q.pop_front().unwrap_or(0.0), self.q.pop_front().unwrap_or(0.0));
-            out[f * ch] = l;
-            if ch > 1 {
-                out[f * ch + 1] = r;
-            }
-        }
-    }
-}
-
-impl HpRing {
-    /// come pull, con interpolazione lineare a passo step (orologi e frequenze diverse)
-    fn pull_resampled(&mut self, out: &mut [f32], ch: usize) {
-        let frames = out.len() / ch.max(1);
-        out.fill(0.0);
-        let need = (frames as f64 * self.step + self.frac).ceil() as usize + 2;
+        let base = (frames as f64 * self.step).ceil() as usize + 2;
+        let over = (self.q.len() / 2) as f64 - (HP_TARGET / 2 + base) as f64;
+        let step = if self.primed { self.step * (1.0 + (over / HP_GAIN_FRAMES).clamp(-1.0, 1.0) * HP_ADJ) } else { self.step };
+        let need = (frames as f64 * step + self.frac).ceil() as usize + 2;
         if !self.primed {
             if self.q.len() < HP_TARGET + 2 * need {
                 return;
@@ -459,7 +443,7 @@ impl HpRing {
             if ch > 1 {
                 out[f * ch + 1] = r0 + (r1 - r0) * t;
             }
-            self.frac += self.step;
+            self.frac += step;
         }
         let used = self.frac as usize;
         self.q.drain(..2 * used);
@@ -917,6 +901,38 @@ mod tests {
         assert!(out4[0] == 0.5 && out4[1] == 0.5 && out4[2] == 0.0 && out4[3] == 0.0, "stereo sui primi due canali");
         r.push(&vec![0.1; HP_MAX * 2]);
         assert!(r.q.len() <= HP_MAX, "non cresce oltre il massimo");
+    }
+
+    #[test]
+    fn buffer_cuffia_non_accumula_ritardo() {
+        // il master consegna lo 0,3% in piu' di quanto la cuffia consuma: senza controllo il
+        // buffer cresceva fino al massimo (~190 ms); ora resta vicino al livello voluto
+        let mut r = HpRing::new();
+        let mut out = vec![0f32; 441 * 2];
+        let mut carry = 0.0f64;
+        for _ in 0..6000 {
+            carry += 441.0 * 1.003;
+            let n = carry as usize;
+            carry -= n as f64;
+            r.push(&vec![0.25; n * 2]);
+            r.pull(&mut out, 2);
+        }
+        let ms = (r.q.len() / 2) as f64 / 44.1;
+        assert!(ms < 40.0, "buffer cuffia {ms:.1} ms");
+        assert!(out.iter().all(|x| (*x - 0.25).abs() < 1e-6), "suona senza buchi");
+        // e se consegna meno (orologio piu' lento) non si svuota a scatti
+        let mut gaps = 0;
+        for _ in 0..6000 {
+            carry += 441.0 * 0.997;
+            let n = carry as usize;
+            carry -= n as f64;
+            r.push(&vec![0.25; n * 2]);
+            r.pull(&mut out, 2);
+            if out[0] == 0.0 {
+                gaps += 1;
+            }
+        }
+        assert!(gaps <= 2, "{gaps} blocchi muti");
     }
 
     #[test]
