@@ -42,6 +42,22 @@ function sendSharedState(){
   ws.send(JSON.stringify({type:'shared_state',state:sharedState,clientRevision}));
   saveStatus('Salvataggio layout…');
 }
+// Copia nel browser dello stato del server (serve solo offline). Il browser tiene ~5 MB e lo
+// stato puo' essere piu' grande (16/11: due progetti con scene ILDA da 1,7 MB l'uno, 7,7 MB in
+// tutto): prima il layout aperto e l'elenco, poi i progetti dal piu' leggero, quelli che non ci
+// stanno restano solo sul server, senza errore. Errore solo se non entra nemmeno il layout.
+function cacheSharedLocally(){
+  const PK='plancia.project.',data=sharedState.projectData||{};
+  const projectKeys=()=>Object.keys(localStorage).filter(k=>k.startsWith(PK));
+  for(const k of projectKeys())if(!(k.slice(PK.length) in data))localStorage.removeItem(k);
+  const head=()=>{localStorage.setItem(KEY,JSON.stringify(sharedState.layout));localStorage.setItem('plancia.projects.v1',JSON.stringify(sharedState.projects||[]))};
+  try{head()}catch{for(const k of projectKeys())localStorage.removeItem(k);head()}
+  let left=0;
+  for(const [id,s] of Object.entries(data).map(([id,p])=>[id,JSON.stringify(p)]).sort((a,b)=>a[1].length-b[1].length)){
+    try{localStorage.setItem(PK+id,s)}catch{localStorage.removeItem(PK+id);left++}
+  }
+  if(left)console.info(`Plancia: ${left} progetti solo sul server (copia nel browser piena)`);
+}
 function acceptSharedState(state,revision){
   if(!state||!state.layout)return false;
   sharedState=JSON.parse(JSON.stringify(state));
@@ -49,11 +65,8 @@ function acceptSharedState(state,revision){
   clearTimeout(sharedSaveTimer);
   sharedBaseline=JSON.stringify(sharedState);
   applyingSharedState=true;
-  try{
-    localStorage.setItem(KEY,JSON.stringify(sharedState.layout));
-    localStorage.setItem('plancia.projects.v1',JSON.stringify(sharedState.projects||[]));
-    for(const [id,snapshot] of Object.entries(sharedState.projectData||{}))localStorage.setItem(`plancia.project.${id}`,JSON.stringify(snapshot));
-  }catch(error){showError(`Cache locale non aggiornata: ${error.message}`)}
+  try{cacheSharedLocally()}
+  catch(error){showError(`Cache locale non aggiornata: ${error.message}`)}
   finally{applyingSharedState=false}
   L=sharedState.layout;pi=Math.min(pi,L.pages.length-1);selId=null;
   render();initShow();
