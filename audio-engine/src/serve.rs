@@ -371,11 +371,43 @@ fn find_device_avoid(want: &Option<String>, avoid: Option<&str>) -> Result<cpal:
             let names: Vec<String> = devs.iter().map(|d| d.description().map(|n| n.to_string()).unwrap_or_default()).collect();
             let def_name = host.default_output_device().and_then(|d| d.description().ok().map(|n| n.to_string()));
             let def = def_name.and_then(|dn| names.iter().position(|n| *n == dn));
-            pick_device(&names, w, avoid, def)
-                .map(|i| devs[i].clone())
-                .ok_or_else(|| format!("uscita \"{}\" non trovata", w.replace('|', "\" o \"")))
+            // in ordine di preferenza; "asio:NOME" = driver ASIO (16/11: Z1 a 4 canali, cuffia nello
+            // stesso giro del master), le altre come prima sulle uscite di Windows
+            for alt in w.split('|').map(str::trim).filter(|a| !a.is_empty()) {
+                if let Some(name) = alt.strip_prefix("asio:").or_else(|| alt.strip_prefix("ASIO:")) {
+                    match asio_device(name.trim()) {
+                        Ok(d) => return Ok(d),
+                        Err(e) => eprintln!("ASIO \"{}\": {e}", name.trim()),
+                    }
+                    continue;
+                }
+                if let Some(i) = pick_device(&names, alt, avoid, def) {
+                    return Ok(devs[i].clone());
+                }
+            }
+            Err(format!("uscita \"{}\" non trovata", w.replace('|', "\" o \"")))
         }
     }
+}
+
+/// driver ASIO per nome (parte del nome, maiuscole non contano)
+#[cfg(all(windows, feature = "asio"))]
+fn asio_device(name: &str) -> Result<cpal::Device, String> {
+    let host = cpal::host_from_id(cpal::HostId::Asio).map_err(|e| e.to_string())?;
+    let want = name.to_lowercase();
+    let mut seen = Vec::new();
+    for d in host.output_devices().map_err(|e| e.to_string())? {
+        let n = d.description().map(|n| n.to_string()).unwrap_or_default();
+        if n.to_lowercase().contains(&want) {
+            return Ok(d);
+        }
+        seen.push(n);
+    }
+    Err(format!("driver non trovato (ci sono: {})", seen.join(", ")))
+}
+#[cfg(not(all(windows, feature = "asio")))]
+fn asio_device(_name: &str) -> Result<cpal::Device, String> {
+    Err("motore compilato senza ASIO".into())
 }
 
 /// cuffia tra la callback del master e quella dell'uscita cuffia (e copia per le luci):
@@ -521,15 +553,36 @@ fn open_tap(want: &str, rate: f64, tap: Hp, err_tx: Sender<String>, master: &str
     Ok((stream, OutputInfo { device: name, rate: fs, ok: true, error: None }))
 }
 
+/// uscita con campioni interi: il motore rende in f32 in un buffer gia' pronto, poi si converte
+fn build_converted<T, B, E>(dev: &cpal::Device, cfg: cpal::StreamConfig, mut body: B, on_err: E) -> Result<cpal::Stream, cpal::Error>
+where
+    T: cpal::SizedSample + cpal::FromSample<f32>,
+    B: FnMut(&mut [f32]) + Send + 'static,
+    E: FnMut(cpal::Error) + Send + 'static,
+{
+    let mut scratch: Vec<f32> = Vec::with_capacity(65536);
+    dev.build_output_stream(
+        cfg,
+        move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
+            scratch.resize(data.len(), 0.0);
+            body(&mut scratch);
+            for (d, s) in data.iter_mut().zip(scratch.iter()) {
+                *d = T::from_sample(*s);
+            }
+        },
+        on_err,
+        None,
+    )
+}
+
 #[allow(clippy::too_many_arguments)]
-fn open_output(want: &Option<String>, engine: &Arc<Mutex<Engine>>, err_tx: Sender<String>, hp: Hp, tap: Hp, vban: Option<crate::vban::Queue>, vban_rate: Arc<Mutex<f64>>, vin: Option<crate::vban_in::Shared>) -> Result<(cpal::Stream, OutputInfo), String> {
+fn open_output(want: &Option<String>, engine: &Arc<Mutex<Engine>>, err_tx: Sender<String>, hp: Hp, tap: Hp, vban: Option<crate::vban::Queue>, vban_rate: Arc<Mutex<f64>>, vin: Option<crate::vban_in::Shared>, master_ch: Arc<std::sync::atomic::AtomicUsize>) -> Result<(cpal::Stream, OutputInfo), String> {
     let dev = find_device(want)?;
     let name = dev.description().map(|n| n.to_string()).unwrap_or_else(|_| "?".into());
     let sup = dev.default_output_config().map_err(|e| e.to_string())?;
-    if sup.sample_format() != cpal::SampleFormat::F32 {
-        return Err(format!("{name}: formato {:?}, serve F32", sup.sample_format()));
-    }
+    let format = sup.sample_format();
     let cfg = sup.config();
+    master_ch.store(cfg.channels as usize, Ordering::Relaxed);
     let (ch, fs) = (cfg.channels as usize, cfg.sample_rate as f64);
     if let Ok(mut e) = engine.lock() {
         e.set_rate(fs);
@@ -539,10 +592,7 @@ fn open_output(want: &Option<String>, engine: &Arc<Mutex<Engine>>, err_tx: Sende
     }
     let eng = engine.clone();
     let mut net_buf: Vec<f32> = Vec::with_capacity(8192);
-    let stream = dev
-        .build_output_stream(
-            cfg,
-            move |data: &mut [f32], _: &cpal::OutputCallbackInfo| match eng.try_lock() {
+    let body = move |data: &mut [f32]| match eng.try_lock() {
                 Ok(mut e) => {
                     e.render(data, ch);
                     if e.hp_ext() {
@@ -563,12 +613,20 @@ fn open_output(want: &Option<String>, engine: &Arc<Mutex<Engine>>, err_tx: Sende
                     }
                 }
                 Err(_) => data.fill(0.0),
-            },
-            move |e| {
-                let _ = err_tx.send(e.to_string());
-            },
-            None,
-        )
+            };
+    let on_err = move |e: cpal::Error| {
+        let _ = err_tx.send(e.to_string());
+    };
+    // F32 diretto; i driver ASIO spesso vogliono interi: si rende in f32 e si converte
+    let stream = match format {
+        cpal::SampleFormat::F32 => {
+            let mut body = body;
+            dev.build_output_stream(cfg, move |data: &mut [f32], _: &cpal::OutputCallbackInfo| body(data), on_err, None)
+        }
+        cpal::SampleFormat::I32 => build_converted::<i32, _, _>(&dev, cfg, body, on_err),
+        cpal::SampleFormat::I16 => build_converted::<i16, _, _>(&dev, cfg, body, on_err),
+        f => return Err(format!("{name}: formato {f:?} non gestito")),
+    }
         .map_err(|e| format!("{name}: {e}"))?;
     stream.play().map_err(|e| format!("{name}: {e}"))?;
     Ok((stream, OutputInfo { device: name, rate: fs, ok: true, error: None }))
@@ -682,6 +740,8 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
     let null_run = Arc::new(AtomicBool::new(false));
     let mut retry_at = Instant::now();
     let hp: Hp = Arc::new(Mutex::new(HpRing::cue()));
+    // canali dell'uscita master: con 4 o piu' (Z1 in ASIO) la cuffia e' sui canali 3-4, niente uscita a parte
+    let master_ch = Arc::new(std::sync::atomic::AtomicUsize::new(2));
     // cuffia separata: errori a parte, si riapre da sola
     let (cue_err_tx, cue_err_rx) = mpsc::channel::<String>();
     let mut cue_stream: Option<cpal::Stream> = None;
@@ -723,7 +783,7 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
             info.error = Some("senza audio (--no-audio)".into());
             return;
         }
-        match open_output(&o.device, &engine, err_tx.clone(), hp.clone(), tap.clone(), vban_q.clone(), vban_rate.clone(), vin.clone()) {
+        match open_output(&o.device, &engine, err_tx.clone(), hp.clone(), tap.clone(), vban_q.clone(), vban_rate.clone(), vin.clone(), master_ch.clone()) {
             Ok((s, i)) => {
                 null_run.store(false, Ordering::Relaxed);
                 println!("uscita: {} ({} Hz)", i.device, i.rate);
@@ -742,6 +802,14 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
     try_open(&mut stream, &mut info);
     let open_cue_now = |cue_stream: &mut Option<cpal::Stream>, cue_info: &mut Option<OutputInfo>, rate: f64, master: &str| {
         let Some(want) = &o.cue_device else { return };
+        if master_ch.load(Ordering::Relaxed) >= 4 {
+            if let Ok(mut e) = engine.lock() {
+                e.set_hp_ext(false);
+            }
+            *cue_stream = None;
+            *cue_info = Some(OutputInfo { device: format!("{master} · canali 3-4"), rate, ok: true, error: None });
+            return;
+        }
         match open_cue(want, rate, hp.clone(), cue_err_tx.clone(), master) {
             Ok((s, i)) => {
                 println!("cuffia: {} ({} Hz)", i.device, i.rate);

@@ -12,3 +12,9 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 symphonia = { version = "0.6.1", features = ["mp3"] }
 tungstenite = "0.30"
+
+[features]
+# driver ASIO (Windows): Z1 a 4 canali, cuffia nello stesso giro del master (16/11).
+# Per compilare serve libclang (LLVM); l'SDK ASIO lo scarica cpal (oppure CPAL_ASIO_DIR).
+default = ["asio"]
+asio = ["cpal/asio"]
