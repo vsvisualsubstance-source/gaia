@@ -4,8 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Regia</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;600&family=Bebas+Neue&family=Inter:wght@400;700&family=Space+Grotesk:wght@400;700&family=Playfair+Display:wght@400;700&family=Archivo+Black&display=swap">
+<link rel="stylesheet" href="fonts/fonts.css">
 <style>
 /* Layout: banco di regia — canali + inspector a sinistra, PGM/transizioni/audio a destra, uscite e mapping sotto */
 :root{
@@ -270,6 +269,17 @@ body.pdragging .zone,body.pdragging .ws.one .zone:empty,body.pdragging .zone.ful
 .tfields select,.tfields input[type=range]{width:100%}
 input[type=color]{width:100%;height:26px;padding:0 2px;background:var(--panel2);border:1px solid var(--line);border-radius:3px;cursor:pointer}
 .tbulk{display:flex;flex-direction:column;gap:8px;background:var(--panel2);border:1px solid var(--acc);border-radius:4px;padding:10px}
+#rgModal{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:60;display:flex;align-items:center;justify-content:center;padding:16px}
+#rgModal[hidden]{display:none}
+.rgm{background:var(--panel);border:1px solid var(--line);border-radius:4px;width:min(560px,100%);max-height:min(80vh,720px);display:flex;flex-direction:column}
+.rgm.wide{width:min(900px,100%)}
+.rgmh{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line)}.rgmh b{flex:1;font:600 15px var(--f-label);letter-spacing:.04em;text-transform:uppercase}
+.rgmb{overflow:auto;padding:8px 12px 12px}
+.rgbar{display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap}.rgbar input{flex:1;min-width:140px;background:var(--panel2);border:1px solid var(--line);border-radius:3px;padding:5px 8px}
+.lbr{display:flex;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--line)}
+.lbr .lbn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.lbr small{display:block;color:var(--dim)}
+.lbf{color:var(--acc);font:600 12px var(--f-label);letter-spacing:.06em;text-transform:uppercase;margin-top:8px}
+#tlClk{color:var(--dim)}#tlClk.on{color:var(--ok)}#tlClk.warn{color:var(--acc)}
 #toast{position:fixed;left:50%;bottom:max(20px,env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:#111;padding:8px 14px;border-radius:3px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .25s;max-width:90vw;z-index:9}
 #toast.show{opacity:1}
 @media (prefers-reduced-motion:reduce){#toast,.strip{transition:none}}
@@ -412,6 +422,7 @@ input[type=color]{width:100%;height:26px;padding:0 2px;background:var(--panel2);
   <div class="pb">
 <div class="smedia">
     <button class="btn" data-act="simport" title="Scegli uno o più video: ognuno diventa un cue">+ Importa video</button>
+    <button class="btn sm" data-act="slib" title="Video e immagini della cartella video sul server della Plancia">Cartella video</button>
     <button class="btn sm" data-act="srelink" id="sRelink" title="Riapri i file dello spettacolo: i cue li ritrovano dal nome">Ricarica file mancanti</button>
     <button class="btn sm" data-act="scams" title="Telecamere e schede di acquisizione collegate al computer">Rileva ingressi video</button>
     <span class="hint" id="sLib"></span>
@@ -448,8 +459,10 @@ input[type=color]{width:100%;height:26px;padding:0 2px;background:var(--panel2);
     <label class="fld">Zoom <input type="range" min="1" max="200" step="0.5" data-path="tl.zoom" aria-label="Zoom timeline"></label>
     <label class="chk"><input type="checkbox" data-path="tl.loop"> Loop</label>
     <label class="chk"><input type="checkbox" data-path="tl.follow"> Segui</label>
+    <label class="chk" title="La timeline segue l'orologio dello show (Plancia, motore audio, TD DMX): play, pausa e posizione arrivano da li'"><input type="checkbox" data-path="tl.ext"> Orologio show</label><span class="hint" id="tlClk"></span>
     <span class="tlsep"></span>
     <button class="btn sm" data-act="tladdclip">+ Clip</button>
+    <button class="btn sm" data-act="tllib" title="Aggiungi un file della cartella video sulla traccia del canale selezionato">+ Dalla cartella</button>
     <select id="tlAddLane" aria-label="Aggiungi automazione"></select>
     <button class="btn sm red" data-act="tlexport" id="tlExp" title="Registra la timeline dall'inizio alla fine (o il loop) con le impostazioni di Registrazione">● Esporta timeline</button>
     <button class="btn sm" data-act="tlclear" id="tlClear">Svuota</button>
@@ -504,7 +517,7 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',
 const BLENDS=[['source-over','Normal'],['lighter','Add'],['screen','Screen'],['multiply','Multiply'],['overlay','Overlay'],['difference','Difference'],['exclusion','Exclusion'],['lighten','Lighten'],['darken','Darken'],['color-dodge','Color dodge'],['color-burn','Color burn'],['hard-light','Hard light'],['soft-light','Soft light'],['hue','Hue'],['saturation','Saturation'],['color','Color'],['luminosity','Luminosity']];
 const TRANS=[['dissolve','Dissolvenza'],['add','Additiva'],['dip','Dip to black'],['blend','Blend mode'],['wipeL','Wipe orizzontale'],['wipeV','Wipe verticale'],['iris','Iris']];
 const GENS={plasma:'Plasma',tunnel:'Tunnel',bars:'Barre',particles:'Particelle',noise:'Rumore',gradient:'Gradiente',grid:'Griglia',testcard:'Test card',solid:'Colore',black:'Nero',text:'Testo',strobe:'Strobo'};
-const MEDIA={video:'File video…',image:'Immagine…',webcam:'Webcam'};
+const MEDIA={video:'File video…',image:'Immagine…',webcam:'Webcam',lib:'Dalla cartella video…',ndi:'NDI…'};
 const FXDEF={zoom:1,rot:0,fhue:0,hspin:0,inv:0,blur:0,bri:100,con:100,sat:100,noise:0,deform:0,dfreq:4};
 const PARAMS=[['speed','Velocità',0,4,.01,'x',1],['hue','Tinta gen.',0,360,1,'deg',0],['fx.zoom','Scala',.25,4,.01,'x',1],['fx.rot','Rotazione',-180,180,1,'deg',0],
   ['fx.noise','Noise',0,1,.01,'pct',0],['fx.deform','Deform',0,1,.01,'pct',0],['fx.dfreq','Onde def.',1,20,.1,'f1',4],['fx.fhue','Colore (hue)',-180,180,1,'deg',0],['fx.hspin','Hue rotate',-360,360,1,'dps',0],
@@ -550,7 +563,7 @@ function defShow(){const q=(name,src,o)=>({id:0,name,src,ch:-1,bus:'T',fi:2,xo:2
     q('Quadro 1','tunnel',{end:'out',dur:30,fo:5,note:'attore entra da sx'}),q('Buio finale','black',{fi:0,xo:6})];c.forEach((x,k)=>x.id=k+1);return {cues:c,sel:0,sb:0,nid:10}}
 function fixShow(o){const d=defShow();if(!o||!Array.isArray(o.cues))return d;const base=defShow().cues[0];
   return {sel:-1,sb:0,nid:100,...o,cues:o.cues.filter(x=>x&&typeof x==='object').map(x=>({...base,note:'',name:'',...x}))}}
-function defTL(){return {dur:60,bpm:120,snap:'beat',zoom:14,loop:false,la:0,lb:8,follow:true,nid:50,tracks:[
+function defTL(){return {dur:60,bpm:120,snap:'beat',zoom:14,loop:false,ext:false,la:0,lb:8,follow:true,nid:50,tracks:[
   {id:1,type:'clip',ch:0,mute:false,items:[{id:11,t:0,d:26,src:'plasma',fi:2,fo:4,op:1,in:0},{id:14,t:40,d:20,src:'gradient',fi:4,fo:4,op:1,in:0}]},
   {id:2,type:'clip',ch:1,mute:false,items:[{id:12,t:12,d:32,src:'tunnel',fi:0,fo:6,op:1,in:0}]},
   {id:3,type:'clip',ch:2,mute:false,items:[{id:13,t:24,d:36,src:'particles',fi:6,fo:6,op:1,in:0}]},
@@ -565,7 +578,7 @@ function fixTL(o,n=4){const d=defTL();if(!o||typeof o!=='object'||!Array.isArray
   if(!t.tracks.some(x=>x.type==='cue'))t.tracks.push({id:++t.nid,type:'cue',mute:false,items:[]});return t}
 function defaults(){const ch=[mkch('plasma',200,'A',1,'source-over'),mkch('tunnel',20,'B',1,'source-over'),mkch('particles',40,'T',0,'screen'),mkch('testcard',0,'T',0,'source-over')];
   ch[0].aud.scale.b='low';ch[1].aud.deform.b='beat';ch[2].aud.color.b='mid';
-  return {res:{w:1280,h:720},sel:0,xf:0,master:1,trans:'dissolve',transBlend:'difference',fadeTime:2,audio:{gain:1.8,release:.6,beatTh:1.4,device:''},recCfg:{src:'pgm',fmt:'',br:16,fps:30,audio:true,disk:false},tl:defTL(),show:defShow(),ui:defUI(),
+  return {res:{w:1280,h:720},sel:0,xf:0,master:1,trans:'dissolve',transBlend:'difference',fadeTime:2,audio:{gain:1.8,release:.6,beatTh:1.4,device:''},recCfg:{src:'pgm',fmt:'',br:16,fps:30,audio:true,disk:false},tl:defTL(),show:defShow(),ui:defUI(),ndiUrl:'',
     ch,scenes:Array(8).fill(null),outputs:[defOut(1,'Proiettore 1')],oid:2}}
 function fixMap(m){const d=defMap();if(!m||typeof m!=='object')return d;const r={...d,...m};
   if(!Array.isArray(r.corners)||r.corners.length!==4)r.corners=d.corners;r.n=clamp(Math.round(+r.n)||4,2,8);
@@ -681,7 +694,7 @@ function msg(g,W,H,txt){g.fillStyle='#0b0b0b';g.fillRect(0,0,W,H);g.fillStyle='#
 function renderSource(i){const c=S.ch[i],r=RT[i],g=r.g,W=r.raw.width,H=r.raw.height;g.save();g.globalAlpha=1;g.globalCompositeOperation='source-over';
   if(GEN[c.src])GEN[c.src](g,W,H,r.time,c,r);
   else if(r.media&&r.mtype===c.src){if(r.mtype==='video'){const rate=clamp(c.speed,.1,4);if(r.rate!==rate){r.media.playbackRate=rate;r.rate=rate}}fitDraw(g,r.media,W,H,c.fit)}
-  else msg(g,W,H,c.src==='webcam'?'Webcam non attiva':'Nessun file: importa dal pannello o trascina sul canale');
+  else msg(g,W,H,c.src==='webcam'?'Webcam non attiva':c.src==='ndi'?'NDI non collegato':'Nessun file: importa dal pannello o trascina sul canale');
   g.restore()}
 
 /* ---------- audio ---------- */
@@ -864,7 +877,7 @@ function split(n,ov){[...OUT.keys()].forEach(closeOut);const w=(100+ov*(n-1))/n;
 
 /* ---------- media ---------- */
 const fileIn=$('#fileIn');
-function stopCam(r){if(r.stream){r.stream.getTracks().forEach(t=>t.stop());r.stream=null}}
+function stopCam(r){if(r.stream){r.stream.getTracks().forEach(t=>t.stop());r.stream=null}if(r.ndi){ndiClose(r.ndi);r.ndi=null}}
 function pickFile(i,accept){fileIn.accept=accept;fileIn.multiple=true;fileIn.dataset.mode='media';fileIn.dataset.ch=i;fileIn.value='';fileIn.click()}
 /* riconosce il codec video leggendo il box 'stsd' di MOV/MP4 (inizio e fine file, dove sta il moov) */
 const CODECS={avc1:['H.264',1],avc3:['H.264',1],hvc1:['H.265/HEVC',2],hev1:['H.265/HEVC',2],dvh1:['Dolby Vision',2],av01:['AV1',1],vp09:['VP9',1],mp4v:['MPEG-4',1],
@@ -916,8 +929,9 @@ function convertFile(f){const job=ffQueue.then(async()=>{const ff=await getFF(t=
       if(code.code!==0){console.warn('ffmpeg:',code.log);throw new Error('ffmpeg non riesce a leggere questo file: '+(code.log.match(/[^|]*(Error|error|not|Invalid|unsupported)[^|]*/)||[''])[0].trim().slice(0,140))}convStatus(f.name,'finalizzo',1);const d=await ff.call('read',{name:outN});return new Blob([d],{type:'video/mp4'})}
     finally{ff.onprogress=null;await ff.call('del',{name:inN}).catch(()=>{});await ff.call('del',{name:outN}).catch(()=>{})}});
   ffQueue=job.catch(()=>{}).then(()=>{convEl.hidden=true});return job}
-function probeVideo(blob){const url=URL.createObjectURL(blob),el=document.createElement('video');el.loop=true;el.muted=true;el.playsInline=true;el.preload='auto';
-  return new Promise(res=>{const done=ok=>{el.onloadedmetadata=el.onerror=null;clearTimeout(t);if(!ok){el.removeAttribute('src');URL.revokeObjectURL(url)}res(ok?{el,url}:null)},
+function probeVideo(blob){return probeSrc(URL.createObjectURL(blob),true)}
+function probeSrc(url,isBlob){const el=document.createElement('video');el.loop=true;el.muted=true;el.playsInline=true;el.preload='auto';
+  return new Promise(res=>{const done=ok=>{el.onloadedmetadata=el.onerror=null;clearTimeout(t);if(!ok){el.removeAttribute('src');if(isBlob)URL.revokeObjectURL(url)}res(ok?{el,url}:null)},
     t=setTimeout(()=>done(false),10000);el.onloadedmetadata=()=>{/* attende un frame: alcuni codec passano i metadati ma non decodificano */
       if(!(el.videoWidth>0))return done(false);el.onseeked=null;const ok=()=>{el.pause();el.currentTime=0;done(true)};if('requestVideoFrameCallback' in el){el.requestVideoFrameCallback(ok);el.play().catch(()=>{})}else done(true)};
     el.onerror=()=>done(false);el.src=url})}
@@ -943,6 +957,7 @@ async function startCam(i,dev){const r=RT[i];try{const st=await navigator.mediaD
   r.media=v;r.stream=st;r.mtype='webcam';r.camDev=dev||'';r.mname=dev?srcLabel('cam:'+dev):'Webcam';S.ch[i].src='webcam';dirty();if(S.sel===i)buildInsp()}catch(e){toast(dev?'Ingresso video non disponibile: è collegato e libero?':'Webcam non disponibile')}}
 function onSrc(i,v){const r=RT[i];if(GEN[v]){const was=S.ch[i].src;S.ch[i].src=v;r.scr={};if(v==='text')r.time=0;if(S.sel===i&&(v==='text')!==(was==='text'))setTimeout(buildInsp);if(r.mtype==='video'&&r.media)r.media.pause();dirty();return}
   if(v==='webcam'){startCam(i);return}
+  if(v==='lib'){openLib();return}if(v==='ndi'){ndiPick(i);return}
   for(let k=r.bin.length-1;k>=0;k--)if(r.bin[k].type===v){selectClip(i,k);return}
   pickFile(i,v==='image'?'image/*':'video/*,image/*,.mp4,.m4v,.mov,.qt,.webm,.mkv,video/mp4,video/quicktime')}
 fileIn.addEventListener('change',()=>{const fs=[...fileIn.files];if(!fs.length)return;
@@ -960,6 +975,110 @@ async function listVideoDevs(ask){try{if(ask){const st=await navigator.mediaDevi
     VDEV=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput'&&d.deviceId).map((d,k)=>({id:d.deviceId,label:d.label||('Ingresso video '+(k+1))}));
     buildShowEdit();buildShowList();if(ask)toast(VDEV.length?`${VDEV.length} ingressi video: sceglili come sorgente del cue`:'Nessun ingresso video trovato')}
   catch(e){if(ask)toast('Accesso agli ingressi video negato o nessun dispositivo collegato')}}
+
+/* ---------- Gaia: cartella video, NDI, orologio dello show (docs/regia.md) ---------- */
+const onBridge=/^https?:$/.test(location.protocol);
+function fmtSize(b){return b>=1e9?(b/1e9).toFixed(1)+' GB':b>=1e6?Math.round(b/1e6)+' MB':Math.round(b/1e3)+' kB'}
+/* cartella video sul server della Plancia (bridge: /api/video/library, file in /media/video/...) */
+const LIB={files:[],dir:'',ok:false,err:'',at:0,loading:null,bad:new Set()};
+function libLoad(force){if(!onBridge)return Promise.resolve(LIB.files);if(LIB.loading)return LIB.loading;
+  if(!force&&LIB.at&&performance.now()-LIB.at<15000)return Promise.resolve(LIB.files);
+  LIB.loading=fetch('/api/video/library',{cache:'no-store'}).then(r=>r.json()).then(j=>{if(!j.ok)throw new Error(j.error||'errore');
+      const was=LIB.files.map(f=>f.rel+f.mtime).join('|');LIB.files=j.files||[];LIB.dir=j.dir||'';LIB.ok=true;LIB.err='';LIB.at=performance.now();
+      if(was!==LIB.files.map(f=>f.rel+f.mtime).join('|')){LIB.bad.clear();if(typeof buildShowEdit==='function')buildShowEdit()}return LIB.files})
+    .catch(e=>{LIB.ok=false;LIB.err=e.message||String(e);return LIB.files}).finally(()=>{LIB.loading=null});return LIB.loading}
+const libURL=rel=>'/media/video/'+rel.split('/').map(encodeURIComponent).join('/');
+const libFind=n=>LIB.files.find(f=>f.rel===n)||LIB.files.find(f=>f.name===n);
+/* carica un file della cartella nel canale i (una volta sola), col nome che usano cue e clip */
+function libAdd(i,f,name=f.rel){const r=RT[i],have=r.bin.findIndex(b=>b.name===name);if(have>=0)return Promise.resolve(have);
+  r.libP=r.libP||{};if(r.libP[name])return r.libP[name];
+  const url=libURL(f.rel);
+  const p=(f.type==='image'?new Promise((res,rej)=>{const el=new Image();el.onload=()=>res(el);el.onerror=()=>rej(new Error('immagine non leggibile'));el.src=url})
+      .then(el=>{r.bin.push({name,url,type:'image',el,info:'immagine · cartella video'});return r.bin.length-1})
+    :probeSrc(url,false).then(v=>{if(!v)throw new Error('il browser non decodifica questo file: convertilo in H.264 (mp4)');
+      return pushVideo(i,name,v,`cartella · ${v.el.videoWidth}×${v.el.videoHeight} · ${fmtT(v.el.duration)}`)}))
+    .then(k=>{if(S.sel===i)buildInsp();return k});
+  r.libP[name]=p;p.catch(e=>{LIB.bad.add(name);toast(`${f.rel}: ${e.message||e}`)}).finally(()=>{delete r.libP[name]});return p}
+function libWant(i,n){const f=libFind(n);if(!f||LIB.bad.has(n)||!RT[i])return false;libAdd(i,f,n).catch(()=>{});return true}
+/* cue e clip che puntano a file non caricati: li prende dalla cartella video se ci sono (nome o percorso uguale) */
+function libRelinkAll(){let n=0;
+  for(const q of S.show.cues)if(cueMissing(q)&&libWant(q.ch>=0&&q.ch<RT.length?q.ch:0,q.src.slice(2)))n++;
+  for(const tr of S.tl.tracks)if(tr.type==='clip'&&RT[tr.ch])for(const it of tr.items)if(it.src.startsWith('m:')&&!RT[tr.ch].bin.some(b=>b.name===it.src.slice(2))&&libWant(tr.ch,it.src.slice(2)))n++;
+  return n}
+function modal(title,html,wide){let m=$('#rgModal');if(!m){m=document.createElement('div');m.id='rgModal';document.body.appendChild(m);m.addEventListener('click',e=>{if(e.target===m)m.hidden=true})}
+  m.innerHTML=`<div class="rgm${wide?' wide':''}" role="dialog" aria-label="${esc(title)}"><div class="rgmh"><b>${esc(title)}</b><button class="btn sm" data-act="mclose">Chiudi</button></div><div class="rgmb">${html}</div></div>`;m.hidden=false;return m}
+const modalOpen=id=>{const m=$('#rgModal');return m&&!m.hidden&&m.dataset.k===id};
+function openLib(){if(!onBridge){toast('La cartella video c’è solo aprendo Regia dalla Plancia: http://<OPS>:8080/regia/');return}
+  const m=modal('Cartella video','<div class="rgbar"><input id="libQ" placeholder="Cerca per nome o cartella" aria-label="Cerca nella cartella video"><button class="btn sm" data-act="libref">Aggiorna</button></div><div id="libList" class="hint">Leggo la cartella…</div>',true);
+  m.dataset.k='lib';$('#libQ').addEventListener('input',libRender);libLoad(true).then(libRender);setTimeout(()=>$('#libQ')&&$('#libQ').focus(),0)}
+function libRender(){const el=$('#libList');if(!el)return;const q=($('#libQ')||{}).value?.trim().toLowerCase()||'';
+  if(!LIB.ok){el.innerHTML=`<p class="hint">Cartella video non leggibile: ${esc(LIB.err||'bridge non raggiungibile')}</p>`;return}
+  const fs=LIB.files.filter(f=>!q||f.rel.toLowerCase().includes(q));
+  if(!LIB.files.length){el.innerHTML=`<p class="hint">Cartella vuota. Copia video (H.264 mp4 o webm) e immagini in<br><b>${esc(LIB.dir)}</b><br>anche in sottocartelle, poi Aggiorna.</p>`;return}
+  const ch=S.sel+1;let html=`<p class="hint">${esc(LIB.dir)} · ${LIB.files.length} file · canale selezionato CH${ch}</p>`,dir=null;
+  for(const f of fs.slice(0,600)){if(f.folder!==dir){dir=f.folder;html+=`<div class="lbf">${esc(dir||'(cartella principale)')}</div>`}
+    const r=esc(f.rel);html+=`<div class="lbr"><span class="lbn" title="${r}">${esc(f.name)}<small>${f.type==='image'?'immagine':'video'} · ${fmtSize(f.size)}</small></span>
+      <button class="btn sm" data-act="libch" data-rel="${r}" title="Carica nel canale ${ch} e mettilo in uso">CH${ch}</button><button class="btn sm" data-act="libcue" data-rel="${r}" title="Nuovo cue in scaletta">+ Cue</button><button class="btn sm" data-act="libtl" data-rel="${r}" title="Clip sulla traccia CH${ch} al cursore">+ Timeline</button></div>`}
+  if(!fs.length)html+='<p class="hint">Nessun file corrisponde.</p>';el.innerHTML=html}
+function libAct(a,rel){const f=LIB.files.find(x=>x.rel===rel),i=S.sel;if(!f)return;
+  libAdd(i,f).then(k=>{const b=RT[i].bin[k];
+    if(a==='libch'){selectClip(i,k);toast(`CH${i+1}: ${f.name}`)}
+    else if(a==='libcue'){showInsert(cueFromMedia(b));toast(`Cue: ${f.name}`)}
+    else{const tr=S.tl.tracks.find(x=>x.type==='clip'&&x.ch===i);if(!tr)return;const t=snapT(TLV.t),d=b.type==='video'&&isFinite(b.el.duration)?b.el.duration:8;
+      const it={id:++S.tl.nid,t,d,src:'m:'+b.name,fi:0,fo:0,op:1,in:0};tr.items.push(it);if(t+d>S.tl.dur)S.tl.dur=Math.ceil(t+d);tlSelect({k:'clip',tr,it});dirty();toast(`Timeline CH${i+1}: ${f.name} a ${fmtTL(t)}`)}}).catch(()=>{})}
+/* NDI: il browser non lo riceve, passa dal gateway NDI -> WebRTC (video-gateway, porta 8788) con il profilo "program" */
+const NDI={sources:[],err:''};
+const ndiBase=()=>(S.ndiUrl||(onBridge?`http://${location.hostname}:8788`:'http://127.0.0.1:8788')).replace(/\/+$/,'');
+function ndiList(){return fetch(ndiBase()+'/api/sources',{cache:'no-store'}).then(r=>r.json()).then(j=>{NDI.sources=j.sources||[];NDI.err='';return NDI.sources},e=>{NDI.err=e.message||String(e);throw e})}
+function ndiPick(i){const m=modal(`NDI · CH${i+1}`,`<div class="rgbar"><input id="ndiUrl" value="${esc(S.ndiUrl)}" placeholder="${esc(ndiBase())}" aria-label="Indirizzo del gateway NDI"><button class="btn sm" data-act="ndiref">Aggiorna</button></div><div id="ndiList" class="hint">Cerco le sorgenti NDI…</div>`);
+  m.dataset.k='ndi';m.dataset.ch=i;$('#ndiUrl').addEventListener('change',e=>{S.ndiUrl=e.target.value.trim();dirty();ndiRender(i)});ndiRender(i)}
+function ndiRender(i){const el=$('#ndiList');if(!el)return;el.textContent='Cerco le sorgenti NDI…';
+  ndiList().then(l=>{el.innerHTML=l.length?l.map(n=>`<div class="lbr"><span class="lbn">${esc(n)}</span><button class="btn sm" data-act="ndigo" data-rel="${esc(n)}">In CH${i+1}</button></div>`).join(''):'<p class="hint">Nessuna sorgente NDI in rete.</p>'},
+    e=>{el.innerHTML=`<p class="hint">Gateway NDI non raggiungibile su ${esc(ndiBase())} (${esc(e.message||e)}). Gira su OPS come GAIA-OPS-VideoGateway.</p>`})}
+async function startNdi(i,name){const r=RT[i];if(r.ndiP||(r.ndiFail&&r.ndiFail.name===name&&performance.now()-r.ndiFail.at<8000))return;r.ndiP=true;let pc=null;
+  try{pc=new RTCPeerConnection();pc.addTransceiver('video',{direction:'recvonly'});
+    const got=new Promise(res=>{pc.ontrack=e=>res(e.streams[0]||new MediaStream([e.track]))});
+    await pc.setLocalDescription(await pc.createOffer());
+    await new Promise(res=>{if(pc.iceGatheringState==='complete')return res();const t=setTimeout(res,2000);pc.addEventListener('icegatheringstatechange',()=>{if(pc.iceGatheringState==='complete'){clearTimeout(t);res()}})});
+    const resp=await fetch(ndiBase()+'/api/previews',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({source:name,profile:'program',offer:{sdp:pc.localDescription.sdp,type:pc.localDescription.type}})});
+    const j=await resp.json().catch(()=>({}));if(!resp.ok)throw new Error(j.error||('HTTP '+resp.status));
+    await pc.setRemoteDescription(j.answer);
+    const st=await Promise.race([got,new Promise((_,rej)=>setTimeout(()=>rej(new Error('nessun video dal gateway')),8000))]);
+    const v=document.createElement('video');v.muted=true;v.playsInline=true;v.srcObject=st;await v.play().catch(()=>{});
+    if(r.media&&r.mtype==='video')r.media.pause();stopCam(r);
+    const n={pc,id:j.id,name,live:true};r.ndi=n;r.stream=st;r.media=v;r.mtype='ndi';r.mname='NDI '+name;r.ndiFail=null;S.ch[i].src='ndi';pc=null;
+    n.pc.addEventListener('connectionstatechange',()=>{if(['failed','closed','disconnected'].includes(n.pc.connectionState)&&r.ndi===n&&n.live){n.live=false;toast(`NDI ${name}: collegamento perso`)}});
+    dirty();if(S.sel===i)buildInsp();toast(`CH${i+1}: NDI ${name}`)}
+  catch(e){r.ndiFail={name,at:performance.now()};toast(`NDI ${name}: ${e.message||e}`)}
+  finally{r.ndiP=false;if(pc)try{pc.close()}catch(_){}}}
+function ndiClose(n){n.live=false;try{n.pc.close()}catch(_){}if(n.id)fetch(ndiBase()+'/api/previews/'+n.id,{method:'DELETE'}).catch(()=>{})}
+document.addEventListener('click',e=>{const el=e.target.closest('[data-act]');if(!el)return;const a=el.dataset.act;
+  if(a==='mclose'){$('#rgModal').hidden=true}
+  else if(a==='slib'||a==='tllib')openLib();
+  else if(a==='libref')libLoad(true).then(libRender);
+  else if(a==='libch'||a==='libcue'||a==='libtl')libAct(a,el.dataset.rel);
+  else if(a==='ndiref')ndiRender(+$('#rgModal').dataset.ch);
+  else if(a==='ndigo'){startNdi(+$('#rgModal').dataset.ch,el.dataset.rel);$('#rgModal').hidden=true}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('#rgModal')&&!$('#rgModal').hidden){$('#rgModal').hidden=true;e.stopImmediatePropagation()}},true);
+/* orologio dello show: gaia/show/clock/state via il bridge (/mqtt), come i follower del bridge (video-timeline.js).
+   Vale uno stato "vivo" (due seq dallo stesso master); se il master tace si continua a contare (volano) per 10 min. */
+const CLK={c:null,on:false,st:null,err:'',topic:new URLSearchParams(location.search).get('clock')||'gaia/show/clock/state'};/* ?clock=<topic>: solo per le prove */
+function clkMsg(p){if(!p||!isFinite(+p.pos))return;const prev=CLK.st;const live=!!prev&&prev.master===p.master&&(!!prev.live||prev.seq!==p.seq);CLK.st={...p,at:performance.now(),live}}
+function clkPos(){const c=CLK.st;if(!c||!c.live)return null;const age=performance.now()-c.at;if(age>600000)return null;
+  let t=+c.pos||0;if(c.playing)t+=age/1000*(isFinite(+c.rate)?+c.rate:1);const L=+c.length;if(L>0)t=c.loop?t%L:Math.min(t,L);
+  return {t,playing:!!c.playing,bpm:+c.bpm||0,fresh:age<5000}}
+function clkShow(){const el=$('#tlClk');if(!el)return;let t='',cls='';
+  if(S.tl.ext){const c=CLK.st,p=clkPos();
+    if(!onBridge)t='solo dalla Plancia';else if(!CLK.on)t='MQTT…';else if(!p)t='nessun orologio';
+    else{t=`${c.master||'master'} ${p.playing?'▶':'■'}${p.fresh?'':' · volano'}`;cls=p.fresh?'on':'warn'}}
+  if(el.textContent!==t)el.textContent=t;if(el.className!==cls)el.className=cls}
+function clkStart(){if(!onBridge||CLK.c)return;const go=()=>{try{
+    const c=mqtt.connect(`${location.protocol==='https:'?'wss':'ws'}://${location.host}/mqtt`,{connectTimeout:4000,reconnectPeriod:3000,clientId:'regia-'+Math.random().toString(36).slice(2,8)});
+    CLK.c=c;c.on('connect',()=>{CLK.on=true;c.subscribe(CLK.topic)});c.on('close',()=>{CLK.on=false});c.on('error',e=>{CLK.err=e.message});
+    c.on('message',(t,b)=>{try{clkMsg(JSON.parse(b))}catch(_){}})}catch(e){CLK.err=e.message}};
+  if(window.mqtt)return go();const sc=document.createElement('script');sc.src='/vendor/mqtt.min.js';sc.onload=go;sc.onerror=()=>{CLK.err='mqtt.min.js non trovato'};document.head.appendChild(sc)}
+function gaiaInit(){if(!onBridge)return;clkStart();libLoad().then(()=>libRelinkAll());ndiList().then(()=>buildShowEdit()).catch(()=>{});
+  setInterval(()=>{libLoad().then(()=>{if(S.show.cues.some(cueMissing)||S.tl.tracks.some(tr=>tr.type==='clip'&&tr.items.some(it=>it.src.startsWith('m:')&&RT[tr.ch]&&!RT[tr.ch].bin.some(b=>'m:'+b.name===it.src))))libRelinkAll()})},30000)}
 
 /* ---------- UI ---------- */
 const opts=arr=>arr.map(([v,l])=>`<option value="${v}">${l}</option>`).join('');
@@ -1109,7 +1228,7 @@ document.addEventListener('click',e=>{const el=e.target.closest('[data-act]');if
     case 'wsmenu':{const pop=$('#wsPop');pop.hidden=!pop.hidden;el.setAttribute('aria-expanded',String(!pop.hidden));break}
     case 'wssave':wsSave();break;case 'wsupdate':wsUpdate();break;case 'wsreset':loadLayout(S.ui.cur);break;case 'wsdel':wsDelete();break;
     case 'chadd':addChannel();break;case 'chrm':removeChannel();break;
-    case 'simport':pickShow('show');break;case 'srelink':pickShow('relink');break;
+    case 'simport':pickShow('show');break;case 'srelink':if(onBridge)libLoad(true).then(()=>{const n=libRelinkAll();if(n)toast(`${n} file ripresi dalla cartella video`);else pickShow('relink')});else pickShow('relink');break;
     case 'sreplace':if(S.show.cues[S.show.sel])pickShow('replace',S.show.sel);break;
     case 'scams':listVideoDevs(true);break;
     case 'tpreset':{const c=S.ch[i];if(c&&TPRE[el.dataset.v]){Object.assign(c.txt,TPRE[el.dataset.v][1]);RT[i].scr={};dirty()}break}
@@ -1197,10 +1316,10 @@ const ENDL={hold:"Ferma sull'ultimo",loop:'Ripeti',out:'Sfuma a nero',next:'Segu
 const BUSL={T:'THRU',A:'Bus A',B:'Bus B',keep:'Invariato'};
 function mediaByName(n){for(const r of RT){const b=r.bin.find(b=>b.name===n);if(b)return b}return null}
 const cueMissing=q=>q.src.startsWith('m:')&&!mediaByName(q.src.slice(2));
-function newCue(){const i=S.sel,r=RT[i],c=S.ch[i];const src=MEDIA[c.src]&&c.src!=='webcam'?(r.mname&&r.mtype===c.src?'m:'+r.mname:'black'):c.src;
+function newCue(){const i=S.sel,r=RT[i],c=S.ch[i];const src=c.src==='ndi'&&r.ndi?'ndi:'+r.ndi.name:MEDIA[c.src]&&c.src!=='webcam'?(r.mname&&r.mtype===c.src?'m:'+r.mname:'black'):c.src;
   const tx=src==='text'?(({t,...x})=>({text:t,tsty:x}))(c.txt):{text:'',tsty:null};
   return {id:++S.show.nid,name:'',src,ch:-1,bus:'T',fi:2,xo:2,op:1,end:'hold',fo:2,dur:0,scene:-1,note:'',...tx}}
-function cueFromMedia(b){return {...newCue(),src:'m:'+b.name,name:b.name.replace(/\.[^.]+$/,'')}}
+function cueFromMedia(b){return {...newCue(),src:'m:'+b.name,name:b.name.split('/').pop().replace(/\.[^.]+$/,'')}}
 function showInsert(q,quiet){const k=S.show.sel>=0?S.show.sel+1:S.show.cues.length;S.show.cues.splice(k,0,q);if(SHOW.live>=k)SHOW.live++;if(S.show.sb>k)S.show.sb++;
   S.show.sel=k;dirty();if(!quiet){buildShowList();buildShowEdit()}}
 function pickCh(q){const n=S.ch.length;if(q.ch>=0&&q.ch<n)return q.ch;if(n===1)return 0;
@@ -1210,8 +1329,9 @@ function loadSrc(i,src){const r=RT[i],c=S.ch[i];
   if(GEN[src]){if(r.mtype==='video'&&r.media)r.media.pause();const was=c.src;c.src=src;r.scr={};if(src==='text')r.time=0;if(S.sel===i&&(src==='text')!==(was==='text'))buildInsp();return true}
   if(src==='webcam'){if(r.mtype!=='webcam')startCam(i);else c.src='webcam';return true}
   if(src.startsWith('cam:')){const dev=src.slice(4);if(r.mtype==='webcam'&&r.camDev===dev)c.src='webcam';else startCam(i,dev);return true}
-  const b=mediaByName(src.slice(2));if(!b)return false;
-  if(r.media&&r.media!==b.el&&r.mtype==='video')r.media.pause();if(r.stream){r.stream.getTracks().forEach(t=>t.stop());r.stream=null}
+  if(src.startsWith('ndi:')){const n=src.slice(4);if(r.mtype==='ndi'&&r.ndi&&r.ndi.name===n)c.src='ndi';else startNdi(i,n);return true}
+  const b=mediaByName(src.slice(2));if(!b){if(src.startsWith('m:'))libWant(i,src.slice(2));return false}
+  if(r.media&&r.media!==b.el&&r.mtype==='video')r.media.pause();stopCam(r);
   r.media=b.el;r.mtype=b.type;r.mname=b.name;r.rate=0;c.src=b.type;
   if(b.type==='video'){b.el.currentTime=0;b.el.play().catch(()=>{})}if(S.sel===i)buildInsp();return true}
 function showGo(){const cues=S.show.cues,k=S.show.sb;if(k<0||k>=cues.length){toast('Fine della scaletta');return}
@@ -1259,7 +1379,9 @@ function srcOptsAll(cur){let o=`<optgroup label="Interne">${Object.entries(GENS)
   const cams=VDEV.map(d=>['cam:'+d.id,d.label]);if(cur&&cur.startsWith('cam:')&&!cams.some(c=>c[0]===cur))cams.push([cur,'Ingresso video (non rilevato)']);
   o+=`<optgroup label="Ingressi video"><option value="webcam">Webcam / ingresso predefinito</option>${cams.map(([v,l])=>`<option value="${esc(v)}">${esc(l)}</option>`).join('')}</optgroup>`;
   const names=[];RT.forEach(r=>r.bin.forEach(b=>{if(!names.includes(b.name))names.push(b.name)}));if(cur&&cur.startsWith('m:')&&!names.includes(cur.slice(2)))names.push(cur.slice(2));
-  if(names.length)o+=`<optgroup label="File caricati">${names.map(n=>`<option value="${esc('m:'+n)}">${esc(n)}${mediaByName(n)?'':' (mancante)'}</option>`).join('')}</optgroup>`;return o}
+  if(names.length)o+=`<optgroup label="File caricati">${names.map(n=>`<option value="${esc('m:'+n)}">${esc(n)}${mediaByName(n)?'':' (mancante)'}</option>`).join('')}</optgroup>`;
+  const lib=LIB.files.filter(f=>!names.includes(f.rel));if(lib.length)o+=`<optgroup label="Cartella video">${lib.slice(0,800).map(f=>`<option value="${esc('m:'+f.rel)}">${esc(f.rel)}</option>`).join('')}</optgroup>`;
+  const nd=[...new Set([...NDI.sources,...(cur&&cur.startsWith('ndi:')?[cur.slice(4)]:[])])];if(nd.length)o+=`<optgroup label="NDI">${nd.map(n=>`<option value="${esc('ndi:'+n)}">${esc(n)}</option>`).join('')}</optgroup>`;return o}
 function buildShowList(){const el=document.getElementById('sList');if(!el)return;const cues=S.show.cues;
   el.innerHTML='<div class="cuerow hd"><span>#</span><span>Nome</span><span>Canale</span><span>Sorgente</span><span>Entrata</span><span>Altri</span><span>Al termine</span><span>Note</span></div>'+
     cues.map((q,k)=>`<div class="cuerow${k===SHOW.live?' live':''}${k===S.show.sb?' sb':''}${k===S.show.sel?' sel':''}" data-act="ssel" data-k="${k}" draggable="true" title="Trascina per riordinare · doppio click = standby"><span><i class="cgrip" aria-hidden="true">⠿</i>${k===SHOW.live?(SHOW.paused?'❚❚ ':'▶ '):''}${k+1}</span><span>${esc(q.name||'—')}</span><span>${q.ch<0?'Auto':'CH'+(q.ch+1)}</span><span class="${cueMissing(q)?'miss':''}">${cueMissing(q)?'⚠ ':''}${q.src==='text'&&q.text?'Testo: “'+esc(q.text.split('\n')[0])+'”':esc(srcLabel(q.src))}</span><span>${q.fi}s</span><span>${q.xo<0?'—':q.xo+'s'}</span><span>${ENDL[q.end]||q.end}${q.end==='out'?' '+q.fo+'s':''}${q.dur>0?' · '+q.dur+'s':''}</span><span>${esc(q.note||'')}</span></div>`).join('')+
@@ -1430,7 +1552,7 @@ function evalLane(tr,t){let ks=tr.keys;if(!ks.length)return +getP(tr.path)||0;fo
   return tr.mode==='step'?a.v:a.v+(b.v-a.v)*(tr.mode==='smooth'?.5-.5*Math.cos(Math.PI*u):u)}
 function clipAt(tr,t){let r=null;for(const it of tr.items)if(t>=it.t&&t<it.t+it.d)r=it;return r}
 function envOf(it,t){const a=t-it.t;if(a<0||a>it.d)return 0;let e=it.op??1;if(it.fi>0&&a<it.fi)e*=a/it.fi;if(it.fo>0&&it.d-a<it.fo)e*=(it.d-a)/it.fo;return e}
-const srcLabel=s=>s.startsWith('m:')?s.slice(2):s==='webcam'?'Webcam':s.startsWith('cam:')?((VDEV.find(d=>d.id===s.slice(4))||{}).label||'Ingresso video'):(GENS[s]||s);
+const srcLabel=s=>s.startsWith('m:')?s.slice(2):s.startsWith('ndi:')?'NDI '+s.slice(4):s==='webcam'?'Webcam':s.startsWith('cam:')?((VDEV.find(d=>d.id===s.slice(4))||{}).label||'Ingresso video'):(GENS[s]||s);
 const missing=(tr,it)=>it.src.startsWith('m:')&&!RT[tr.ch].bin.some(b=>'m:'+b.name===it.src);
 
 function tlSanitize(){const T=S.tl;T.dur=clamp(+T.dur||60,1,36000);T.bpm=clamp(+T.bpm||120,20,300);T.zoom=clamp(+T.zoom||14,1,200);
@@ -1440,7 +1562,8 @@ function tlSanitize(){const T=S.tl;T.dur=clamp(+T.dur||60,1,36000);T.bpm=clamp(+
 function ensureSrc(i,it){const r=RT[i],c=S.ch[i],src=it.src;
   if(GEN[src]){if(c.src!==src){const was=c.src;c.src=src;r.scr={};if(src==='text')r.time=0;if(r.mtype==='video'&&r.media)r.media.pause();if(S.sel===i&&(src==='text')!==(was==='text'))buildInsp()}return true}
   if(src==='webcam'){if(r.mtype==='webcam'){c.src='webcam';return true}if(!r.camP){r.camP=true;startCam(i).finally(()=>r.camP=false)}return false}
-  const k=r.bin.findIndex(b=>'m:'+b.name===src);if(k<0)return false;
+  if(src.startsWith('ndi:')){const n=src.slice(4);if(r.mtype==='ndi'&&r.ndi&&r.ndi.name===n){c.src='ndi';return !!r.ndi.live}startNdi(i,n);return false}
+  const k=r.bin.findIndex(b=>'m:'+b.name===src);if(k<0){if(src.startsWith('m:'))libWant(i,src.slice(2));return false}
   if(r.media!==r.bin[k].el||c.src!==r.bin[k].type)selectClip(i,k);return true}
 function syncMedia(i,it,t){const r=RT[i],m=r.media;if(r.mtype!=='video'||!m||!m.duration)return;
   let tg=(it.in||0)+(t-it.t)*clamp(S.ch[i].speed,.1,4);tg=m.loop?tg%m.duration:Math.min(tg,m.duration-.05);
@@ -1455,8 +1578,8 @@ function tlApply(){const t=TLV.t;
 function tlRelease(){for(const r of RT){if(r.tlClip&&r.mtype==='video'&&r.media&&r.media.paused)r.media.play().catch(()=>{});r.tlA=1;r.tlClip=null}}
 function fireCues(a,b){for(const tr of S.tl.tracks)if(tr.type==='cue'&&!tr.mute)for(const c of tr.items)if(c.t>a&&c.t<=b)recallScene(c.k,c.f)}
 function tlSeek(t){TLV.t=clamp(t,0,S.tl.dur);TLV.armed=true}
-function tlToggle(){if(TLV.playing){TLV.playing=false;return}const T=S.tl;TLV.armed=true;if(TLV.t>=T.dur-.01)TLV.t=T.loop&&T.lb>T.la?T.la:0;fireCues(TLV.t-1e-4,TLV.t);TLV.playing=true}
-function tlStop(){if(TLV.expEnd!=null){TLV.expEnd=null;stopRec()}TLV.playing=false;TLV.armed=false;TLV.t=S.tl.loop&&S.tl.lb>S.tl.la?S.tl.la:0;tlRelease()}
+function tlToggle(){if(TLV.ext){toast("La timeline segue l'orologio dello show: play e pausa dalla Plancia (o togli Orologio show)");return}if(TLV.playing){TLV.playing=false;return}const T=S.tl;TLV.armed=true;if(TLV.t>=T.dur-.01)TLV.t=T.loop&&T.lb>T.la?T.la:0;fireCues(TLV.t-1e-4,TLV.t);TLV.playing=true}
+function tlStop(){if(TLV.ext){toast("La timeline segue l'orologio dello show: togli Orologio show per riprendere il banco");return}if(TLV.expEnd!=null){TLV.expEnd=null;stopRec()}TLV.playing=false;TLV.armed=false;TLV.t=S.tl.loop&&S.tl.lb>S.tl.la?S.tl.la:0;tlRelease()}
 async function tlExport(){if(REC.active){toast('Una registrazione è già in corso');return}const T=S.tl,lp=T.loop&&T.lb-T.la>.05,a=lp?T.la:0,b=lp?T.lb:T.dur;
   TLV.playing=false;tlSeek(a);tlApply();await startRec();if(!REC.active)return;TLV.expEnd=b;fireCues(a-1e-4,a);TLV.playing=true;toast(`Esporto la timeline: ${fmtT(b-a)}`)}
 function tlClear(){const now=performance.now();if(now-TLV.clr>3000){TLV.clr=now;$('#tlClear').textContent='Conferma svuota';return}
@@ -1614,7 +1737,12 @@ function initTL(){const cv=$('#tlCv'),pos=e=>{const b=cv.getBoundingClientRect()
     if(last){if(t>S.tl.dur)S.tl.dur=Math.ceil(t);tlSelect({k:'clip',tr,it:last});dirty()}});
   buildTLInsp()}
 function tlTick(dt){const T=S.tl;tlSanitize();
-  if(TLV.playing){let a=TLV.t,b=a+dt;
+  const ck=T.ext&&TLV.expEnd==null?clkPos():null;TLV.ext=!!ck;
+  if(ck){/* orologio dello show: posizione, play e BPM arrivano dal master (docs/show-clock.md) */
+    const a=TLV.t,b=clamp(ck.t,0,T.dur);if(ck.playing&&b>a&&b-a<1)fireCues(a,b);
+    TLV.t=b;TLV.playing=ck.playing;TLV.armed=true;
+    if(ck.bpm>=20&&ck.bpm<=300&&Math.abs(T.bpm-ck.bpm)>.05){T.bpm=Math.round(ck.bpm*10)/10;dirty()}}
+  else if(TLV.playing){let a=TLV.t,b=a+dt;
     if(TLV.expEnd!=null){if(!REC.active)TLV.expEnd=null;else if(b>=TLV.expEnd){b=TLV.expEnd;fireCues(a,b);TLV.t=b;TLV.playing=false;TLV.expEnd=null;tlApply();stopRec();a=b}}
     if(TLV.playing){if(T.loop&&T.lb-T.la>.05&&TLV.expEnd==null&&a<T.lb&&b>=T.lb){fireCues(a,T.lb);a=T.la-1e-6;b=T.la+(b-T.lb)}
       if(b>=T.dur){b=T.dur;TLV.playing=false}fireCues(a,b);TLV.t=b}}
@@ -1627,7 +1755,7 @@ function tlTick(dt){const T=S.tl;tlSanitize();
   const pb=$('#tlPlay'),pt=TLV.playing?'❚❚ PAUSA':'▶ PLAY';if(pb.textContent!==pt)pb.textContent=pt;pb.classList.toggle('hot',TLV.playing);
   $('#tl').classList.toggle('armed',TLV.armed);$('#tlExp').classList.toggle('hot',TLV.expEnd!=null);
   const et=TLV.expEnd!=null?'■ Ferma export':'● Esporta timeline';if($('#tlExp').textContent!==et)$('#tlExp').textContent=et;
-  const tt=fmtTL(TLV.t);if($('#tlTime').textContent!==tt)$('#tlTime').textContent=tt;
+  const tt=fmtTL(TLV.t);if($('#tlTime').textContent!==tt)$('#tlTime').textContent=tt;clkShow();
   const bt=Math.floor(TLV.t/(60/T.bpm)+1e-6),bs=`${Math.floor(bt/4)+1}.${bt%4+1}`;if($('#tlBeat').textContent!==bs)$('#tlBeat').textContent=bs;
   if(TLV.clr&&performance.now()-TLV.clr>3000){TLV.clr=0;$('#tlClear').textContent='Svuota'}}
 
@@ -1676,7 +1804,7 @@ function drawOverlayOn(g,o,w,h){const m=o.map,H=homog(m.corners),L=8,Sx=32;g.sav
   const sp=hs[sel]||[0,0];g.font='600 11px "JetBrains Mono",monospace';g.fillStyle='#ffb020';g.textBaseline='bottom';g.textAlign='left';
   g.fillText(`punto ${sel+1} · ${(sp[0]*100).toFixed(1)}%, ${(sp[1]*100).toFixed(1)}%`,8,h-6);g.restore()}
 
-initLayout();initTL();initShow();buildAll();setRes(S.res.w,S.res.h);requestAnimationFrame(frame);
+initLayout();initTL();initShow();buildAll();setRes(S.res.w,S.res.h);requestAnimationFrame(frame);gaiaInit();
 if(navigator.mediaDevices&&navigator.mediaDevices.enumerateDevices)listDevices();
 </script>
 </body>

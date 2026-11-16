@@ -99,3 +99,5 @@ minipc/script/provision_registry.json
 web/*.bak*
 ops/laser/cubes.json
 ops/laser/cubes.json.tmp
+video-gateway/*.log
+media/

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Plancia Video Service -- test PoC</title>
+<style>
+  body{background:#0b0d11;color:#dfe3ea;font:14px/1.4 system-ui,sans-serif;padding:20px}
+  select,button{font:inherit;padding:6px 10px;background:#161a20;color:#dfe3ea;border:1px solid #333;border-radius:4px}
+  video{display:block;margin-top:14px;max-width:100%;background:#000;border:1px solid #333}
+  #log{white-space:pre-wrap;font:12px/1.4 monospace;color:#8a92a0;margin-top:12px}
+</style>
+</head>
+<body>
+  <h2>Plancia Video Service -- PoC NDI&rarr;WebRTC</h2>
+  <select id="sources"></select>
+  <button id="refresh">Aggiorna sorgenti</button>
+  <button id="connect">Connetti</button>
+  <button id="disconnect">Disconnetti</button>
+  <video id="v" autoplay playsinline muted></video>
+  <div id="log"></div>
+<script>
+const logEl = document.getElementById('log');
+const log = (...a) => { logEl.textContent += a.join(' ') + '\n'; console.log(...a); };
+let pc = null, previewId = null;
+
+async function loadSources(){
+  const r = await fetch('/api/sources');
+  const j = await r.json();
+  const sel = document.getElementById('sources');
+  sel.innerHTML = j.sources.map(s => `<option value="${s}">${s}</option>`).join('') || '<option disabled>nessuna sorgente</option>';
+  log('sorgenti:', JSON.stringify(j.sources));
+}
+
+document.getElementById('refresh').onclick = loadSources;
+
+document.getElementById('connect').onclick = async () => {
+  const source = document.getElementById('sources').value;
+  if (!source) { log('nessuna sorgente selezionata'); return; }
+  pc = new RTCPeerConnection();
+  pc.ontrack = (e) => { document.getElementById('v').srcObject = e.streams[0]; log('track ricevuta'); };
+  pc.onconnectionstatechange = () => log('connectionState:', pc.connectionState);
+  pc.addTransceiver('video', { direction: 'recvonly' });
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  const r = await fetch('/api/previews', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source, offer: { sdp: offer.sdp, type: offer.type } })
+  });
+  const j = await r.json();
+  if (j.error) { log('errore:', j.error); return; }
+  previewId = j.id;
+  await pc.setRemoteDescription(new RTCSessionDescription(j.answer));
+  log('preview creata:', previewId);
+};
+
+document.getElementById('disconnect').onclick = async () => {
+  if (previewId) await fetch('/api/previews/' + previewId, { method: 'DELETE' });
+  if (pc) pc.close();
+  pc = null; previewId = null;
+  log('disconnesso');
+};
+
+loadSources();
+</script>
+</body>
+</html>

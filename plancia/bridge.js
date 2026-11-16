@@ -26,6 +26,8 @@ const PLAN_DIR = path.join(path.dirname(STATE_FILE), 'plans'), PLAN_MAX = 20 * 1
 const fixtureLib = createLibrary({ dir: path.join(path.dirname(STATE_FILE), 'fixture-lib') });
 const audioLib = require('./audio-lib');
 const laserLib = require('./laser-lib');
+const videoLib = require('./video-lib');
+const REGIA_DIR = path.join(__dirname, 'regia');
 const STATIC_ASSETS = {
   '/app.js': { file: 'app.js', contentType: 'text/javascript; charset=utf-8' },
   '/plancia.css': { file: 'plancia.css', contentType: 'text/css; charset=utf-8' }
@@ -290,6 +292,24 @@ const server = http.createServer((req, res) => {
     const id = new URL(req.url, 'http://plancia').searchParams.get('id');
     const reply = (code, obj) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(obj)); };
     (id ? laserLib.scene(id).then(scene => ({ scene })) : laserLib.index()).then(out => reply(200, { ok: true, ...out }), err => reply(404, { ok: false, error: err.message }));
+  } else if (/^\/regia\/?$/.test(req.url.split('?')[0])) {
+    // Regia video (plancia/regia, docs/regia.md): pagina a se', gira sulla macchina dei proiettori
+    if (req.url.split('?')[0] === '/regia') { res.writeHead(301, { location: '/regia/' + (req.url.split('?')[1] ? '?' + req.url.split('?')[1] : '') }); res.end(); return; }
+    fs.promises.readFile(path.join(REGIA_DIR, 'index.html')).then(buf => { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }); res.end(buf); },
+      () => { res.writeHead(404); res.end(); });
+  } else if (/^\/regia\/fonts\/[\w.-]+\.(woff2|css)$/.test(req.url.split('?')[0])) {
+    const name = req.url.split('?')[0].slice('/regia/fonts/'.length);
+    fs.promises.readFile(path.join(REGIA_DIR, 'fonts', name)).then(buf => {
+      res.writeHead(200, { 'content-type': name.endsWith('.css') ? 'text/css; charset=utf-8' : 'font/woff2', 'cache-control': 'max-age=86400' }); res.end(buf);
+    }, () => { res.writeHead(404); res.end(); });
+  } else if (req.url.split('?')[0] === '/api/video/library') {
+    // cartella video di Regia (video-lib.js): elenco dei file
+    const reply = (code, obj) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(obj)); };
+    videoLib.list().then(files => reply(200, { ok: true, dir: videoLib.DIR, files }), err => reply(500, { ok: false, error: err.message }));
+  } else if (req.url.startsWith('/media/video/') && (req.method === 'GET' || req.method === 'HEAD')) {
+    let rel = null;
+    try { rel = decodeURIComponent(req.url.split('?')[0].slice('/media/video/'.length)); } catch { /* sotto: 404 */ }
+    videoLib.serve(req, res, rel);
   } else if (req.url.split('?')[0] === '/vendor/mqtt.min.js') {
     // stesso mqtt.js che usano le pagine web di Gaia: niente CDN, funziona anche senza internet
     res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'max-age=86400' });
