@@ -390,9 +390,14 @@ struct HpRing {
     /// il cavo virtuale delle luci puo' andare a 48 kHz col motore a 44.1
     step: f64,
     frac: f64,
+    /// livello voluto (campioni, oltre al blocco della callback): cuffia minimo, luci piu' largo
+    target: usize,
 }
 type Hp = Arc<Mutex<HpRing>>;
+/// luci (cavo virtuale, altro dispositivo e altra frequenza): margine largo, il ritardo non conta
 const HP_TARGET: usize = 2 * 768;
+/// cuffia (16/11, "come il direct monitor"): il minimo sopra il blocco della callback
+const HP_TARGET_CUE: usize = 2 * 256;
 const HP_MAX: usize = 2 * 8192;
 /// correzione massima della velocita' di lettura (0,5%: non si sente in cuffia)
 const HP_ADJ: f64 = 0.005;
@@ -401,7 +406,10 @@ const HP_GAIN_FRAMES: f64 = 400.0;
 
 impl HpRing {
     fn new() -> Self {
-        HpRing { q: VecDeque::with_capacity(HP_MAX + 4096), primed: false, step: 1.0, frac: 0.0 }
+        HpRing { q: VecDeque::with_capacity(HP_MAX + 4096), primed: false, step: 1.0, frac: 0.0, target: HP_TARGET }
+    }
+    fn cue() -> Self {
+        HpRing { target: HP_TARGET_CUE, ..HpRing::new() }
     }
     fn set_step(&mut self, step: f64) {
         self.step = if step.is_finite() && step > 0.0 { step } else { 1.0 };
@@ -422,11 +430,11 @@ impl HpRing {
         let frames = out.len() / ch.max(1);
         out.fill(0.0);
         let base = (frames as f64 * self.step).ceil() as usize + 2;
-        let over = (self.q.len() / 2) as f64 - (HP_TARGET / 2 + base) as f64;
+        let over = (self.q.len() / 2) as f64 - (self.target / 2 + base) as f64;
         let step = if self.primed { self.step * (1.0 + (over / HP_GAIN_FRAMES).clamp(-1.0, 1.0) * HP_ADJ) } else { self.step };
         let need = (frames as f64 * step + self.frac).ceil() as usize + 2;
         if !self.primed {
-            if self.q.len() < HP_TARGET + 2 * need {
+            if self.q.len() < self.target + 2 * need {
                 return;
             }
             self.primed = true;
@@ -673,7 +681,7 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
     let mut info = OutputInfo { device: String::new(), rate: 48000.0, ok: false, error: None };
     let null_run = Arc::new(AtomicBool::new(false));
     let mut retry_at = Instant::now();
-    let hp: Hp = Arc::new(Mutex::new(HpRing::new()));
+    let hp: Hp = Arc::new(Mutex::new(HpRing::cue()));
     // cuffia separata: errori a parte, si riapre da sola
     let (cue_err_tx, cue_err_rx) = mpsc::channel::<String>();
     let mut cue_stream: Option<cpal::Stream> = None;
@@ -906,8 +914,8 @@ mod tests {
     #[test]
     fn buffer_cuffia_non_accumula_ritardo() {
         // il master consegna lo 0,3% in piu' di quanto la cuffia consuma: senza controllo il
-        // buffer cresceva fino al massimo (~190 ms); ora resta vicino al livello voluto
-        let mut r = HpRing::new();
+        // buffer cresceva fino al massimo (~190 ms); ora resta vicino al livello voluto (cuffia: il minimo)
+        let mut r = HpRing::cue();
         let mut out = vec![0f32; 441 * 2];
         let mut carry = 0.0f64;
         for _ in 0..6000 {
@@ -918,7 +926,7 @@ mod tests {
             r.pull(&mut out, 2);
         }
         let ms = (r.q.len() / 2) as f64 / 44.1;
-        assert!(ms < 40.0, "buffer cuffia {ms:.1} ms");
+        assert!(ms < 25.0, "buffer cuffia {ms:.1} ms");
         assert!(out.iter().all(|x| (*x - 0.25).abs() < 1e-6), "suona senza buchi");
         // e se consegna meno (orologio piu' lento) non si svuota a scatti
         let mut gaps = 0;
