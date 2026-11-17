@@ -1,5 +1,11 @@
 # Regia video
 
+> **17/11: in pausa.** Il video dello show resta sui motori nativi (PatchDeck/TouchDesigner, Resolume),
+> comandati dalla Plancia (riga VIDEO). Un'uscita video da browser ha limiti da show (uscite legate
+> alla finestra di controllo, niente HAP, nessuna sincronia garantita). Se servira' un motore nostro
+> sara' un player nativo in Rust (wgpu, ffmpeg/HAP, NDI SDK, mapping). Regia resta nel repo come
+> riferimento per l'interfaccia (scaletta, timeline, mapping) e il codice qui sotto funziona.
+
 Regia è il mixer video nel browser fatto da Nicola: canali, bus A/B, effetti, scene, scaletta con GO, timeline, uscite mappate sui proiettori e registrazione.
 
 - **Dove sta:** `plancia/regia/index.html`.
