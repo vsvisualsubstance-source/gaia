@@ -147,7 +147,12 @@ function renderRecType(audio){const MR=window.MediaRecorder;if(!MR?.isTypeSuppor
   return list.find(t=>MR.isTypeSupported(t))||''}
 function renderRecPaint(){document.querySelectorAll('.t-stage [data-rec]').forEach(b=>{b.classList.toggle('rec-on',!!renderRec);
   b.textContent=renderRec?`■ ${Math.max(0,Math.ceil((renderRec.until-Date.now())/1000))}s`:'⏺'})}
-function renderRecStop(){const r=renderRec;if(!r)return;clearTimeout(r.timer);clearInterval(r.tick);renderRec=null;renderRecPaint();try{r.mr.stop()}catch{}}
+function renderRecStop(){const r=renderRec;if(!r)return;clearTimeout(r.timer);clearInterval(r.tick);renderRec=null;renderRecPaint();try{r.mr.stop()}catch{}renderRecSize(r.cv,r.d0)}
+// 17/11: video del Render in alta qualita': la tela si disegna a 1080 righe (o di piu', fino a 3840
+// di larghezza) con le stesse proporzioni del Palco, poi torna come prima. d = pixel per punto.
+function renderRecSize(cv,d){if(!cv?._d)return;const W=cv.width/cv._d,H=cv.height/cv._d;
+  cv.width=Math.max(2,Math.round(W*d/2)*2);cv.height=Math.max(2,Math.round(H*d/2)*2);cv._d=d}
+function renderRecScale(cv,rows){const W=cv.width/cv._d,H=cv.height/cv._d;return Math.max(cv._d,Math.min(rows/H,3840/W))}
 
 // Audio nel video. Il suono lo fa il motore gaia-audio sulla scheda, non la pagina: durante la
 // registrazione la pagina rispecchia lo stato del motore (audio_state: brano, posizione, play,
@@ -206,15 +211,17 @@ async function renderRecord(el,w){
   const show=allW().find(x=>x.type==='timeline'&&isShowTimeline(x));
   const items=[10,30,60].map(s=>({label:`⏺ ${s} s, quello che succede ora`,value:{s}}));
   if(show)items.push(...[30,60].map(s=>({label:`⏺ ${s} s, show dall'inizio (▶ timeline)`,value:{s,start:true}})));
-  const v=await uiChoose('Video del Render',items,{hint:"Registra il Palco com'è adesso sullo schermo (telecamera e zoom compresi). \"Show dall'inizio\" fa ripartire la timeline: le luci vere la seguono. Se il motore audio è collegato, nel video entra anche l'audio della Console e della traccia AUDIO."});
+  const v=await uiChoose('Video del Render',items,{hint:"Registra il Palco com'è adesso sullo schermo (telecamera e zoom compresi), in alta qualità (1080 righe, senza scritte). \"Show dall'inizio\" fa ripartire la timeline: le luci vere la seguono. Laser non collegati: si vedono le scene della timeline LASER o l'ultima mandata dal tablet. Se il motore audio è collegato, nel video entra anche l'audio della Console e della traccia AUDIO."});
   if(!v)return;
+  const d0=cv._d;renderRecSize(cv,renderRecScale(cv,1080));
   const au=recAudioOpen(),type=renderRecType(!!au)||renderRecType(false);
   // brani della traccia AUDIO: si preparano subito, cosi' lo show dall'inizio ha il suono dal primo secondo
   if(au)for(const c of L.audioTimeline?.cues||[])if(c.src?.kind==='track'&&c.src.id)recAudioBuf(au,c.src.id);
   const stream=new MediaStream([...cv.captureStream(30).getVideoTracks(),...(au?au.dest.stream.getAudioTracks():[])]);
+  const px=cv.width*cv.height,vbr=px>3e6?40e6:px>1.5e6?24e6:12e6;
   let mr;
-  try{mr=new MediaRecorder(stream,{mimeType:type,videoBitsPerSecond:4e6,...(au?{audioBitsPerSecond:192e3}:{})})}
-  catch(e){recAudioClose(au);showError('Registrazione non partita: '+e.message);return}
+  try{mr=new MediaRecorder(stream,{mimeType:type,videoBitsPerSecond:vbr,...(au?{audioBitsPerSecond:256e3}:{})})}
+  catch(e){recAudioClose(au);renderRecSize(cv,d0);showError('Registrazione non partita: '+e.message);return}
   const chunks=[];
   mr.ondataavailable=e=>{if(e.data?.size)chunks.push(e.data)};
   mr.onstop=()=>{const heard=!!au?.heard,errs=au?[...au.errors]:[];recAudioClose(au);
@@ -224,10 +231,11 @@ async function renderRecord(el,w){
     a.href=URL.createObjectURL(blob);a.download=`render_${name}_${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.${type.includes('mp4')?'mp4':'webm'}`;
     document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),60000);
     const audioMsg=!au?' Senza audio: motore audio non collegato.':heard?' Con audio.':' Senza audio: nessun brano in play durante la registrazione.';
-    showInfo(`Video del Render salvato: ${a.download} (${(blob.size/1048576).toFixed(1)} MB).${audioMsg}${errs.length?' Audio: '+errs.join(', '):''}`)};
+    showInfo(`Video del Render salvato: ${a.download} (${(blob.size/1048576).toFixed(1)} MB, ${size}).${audioMsg}${errs.length?' Audio: '+errs.join(', '):''}`)};
   if(v.start&&show){tlAct(show,'start');await playShowClock(show)}
   mr.start(1000);
-  renderRec={mr,audio:au,until:Date.now()+v.s*1000,timer:setTimeout(renderRecStop,v.s*1000),tick:setInterval(renderRecPaint,500)};renderRecPaint();
+  const size=`${cv.width}×${cv.height}`;
+  renderRec={mr,cv,d0,audio:au,until:Date.now()+v.s*1000,timer:setTimeout(renderRecStop,v.s*1000),tick:setInterval(renderRecPaint,500)};renderRecPaint();
   if(au&&AU.lastState)recAudioSync(au,AU.lastState);
 }
 
@@ -762,7 +770,7 @@ registerWidget('stage',{oscAddress:false,
   // ogni fotogramma: Render (luci, a tempo con level) o Pianta, e la riga di stato
   tick(el,w,{now,level}){const c=el.querySelector('canvas'),g=c.getContext('2d');if(!c._d)return;
       // laser vero in uscita: Render a 15 fotogrammi al secondo (laserRenderLight, 99-laser.js)
-      const light=w.view!=='plot'&&laserRenderLight();
+      const light=w.view!=='plot'&&laserRenderLight()&&!renderRec;   // registrando: sempre pieno
       const skip=light&&now-(el._lastDraw||0)<1000/laserRenderLightFps()-4;
       if(!skip){el._lastDraw=now;g.setTransform(c._d,0,0,c._d,0,0);
       const W=c.width/c._d,H=c.height/c._d;if(w.view==='plot')drawPlot(g,W,H,now,w);

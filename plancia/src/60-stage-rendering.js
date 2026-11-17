@@ -291,14 +291,14 @@ function drawRender(g,W,H,t,level,w){
       const preview=wallVideoPlayers.get(wallF.id);
       g.fillStyle='#101319';g.fillRect(wx0,wy0,wx1-wx0,wy1-wy0);
       if(!drawVideoCover(g,preview?.video,wx0,wy0,wx1-wx0,wy1-wy0,clamp(b))){
-        const message=preview?.message||wallPreviewMessage(wallF);
+        const message=renderRec?'':preview?.message||wallPreviewMessage(wallF);
         g.fillStyle='#c9ced8';g.font='10px JetBrains Mono, monospace';g.textAlign='center';
         g.fillText(message.slice(0,64),wp.x,(wy0+wy1)/2);
       }
     }else if(wallF.sourceType&&wallF.sourceType!=='procedural'){
       g.fillStyle='#101319';g.fillRect(wx0,wy0,wx1-wx0,wy1-wy0);
       g.fillStyle='#c9ced8';g.font='10px JetBrains Mono, monospace';g.textAlign='center';
-      g.fillText(wallPreviewMessage(wallF).slice(0,64),wp.x,(wy0+wy1)/2);
+      if(!renderRec)g.fillText(wallPreviewMessage(wallF).slice(0,64),wp.x,(wy0+wy1)/2);
     }else{
       g.globalCompositeOperation='lighter';
       const hsv=rgb2hsv(...c), hue=hsv[0],sat=hsv[1],val=Math.max(...c),timeHue=Math.sin(t*.0006)*.05;
@@ -392,7 +392,7 @@ function drawRender(g,W,H,t,level,w){
         else if(!project.cam3d&&tl>=0&&ey>fb&&ey<ff+H*.05){g.save();g.translate(ex,ey);g.scale(1,.32);glow(g,0,0,wd*1.1,col,.5*k);g.restore()}
       }
     }
-    if(feedback&&!PREVIEW_OVR){
+    if(feedback&&!PREVIEW_OVR&&!renderRec){   // nei video del Render niente scritte (17/11)
       // due righe corte e centrate: livello (o OFF) e posizione
       const l1=[feedback.sent?(feedback.intensity==null?'OUT':`${Math.round(feedback.intensity*100)}%`):'OFF',
         // ruota colori con slot senza colore nel catalogo: TD manda bianco (nota 34)
@@ -422,7 +422,10 @@ function drawRender(g,W,H,t,level,w){
     // cubo, gateway assente, cubo spento o fermo) simulazione animata; lo stato del cubo
     // (puntino colorato) lo disegna drawRealLaser
     if(f.cube&&drawRealLaser(g,f,origin,fixtureZ(f),spread,base,depth*1.8,project))continue;
-    drawSimLaser(g,f,origin,fixtureZ(f),spread,base,depth*1.8,project,t,M);
+    // simulazione: la scena della timeline o del tablet, se c'e'; altrimenti il ventaglio di prova
+    const sim=laserSimScene(f);
+    if(sim&&sim!=='off'&&M>.02)drawLaserPts(g,f,origin,fixtureZ(f),spread,base,depth*1.8,project,laserSimPts(sim,t),!!renderRec);
+    else if(!sim)drawSimLaser(g,f,origin,fixtureZ(f),spread,base,depth*1.8,project,t,M);
     if(!f.cube){g.fillStyle='#ff365c';g.beginPath();g.arc(origin.x,origin.y,3,0,Math.PI*2);g.fill()}
   }
   // barre LED

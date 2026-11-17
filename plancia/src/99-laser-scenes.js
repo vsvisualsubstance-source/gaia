@@ -356,7 +356,7 @@ function lzScenesHtml(d){
         <button class="lzs-ed" data-lzs="edit" data-lzs-v="${esc(s.id)}" title="Modifica">✎</button></div>`).join('')||'<p class="hint">Nessuna scena: tocca Template.</p>'}</div></div>`;
 }
 function lzsSig(){return[LZS_TARGET,LZS_FLASH,laserScenes().map(s=>[s.id,s.name,s.anim?.scale])]}
-function lzsApply(s,target=LZS_TARGET){lzCmd({action:'scene',cube:target,scene:lzsResolve(s)},'scene')}
+function lzsApply(s,target=LZS_TARGET){const sc=lzsResolve(s);LZ_SENT[target]=sc;if(target==='all')for(const k of Object.keys(LZ_SENT))if(k!=='all')delete LZ_SENT[k];lzCmd({action:'scene',cube:target,scene:sc},'scene')}
 function lzsDown(e,el,w){
   const b=e.target.closest('[data-lzs]');if(!b)return;e.preventDefault();
   const a=b.dataset.lzs,v=b.dataset.lzsV,s=laserScenes().find(x=>x.id===v);

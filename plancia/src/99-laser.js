@@ -245,7 +245,15 @@ function laserRenderLight(){const d=G.devices?.[lzDevId()];return!!(d&&!d.offlin
 // dove arriva. Orientamento, inclinazione e apertura della fixture dicono solo dove disegnarla.
 function drawRealLaser(g,f,origin,z0,spread,base,distance,project){
   const c=laserCubeState(f.cube),pts=c?.streaming?laserPreviewPts(f.cube):null,col=laserStateColor(c);
-  if(pts?.length){
+  if(pts?.length)drawLaserPts(g,f,origin,z0,spread,base,distance,project,pts,!!renderRec);
+  g.fillStyle=col;g.beginPath();g.arc(origin.x,origin.y,c?.armed?4:3,0,Math.PI*2);g.fill();
+  if(c?.armed&&!c.streaming){g.strokeStyle=col;g.lineWidth=1;g.beginPath();g.arc(origin.x,origin.y,8,0,Math.PI*2);g.stroke()}
+  return!!pts?.length;   // false = niente raggi veri: il Render simula
+}
+// punti [x,y,'rrggbb'] (-100..100, '' = spento) dal laser alla figura. hq (video del Render, 17/11):
+// tutti i raggi e il bagliore; altrimenti leggero (11/11, il Render rallentava TD sulla touring)
+function drawLaserPts(g,f,origin,z0,spread,base,distance,project,pts,hq){
+  {
     const tan=Math.tan(spread/2);
     // su un piano davanti al laser (prima su un arco attorno al cubo: una griglia piatta si curvava)
     const{fwd,right,up}=laserAxes(f,base);
@@ -254,7 +262,8 @@ function drawRealLaser(g,f,origin,z0,spread,base,distance,project){
     // leggero (11/11, il Render rallentava TD sulla touring durante lo show): niente shadowBlur, che
     // nel canvas costa piu' di tutto il resto, e un solo tratto per colore invece di uno per segmento.
     // La luminosita' la da' un secondo passaggio piu' largo e trasparente.
-    const lit=pts.map((p,i)=>p[2]?i:-1).filter(i=>i>=0),k=Math.max(1,Math.ceil(lit.length/24));
+    const lit=pts.map((p,i)=>p[2]?i:-1).filter(i=>i>=0),k=hq?Math.max(1,Math.ceil(lit.length/90)):Math.max(1,Math.ceil(lit.length/24));
+    if(hq){g.save();g.globalCompositeOperation='lighter';g.shadowBlur=10}
     const byColor=new Map(),add=(col,fn)=>{let p=byColor.get(col);if(!p)byColor.set(col,p=new Path2D());fn(p)};
     lit.forEach((i,j)=>{if(!(j%k))add('#'+pts[i][2],p=>{p.moveTo(origin.x,origin.y);p.lineTo(tg[i].x,tg[i].y)})});
     g.save();g.globalCompositeOperation='lighter';g.lineWidth=1;g.globalAlpha=.3;
@@ -262,12 +271,27 @@ function drawRealLaser(g,f,origin,z0,spread,base,distance,project){
     byColor.clear();
     for(let i=1;i<pts.length;i++){if(!pts[i][2])continue;add('#'+pts[i][2],p=>{p.moveTo(tg[i-1].x,tg[i-1].y);p.lineTo(tg[i].x,tg[i].y)})}
     g.lineCap='round';
-    for(const [w,a] of [[5,.22],[1.8,.95]]){g.lineWidth=w;g.globalAlpha=a;for(const [col,p] of byColor){g.strokeStyle=col;g.stroke(p)}}
+    for(const [w,a] of [[5,.22],[1.8,.95]]){g.lineWidth=w;g.globalAlpha=a;for(const [col,p] of byColor){g.strokeStyle=col;if(hq)g.shadowColor=col;g.stroke(p)}}
     g.restore();
+    if(hq)g.restore();
   }
-  g.fillStyle=col;g.beginPath();g.arc(origin.x,origin.y,c?.armed?4:3,0,Math.PI*2);g.fill();
-  if(c?.armed&&!c.streaming){g.strokeStyle=col;g.lineWidth=1;g.beginPath();g.arc(origin.x,origin.y,8,0,Math.PI*2);g.stroke()}
-  return!!pts?.length;   // false = niente raggi veri: il Render simula
+}
+// 17/11: laser senza cubi in uscita (simulazione, anche senza gateway): nel Render la scena vera,
+// quella della timeline LASER all'ora dello show, oppure l'ultima mandata dal tablet, animata come
+// nel gateway. null = nessuna scena (ventaglio di prova), 'off' = spento.
+const LZ_SENT={};   // cubo|'all' -> scena (risolta) mandata con lzsApply
+function laserSimScene(f){
+  const cube=f.cube||'all',cues=laserDoc().cues.filter(c=>Number.isFinite(+c.time)).sort((a,b)=>a.time-b.time),t=cues.length?showClockPosition():null;
+  if(t!=null){let mode=null,scene=null;
+    for(const c of cues){if(c.time>t)break;if(c.cube&&c.cube!=='all'&&c.cube!==cube)continue;if(c.mode)mode=c.mode;if(c.scene)scene=c.scene}
+    if(mode==='off')return'off';
+    if(mode==='scene'&&scene){const sc=laserScenes().find(s=>s.id===scene);if(sc)return sc}
+    if(mode)return null}
+  return LZ_SENT[cube]||LZ_SENT.all||null;
+}
+function laserSimPts(sc,tms){
+  const bpm=liveBpm(),h=v=>Math.max(0,Math.min(255,v|0)).toString(16).padStart(2,'0');
+  return lzsAnimate(sc,tms/1000*lzsTempoRate(sc,bpm),0,0,bpm).map(p=>[p[0]*100,p[1]*100,(p[2]||p[3]||p[4])?h(p[2])+h(p[3])+h(p[4]):'']);
 }
 // laser senza raggi veri (nessun cubo, gateway assente, cubo spento o non in uscita):
 // ventaglio animato che spazza e cambia colore, alla sua altezza e nella sua direzione
@@ -279,7 +303,8 @@ function drawSimLaser(g,f,origin,z0,spread,base,distance,project,t,M){
     const tg=laserPoint(f,z0,[f.x+Math.sin(a)*ce*distance,f.y+Math.cos(a)*ce*distance,z0+Math.sin(e)*distance],project);
     g.strokeStyle=rgba(col,.75*M);g.shadowColor=rgba(col,1);g.beginPath();g.moveTo(origin.x,origin.y);g.lineTo(tg.x,tg.y);g.stroke()}
   g.restore();
-  g.save();g.fillStyle='#ff365c';g.font='8px JetBrains Mono, monospace';g.textAlign='center';g.fillText('SIM',origin.x,origin.y-7);g.restore();
+  // nei video del Render niente scritta (17/11)
+  if(!renderRec){g.save();g.fillStyle='#ff365c';g.font='8px JetBrains Mono, monospace';g.textAlign='center';g.fillText('SIM',origin.x,origin.y-7);g.restore()}
 }
 function bindLaserFixtureEditor(f){
   const sel=$('#feCube'),cubes=lzDev()?.laser.cubes||[];
