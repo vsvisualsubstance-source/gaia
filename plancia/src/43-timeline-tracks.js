@@ -35,6 +35,16 @@ function tlTrackDefs(){
   ];
 }
 const tlTrackDef=id=>tlTrackDefs().find(d=>d.id===id);
+// 17/11: un blocco di SEQUENZE, EFFETTI o TESTE MOV. puo' finire prima della cue dopo (c.until,
+// secondi dall'inizio): in mezzo resta vuoto. cues ordinate per tempo.
+function tlEnd(cues,i,D){const c=cues[i],n=cues[i+1]?.time??D,u=+c.until;return Number.isFinite(u)&&u>+c.time&&u<n?u:n}
+// per DMX Master e per il motore: il vuoto e' una cue "fermo" (off) alla fine del blocco
+function tlWithGaps(cues,off){
+  const s=(cues||[]).filter(c=>Number.isFinite(+c.time)).sort((a,b)=>a.time-b.time),out=[];
+  s.forEach((c,i)=>{const{until,...rest}=c,n=s[i+1]?.time,u=+until;out.push(rest);
+    if(Number.isFinite(u)&&u>+c.time&&(n==null||u<n-1e-3))out.push({...off,time:u,label:''})});
+  return out;
+}
 // visibile se ha delle cue o l'ha scelta chi usa la pagina (mai nascondere del contenuto).
 // Le timeline secondarie (Show, Sequenze ed effetti) hanno w.onlyTracks: solo quelle,
 // tutte le tracce restano nella pagina Timeline.
@@ -58,6 +68,7 @@ function trackPointer(e,el,w,lane){
   const d=tlTrackDef(lane.dataset.trk),r=lane.getBoundingClientRect(),blk=e.target.closest('[data-ci]'),t=clamp((e.clientX-r.left)/r.width)*timelineDuration(w);
   if(!d)return;
   if(!blk){trackTap(w,d,t,-1);return}
+  if(e.target.closest('.tl-rz')){trackResize(e,el,w,d,blk,r);return}
   const ci=+blk.dataset.ci,x0=e.clientX,D=timelineDuration(w),t0=+d.list()[ci]?.time||0;let moved=false;
   try{el.setPointerCapture(e.pointerId)}catch{/* evento sintetico */}
   el.onpointermove=ev=>{if(Math.abs(ev.clientX-x0)>5)moved=true;if(moved)blk.style.left=clamp(t0+(ev.clientX-x0)/r.width*D,0,D-.01)/D*100+'%'};
@@ -66,16 +77,32 @@ function trackPointer(e,el,w,lane){
     const cues=d.list().map(c=>({...c})),to=tlSnap(w,t0+(ev.clientX-x0)/r.width*D);cues[ci].time=to;d.store(cues.sort((a,b)=>a.time-b.time));
     if(d.td)tlMarkTd();save();refreshShowTimelines();showInfo(`Cue spostata a ${formatCueTime(to)}.${d.td&&showClock.authority?' ⇪ TD per mandarla a DMX Master.':''}`)};
 }
+// bordo destro di un blocco: dove finisce. Oltre la cue dopo (o fino in fondo) = senza fine propria
+function trackResize(e,el,w,d,blk,r){
+  const ci=+blk.dataset.ci,D=timelineDuration(w),cue=d.list()[ci];if(!cue)return;
+  const sorted=[...d.list()].sort((a,b)=>a.time-b.time),next=sorted[sorted.indexOf(cue)+1]?.time??D;
+  const at=ev=>clamp((ev.clientX-r.left)/r.width,0,1)*D;
+  try{el.setPointerCapture(e.pointerId)}catch{/* evento sintetico */}
+  el.onpointermove=ev=>{const u=Math.min(next,Math.max(+cue.time+.5,at(ev)));blk.style.width=(u-cue.time)/D*100+'%'};
+  el.onpointerup=el.onpointercancel=ev=>{el.onpointermove=el.onpointerup=el.onpointercancel=null;
+    const u=tlSnap(w,at(ev)),cues=d.list().map(c=>({...c})),c=cues[ci];
+    if(u>=next-.25){delete c.until;showInfo(`${d.label}: dura fino alla cue dopo.`)}
+    else{c.until=Math.max(+c.time+.5,u);showInfo(`${d.label}: finisce a ${formatCueTime(c.until)}, poi vuoto.${d.td&&showClock.authority?' ⇪ TD per mandarlo a DMX Master.':''}`)}
+    d.store(cues.sort((a,b)=>a.time-b.time));if(d.td)tlMarkTd();save();refreshShowTimelines()};
+}
 async function trackTap(w,d,t,ci){
   const cue=ci>=0?d.list()[ci]:null,at=tlSnap(w,t);
   // tracce con cue complesse (video, laser): il loro editor, con la cue nuova gia' al suo posto
   if(!d.items){const cues=d.list().map(d.copy);if(!cue)cues.push(d.fresh(at));d.edit(w,cues,{});return}
   const msg=d.empty();if(msg){showError(msg);return}
   const title=cue?`Cue a ${formatCueTime(cue.time)}: ${d.name(cue)}`:`Da ${formatCueTime(at)} parte…`,items=d.items(cue);
-  const pick=await uiChoose(title,cue?[...items,{label:'Togli questa cue',value:'__del',cls:'danger',single:true}]:items,d.multi?{multi:true,done:'OK'}:{});
+  // fine del blocco: qui (dove si e' toccato) oppure di nuovo fino alla cue dopo
+  const ends=cue?[...(at>+cue.time+.25?[{label:`✂ Finisce qui (${formatCueTime(at)}), poi vuoto`,value:'__end',single:true}]:[]),...(Number.isFinite(+cue.until)?[{label:'↔ Dura fino alla cue dopo',value:'__noend',single:true}]:[])]:[];
+  const pick=await uiChoose(title,cue?[...items,...ends,{label:'Togli questa cue',value:'__del',cls:'danger',single:true}]:items,d.multi?{multi:true,done:'OK'}:{});
   if(pick==null)return;
   const cues=d.list().map(c=>({...c}));
-  if(pick==='__del')cues.splice(ci,1);else if(cue)cues[ci]=d.set(cues[ci],pick);else cues.push(d.set({time:at,label:''},pick));
+  if(pick==='__end')cues[ci].until=at;else if(pick==='__noend')delete cues[ci].until;
+  else if(pick==='__del')cues.splice(ci,1);else if(cue)cues[ci]=d.set(cues[ci],pick);else cues.push(d.set({time:at,label:''},pick));
   d.store(cues.sort((a,b)=>a.time-b.time));if(d.td)tlMarkTd();save();refreshShowTimelines();
   showInfo(`${d.label}: fatto.${d.td&&showClock.authority?' ⇪ TD per mandarlo a DMX Master.':''}`);
 }

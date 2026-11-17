@@ -137,8 +137,8 @@ registerWidget('chase',{size:[8,6],label:'Chase',showsValue:false,showsAddr:fals
 // ---- traccia SEQUENZE della timeline dello show: in DMX Master diventa cue "⟳ …"
 function chaseLaneHtml(w,D){
   const cues=[...chaseDoc().cues].sort((a,b)=>a.time-b.time);
-  const blocks=cues.map((c,i)=>{const e=cues[i+1]?.time??D,ch=chases().find(x=>x.id===c.chase);
-    return`<div class="tl-blk tl-vblk" data-ci="${chaseDoc().cues.indexOf(c)}" style="left:${c.time/D*100}%;width:${Math.max(0,e-c.time)/D*100}%;--ic:${c.chase==='off'||!ch?'#5d6573':'#b18cff'}"><span>${esc(c.label||ch?.name||'Fermo')}</span><em>${esc(c.chase==='off'?'fermo':ch?`${ch.steps.length} step`:'(chase tolto)')}</em></div>`}).join('');
+  const blocks=cues.map((c,i)=>{const e=tlEnd(cues,i,D),ch=chases().find(x=>x.id===c.chase);
+    return`<div class="tl-blk tl-vblk" data-ci="${chaseDoc().cues.indexOf(c)}" style="left:${c.time/D*100}%;width:${Math.max(0,e-c.time)/D*100}%;--ic:${c.chase==='off'||!ch?'#5d6573':'#b18cff'}">${w.readonly?'':'<b class="tl-rz" title="Trascina il bordo: il blocco finisce prima e dopo resta vuoto"></b>'}<span>${esc(c.label||ch?.name||'Fermo')}</span><em>${esc(c.chase==='off'?'fermo':ch?`${ch.steps.length} step`:'(chase tolto)')}</em></div>`}).join('');
   return`<div class="tl-trk"><div class="tl-vhead"><span class="k" title="Chase: scene che si alternano a tempo">SEQUENZE</span>${tlMuteHtml('chase')}
     ${w.readonly?'':'<button class="tl-vcue" data-act="ccue" title="Elenco delle cue dei chase">CUE</button>'}
     </div><div class="tl-vlane tl-tlane" data-trk="chase"${w.readonly?'':' title="Tocca un punto: un chase parte da lì. Tocca un blocco per cambiarlo, trascinalo per spostarlo"'}><div class="tl-cues">${blocks}</div><span class="tl-vst tl-cst"></span><div class="tl-ph tl-cph"></div></div></div>`;
@@ -187,14 +187,14 @@ function chaseTimelineDoc(){
   if(!chaseTdReady())return undefined;
   const known=new Set(chases().map(c=>c.id)),cues=chaseDoc().cues.filter(c=>Number.isFinite(+c.time)&&(c.chase==='off'||known.has(c.chase)));if(!cues.length)return null;
   const used=new Set(cues.map(c=>c.chase));
-  return{chases:chases().filter(c=>used.has(c.id)).map(chaseTd),cues:cues.map(c=>({time:+c.time,chase:c.chase,label:c.label||''}))};
+  return{chases:chases().filter(c=>used.has(c.id)).map(chaseTd),cues:tlWithGaps(cues,{chase:'off'}).map(c=>({time:+c.time,chase:c.chase,label:c.label||''}))};
 }
 // cue della timeline per DMX Master: quelle dei chase rigenerate, mai doppie.
 // Con i chase in TD niente cue "⟳": quelle vecchie spariscono al primo invio.
 function withChaseCues(cues,w){
   const own=cues.filter(c=>!isChaseCue(c));if(chaseTdReady())return own;
   const taken=new Set(own.map(c=>Math.round(c.time*100)));
-  const gen=chaseTimelineCues(chaseDoc(),chases(),w.duration,+w.bpm||120).map(c=>{let k=Math.round(c.time*100);while(taken.has(k))k++;taken.add(k);return{...c,time:k/100}});
+  const gen=chaseTimelineCues({...chaseDoc(),cues:tlWithGaps(chaseDoc().cues,{chase:'off'})},chases(),w.duration,+w.bpm||120).map(c=>{let k=Math.round(c.time*100);while(taken.has(k))k++;taken.add(k);return{...c,time:k/100}});
   return[...own,...gen].sort((a,b)=>a.time-b.time);
 }
 // 2026-11-03: pagina "Sequenze" (chase) dopo Regia (uiRev 10)

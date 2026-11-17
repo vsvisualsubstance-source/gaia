@@ -179,8 +179,8 @@ registerWidget('headmotion',{size:[8,6],label:'Movimento teste',showsValue:false
 // ---- traccia MOVIMENTO della timeline dello show (la esegue il bridge)
 function headMotionLaneHtml(w,D){
   const cues=[...hmDoc().cues].sort((a,b)=>a.time-b.time);
-  const blocks=cues.map((c,i)=>{const e=cues[i+1]?.time??D,sc=hmScenes().find(s=>s.id===c.scene);
-    return`<div class="tl-blk tl-vblk" data-ci="${hmDoc().cues.indexOf(c)}" style="left:${c.time/D*100}%;width:${Math.max(0,e-c.time)/D*100}%;--ic:${c.scene==='off'||!sc?'#5d6573':'#3ec5ff'}"><span>${esc(c.label||sc?.name||'Fermo')}</span><em>${esc(c.scene==='off'?'fermo':sc?sc.name:'(scena tolta)')}</em></div>`}).join('');
+  const blocks=cues.map((c,i)=>{const e=tlEnd(cues,i,D),sc=hmScenes().find(s=>s.id===c.scene);
+    return`<div class="tl-blk tl-vblk" data-ci="${hmDoc().cues.indexOf(c)}" style="left:${c.time/D*100}%;width:${Math.max(0,e-c.time)/D*100}%;--ic:${c.scene==='off'||!sc?'#5d6573':'#3ec5ff'}">${w.readonly?'':'<b class="tl-rz" title="Trascina il bordo: il blocco finisce prima e dopo resta vuoto"></b>'}<span>${esc(c.label||sc?.name||'Fermo')}</span><em>${esc(c.scene==='off'?'fermo':sc?sc.name:'(scena tolta)')}</em></div>`}).join('');
   return`<div class="tl-trk"><div class="tl-vhead"><span class="k" title="Figure che le teste percorrono: cerchio, otto, ventaglio...">TESTE MOV.</span>
     ${hmEngine()==='td'?'<span class="tl-mtd" title="Motore DMX Master: la traccia va con la timeline di TD e segue il suo LIVE/TIMELINE">TD</span>':`<button class="tl-live tl-mlive" data-act="mlive"${w.readonly?' disabled':''} title="MOVIMENTO · TIMELINE: il motore su OPS muove le teste secondo la timeline. LIVE: solo prove dal tablet">—</button>`}
     ${w.readonly?'':'<button class="tl-vcue" data-act="mcue" title="Elenco delle cue di movimento">CUE</button>'}
@@ -234,7 +234,7 @@ function hmTimelineMotion(){
   if(hmEngine()!=='td')return hmTdReady()?null:undefined;
   const cues=hmDoc().cues.filter(c=>Number.isFinite(+c.time)),used=new Set(cues.map(c=>c.scene).filter(x=>x&&x!=='off'));
   if(!cues.length)return null;
-  return{scenes:hmScenes().filter(s=>used.has(s.id)).map(hmTdScene),cues:cues.map(c=>({time:+c.time,scene:used.has(c.scene)&&hmScenes().some(s=>s.id===c.scene)?c.scene:'off',label:c.label||''}))};
+  return{scenes:hmScenes().filter(s=>used.has(s.id)).map(hmTdScene),cues:tlWithGaps(cues,{scene:'off'}).map(c=>({time:+c.time,scene:used.has(c.scene)&&hmScenes().some(s=>s.id===c.scene)?c.scene:'off',label:c.label||''}))};
 }
 // 2026-11-03: libreria dei movimenti con i template e pagina "Teste · movimento"
 // rifatta attorno alla libreria (uiRev 9; la prima versione, uiRev 8, generava cue)

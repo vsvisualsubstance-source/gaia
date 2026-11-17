@@ -14,9 +14,11 @@ const { clockPosition, clockReceive, clockAlive, clockUsable } = require('./vide
 
 // scena attiva al tempo t: l'ultima cue <= t ('off' = fermo), -1 prima della prima
 function headMotionAt(cues, t) {
-  let cue = -1, scene = null;
+  let cue = -1, scene = null, until = NaN;
   (cues || []).map((c, i) => ({ ...c, _i: i })).filter(c => Number.isFinite(+c.time)).sort((a, b) => a.time - b.time)
-    .forEach(c => { if (c.time <= t) { cue = c._i; scene = c.scene && c.scene !== 'off' ? c.scene : null; } });
+    .forEach(c => { if (c.time <= t) { cue = c._i; scene = c.scene && c.scene !== 'off' ? c.scene : null; until = +c.until; } });
+  // 17/11: blocco con una fine (until): dopo, fermo fino alla cue dopo
+  if (Number.isFinite(until) && t >= until) scene = null;
   return { cue, scene };
 }
 

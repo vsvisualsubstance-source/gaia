@@ -68,3 +68,11 @@ test('engine: live play selects all heads and streams /mh/pantilt, stop ends it'
     assert.equal(eng.status().source, 'off');
   } finally { eng.close(); }
 });
+
+test('movimento con una fine (until): dopo, fermo fino alla cue dopo', () => {
+  const { headMotionAt } = require('../head-motion-engine');
+  const cues = [{ time: 0, scene: 'a', until: 10 }, { time: 20, scene: 'b' }];
+  assert.strictEqual(headMotionAt(cues, 5).scene, 'a');
+  assert.strictEqual(headMotionAt(cues, 12).scene, null);
+  assert.strictEqual(headMotionAt(cues, 25).scene, 'b');
+});

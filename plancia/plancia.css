@@ -893,3 +893,6 @@ button{cursor:pointer}
 .dev-st.ok{background:rgba(60,200,120,.18);color:#5fd394}.dev-st.ko{background:rgba(255,90,80,.16);color:#ff7a70}
 .dev-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin:8px 0}
 .dev-grid em{display:block;font-style:normal;opacity:.65;font-size:11px}
+/* fine di un blocco della timeline (17/11): bordo destro da trascinare */
+.tl-rz{position:absolute;top:0;right:0;bottom:0;width:14px;cursor:ew-resize;touch-action:none;background:linear-gradient(90deg,transparent 40%,color-mix(in srgb,var(--ic) 70%,transparent) 40% 55%,transparent 55%)}
+.tl-rz:hover{background:color-mix(in srgb,var(--ic) 45%,transparent)}

@@ -129,8 +129,8 @@ registerWidget('lightfx',{size:[8,6],label:'Effetti luci',showsValue:false,shows
 // ---- traccia EFFETTI: in show_timeline.effects (ogni cue dice quali effetti suonano)
 function fxLaneHtml(w,D){
   const cues=[...fxDoc().cues].sort((a,b)=>a.time-b.time);
-  const blocks=cues.map((c,i)=>{const e=cues[i+1]?.time??D,names=(c.effects||[]).map(id=>lightFx().find(f=>f.id===id)?.name||'?');
-    return`<div class="tl-blk tl-vblk" data-ci="${fxDoc().cues.indexOf(c)}" style="left:${c.time/D*100}%;width:${Math.max(0,e-c.time)/D*100}%;--ic:${names.length?'#ffb23e':'#5d6573'}"><span>${esc(c.label||names[0]||'Nessuno')}</span><em>${esc(names.length?names.join(' + '):'nessun effetto')}</em></div>`}).join('');
+  const blocks=cues.map((c,i)=>{const e=tlEnd(cues,i,D),names=(c.effects||[]).map(id=>lightFx().find(f=>f.id===id)?.name||'?');
+    return`<div class="tl-blk tl-vblk" data-ci="${fxDoc().cues.indexOf(c)}" style="left:${c.time/D*100}%;width:${Math.max(0,e-c.time)/D*100}%;--ic:${names.length?'#ffb23e':'#5d6573'}">${w.readonly?'':'<b class="tl-rz" title="Trascina il bordo: il blocco finisce prima e dopo resta vuoto"></b>'}<span>${esc(c.label||names[0]||'Nessuno')}</span><em>${esc(names.length?names.join(' + '):'nessun effetto')}</em></div>`}).join('');
   return`<div class="tl-trk"><div class="tl-vhead"><span class="k">EFFETTI</span>${tlMuteHtml('fx')}
     ${w.readonly?'':'<button class="tl-vcue" data-act="fcue" title="Elenco delle cue degli effetti">CUE</button>'}
     </div><div class="tl-vlane tl-tlane" data-trk="fx"${w.readonly?'':' title="Tocca un punto: quali effetti suonano da lì. Tocca un blocco per cambiarli, trascinalo per spostarlo"'}><div class="tl-cues">${blocks}</div><span class="tl-vst tl-fst"></span><div class="tl-ph tl-fph"></div></div></div>`;
@@ -192,7 +192,7 @@ function fxTimelineEffects(){
   if(!fxTdReady())return undefined;
   const cues=fxDoc().cues.filter(c=>Number.isFinite(+c.time));if(!cues.length)return null;
   const known=new Set(lightFx().map(f=>f.id)),used=new Set(cues.flatMap(c=>(c.effects||[]).filter(id=>known.has(id))));
-  return{effects:lightFx().filter(f=>used.has(f.id)).map(fxTd),cues:cues.map(c=>({time:+c.time,effects:(c.effects||[]).filter(id=>used.has(id)),label:c.label||''}))};
+  return{effects:lightFx().filter(f=>used.has(f.id)).map(fxTd),cues:tlWithGaps(cues,{effects:[]}).map(c=>({time:+c.time,effects:(c.effects||[]).filter(id=>used.has(id)),label:c.label||''}))};
 }
 // 2026-11-03: libreria degli effetti con i template (uiRev 12); la pagina e' "Sequenze ed effetti"
 function migrateUiLightFx(){
