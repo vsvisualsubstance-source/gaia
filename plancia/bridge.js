@@ -165,16 +165,25 @@ function decode(buf, out = []) {
 }
 
 /* ---------- MIDI opzionale ---------- */
-let midiOut = null, midiOutName = null, midiLib = false;
-try {
-  const easymidi = require('easymidi');
-  midiLib = true;
-  const outs = easymidi.getOutputs();
-  // mai il sintetizzatore di Windows come predefinito: suonerebbe dagli
-  // altoparlanti di OPS (MIDI_OUT="Microsoft GS Wavetable Synth" se lo si vuole)
-  const name = process.env.MIDI_OUT || outs.find(n => !/GS Wavetable/i.test(n));
-  if (name) { midiOut = new easymidi.Output(name); midiOutName = name; }
-} catch { /* easymidi non installato: MIDI disattivato */ }
+// Controller MIDI scelti dalla Plancia (devices-config.js, data/devices.json): ruolo di ogni porta
+// in ingresso e porta in uscita. MIDI_OUT, se impostata, vale ancora piu' della scelta.
+const devCfgLib = require('./devices-config');
+const DEVICES_FILE = path.join(path.dirname(STATE_FILE), 'devices.json');
+let devCfg = devCfgLib.load(DEVICES_FILE);
+let midiOut = null, midiOutName = null, midiLib = false, midiOutList = [];
+function openMidiOut() {
+  let easymidi;
+  try { easymidi = require('easymidi'); midiLib = true; } catch { return; /* easymidi non installato: MIDI disattivato */ }
+  try { midiOutList = easymidi.getOutputs(); } catch { midiOutList = []; }
+  // mai il sintetizzatore di Windows come predefinito: suonerebbe dagli altoparlanti di OPS
+  const name = process.env.MIDI_OUT || devCfgLib.pickOut(midiOutList, devCfg);
+  if (name === midiOutName && midiOut) return;
+  try { midiOut?.close(); } catch { /* gia' chiusa */ }
+  midiOut = null; midiOutName = null;
+  if (!name) return;
+  try { midiOut = new easymidi.Output(name); midiOutName = name; console.log(`MIDI out: ${name}`); } catch (e) { console.log(`MIDI out: "${name}" non si apre (${e.message})`); }
+}
+openMidiOut();
 
 /* ---------- server ---------- */
 const server = http.createServer((req, res) => {
@@ -383,7 +392,8 @@ const audioTl = require('./audio-timeline').startAudioTimeline({ getDoc: () => p
 const audioAuto = require('./audio-auto').startAudioAuto({ engine: audioEngine, lib: audioLib, broadcast,
   timelineActive: () => { const s = audioTl?.status(); return !!(s && s.active && s.clock); } });
 // Controller DJ (Traktor Kontrol Z1) sulla Console Audio: comandi al motore, LED dallo stato
-const audioMidi = require('./audio-midi').startAudioMidi({ engine: audioEngine, timed: diag.timed, note: diag.note, isTimeline: () => !!persistedState?.layout?.audioTimeline?.active || audioAuto.active() });
+const audioMidi = require('./audio-midi').startAudioMidi({ engine: audioEngine, timed: diag.timed, note: diag.note,
+  z1Out: () => (typeof midiPorts === 'undefined' ? null : midiPorts.available().find(n => devCfgLib.roleOf(n, devCfg) === 'z1') || null), isTimeline: () => !!persistedState?.layout?.audioTimeline?.active || audioAuto.active() });
 const chase = require('./chase-engine').startChase({ broadcast, tdId: () => dmxMaster.id(),
   sendOsc: (address, args) => { const to = routeOf(address, 'default'); if (to) udp.send(encode(address, args), to.port, to.host, () => {}); }
 });
@@ -400,10 +410,12 @@ try {
   midiMqtt.on('error', () => { /* riprova da solo */ });
 } catch { /* pacchetto mqtt mancante: PANIC/GO/BACK solo OSC */ }
 function onMidi(m, port) {
+  const role = devCfgLib.roleOf(port, devCfg);
+  if (role === 'off') return;
   diag.midi(port, m);
   broadcast({ type: 'midi_in', port, ...m });
   // la Z1 comanda la Console Audio; le sue mappature "Impara MIDI" restano possibili
-  audioMidi.onMidi(m, port);
+  audioMidi.onMidi(m, port, role);
   const r = midiIn.midiActions(m, persistedState?.layout, midiState, { laserId: process.env.LASER_ID || 'laser-ops' });
   for (const o of r.osc) {
     if (laserLive(o.address, o.args)) { broadcast({ type: 'osc', address: o.address, args: o.args, channel: o.channel, echo: true }); continue; }
@@ -418,7 +430,17 @@ function onMidi(m, port) {
 // nessuna esclusione automatica: un controller (es. APC40) ha lo stesso nome in
 // ingresso e in uscita, e la Plancia non rimanda in MIDI cio' che arriva dal MIDI
 // (niente anelli). Con una porta virtuale di loopback limitare con MIDI_IN.
-const midiPorts = midiIn.startMidiIn({ onMessage: onMidi, timed: diag.timed, onPorts: inputs => broadcast({ type: 'midi_ports', inputs }) });
+const midiPorts = midiIn.startMidiIn({ onMessage: onMidi, timed: diag.timed, isOff: name => devCfgLib.roleOf(name, devCfg) === 'off',
+  // la prima scansione gira dentro startMidiIn, prima che midiPorts esista: il resto al giro dopo
+  onPorts: inputs => { broadcast({ type: 'midi_ports', inputs }); setImmediate(() => { if (!midiOut) openMidiOut(); broadcast(devicesMsg()); }); } });
+// finestra "Controller MIDI e schede audio" della Plancia (src/97-devices.js)
+function devicesMsg() {
+  const open = midiPorts.ports();
+  const names = [...new Set([...midiPorts.available(), ...Object.keys(devCfg.midi.roles)])];
+  return { type: 'devices', roles: devCfgLib.ROLES, env: { midiOut: process.env.MIDI_OUT || '', midiIn: process.env.MIDI_IN || '' }, midi: {
+    inputs: names.map(name => ({ name, present: midiPorts.available().includes(name), open: open.includes(name), role: devCfgLib.roleOf(name, devCfg), auto: devCfgLib.autoRole(name) })),
+    outputs: midiOutList, out: devCfg.midi.out, outActive: midiOutName } };
+}
 
 wss.on('connection', ws => {
   ws.send(hello());
@@ -446,6 +468,14 @@ wss.on('connection', ws => {
     } else if (m.type === 'audio_auto') {
       const err = audioAuto.command(m);
       if (err && ws.readyState === 1) ws.send(JSON.stringify({ type: 'audio_error', message: 'Autoplay: ' + err }));
+    } else if (m.type === 'devices_get') {
+      openMidiOut();
+      if (ws.readyState === 1) ws.send(JSON.stringify(devicesMsg()));
+    } else if (m.type === 'devices_set' && m.midi && typeof m.midi === 'object') {
+      try { devCfg = devCfgLib.save(DEVICES_FILE, { midi: { ...devCfg.midi, ...m.midi } }); } catch (e) { if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'audio_error', message: 'Controller MIDI non salvati: ' + e.message })); return; }
+      console.log(`Controller MIDI: ruoli ${JSON.stringify(devCfg.midi.roles)}, uscita ${devCfg.midi.out || 'automatica'}`);
+      midiPorts.rescan(); openMidiOut(); audioMidi.reopen();
+      broadcast(devicesMsg());
     } else if (m.type === 'audio') {
       if (!audioEngine.send(m) && ws.readyState === 1) ws.send(JSON.stringify({ type: 'audio_error', message: 'Motore audio non collegato.' }));
     } else if (m.type === 'tempo' && +m.bpm > 0) {

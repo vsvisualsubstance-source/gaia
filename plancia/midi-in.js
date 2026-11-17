@@ -92,15 +92,18 @@ function midiActions(m, layout, state, { laserId = 'laser-ops', clockTopic = 'ga
 // allora si controlla ogni idleMs invece che ogni pollMs (meno righe nel log;
 // con rtpMIDI attivo c'e' sempre almeno una porta).
 // timed(nome, fn): misura le chiamate sincrone al MIDI di Windows (diag.js)
-function startMidiIn({ onMessage, onPorts = () => {}, exclude = [], log = console.log, pollMs = 3000, idleMs = 15000, timed = (w, f) => f() }) {
+// isOff(nome): porta spenta dalla Plancia (devices-config.js), non si apre e si chiude se aperta
+function startMidiIn({ onMessage, onPorts = () => {}, exclude = [], isOff = () => false, log = console.log, pollMs = 3000, idleMs = 15000, timed = (w, f) => f() }) {
   let easymidi;
-  try { easymidi = require('easymidi'); } catch { return { ports: () => [], stop() {} }; }
+  const none = { ports: () => [], available: () => [], rescan() {}, stop() {} };
+  try { easymidi = require('easymidi'); } catch { return none; }
   const want = (process.env.MIDI_IN ?? '').trim();
-  if (want.toLowerCase() === 'off') return { ports: () => [], stop() {} };
+  if (want.toLowerCase() === 'off') return none;
   const names = want ? want.split(',').map(s => s.trim().toLowerCase()).filter(Boolean) : null;
   const ex = exclude.filter(Boolean).map(s => s.toLowerCase());
   const open = new Map();
-  const wanted = name => !ex.includes(name.toLowerCase()) && (!names || names.some(n => name.toLowerCase().includes(n)));
+  const wanted = name => !ex.includes(name.toLowerCase()) && (!names || names.some(n => name.toLowerCase().includes(n))) && !isOff(name);
+  let seenList = [];
   const scan = () => {
     let list = [];
     try { list = timed('MIDI elenco porte', () => easymidi.getInputs()); } catch { /* nessun dispositivo */ }
@@ -112,17 +115,17 @@ function startMidiIn({ onMessage, onPorts = () => {}, exclude = [], log = consol
         open.set(name, input); changed = true; log(`MIDI in: aperta "${name}"`);
       } catch (e) { log(`MIDI in: "${name}" non si apre (${e.message})`); }
     }
-    for (const [name, input] of open) if (!list.includes(name)) {
+    for (const [name, input] of open) if (!list.includes(name) || !wanted(name)) {
       try { input.close(); } catch { /* gia' chiusa */ }
-      open.delete(name); changed = true; log(`MIDI in: "${name}" scollegata`);
+      open.delete(name); changed = true; log(`MIDI in: "${name}" ${list.includes(name) ? 'spenta' : 'scollegata'}`);
     }
-    if (changed) onPorts([...open.keys()]);
+    if (changed || list.join('|') !== seenList.join('|')) { seenList = list; onPorts([...open.keys()]); }
     return list.length;
   };
   let timer = null, seen = 0;
   const loop = () => { seen = scan(); timer = setTimeout(loop, seen ? pollMs : idleMs); };
   loop();
-  return { ports: () => [...open.keys()], stop() { clearTimeout(timer); for (const i of open.values()) try { i.close(); } catch { /* */ } } };
+  return { ports: () => [...open.keys()], available: () => seenList.slice(), rescan: () => { clearTimeout(timer); loop(); }, stop() { clearTimeout(timer); for (const i of open.values()) try { i.close(); } catch { /* */ } } };
 }
 
 module.exports = { ACTIONS, normalize, matches, midiActions, startMidiIn };

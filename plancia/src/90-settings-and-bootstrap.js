@@ -8,6 +8,10 @@ function openSheet(){
         <div class="row"><button class="btn sm" data-tadd="${k}">Aggiungi</button><button class="btn sm ghost" data-trep="${k}">Sostituisci</button></div></div>`).join('')}</div>
       <p class="note" id="tMsg">"Aggiungi" mette le pagine del template dopo le tue; "Sostituisci" chiede conferma e rimpiazza tutto il layout.</p>
     </section>
+    <section><h3 style="font-size:14px">Controller MIDI e schede audio</h3>
+      <p class="note">Cosa fa ogni controller MIDI collegato (Z1, LPD8, Impara MIDI, spento), la porta MIDI in uscita e le schede del motore audio (master, cuffia, luci).</p>
+      <div class="row"><button class="btn primary" id="sDevices">Apri</button></div>
+    </section>
     <section><h3 style="font-size:14px">Gaia</h3>
       <label class="chk"><input id="gOn" type="checkbox"> Collega a Gaia</label>
       <div class="row" style="align-items:flex-end"><label style="flex:1;min-width:160px">Profilo di rete<select id="gProf"></select></label>
@@ -99,6 +103,7 @@ function openSheet(){
   };
   $('#sJson').value=JSON.stringify(L,null,1);
   bindMidiSettings(s);
+  $('#sDevices').onclick=()=>{closeSheet();openDevices()};
   $('#sClose').onclick=closeSheet; s.onpointerdown=e=>{if(e.target===s)closeSheet()};
   const tmsg=t=>$('#tMsg').textContent=t;
   s.querySelectorAll('[data-tadd]').forEach(b=>b.onclick=()=>{const t=TPL[b.dataset.tadd],ps=t.pages();L.pages.push(...ps);pi=L.pages.length-ps.length;selId=null;save();render();initShow();tmsg(`Aggiunto "${t.name}" (${ps.length} ${ps.length>1?'pagine':'pagina'}).`);$('#sJson').value=JSON.stringify(L,null,1)});

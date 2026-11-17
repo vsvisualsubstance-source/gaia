@@ -238,6 +238,110 @@ struct Ctx {
     vban: Option<crate::vban::Queue>,
     /// ingresso VBAN (None = non configurato): sorgente delle luci con lights.source
     vin: Option<crate::vban_in::Shared>,
+    /// cambio delle schede dalla Plancia (out.set), eseguito dal giro principale
+    dev_tx: Sender<Value>,
+    /// schede scelte adesso (per out.list)
+    wants: Arc<Mutex<Wants>>,
+}
+
+/// schede del motore: master (anche con riserve "a|b"), cuffia separata, copia per le luci.
+/// Scelte dalla Plancia (out.set) e salvate in <cache>/devices.json, che vale piu' delle opzioni
+/// di avvio (--device, --cue-device, --tap-device). 17/11.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Wants {
+    pub device: Option<String>,
+    pub cue_device: Option<String>,
+    pub tap_device: Option<String>,
+}
+
+const WANT_KEYS: [&str; 3] = ["device", "cue_device", "tap_device"];
+
+impl Wants {
+    fn slot(&mut self, k: &str) -> &mut Option<String> {
+        match k {
+            "device" => &mut self.device,
+            "cue_device" => &mut self.cue_device,
+            _ => &mut self.tap_device,
+        }
+    }
+    /// chiavi presenti in v: stringa = scheda, null o "" = nessuna (master: predefinita di Windows)
+    pub fn apply(&mut self, v: &Value) -> bool {
+        let before = self.clone();
+        for k in WANT_KEYS {
+            if let Some(x) = v.get(k) {
+                *self.slot(k) = x.as_str().map(str::trim).filter(|t| !t.is_empty()).map(String::from);
+            }
+        }
+        *self != before
+    }
+    pub fn to_json(&self) -> Value {
+        json!({"device": self.device, "cue_device": self.cue_device, "tap_device": self.tap_device})
+    }
+}
+
+fn devices_file(cache: &Path) -> PathBuf {
+    cache.join("devices.json")
+}
+
+fn load_wants(cache: &Path, base: Wants) -> Wants {
+    let mut w = base;
+    if let Ok(t) = std::fs::read_to_string(devices_file(cache)) {
+        match serde_json::from_str::<Value>(&t) {
+            Ok(v) => {
+                w.apply(&v);
+                println!("schede da {}", devices_file(cache).display());
+            }
+            Err(e) => eprintln!("{}: {e} (uso le opzioni di avvio)", devices_file(cache).display()),
+        }
+    }
+    w
+}
+
+fn save_wants(cache: &Path, w: &Wants) -> Result<(), String> {
+    let p = devices_file(cache);
+    let tmp = p.with_extension("json.tmp");
+    std::fs::write(&tmp, serde_json::to_string_pretty(&w.to_json()).unwrap_or_default()).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp, &p).map_err(|e| e.to_string())
+}
+
+/// elenco delle uscite per la Plancia: Windows (WASAPI) dal motore, ASIO dal registro
+/// (caricare i driver ASIO per elencarli disturberebbe quello in uso)
+fn list_outputs() -> Value {
+    let mut out = Vec::new();
+    let host = cpal::default_host();
+    let def = host.default_output_device().and_then(|d| d.description().ok().map(|n| n.to_string()));
+    if let Ok(devs) = host.output_devices() {
+        for d in devs {
+            let name = d.description().map(|n| n.to_string()).unwrap_or_default();
+            let cfg = d.default_output_config().ok();
+            out.push(json!({"name": name, "kind": "windows", "channels": cfg.as_ref().map(|c| c.channels()), "rate": cfg.as_ref().map(|c| c.sample_rate()), "default": Some(&name) == def.as_ref()}));
+        }
+    }
+    for name in asio_drivers() {
+        out.push(json!({"name": format!("asio:{name}"), "kind": "asio"}));
+    }
+    Value::Array(out)
+}
+
+#[cfg(windows)]
+fn asio_drivers() -> Vec<String> {
+    let mut names = Vec::new();
+    for key in ["HKLM\\SOFTWARE\\ASIO", "HKLM\\SOFTWARE\\WOW6432Node\\ASIO"] {
+        let Ok(o) = std::process::Command::new("reg").args(["query", key]).output() else { continue };
+        for line in String::from_utf8_lossy(&o.stdout).lines() {
+            if let Some(i) = line.to_uppercase().find("\\ASIO\\") {
+                let n = line[i + 6..].trim().to_string();
+                if !n.is_empty() && !names.contains(&n) {
+                    names.push(n);
+                }
+            }
+        }
+    }
+    names
+}
+#[cfg(not(windows))]
+fn asio_drivers() -> Vec<String> {
+    Vec::new()
 }
 
 fn handle_text(ctx: &Arc<Ctx>, text: &str) {
@@ -267,6 +371,19 @@ fn handle_text(ctx: &Arc<Ctx>, text: &str) {
             (None, _) => error_msg(&ctx.clients, "Ingresso VBAN non configurato nel motore (opzione --vban-in)."),
             (_, _) => error_msg(&ctx.clients, "lights.source: serve value \"net\" o \"console\""),
         }
+        return;
+    }
+    if v.get("cmd").and_then(Value::as_str) == Some("out.list") {
+        // schede disponibili e scelte adesso; l'elenco puo' richiedere un attimo: thread a parte
+        let ctx = ctx.clone();
+        thread::spawn(move || {
+            let cur = ctx.wants.lock().map(|w| w.to_json()).unwrap_or(Value::Null);
+            broadcast(&ctx.clients, &json!({"type": "audio_devices", "outputs": list_outputs(), "current": cur}).to_string());
+        });
+        return;
+    }
+    if v.get("cmd").and_then(Value::as_str) == Some("out.set") {
+        let _ = ctx.dev_tx.send(v);
         return;
     }
     if v.get("cmd").and_then(Value::as_str) == Some("deck.load") {
@@ -722,7 +839,10 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
             }
         }
     };
-    let ctx = Arc::new(Ctx { root: o.root.clone(), cache: o.cache.clone(), tx, clients: clients.clone(), vban: vban_early.clone(), vin: vin.clone() });
+    let mut wants = load_wants(&o.cache, Wants { device: o.device.clone(), cue_device: o.cue_device.clone(), tap_device: o.tap_device.clone() });
+    let wants_shared = Arc::new(Mutex::new(wants.clone()));
+    let (dev_tx, dev_rx) = mpsc::channel::<Value>();
+    let ctx = Arc::new(Ctx { root: o.root.clone(), cache: o.cache.clone(), tx, clients: clients.clone(), vban: vban_early.clone(), vin: vin.clone(), dev_tx, wants: wants_shared.clone() });
     {
         let ctx = ctx.clone();
         thread::spawn(move || {
@@ -745,13 +865,13 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
     // cuffia separata: errori a parte, si riapre da sola
     let (cue_err_tx, cue_err_rx) = mpsc::channel::<String>();
     let mut cue_stream: Option<cpal::Stream> = None;
-    let mut cue_info: Option<OutputInfo> = o.cue_device.as_ref().map(|d| OutputInfo { device: d.clone(), rate: 0.0, ok: false, error: Some("non aperta".into()) });
+    let mut cue_info: Option<OutputInfo> = wants.cue_device.as_ref().map(|d| OutputInfo { device: d.clone(), rate: 0.0, ok: false, error: Some("non aperta".into()) });
     let mut cue_retry_at = Instant::now();
     // uscita per le luci (cavo virtuale verso DMX Master): come la cuffia, a parte
     let tap: Hp = Arc::new(Mutex::new(HpRing::new()));
     let (tap_err_tx, tap_err_rx) = mpsc::channel::<String>();
     let mut tap_stream: Option<cpal::Stream> = None;
-    let mut tap_info: Option<OutputInfo> = o.tap_device.as_ref().map(|d| OutputInfo { device: d.clone(), rate: 0.0, ok: false, error: Some("non aperta".into()) });
+    let mut tap_info: Option<OutputInfo> = wants.tap_device.as_ref().map(|d| OutputInfo { device: d.clone(), rate: 0.0, ok: false, error: Some("non aperta".into()) });
     let mut tap_retry_at = Instant::now();
     // copia del mix in rete (VBAN): stessa sorgente del tap, spedita da un thread a parte
     let vban_rate = Arc::new(Mutex::new(48000.0f64));
@@ -778,12 +898,12 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
             }
         },
     };
-    let try_open = |stream: &mut Option<cpal::Stream>, info: &mut OutputInfo| {
+    let try_open = |stream: &mut Option<cpal::Stream>, info: &mut OutputInfo, device: &Option<String>| {
         if o.no_audio {
             info.error = Some("senza audio (--no-audio)".into());
             return;
         }
-        match open_output(&o.device, &engine, err_tx.clone(), hp.clone(), tap.clone(), vban_q.clone(), vban_rate.clone(), vin.clone(), master_ch.clone()) {
+        match open_output(device, &engine, err_tx.clone(), hp.clone(), tap.clone(), vban_q.clone(), vban_rate.clone(), vin.clone(), master_ch.clone()) {
             Ok((s, i)) => {
                 null_run.store(false, Ordering::Relaxed);
                 println!("uscita: {} ({} Hz)", i.device, i.rate);
@@ -799,9 +919,9 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
             }
         }
     };
-    try_open(&mut stream, &mut info);
-    let open_cue_now = |cue_stream: &mut Option<cpal::Stream>, cue_info: &mut Option<OutputInfo>, rate: f64, master: &str| {
-        let Some(want) = &o.cue_device else { return };
+    try_open(&mut stream, &mut info, &wants.device);
+    let open_cue_now = |cue_stream: &mut Option<cpal::Stream>, cue_info: &mut Option<OutputInfo>, rate: f64, master: &str, cue_device: &Option<String>| {
+        let Some(want) = cue_device else { return };
         if master_ch.load(Ordering::Relaxed) >= 4 {
             if let Ok(mut e) = engine.lock() {
                 e.set_hp_ext(false);
@@ -827,8 +947,8 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
             }
         }
     };
-    let open_tap_now = |tap_stream: &mut Option<cpal::Stream>, tap_info: &mut Option<OutputInfo>, rate: f64, master: &str| {
-        let Some(want) = &o.tap_device else { return };
+    let open_tap_now = |tap_stream: &mut Option<cpal::Stream>, tap_info: &mut Option<OutputInfo>, rate: f64, master: &str, tap_device: &Option<String>| {
+        let Some(want) = tap_device else { return };
         match open_tap(want, rate, tap.clone(), tap_err_tx.clone(), master) {
             Ok((s, i)) => {
                 println!("luci: {} ({} Hz)", i.device, i.rate);
@@ -847,8 +967,8 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
         }
     };
     if stream.is_some() {
-        open_cue_now(&mut cue_stream, &mut cue_info, info.rate, &info.device);
-        open_tap_now(&mut tap_stream, &mut tap_info, info.rate, &info.device);
+        open_cue_now(&mut cue_stream, &mut cue_info, info.rate, &info.device, &wants.cue_device);
+        open_tap_now(&mut tap_stream, &mut tap_info, info.rate, &info.device, &wants.tap_device);
     }
     if stream.is_none() {
         null_run.store(true, Ordering::Relaxed);
@@ -886,6 +1006,38 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
             Err(mpsc::RecvTimeoutError::Timeout) => {}
             Err(mpsc::RecvTimeoutError::Disconnected) => return Err("motore fermo".into()),
         }
+        // schede cambiate dalla Plancia: si chiudono tutte e si riaprono dal giro qui sotto (clock interno nel frattempo)
+        if let Ok(v) = dev_rx.try_recv() {
+            let mut nw = wants.clone();
+            if nw.apply(&v) {
+                wants = nw;
+                if let Ok(mut w) = wants_shared.lock() {
+                    *w = wants.clone();
+                }
+                match save_wants(&o.cache, &wants) {
+                    Ok(()) => println!("schede: master {:?}, cuffia {:?}, luci {:?}", wants.device, wants.cue_device, wants.tap_device),
+                    Err(e) => error_msg(&clients, &format!("schede cambiate ma non salvate: {e}")),
+                }
+                tap_stream = None;
+                cue_stream = None;
+                stream = None;
+                if let Ok(mut en) = engine.lock() {
+                    en.set_hp_ext(false);
+                    en.set_tap_ext(vban_q.is_some());
+                }
+                master_ch.store(2, Ordering::Relaxed);
+                info.ok = false;
+                info.error = Some("cambio scheda".into());
+                cue_info = wants.cue_device.as_ref().map(|d| OutputInfo { device: d.clone(), rate: 0.0, ok: false, error: Some("non aperta".into()) });
+                tap_info = wants.tap_device.as_ref().map(|d| OutputInfo { device: d.clone(), rate: 0.0, ok: false, error: Some("non aperta".into()) });
+                retry_at = Instant::now();
+                if !null_run.swap(true, Ordering::Relaxed) {
+                    null_clock(engine.clone(), null_run.clone(), vban_q.clone(), vban_rate.clone());
+                }
+            }
+            let cur = wants.to_json();
+            broadcast(&clients, &json!({"type": "audio_devices_set", "current": cur}).to_string());
+        }
         if let Ok(e) = err_rx.try_recv() {
             eprintln!("uscita audio: {e}");
             stream = None;
@@ -898,7 +1050,7 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
         }
         if stream.is_none() && !o.no_audio && Instant::now() >= retry_at {
             retry_at = Instant::now() + Duration::from_secs(5);
-            try_open(&mut stream, &mut info);
+            try_open(&mut stream, &mut info, &wants.device);
             if stream.is_some() {
                 cue_stream = None;
                 cue_retry_at = Instant::now();
@@ -918,9 +1070,9 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
             }
             cue_retry_at = Instant::now() + Duration::from_secs(5);
         }
-        if o.cue_device.is_some() && cue_stream.is_none() && stream.is_some() && Instant::now() >= cue_retry_at {
+        if wants.cue_device.is_some() && cue_stream.is_none() && stream.is_some() && Instant::now() >= cue_retry_at {
             cue_retry_at = Instant::now() + Duration::from_secs(5);
-            open_cue_now(&mut cue_stream, &mut cue_info, info.rate, &info.device);
+            open_cue_now(&mut cue_stream, &mut cue_info, info.rate, &info.device, &wants.cue_device);
         }
         if let Ok(e) = tap_err_rx.try_recv() {
             eprintln!("luci: {e}");
@@ -934,9 +1086,9 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
             }
             tap_retry_at = Instant::now() + Duration::from_secs(5);
         }
-        if o.tap_device.is_some() && tap_stream.is_none() && stream.is_some() && Instant::now() >= tap_retry_at {
+        if wants.tap_device.is_some() && tap_stream.is_none() && stream.is_some() && Instant::now() >= tap_retry_at {
             tap_retry_at = Instant::now() + Duration::from_secs(5);
-            open_tap_now(&mut tap_stream, &mut tap_info, info.rate, &info.device);
+            open_tap_now(&mut tap_stream, &mut tap_info, info.rate, &info.device, &wants.tap_device);
         }
     }
 }
@@ -1040,6 +1192,22 @@ mod tests {
         assert_eq!(pick_device(&names, "Main (Traktor Kontrol Z1|default", None, None), None, "nessuna predefinita: niente");
         assert_eq!(pick_device(&names, "Z1|predefinita", Some("Speakers (Realtek)"), Some(0)), None, "la predefinita gia' usata dal master: no");
         assert_eq!(pick_device(&names, "Z1|predefinita", None, Some(2)), None, "predefinita = VB-Cable: no (la musica finirebbe nel cavo)");
+    }
+
+    #[test]
+    fn schede_dalla_plancia() {
+        let mut w = Wants { device: Some("Main".into()), cue_device: Some("Headphone".into()), tap_device: None };
+        // solo le chiavi presenti cambiano; null o "" = nessuna
+        assert!(w.apply(&json!({"cmd": "out.set", "device": "asio:Traktor Kontrol Z1|Main", "cue_device": null})));
+        assert_eq!(w, Wants { device: Some("asio:Traktor Kontrol Z1|Main".into()), cue_device: None, tap_device: None });
+        assert!(!w.apply(&json!({"device": "asio:Traktor Kontrol Z1|Main"})));
+        assert!(w.apply(&json!({"tap_device": " CABLE Input "})));
+        assert_eq!(w.tap_device.as_deref(), Some("CABLE Input"));
+        let dir = std::env::temp_dir().join(format!("gaia-wants-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        save_wants(&dir, &w).unwrap();
+        assert_eq!(load_wants(&dir, Wants::default()), w);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

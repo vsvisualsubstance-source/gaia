@@ -150,7 +150,8 @@ function z1Leds(state, st) {
 const METER_MS = 200, METER_STEP = 3;
 const meterDue = (v, last, now) => last == null || (now - last.at >= METER_MS && (Math.abs(v - last.v) >= METER_STEP || (v === 0 && last.v !== 0)));
 
-function startAudioMidi({ engine, isTimeline = () => false, log = console.log, timed = (w, f) => f(), note = () => {} }) {
+// z1Out(): nome della porta MIDI in uscita della Z1 (scelta in devices-config.js); null = per nome
+function startAudioMidi({ engine, isTimeline = () => false, log = console.log, timed = (w, f) => f(), note = () => {}, z1Out = () => null }) {
   const st = { fx: { A: true, B: true }, filter: { A: 0, B: 0 }, cue: { A: false, B: false }, timeline: false };
   const lpd = { timeline: false, eng: null, pads: {} };
   let holdT = null;   // ripetizione del pad FINE tenuto
@@ -160,7 +161,8 @@ function startAudioMidi({ engine, isTimeline = () => false, log = console.log, t
     outTried = Date.now();
     try {
       const easymidi = require('easymidi');
-      const name = easymidi.getOutputs().find(n => Z1_PORT.test(n));
+      const outs = easymidi.getOutputs(), pref = z1Out();
+      const name = (pref && outs.find(n => n === pref || n.toLowerCase().includes(pref.toLowerCase()) || pref.toLowerCase().includes(n.toLowerCase()))) || outs.find(n => Z1_PORT.test(n));
       if (name) { out = new easymidi.Output(name); sent = {}; meterAt = {}; log(`Console Audio: LED su ${name}`); }
     } catch { out = null; }
     return out;
@@ -186,9 +188,11 @@ function startAudioMidi({ engine, isTimeline = () => false, log = console.log, t
     } catch { try { out.close(); } catch { /* gia' chiusa */ } out = null; }
   }, 66);
   return {
-    // messaggio MIDI normalizzato (midi-in.js) dalla porta `port`; true = era di un controller della console
-    onMidi(m, port) {
-      if (Z1_PORT.test(port || '')) {
+    // messaggio MIDI normalizzato (midi-in.js) dalla porta `port`; true = era di un controller della console.
+    // role: 'z1' | 'lpd8' | altro (devices-config.js); senza, si decide dal nome come prima
+    onMidi(m, port, role) {
+      role = role || (Z1_PORT.test(port || '') ? 'z1' : LPD8_PORT.test(port || '') ? 'lpd8' : '');
+      if (role === 'z1') {
         st.timeline = !!isTimeline();
         for (const c of z1Commands(m, st)) engine.send(c);
         // tasto cuffia: la Z1 ha gia' cambiato il suo LED da sola; si rimanda lo stato vero
@@ -196,7 +200,7 @@ function startAudioMidi({ engine, isTimeline = () => false, log = console.log, t
         if (m.kind === 'cc' && m.ch === 3 && (m.n === 1 || m.n === 2)) delete sent[`3:${m.n}`];
         return true;
       }
-      if (LPD8_PORT.test(port || '')) {
+      if (role === 'lpd8') {
         lpd.timeline = !!isTimeline();
         lpd.eng = engine.state();
         const was = lpd.hold;
@@ -215,6 +219,8 @@ function startAudioMidi({ engine, isTimeline = () => false, log = console.log, t
       }
       return false;
     },
+    // Z1 cambiata (altra porta): si riapre l'uscita dei LED al prossimo giro
+    reopen() { try { out?.close(); } catch { /* niente */ } out = null; outTried = 0; },
     stop() { clearInterval(leds); clearTimeout(holdT); clearInterval(holdT); try { out?.close(); } catch { /* niente */ } },
   };
 }

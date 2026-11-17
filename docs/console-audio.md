@@ -431,3 +431,23 @@ Pagina operativa nuova (template "Console Audio"):
   touring con l'aggiornamento; il binario non va nel repo.
 - **Audio-reattivita' delle luci**: DMX Master analizza il suo ingresso
   audio; il master del motore va mandato anche li' (Dante o cavo).
+
+## Controller MIDI e schede audio (17/11)
+
+Impostazioni → **Controller MIDI e schede audio** (`plancia/src/97-devices.js`):
+
+- **Ingressi MIDI:** ruolo di ogni porta:
+  - Console Audio Z1;
+  - Console Audio LPD8;
+  - Impara MIDI;
+  - spento.
+  
+  Senza scelta il ruolo si decide dal nome, come prima. Il bridge salva le scelte in `plancia/data/devices.json` (`devices-config.js`).
+- **Uscita MIDI:**
+  - si può scegliere la porta oppure nessuna;
+  - in automatico non prende mai il sintetizzatore di Windows, né la Z1 o l'LPD8;
+  - `MIDI_OUT` vale ancora più della scelta.
+- **Schede del motore:** master con riserva, cuffia separata, copia per le luci.
+  - Il motore le elenca (`out.list`): Windows dal motore, ASIO dal registro, senza caricare i driver.
+  - Le cambia al volo (`out.set`): chiude e riapre le uscite, i deck restano dove sono.
+  - Le ricorda in `<cache>/devices.json`, che vale più di `--device`, `--cue-device` e `--tap-device`.

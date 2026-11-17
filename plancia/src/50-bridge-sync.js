@@ -19,7 +19,7 @@ function connect(){
   if(m.type==='chase'){G.chaseSt=m.state||null;return} // chase dal vivo nel bridge
   if(m.type==='head_motion'){G.hmSt=m.state||null;return} // stato del motore del movimento teste
   if(m.type==='video'){VIDEO_ST=m.state||null;return} // stato della timeline video dal bridge
-  if(m.type==='midi_in'){midiFromBridge(m);return}     // MIDI in ingresso (eseguito dal bridge)
+  if(m.type==='midi_in'){midiFromBridge(m);devMidiIn(m);return}     // MIDI in ingresso (eseguito dal bridge)
   if(m.type==='audio_state'){auApplyState(m);AU.lastState=m;if(renderRec?.audio)recAudioSync(renderRec.audio,m);return}  // motore audio gaia-audio (Console Audio)
   if(m.type==='audio_tl'){G.audioTlSt=m.state||null;return}  // timeline audio eseguita dal bridge
   if(m.type==='audio_auto'){G.audioAuto=m.state||null;return}  // autoplay della Console Audio (audio-auto.js nel bridge)
@@ -27,6 +27,7 @@ function connect(){
   if(m.type==='audio_playlists'){AU.playlists=Array.isArray(m.playlists)?m.playlists:[];return}  // playlist globali dal bridge
   if(m.type==='audio_error'){showError('Console Audio: '+(m.message||'errore del motore'));return}
   if(m.type==='midi_ports'){MIDI_PORTS=Array.isArray(m.inputs)?m.inputs:[];return}
+  if(m.type==='devices'||m.type==='audio_devices'||m.type==='audio_devices_set'){devicesFromBridge(m);return}  // finestra Controller MIDI e schede audio (97-devices.js)
     if(m.type==='hello'){
       hello=m;status();
       if(m.sharedState?.layout){

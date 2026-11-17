@@ -883,3 +883,13 @@ button{cursor:pointer}
 .lz-zsvg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}.lz-zsvg polygon{vector-effect:non-scaling-stroke;stroke-width:1}.lz-zsvg .z{fill:#9be15d44;stroke:#9be15d}.lz-zsvg .m{fill:#ff5a5f55;stroke:#ff5a5f}.lz-zsvg .d{fill:#3ec9ff33;stroke:#3ec9ff}.lz-zsvg circle{fill:#3ec9ff}.lz-zbox.draw{cursor:crosshair;border-color:#3ec9ff;touch-action:none}
 .lz-pdraw{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}.lz-pdraw .hint{width:100%;margin:2px 0}
 .lzs-b.lzs-c{color:#ffd166}.lzs-ly{border:1px solid #ffffff1a;border-radius:8px;padding:8px 10px;margin:8px 0}.lzs-ly select{max-width:60%}
+/* Controller MIDI e schede audio (src/97-devices.js) */
+.dev-list{display:flex;flex-direction:column;gap:6px;margin:6px 0}
+.dev-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid var(--line,#2a2f37)}
+.dev-name{flex:1;min-width:180px;display:flex;flex-direction:column}
+.dev-name small{opacity:.7}
+.dev-row select{min-width:220px;max-width:100%}
+.dev-st{font-size:12px;padding:2px 8px;border-radius:10px}
+.dev-st.ok{background:rgba(60,200,120,.18);color:#5fd394}.dev-st.ko{background:rgba(255,90,80,.16);color:#ff7a70}
+.dev-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin:8px 0}
+.dev-grid em{display:block;font-style:normal;opacity:.65;font-size:11px}

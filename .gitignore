@@ -101,3 +101,14 @@ ops/laser/cubes.json
 ops/laser/cubes.json.tmp
 video-gateway/*.log
 media/
+# file locali e di esercizio (17/11): restano su disco, fuori da git
+ops/agent/agent.log.*
+ops/agent/gaia_core.json
+ops/agent/mqtt_override.json
+ops/agent/services.local*.json
+ops/dhcp/dhcp_leases.json
+ops/voice/voice.conf
+kiosk-profile/
+plancia/snapshots/
+video-gateway-wheels/
+.continueignore
