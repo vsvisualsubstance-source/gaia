@@ -224,16 +224,18 @@ async function renderRecord(el,w){
   catch(e){recAudioClose(au);renderRecSize(cv,d0);showError('Registrazione non partita: '+e.message);return}
   const chunks=[];
   mr.ondataavailable=e=>{if(e.data?.size)chunks.push(e.data)};
-  mr.onstop=()=>{const heard=!!au?.heard,errs=au?[...au.errors]:[];recAudioClose(au);
+  mr.onstop=async()=>{const heard=!!au?.heard,errs=au?[...au.errors]:[];recAudioClose(au);const frames=lfStop();
     if(!chunks.length){showError('Video vuoto: riprova.');return}
     const blob=new Blob(chunks,{type:type.split(';')[0]}),a=document.createElement('a'),d=new Date(),p=n=>String(n).padStart(2,'0');
     const name=(L._projectName||'palco').replace(/[^\w\- ]+/g,'-').trim().replace(/\s+/g,'_');
     a.href=URL.createObjectURL(blob);a.download=`render_${name}_${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.${type.includes('mp4')?'mp4':'webm'}`;
     document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),60000);
     const audioMsg=!au?' Senza audio: motore audio non collegato.':heard?' Con audio.':' Senza audio: nessun brano in play durante la registrazione.';
-    showInfo(`Video del Render salvato: ${a.download} (${(blob.size/1048576).toFixed(1)} MB, ${size}).${audioMsg}${errs.length?' Audio: '+errs.join(', '):''}`)};
+    let lights='';
+    if(frames)try{lights=` Stato luci per il Render 3D: ${await lfUpload(frames,a.download.replace(/\.[^.]+$/,''))}.`}catch(e){lights=` Stato luci non salvato sul server (${e.message}).`}
+    showInfo(`Video del Render salvato: ${a.download} (${(blob.size/1048576).toFixed(1)} MB, ${size}).${audioMsg}${lights}${errs.length?' Audio: '+errs.join(', '):''}`)};
   if(v.start&&show){tlAct(show,'start');await playShowClock(show)}
-  mr.start(1000);
+  mr.start(1000);lfStart(30);
   const size=`${cv.width}×${cv.height}`;
   renderRec={mr,cv,d0,audio:au,until:Date.now()+v.s*1000,timer:setTimeout(renderRecStop,v.s*1000),tick:setInterval(renderRecPaint,500)};renderRecPaint();
   if(au&&AU.lastState)recAudioSync(au,AU.lastState);

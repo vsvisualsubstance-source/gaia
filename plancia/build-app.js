@@ -57,6 +57,7 @@ const appModules = [
   '96-channel-test.js',
   '97-stage-space.js',
   '98-device-panel.js',
+  '62-light-frames.js',
   '97-devices.js',
   '98-dmx-export.js',
   '99-laser.js',

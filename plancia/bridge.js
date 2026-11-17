@@ -28,6 +28,9 @@ const audioLib = require('./audio-lib');
 const laserLib = require('./laser-lib');
 const videoLib = require('./video-lib');
 const REGIA_DIR = path.join(__dirname, 'regia');
+// Render 3D (render3d/): pagina e librerie nel repo, scansioni e video pesanti in data/render3d (fuori da git)
+const R3D_DIR = path.join(__dirname, 'render3d'), R3D_DATA = path.join(path.dirname(STATE_FILE), 'render3d');
+const lightFrames = require('./light-frames').create(path.join(path.dirname(STATE_FILE), 'light-frames'));
 const STATIC_ASSETS = {
   '/app.js': { file: 'app.js', contentType: 'text/javascript; charset=utf-8' },
   '/plancia.css': { file: 'plancia.css', contentType: 'text/css; charset=utf-8' }
@@ -311,6 +314,46 @@ const server = http.createServer((req, res) => {
     fs.promises.readFile(path.join(REGIA_DIR, 'fonts', name)).then(buf => {
       res.writeHead(200, { 'content-type': name.endsWith('.css') ? 'text/css; charset=utf-8' : 'font/woff2', 'cache-control': 'max-age=86400' }); res.end(buf);
     }, () => { res.writeHead(404); res.end(); });
+  } else if (req.url.split('?')[0] === '/api/light-frames' && req.method === 'POST') {
+    // stato delle luci registrato col video del Render (62-light-frames.js), per il Render 3D
+    const reply = (code, obj) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(obj)); };
+    const parts = []; let size = 0;
+    req.on('data', c => { size += c.length; if (size > lightFrames.MAX) { reply(413, { ok: false, error: 'troppo grande' }); req.destroy(); } else parts.push(c); });
+    req.on('end', () => {
+      if (size > lightFrames.MAX) return;
+      lightFrames.save(new URL(req.url, 'http://plancia').searchParams.get('name'), Buffer.concat(parts))
+        .then(file => reply(200, { ok: true, file }), err => reply(400, { ok: false, error: err.message }));
+    });
+  } else if (req.url.split('?')[0] === '/api/light-frames') {
+    lightFrames.list().then(files => { res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify({ ok: true, files })); });
+  } else if (req.url.startsWith('/api/light-frames/') && req.method === 'GET') {
+    let file = null; try { file = lightFrames.path(decodeURIComponent(req.url.split('?')[0].slice('/api/light-frames/'.length))); } catch { /* 404 */ }
+    if (!file) { res.writeHead(404); res.end(); return; }
+    fs.stat(file, (err, st) => {
+      if (err) { res.writeHead(404); res.end(); return; }
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'content-length': st.size, 'cache-control': 'no-cache' });
+      fs.createReadStream(file).pipe(res);
+    });
+  } else if (/^\/render3d(\/|$)/.test(req.url.split('?')[0]) && (req.method === 'GET' || req.method === 'HEAD')) {
+    // Render 3D: render3d/ nel repo (pagina, vendor) poi data/render3d (scansione, video); niente ".."
+    let rel = req.url.split('?')[0].slice('/render3d'.length);
+    if (rel === '') { res.writeHead(301, { location: '/render3d/' }); res.end(); return; }
+    try { rel = decodeURIComponent(rel); } catch { rel = ''; }
+    if (rel === '/' ) rel = '/index.html';
+    const TYPES = { html: 'text/html; charset=utf-8', js: 'text/javascript; charset=utf-8', mjs: 'text/javascript; charset=utf-8', json: 'application/json; charset=utf-8', mp4: 'video/mp4', glb: 'model/gltf-binary', css: 'text/css; charset=utf-8', png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp' };
+    const type = TYPES[(rel.split('.').pop() || '').toLowerCase()];
+    const pick = [R3D_DIR, R3D_DATA].map(d => path.resolve(d, '.' + rel)).find((f, i) => f.startsWith([R3D_DIR, R3D_DATA][i] + path.sep) && fs.existsSync(f));
+    if (!type || !pick) { res.writeHead(404); res.end(); return; }
+    fs.stat(pick, (err, st) => {
+      if (err || !st.isFile()) { res.writeHead(404); res.end(); return; }
+      const m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || ''), ranged = !!(m && (m[1] || m[2]));
+      let start = 0, end = st.size - 1;
+      if (ranged) { start = m[1] ? +m[1] : Math.max(0, st.size - +m[2]); end = m[1] && m[2] ? Math.min(+m[2], st.size - 1) : st.size - 1; }
+      const head = { 'content-type': type, 'content-length': end - start + 1, 'accept-ranges': 'bytes', 'cache-control': rel === '/index.html' ? 'no-store' : 'max-age=3600' };
+      res.writeHead(ranged ? 206 : 200, ranged ? { ...head, 'content-range': `bytes ${start}-${end}/${st.size}` } : head);
+      if (req.method === 'HEAD') { res.end(); return; }
+      fs.createReadStream(pick, { start, end }).on('error', () => res.destroy()).pipe(res);
+    });
   } else if (req.url.split('?')[0] === '/api/video/library') {
     // cartella video di Regia (video-lib.js): elenco dei file
     const reply = (code, obj) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(obj)); };

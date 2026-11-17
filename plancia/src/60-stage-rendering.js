@@ -273,6 +273,7 @@ function drawRender(g,W,H,t,level,w){
   // luci accese di questo fotogramma (posizione in metri, colore, forza): servono a
   // riflessi sul pavimento lucido e nebbia, disegnati dopo tutte le luci
   const lit=[],addLit=(x,y,z,col,k,r)=>{if(k>.02&&col)lit.push({x:+x||0,y:+y||0,z:+z||0,col,k:Math.min(1.5,k),r})};
+  lfBegin(t);   // stato delle luci per il Render 3D, solo mentre si registra (62-light-frames.js)
   g.globalCompositeOperation='lighter';
   glow(g,W/2,H*.35,W*.6,SH.back.c,.12*hz*M*SH.g.back);
   drawScreensRender(g,project,zScale,t);drawProjectorsRender(g,project,zScale);g.globalCompositeOperation='lighter';
@@ -317,7 +318,7 @@ function drawRender(g,W,H,t,level,w){
         g.fillStyle=rgba(col,1,k);g.fillRect(wx0+x*pw+.5,wy0+y*ph+.5,Math.max(1,pw-1.2),Math.max(1,ph-1.2));
       }
       avg/=cols*rows;if(panel){g.restore();panel=false}glow(g,wp.x,wp.y,W*.42,c,.35*avg*hz);
-      addLit(wallF.x,wallF.y,(wallF.z||0)+(wallF.h||3.5)/2,c,avg,(wallF.w||6)*.45);
+      addLit(wallF.x,wallF.y,(wallF.z||0)+(wallF.h||3.5)/2,c,avg,(wallF.w||6)*.45);lfSet(wallF,{c,k:avg});
     }
     if(panel)g.restore();
     g.globalCompositeOperation='lighter';
@@ -334,7 +335,7 @@ function drawRender(g,W,H,t,level,w){
   drawStructuresRender(g,project);   // americane, pedane, pilastri, quinte
   g.globalCompositeOperation='lighter';
   // front wash
-  const fw=SH.wash.c,fk=SH.g.front*M*(SH.chase===5?.4+.6*level:1);
+  const fw=SH.wash.c,fk=SH.g.front*M*(SH.chase===5?.4+.6*level:1);lfGlobal('wash',fw,fk);
   if(fk>.01){g.save();g.beginPath();g.moveTo(frontL.x,frontL.y);g.lineTo(frontR.x,frontR.y);g.lineTo(rearR.x,rearR.y);g.lineTo(rearL.x,rearL.y);g.closePath();g.clip();
     if(project.cam3d){const c0=project(0,depth/2,0),rr=Math.max(40,halfStage*1.4*c0.scale),pg=g.createRadialGradient(c0.x,c0.y,0,c0.x,c0.y,rr);pg.addColorStop(0,rgba(fw,.55*fk));pg.addColorStop(1,rgba(fw,0));g.fillStyle=pg;g.fillRect(0,0,W,H);g.restore()}
     else{const pg=g.createRadialGradient(W/2,(fb+ff)/2,0,W/2,(fb+ff)/2,W*.42);pg.addColorStop(0,rgba(fw,.55*fk));pg.addColorStop(1,rgba(fw,0));g.fillStyle=pg;g.fillRect(0,fb,W,ff-fb);g.restore()}}
@@ -343,6 +344,7 @@ function drawRender(g,W,H,t,level,w){
     const f=uplights[i],group=f.group==='back'||f.group==='rig_b'?'back':'front',p=project(f.x,f.y,f.z);
     const live=outputOf(f),col=live?live.color:chaseCol(group==='back'?SH.back.c:SH.wash.c,i,uplights.length,t);
     const k=live?live.level:SH.g[group]*M*chaseK(i,uplights.length,t,level);
+    lfSet(f,{c:col,k});
     if(k<.01)continue;
     // fascio nella direzione vera della luce; rivolta al pubblico: si vede la sorgente piu' forte
     const ab=aimBeam(project,f,f.z||0,H),pw=fixturePower(f);
@@ -374,6 +376,7 @@ function drawRender(g,W,H,t,level,w){
     // come valore DMX grezzo, non come slot: fascio aperto
     const real=live?live.angles:null;
     const col=live?live.color:[p[2],p[3],p[4]],pan=real?real[0]:p[0],tl=real?real[1]:p[1],z=feedback?.zoom??p[6],soft=1-(feedback?.focus??p[7])*.5;
+    lfSet(hf,{c:col,k,pan,tl,z});
     if(k>.01){
       if(feedback&&!real)lamp(g,x,y,size,col,.95*k);
       else{
@@ -421,10 +424,10 @@ function drawRender(g,W,H,t,level,w){
     // collegata a un LaserCube che proietta: raggi veri dal gateway. Altrimenti (nessun
     // cubo, gateway assente, cubo spento o fermo) simulazione animata; lo stato del cubo
     // (puntino colorato) lo disegna drawRealLaser
-    if(f.cube&&drawRealLaser(g,f,origin,fixtureZ(f),spread,base,depth*1.8,project))continue;
+    if(f.cube&&drawRealLaser(g,f,origin,fixtureZ(f),spread,base,depth*1.8,project)){lfSet(f,{p:laserPreviewPts(f.cube)});continue}
     // simulazione: la scena della timeline o del tablet, se c'e'; altrimenti il ventaglio di prova
     const sim=laserSimScene(f);
-    if(sim&&sim!=='off'&&M>.02)drawLaserPts(g,f,origin,fixtureZ(f),spread,base,depth*1.8,project,laserSimPts(sim,t),!!renderRec);
+    if(sim&&sim!=='off'&&M>.02){const pts=laserSimPts(sim,t);drawLaserPts(g,f,origin,fixtureZ(f),spread,base,depth*1.8,project,pts,!!renderRec);lfSet(f,{p:pts})}
     else if(!sim)drawSimLaser(g,f,origin,fixtureZ(f),spread,base,depth*1.8,project,t,M);
     if(!f.cube){g.fillStyle='#ff365c';g.beginPath();g.arc(origin.x,origin.y,3,0,Math.PI*2);g.fill()}
   }
@@ -438,9 +441,9 @@ function drawRender(g,W,H,t,level,w){
       // il fianco o il retro (piu' scuri) e la luce va dove punta (fascio morbido)
       const ab=aimBeam(project,f,(f.z||0)+(f.vertical?span/2:0),H),vis=.18+.82*ab.toward;
       const ux=Math.cos(h),uy=-Math.sin(h); // asse di una barra orizzontale: perpendicolare alla direzione
-      let kSum=0,cSum=null;
+      let kSum=0,cSum=null;const pxs=LF?[]:null;
       for(let j=0;j<px;j++){const idx=i*px+j,sim=live?null:tdRigSim(rig,t,i,bars.length),color=col||sim?.color||rigTint(chaseCol(SH.bar.c,idx,bars.length*px,t),rn),k=live?fixtureLevel:sim?sim.level:rk*M*chaseK(SH.chase===2?idx:i,SH.chase===2?bars.length*px:bars.length,t,level);
-        kSum+=k;cSum=cSum||color;const kv=k*vis;
+        kSum+=k;cSum=cSum||color;const kv=k*vis;if(pxs)pxs.push([color,k]);
         // in piedi (f.vertical): i pixel salgono da f.z verso l'alto, una colonna di luce
         if(f.vertical){const p=project(f.x,f.y,(f.z||0)+(j+.5)*span/px),x=p.x,y=p.y,hh=Math.max(1,p.zs*span/px-1);
           g.fillStyle=kv>.02?rgba(color,1,kv):'#15171c';g.fillRect(x-2,y-hh/2,4,hh);
@@ -448,7 +451,7 @@ function drawRender(g,W,H,t,level,w){
         const o=(j+.5-px/2)*span/px,p=project(f.x+ux*o,f.y+uy*o,f.z),x=p.x,y=p.y,sw=Math.max(1,p.scale*span/px*Math.abs(ux)-1);
         g.fillStyle=kv>.02?rgba(color,1,kv):'#15171c';g.fillRect(x-sw/2,y-2,Math.max(2,sw),4);
         if(kv>.02)lamp(g,x,y,10,color,.5*kv)}
-      const kAvg=kSum/px,pw=fixturePower(f);
+      const kAvg=kSum/px,pw=fixturePower(f);if(pxs)lfSet(f,{px:pxs});
       if(kAvg>.02&&ab.toward<.9)beam(g,ab.p.x,ab.p.y,ab.ang,ab.len,ab.wd+ab.p.zs*span*.25,cSum,.16*kAvg*pw*hz*(1-ab.toward));
       floorPool(g,project,ab.hit,cSum,.35*kAvg*pw);addLit(f.x,f.y,(f.z||0)+(f.vertical?span/2:0),cSum,kAvg*pw*vis,f.vertical?.35:span*.4);
     }
@@ -457,6 +460,7 @@ function drawRender(g,W,H,t,level,w){
   const bl=SH.g.blinder*(SH.blackout?0:1);
   if(bl>.01||blinderF.some(f=>outputOf(f)?.record.sent)){
     for(const f of blinderF){const live=outputOf(f),actual=live?live.level:bl;
+      lfSet(f,{c:live?live.color:[1,.85,.6],k:actual});
       if(actual<=.01)continue;
       const ab=aimBeam(project,f,f.z||0,H),c=live?live.color:[1,.85,.6],pw=fixturePower(f);
       lamp(g,ab.p.x,ab.p.y,Math.max(12,ab.p.scale*1.5)*(.5+.5*ab.toward),c,.55*Math.min(1,actual*pw)*(.3+.7*ab.toward));
@@ -492,6 +496,7 @@ function drawRender(g,W,H,t,level,w){
     if(showPlaying&&level>.75&&hash(idx,Math.floor(t/400))>.8){g.strokeStyle='#020203';g.lineWidth=4;g.beginPath();g.moveTo(x+r,y+r);g.lineTo(x+r*2,y-r*2.5);g.stroke()}
     g.strokeStyle=rgba(bl>.05?[1,.9,.75]:fw,bl>.05?.6*bl:.3*fk);g.lineWidth=1.2;g.beginPath();g.arc(x,y,r,Math.PI*1.1,Math.PI*1.9);g.stroke();
   }
+  lfEnd();
 }
 // Stato di interazione della Pianta per widget id -- MAI dentro l'oggetto
 // w stesso: w vive in L (salvato via JSON.stringify), hits/proj/selFix sono
