@@ -112,7 +112,9 @@ function cleanPlaylists(list) {
     seen.add(id);
     const name = String(p.name || '').trim().slice(0, 80) || 'Playlist';
     const tracks = Array.isArray(p.tracks) ? p.tracks.filter(t => typeof t === 'string' && /^[0-9a-f]{16}$/.test(t)).slice(0, MAX_PL_TRACKS) : [];
-    return { id, name, tracks, updated: typeof p.updated === 'string' ? p.updated.slice(0, 30) : new Date().toISOString() };
+    // folder: cartella da cui e' nata (17/11), per riaggiornarla quando ci si copiano brani nuovi
+    const folder = typeof p.folder === 'string' && p.folder.trim() ? { folder: p.folder.trim().slice(0, 300) } : {};
+    return { id, name, tracks, ...folder, updated: typeof p.updated === 'string' ? p.updated.slice(0, 30) : new Date().toISOString() };
   });
 }
 async function playlists() {

@@ -393,6 +393,30 @@ async function auNewPlaylist(withTrack){
   if(!auSavePlaylists([...AU.playlists,p]))return null;
   showInfo(`Playlist "${p.name}" creata${withTrack?' con il brano':''}.`);return p;
 }
+// 17/11: playlist da una cartella della libreria (anche le sottocartelle), nell'ordine dei file
+function auFolderTracks(folder,sub=true){
+  return AU.tracks.filter(t=>t.folder===folder||(sub&&folder&&t.folder.startsWith(folder+'/'))||(!folder&&sub))
+    .sort((a,b)=>String(a.path||a.title).localeCompare(String(b.path||b.title),'it',{numeric:true}));
+}
+async function auPlaylistFromFolder(folder){
+  if(folder==null){
+    const folders=[...new Set(AU.tracks.map(t=>t.folder))].filter(Boolean).sort((a,b)=>a.localeCompare(b,'it',{numeric:true}));
+    if(!folders.length){showError('Libreria senza cartelle: prima Aggiorna la libreria.');return null}
+    folder=await uiChoose('Playlist da quale cartella?',folders.map(f=>({label:`${f} (${auFolderTracks(f).length})`,value:f,on:f===AU.lib.folder})));
+    if(folder==null)return null;
+  }
+  const direct=auFolderTracks(folder,false),all=auFolderTracks(folder);
+  let tracks=all;
+  if(all.length>direct.length){
+    const pick=await uiChoose(`"${folder}"`,[{label:`Con le sottocartelle (${all.length} brani)`,value:'all',on:true},{label:`Solo questa cartella (${direct.length} brani)`,value:'dir',off:!direct.length}]);
+    if(pick==null)return null;tracks=pick==='dir'?direct:all;
+  }
+  if(!tracks.length){showError(`Nessun brano analizzato in "${folder}".`);return null}
+  const name=(await uiPrompt('Nome della playlist',folder.split('/').pop()))?.trim();if(!name)return null;
+  const p={id:'pl-'+uid()+uid(),name:name.slice(0,80),tracks:tracks.map(t=>t.id),folder,updated:new Date().toISOString()};
+  if(!auSavePlaylists([...AU.playlists,p]))return null;
+  showInfo(`Playlist "${p.name}" creata con ${tracks.length} brani da "${folder}".`);return p;
+}
 async function auAddToPlaylist(id){
   const t=AU.tracks.find(x=>x.id===id);if(!t)return;
   const pick=await uiChoose(`Aggiungi "${t.title}" a…`,[...AU.playlists.map(p=>({label:`${p.name} (${p.tracks.length})`,value:p.id,on:p.id===AU.lib.lastPl})),{label:'＋ Nuova playlist…',value:'__new'}]);
@@ -404,8 +428,13 @@ async function auAddToPlaylist(id){
 }
 async function auPlaylistMenu(){
   const p=auPlaylist(AU.lib.view);if(!p)return;
-  const pick=await uiChoose(`Playlist "${p.name}"`,[{label:'Rinomina',value:'ren'},{label:'Duplica',value:'dup'},{label:'Svuota',value:'clr'},{label:'Elimina playlist',value:'del',cls:'danger'}]);
+  const pick=await uiChoose(`Playlist "${p.name}"`,[...(p.folder?[{label:`Aggiorna da "${p.folder}"`,value:'refresh'}]:[]),{label:'Rinomina',value:'ren'},{label:'Duplica',value:'dup'},{label:'Svuota',value:'clr'},{label:'Elimina playlist',value:'del',cls:'danger'}]);
   if(pick==='ren'){const n=(await uiPrompt('Nuovo nome',p.name))?.trim();if(n)auSetPlaylist(p.id,x=>({...x,name:n.slice(0,80)}))}
+  else if(pick==='refresh'){
+    // brani nuovi della cartella in fondo, nell'ordine dei file; quelli gia' presenti restano dove sono
+    const have=new Set(p.tracks),add=auFolderTracks(p.folder).filter(t=>!have.has(t.id));
+    if(!add.length){showInfo(`Nessun brano nuovo in "${p.folder}".`);return}
+    if(auSetPlaylist(p.id,x=>({...x,tracks:[...x.tracks,...add.map(t=>t.id)]})))showInfo(`${add.length} brani aggiunti da "${p.folder}".`)}
   else if(pick==='dup'){const c={...p,id:'pl-'+uid()+uid(),name:(p.name+' (copia)').slice(0,80),tracks:[...p.tracks],updated:new Date().toISOString()};if(auSavePlaylists([...AU.playlists,c]))AU.lib.view=c.id}
   else if(pick==='clr'){if(await uiConfirm(`Togliere tutti i ${p.tracks.length} brani da "${p.name}"?`,{ok:'Svuota'}))auSetPlaylist(p.id,x=>({...x,tracks:[]}))}
   else if(pick==='del'){const used=auTimelineUses(p.id);
@@ -565,7 +594,8 @@ function auDown(e,el,w){
   else if(a==='load')auLoad(b.dataset.deck,b.dataset.id);
   else if(a==='sort'){const s=b.dataset.k;if(AU.lib.sort===s)AU.lib.dir*=-1;else{AU.lib.sort=s;AU.lib.dir=s==='bpm'||s==='confidence'?-1:1}}
   else if(a==='libreload')auLoadLibrary(true);
-  else if(a==='plnew')auNewPlaylist().then(p=>{if(p)AU.lib.view=p.id});
+  else if(a==='plnew')uiChoose('Nuova playlist',[...(AU.lib.folder?[{label:`Dalla cartella "${AU.lib.folder}"`,value:'cur',on:true}]:[]),{label:'Da una cartella…',value:'dir',on:!AU.lib.folder},{label:'Vuota',value:'empty'}])
+    .then(k=>k==='empty'?auNewPlaylist():k==='dir'?auPlaylistFromFolder():k==='cur'?auPlaylistFromFolder(AU.lib.folder):null).then(p=>{if(p)AU.lib.view=p.id});
   else if(a==='plmenu')auPlaylistMenu();
   else if(a==='autogo')auAutoStart();
   else if(a==='mode')auModeSet(b.dataset.k);
