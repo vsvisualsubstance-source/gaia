@@ -54,6 +54,8 @@ TARGET_W, TARGET_H = 640, 360
 if not ndi.initialize():
     raise SystemExit("ndi.initialize() fallito -- NDI runtime non trovato")
 
+STALL_S = 5.0  # senza fotogrammi per tanto, il ricevitore NDI si ricrea
+
 # profili: "preview" per i tablet della Plancia, "program" per Regia (plancia/regia, 16/11),
 # che mette il flusso in onda sui proiettori: banda NDI piena e 1280x720
 PROFILES = {
@@ -125,27 +127,50 @@ class NdiReceiver:
                 self._registry.pop(self.key, None)
 
     def _run(self):
-        with _sources_lock:
-            src = _sources.get(self.source_name)
-        if src is None:
-            log.warning("sorgente NDI '%s' non (piu') trovata", self.source_name)
-            return
-        settings = ndi.RecvCreateV3()
-        settings.source_to_connect_to = src
-        settings.color_format = ndi.RECV_COLOR_FORMAT_BGRX_BGRA
-        settings.bandwidth = self.bandwidth  # LOWEST per le anteprime, HIGHEST per Regia
-        recv = ndi.recv_create_v3(settings)
-        self._recv = recv
-        log.info("NDI receiver connesso a '%s'", self.source_name)
+        # 17/11: non si arrende piu'. Se la sorgente non c'e' (ancora) riprova; se non arrivano
+        # fotogrammi per STALL_S (mittente riavviato, cambio rete) ricrea il ricevitore.
+        frames, t_log, warned = 0, time.monotonic(), False
         while not self._stop:
-            t, v, a, m = ndi.recv_capture_v2(recv, 200)
-            if t == ndi.FRAME_TYPE_VIDEO:
-                img = v.data  # BGRA, shape (H,W,4)
-                rgb = img[:, :, [2, 1, 0]]  # BGRA -> RGB (scarta alpha)
-                with self._lock:
-                    self._latest = (rgb.copy(), time.monotonic())
-                ndi.recv_free_video_v2(recv, v)
-        ndi.recv_destroy(recv)
+            with _sources_lock:
+                src = _sources.get(self.source_name)
+            if src is None:
+                if not warned:
+                    log.warning("sorgente NDI '%s' non trovata, riprovo", self.source_name)
+                    warned = True
+                time.sleep(1.0)
+                continue
+            warned = False
+            settings = ndi.RecvCreateV3()
+            settings.source_to_connect_to = src
+            settings.color_format = ndi.RECV_COLOR_FORMAT_BGRX_BGRA
+            settings.bandwidth = self.bandwidth  # LOWEST per le anteprime, HIGHEST per Regia
+            recv = ndi.recv_create_v3(settings)
+            self._recv = recv
+            log.info("NDI receiver connesso a '%s' (banda %s)", self.source_name, self.bandwidth)
+            last_frame = time.monotonic()
+            while not self._stop:
+                t, v, a, m = ndi.recv_capture_v2(recv, 200)
+                now = time.monotonic()
+                if t == ndi.FRAME_TYPE_VIDEO:
+                    img = v.data  # BGRA, shape (H,W,4)
+                    rgb = img[:, :, [2, 1, 0]]  # BGRA -> RGB (scarta alpha)
+                    with self._lock:
+                        self._latest = (rgb.copy(), now)
+                    ndi.recv_free_video_v2(recv, v)
+                    last_frame = now
+                    frames += 1
+                elif t == ndi.FRAME_TYPE_AUDIO:
+                    ndi.recv_free_audio_v2(recv, a)
+                elif t == ndi.FRAME_TYPE_METADATA:
+                    ndi.recv_free_metadata(recv, m)
+                if now - t_log >= 60:
+                    log.info("NDI '%s': %.1f fps ricevuti nell'ultimo minuto", self.source_name, frames / (now - t_log))
+                    frames, t_log = 0, now
+                if now - last_frame > STALL_S:
+                    log.warning("NDI '%s': nessun fotogramma da %.0f s, ricreo il ricevitore", self.source_name, now - last_frame)
+                    break
+            ndi.recv_destroy(recv)
+            self._recv = None
         log.info("NDI receiver per '%s' chiuso", self.source_name)
 
     def latest(self):
@@ -281,6 +306,8 @@ app.router.add_get("/api/sources", handle_sources)
 app.router.add_post("/api/previews", handle_create_preview)
 app.router.add_get("/api/previews/{id}/status", handle_preview_status)
 app.router.add_delete("/api/previews/{id}", handle_delete_preview)
+# chiusura dalla pagina che si chiude (navigator.sendBeacon fa solo POST)
+app.router.add_post("/api/previews/{id}/close", handle_delete_preview)
 app.router.add_route("OPTIONS", "/{tail:.*}", lambda r: web.Response())
 
 if __name__ == "__main__":

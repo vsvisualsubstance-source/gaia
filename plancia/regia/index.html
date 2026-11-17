@@ -1046,12 +1046,21 @@ async function startNdi(i,name){const r=RT[i];if(r.ndiP||(r.ndiFail&&r.ndiFail.n
     const st=await Promise.race([got,new Promise((_,rej)=>setTimeout(()=>rej(new Error('nessun video dal gateway')),8000))]);
     const v=document.createElement('video');v.muted=true;v.playsInline=true;v.srcObject=st;await v.play().catch(()=>{});
     if(r.media&&r.mtype==='video')r.media.pause();stopCam(r);
-    const n={pc,id:j.id,name,live:true};r.ndi=n;r.stream=st;r.media=v;r.mtype='ndi';r.mname='NDI '+name;r.ndiFail=null;S.ch[i].src='ndi';pc=null;
+    const n={pc,id:j.id,name,live:true,dec:0,decAt:performance.now()};r.ndi=n;r.stream=st;r.media=v;r.mtype='ndi';r.mname='NDI '+name;r.ndiFail=null;S.ch[i].src='ndi';S.ch[i].ndi=name;pc=null;
     n.pc.addEventListener('connectionstatechange',()=>{if(['failed','closed','disconnected'].includes(n.pc.connectionState)&&r.ndi===n&&n.live){n.live=false;toast(`NDI ${name}: collegamento perso`)}});
     dirty();if(S.sel===i)buildInsp();toast(`CH${i+1}: NDI ${name}`)}
-  catch(e){r.ndiFail={name,at:performance.now()};toast(`NDI ${name}: ${e.message||e}`)}
+  catch(e){const k=r.ndiFail&&r.ndiFail.name===name?r.ndiFail.k+1:1;r.ndiFail={name,at:performance.now(),k};if(k===1)toast(`NDI ${name}: ${e.message||e} (riprovo da solo)`)}
   finally{r.ndiP=false;if(pc)try{pc.close()}catch(_){}}}
 function ndiClose(n){n.live=false;try{n.pc.close()}catch(_){}if(n.id)fetch(ndiBase()+'/api/previews/'+n.id,{method:'DELETE'}).catch(()=>{})}
+/* 17/11: l'NDI si ricollega da solo: all'apertura (canale rimasto su NDI), se il collegamento cade
+   o se non arrivano fotogrammi per 4 s. Il canale ricorda la sorgente in S.ch[i].ndi. */
+async function ndiWatch(){const now=performance.now();
+  for(let i=0;i<RT.length;i++){const c=S.ch[i],r=RT[i];if(!r||c.src!=='ndi'||!c.ndi||r.ndiP)continue;
+    const n=r.ndi;if(!n){startNdi(i,c.ndi);continue}
+    let dec=n.dec;try{(await n.pc.getStats()).forEach(x=>{if(x.type==='inbound-rtp'&&x.kind==='video')dec=x.framesDecoded||0})}catch(_){}
+    if(dec!==n.dec){n.dec=dec;n.decAt=now}
+    if(r.ndi===n&&(!n.live||now-n.decAt>4000)){toast(`CH${i+1}: NDI ${n.name} fermo, lo ricollego`);ndiClose(n);r.ndi=null;startNdi(i,c.ndi)}}}
+addEventListener('pagehide',()=>{for(const r of RT)if(r.ndi&&r.ndi.id)try{navigator.sendBeacon(ndiBase()+'/api/previews/'+r.ndi.id+'/close')}catch(_){}});
 document.addEventListener('click',e=>{const el=e.target.closest('[data-act]');if(!el)return;const a=el.dataset.act;
   if(a==='mclose'){$('#rgModal').hidden=true}
   else if(a==='slib'||a==='tllib')openLib();
@@ -1077,7 +1086,7 @@ function clkStart(){if(!onBridge||CLK.c)return;const go=()=>{try{
     CLK.c=c;c.on('connect',()=>{CLK.on=true;c.subscribe(CLK.topic)});c.on('close',()=>{CLK.on=false});c.on('error',e=>{CLK.err=e.message});
     c.on('message',(t,b)=>{try{clkMsg(JSON.parse(b))}catch(_){}})}catch(e){CLK.err=e.message}};
   if(window.mqtt)return go();const sc=document.createElement('script');sc.src='/vendor/mqtt.min.js';sc.onload=go;sc.onerror=()=>{CLK.err='mqtt.min.js non trovato'};document.head.appendChild(sc)}
-function gaiaInit(){if(!onBridge)return;clkStart();libLoad().then(()=>libRelinkAll());ndiList().then(()=>buildShowEdit()).catch(()=>{});
+function gaiaInit(){setInterval(ndiWatch,2000);if(!onBridge)return;clkStart();libLoad().then(()=>libRelinkAll());ndiList().then(()=>buildShowEdit()).catch(()=>{});
   setInterval(()=>{libLoad().then(()=>{if(S.show.cues.some(cueMissing)||S.tl.tracks.some(tr=>tr.type==='clip'&&tr.items.some(it=>it.src.startsWith('m:')&&RT[tr.ch]&&!RT[tr.ch].bin.some(b=>'m:'+b.name===it.src))))libRelinkAll()})},30000)}
 
 /* ---------- UI ---------- */

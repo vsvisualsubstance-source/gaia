@@ -50,6 +50,7 @@ Aperta così ha la cartella video, l'orologio dello show e NDI. Aperta come file
   - nei cue le sorgenti NDI compaiono nel gruppo "NDI";
   - nelle clip della timeline la sorgente si scrive `ndi:<nome>`.
 - **Indirizzo del gateway:** di default `http://<host della pagina>:8788`. Si cambia dalla finestra NDI e resta salvato (`ndiUrl`).
+- **Ricollegamento:** il canale ricorda la sorgente NDI (`S.ch[i].ndi`). Regia si ricollega da sola all'apertura, se il collegamento cade o se non arrivano fotogrammi per 4 s. Il gateway, se la sorgente sparisce o tace per 5 s, ricrea il ricevitore NDI e scrive nel log i fps ricevuti ogni minuto.
 - **Profili del gateway:**
   - `preview` resta quello dei tablet (640×360, banda minima);
   - `program` è quello di Regia.
