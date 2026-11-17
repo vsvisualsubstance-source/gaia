@@ -1,0 +1,1399 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Luci nello spazio — scan 22/11/2024</title>
+<style>
+  :root{--bg:#0b0c0e;--panel:rgba(18,19,22,.86);--line:#2a2c31;--txt:#e8e6e1;--mut:#8d8a84;--acc:#ff4d2e}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;overflow:hidden}
+  #c{position:fixed;inset:0;display:block}
+  #panel{position:fixed;top:12px;left:12px;width:340px;max-height:calc(100% - 24px);overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;backdrop-filter:blur(6px)}
+  h1{font-size:12px;margin:0 0 2px;letter-spacing:.06em;text-transform:uppercase}
+  .sub{color:var(--mut);margin-bottom:10px}
+  .sec{border-top:1px solid var(--line);padding-top:9px;margin-top:9px}
+  .sec>b{display:block;color:var(--mut);font-weight:400;text-transform:uppercase;letter-spacing:.08em;font-size:10px;margin-bottom:6px}
+  .row{display:flex;align-items:center;gap:8px;margin:5px 0}
+  .row label{flex:0 0 112px;color:var(--mut)}
+  .row input[type=range]{flex:1;accent-color:var(--acc)}
+  .rz{flex:0 0 auto;padding:1px 5px;font-size:11px;line-height:1.2;color:var(--mut)} .rz:hover{color:#fff}
+  .row output{width:38px;text-align:right}
+  .btns{display:flex;flex-wrap:wrap;gap:5px}
+  button,select{background:#1c1d21;color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:5px 8px;font:inherit;cursor:pointer}
+  button:hover,select:hover{border-color:#555}
+  button.on{border-color:var(--acc);color:#fff}
+  select{width:100%}
+  .pos{display:grid;grid-template-columns:1fr 50px 50px 44px 44px;gap:3px;align-items:center}
+  .pos input{width:100%;background:#141518;color:var(--txt);border:1px solid var(--line);border-radius:4px;padding:2px 4px;font:inherit}
+  .pos span{color:var(--mut)} .pos span.h{text-align:center;font-size:10px}
+  #prev{position:fixed;right:12px;bottom:12px;width:min(46vw,520px);border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#000}
+  #prev canvas{display:block;width:100%}
+  #prev .bar{position:absolute;right:6px;top:4px;display:flex;gap:4px;z-index:2}
+  #prev .bar button{padding:0 7px;font-size:12px;line-height:18px;background:rgba(20,20,22,.8)}
+  #prev.min canvas{display:none} #prev.min{width:200px;height:28px}
+  #prevOpen{position:fixed;right:12px;bottom:12px;display:none}
+  #prev .tag{position:absolute;left:8px;top:6px;color:var(--mut);font-size:10px;text-transform:uppercase;letter-spacing:.08em}
+  #load{position:fixed;inset:0;display:grid;place-items:center;color:var(--mut);pointer-events:none}
+  #tl{width:100%;accent-color:var(--acc)}
+  .hint{color:var(--mut);font-size:10.5px;margin-top:6px}
+</style>
+<script type="importmap">
+{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+  "mp4-muxer":"https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.3/build/mp4-muxer.mjs"
+}}
+</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="load">carico scansione…</div>
+
+<div id="panel">
+  <h1>Luci nello spazio</h1>
+  <div class="sub">I render 2D pilotano colonne LED, consolle e laser nella scansione.</div>
+
+  <div class="sec"><b>Render</b>
+    <select id="clip">
+      <option value="v1.mp4">render 13:39 (60 s)</option>
+      <option value="v2.mp4">render 13:41 (60 s)</option>
+      <option value="v3.mp4">render 13:41_1 (13 s)</option>
+      <option value="v4.mp4">render 13:43 (15 s)</option>
+    </select>
+    <div class="row" style="margin-top:7px"><button id="play">❚❚ pausa</button><input id="tl" type="range" min="0" max="1000" value="0"></div>
+  </div>
+
+  <div class="sec"><b>Importa</b>
+    <div class="btns"><button id="impScanBtn">⇪ scansione 3D…</button><button id="impVidBtn">⇪ render video…</button><button id="impOrig">scansione originale</button></div>
+    <input id="impScan" type="file" multiple accept=".obj,.mtl,.glb,.gltf,.jpg,.jpeg,.png,.webp" style="display:none">
+    <input id="impVid" type="file" multiple accept="video/*,.mp4,.mov,.webm,.m4v" style="display:none">
+    <div class="hint" id="impMsg">Scansione: seleziona insieme .obj + .mtl + texture (jpg/png), oppure un .glb. Render: uno o più video con la stessa impaginazione dei render attuali (colonne, consolle e laser negli stessi punti). I file restano nel tuo browser e non vengono caricati da nessuna parte; dopo un ricaricamento vanno reimportati.</div>
+  </div>
+
+  <div class="sec"><b>Preset</b>
+    <div class="row"><input id="pName" placeholder="nome preset" style="flex:1;background:#141518;color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:5px 7px;font:inherit"><button id="pSave">salva</button></div>
+    <div class="row"><select id="pList" style="flex:1"></select><button id="pLoad">carica</button><button id="pDel" title="elimina">✕</button></div>
+    <div class="btns"><button id="pExport">esporta .json</button><button id="pImportBtn">importa .json</button><input id="pImport" type="file" accept=".json,application/json" style="display:none"></div>
+    <div class="hint" id="pMsg">I preset restano in questo browser; esportali in .json per conservarli o passarli ad altri.</div>
+  </div>
+
+  <div class="btns" style="margin-top:8px"><button id="resetAll">↺ reset tutto ai valori iniziali</button></div>
+
+  <div class="sec"><b>Export video</b>
+    <div class="row"><label>risoluzione</label><select id="exRes" style="flex:1">
+      <option value="1920x1080">1920 × 1080</option>
+      <option value="1280x720">1280 × 720</option>
+      <option value="2560x1440">2560 × 1440</option>
+      <option value="1080x1920">1080 × 1920 (verticale)</option>
+      <option value="win">finestra attuale</option>
+    </select></div>
+    <div class="row"><label>durata</label><select id="exDur" style="flex:1">
+      <option value="full">tutto il render, dall'inizio</option>
+      <option value="10">10 s dal punto attuale</option>
+      <option value="20">20 s dal punto attuale</option>
+      <option value="30">30 s dal punto attuale</option>
+    </select></div>
+    <div class="btns"><button id="exGo">● registra MP4</button><button id="exStop" style="display:none">■ ferma e salva quanto fatto</button></div>
+    <div class="hint" id="exMsg">Genera un MP4 a 30 fps fotogramma per fotogramma (fluido anche su computer lenti), senza pannelli. L'orbita animata, se attiva, viene inclusa.</div>
+  </div>
+
+  <div class="sec"><b>Vista</b>
+    <div class="btns">
+      <button data-cam="render">come il render</button>
+      <button data-cam="top">pianta</button>
+      <button data-cam="stage">dalla consolle</button>
+      <button data-cam="side">laterale</button>
+    </div>
+    <div class="btns" style="margin-top:6px"><button id="axo">◇ assonometria</button><button data-iso="45">iso ↗</button><button data-iso="135">iso ↖</button><button data-iso="225">iso ↙</button><button data-iso="315">iso ↘</button></div>
+    <div class="row"><label>inclinazione assonometria°</label><input id="isoEl" type="range" min="5" max="90" step="0.5" value="35.26"><output></output></div>
+    <div class="btns" style="margin-top:6px"><button data-orbit="in">⟳ orbita interna</button><button data-orbit="out">⟳ orbita esterna</button></div>
+    <div class="row"><label>centro orbita</label><select id="orbC" style="flex:1">
+      <option value="con">consolle</option>
+      <option value="lz">laser (sorgente)</option>
+      <option value="room">centro sala</option>
+      <option value="Lb">colonna sx (centro)</option>
+      <option value="Rb">colonna dx (centro)</option>
+      <option value="Lf">colonna sx (fondo)</option>
+      <option value="Rf">colonna dx (fondo)</option>
+      <option value="cur">punto attuale / punto scelto</option>
+    </select></div>
+    <div class="btns" style="margin:4px 0"><button id="orbPick">📍 scegli centro cliccando su pianta o vista</button></div>
+    <div class="row"><label>altezza centro</label><input id="orbH" type="range" min="0" max="6" step="0.05" value="1.4"><output></output></div>
+    <div class="row"><label>velocità orbita</label><input id="orbSpd" type="range" min="-6" max="6" step="0.1" value="1.2"><output></output></div>
+    <div class="row"><label>forma</label><select id="orbShape" style="flex:1"><option value="circle">cerchio</option><option value="ellipse">ellisse</option></select></div>
+    <div class="row" id="rowOrbR"><label>raggio (m)</label><input id="orbR" type="range" min="0.5" max="35" step="0.05" value="7"><output></output></div>
+    <div class="row" id="rowOrbRx"><label>raggio lungo (m)</label><input id="orbRx" type="range" min="0.5" max="35" step="0.05" value="9"><output></output></div>
+    <div class="row" id="rowOrbRz"><label>raggio corto (m)</label><input id="orbRz" type="range" min="0.5" max="35" step="0.05" value="4.5"><output></output></div>
+    <div class="row" id="rowOrbA"><label>orientamento ellisse°</label><input id="orbA" type="range" min="-90" max="90" step="0.5" value="0"><output></output></div>
+    <div class="row"><label>altezza camera (sopra il centro)</label><input id="orbCamH" type="range" min="-3" max="25" step="0.05" value="1.8"><output></output></div>
+    <div class="hint">Raggio lungo = lungo l'asse della sala (orientamento 0°). I preset "interna"/"esterna" impostano raggio e altezza; poi puoi regolarli mentre gira.</div>
+    <div class="btns" style="margin-top:6px"><button id="panmode">trascina = pan</button><button id="recenter">centra su consolle</button></div>
+    <div class="hint">Orbita: trascina · Pan: tasto destro, Shift+trascina, frecce, oppure "trascina = pan" · Zoom: rotella</div>
+  </div>
+
+  <div class="sec"><b>Composizione intera</b>
+    <div class="row"><label>rotazione X°</label><input id="cmpRX" type="range" min="-180" max="180" step="0.1" value="0"><output></output></div>
+    <div class="row"><label>rotazione Y°</label><input id="cmpRY" type="range" min="-180" max="180" step="0.1" value="0"><output></output></div>
+    <div class="row"><label>rotazione Z°</label><input id="cmpRZ" type="range" min="-180" max="180" step="0.1" value="0"><output></output></div>
+    <div class="btns" style="margin:2px 0 4px"><button data-c90="cmpRX">X +90</button><button data-c90="cmpRY">Y +90</button><button data-c90="cmpRZ">Z +90</button></div>
+    <div class="row"><label>sposta x</label><input id="cmpX" type="range" min="-20" max="20" step="0.01" value="0"><output></output></div>
+    <div class="row"><label>sposta y</label><input id="cmpY" type="range" min="-10" max="10" step="0.01" value="0"><output></output></div>
+    <div class="row"><label>sposta z</label><input id="cmpZ" type="range" min="-20" max="20" step="0.01" value="0"><output></output></div>
+    <div class="hint">Ruota e sposta tutto insieme (scansione, luci, laser, persone) attorno al centro della sala, senza cambiare le posizioni relative.</div>
+  </div>
+
+  <div class="sec"><b>Scansione OBJ · assi</b>
+    <div class="row"><label>rotazione X°</label><input id="objRX" type="range" min="-180" max="180" step="0.1" value="0"><output></output></div>
+    <div class="row"><label>rotazione Y°</label><input id="objRY" type="range" min="-180" max="180" step="0.1" value="0"><output></output></div>
+    <div class="row"><label>rotazione Z°</label><input id="objRZ" type="range" min="-180" max="180" step="0.1" value="0"><output></output></div>
+    <div class="btns" style="margin:2px 0 6px">
+      <button data-r90="objRX">X +90</button><button data-r90="objRY">Y +90</button><button data-r90="objRZ">Z +90</button>
+      <button id="objFlip">specchia</button>
+    </div>
+    <div class="row"><label>offset x</label><input id="objX" type="range" min="-60" max="60" step="0.005" value="0"><output></output></div>
+    <div class="row"><label>offset y (pavimento)</label><input id="objY" type="range" min="-30" max="30" step="0.005" value="0"><output></output></div>
+    <div class="row"><label>offset z</label><input id="objZ" type="range" min="-60" max="60" step="0.005" value="0"><output></output></div>
+    <div class="row"><label>scala</label><input id="objS" type="range" min="0.5" max="2" step="0.001" value="1"><output></output></div>
+    <div class="btns" style="margin:4px 0"><button id="objLevel">⊥ metti in piano il pavimento (auto)</button></div>
+    <div class="hint" id="levelMsg">Corregge orientamento, pavimento e scala della scansione. Luci, persone e pianta restano nel loro sistema di riferimento.</div>
+  </div>
+
+  <div class="sec"><b>Muri perimetrali</b>
+    <select id="walls">
+      <option value="all">visibili</option>
+      <option value="auto">casa delle bambole (nasconde il lato verso la camera)</option>
+      <option value="cut">tagliati in altezza</option>
+      <option value="none">nascosti</option>
+    </select>
+    <div class="row"><label>altezza taglio</label><input id="cutH" type="range" min="0.2" max="8" step="0.05" value="2.2"><output></output></div>
+    <div class="row"><label>fascia muro</label><input id="band" type="range" min="0.5" max="3" step="0.05" value="1.6"><output></output></div>
+  </div>
+
+  <div class="sec"><b>Ambiente</b>
+    <div class="row"><label>luce sala</label><input id="amb" type="range" min="0" max="1.5" step="0.01" value="0.18"><output></output></div>
+    <div class="row"><label>bloom</label><input id="bloom" type="range" min="0" max="2.5" step="0.01" value="0.8"><output></output></div>
+    <div class="row"><label>luce LED su muri</label><input id="spill" type="range" min="0" max="12" step="0.1" value="1.6"><output></output></div>
+    <div class="row"><label>guadagno colonne fondo</label><input id="gainF" type="range" min="0.5" max="4" step="0.05" value="2.2"><output></output></div>
+  </div>
+
+  <div class="sec"><b>Laser</b>
+    <div class="hint" style="margin:0 0 6px">Sorgente indipendente: segue la barra orizzontale solo negli spostamenti (x/y/z), non nelle sue rotazioni. Regolabile anche da "Elemento singolo → laser".</div>
+    <div class="row"><label>x (avanti/dietro)</label><input id="lzX" type="range" min="-6" max="6" step="0.005" value="0.1"><output></output></div>
+    <div class="row"><label>y (altezza)</label><input id="lzY" type="range" min="0" max="4" step="0.005" value="1.73"><output></output></div>
+    <div class="row"><label>z (laterale)</label><input id="lzZ" type="range" min="-6" max="6" step="0.005" value="0"><output></output></div>
+    <div class="row"><label>direzione°</label><input id="lzAz" type="range" min="-180" max="180" step="0.5" value="0"><output></output></div>
+    <div class="row"><label>inclinazione°</label><input id="lzInc" type="range" min="-180" max="180" step="0.5" value="0"><output></output></div>
+    <div style="display:flex;gap:8px;align-items:flex-start;margin:6px 0">
+      <canvas id="lzPad" width="150" height="150" style="width:150px;height:150px;border:1px solid var(--line);border-radius:6px;background:#111;touch-action:none;cursor:crosshair"></canvas>
+      <div class="hint" style="margin:0">Pad XY del laser (vista dall'alto, ↑ = verso il pubblico). Nella scena: con "trascina" attivo il laser segue il punto del pavimento sotto il mouse. Trascina per spostare; con Shift il movimento è 10× più fine. Rotella = zoom del pad.<br><br><button id="lzDrag">✥ trascina laser nella scena</button></div>
+    </div>
+    <div class="row"><label>asta a terra</label><input id="lzStand" type="checkbox" checked style="accent-color:var(--acc)"></div>
+    <div class="btns" style="margin-bottom:4px"><button id="lzReset">azzera laser</button><button data-lz="90">verso pubblico</button><button data-lz="0">verticale</button></div>
+    <div class="row"><label>apertura ventaglio</label><input id="fan" type="range" min="0.5" max="4" step="0.05" value="1.5"><output></output></div>
+    <div class="row"><label>fumo / haze</label><input id="haze" type="range" min="0" max="1" step="0.01" value="0.35"><output></output></div>
+  </div>
+
+  <div class="sec"><b>Persone (scala 1:1)</b>
+    <div class="row"><label>numero</label><input id="pplN" type="range" min="0" max="250" step="1" value="60"><output></output></div>
+    <div class="row"><label>zona</label><select id="pplArea" style="flex:1">
+      <option value="front">davanti alla consolle</option>
+      <option value="all">tutta la sala</option>
+    </select></div>
+    <div class="row"><label>distribuzione</label><input id="pplSeed" type="range" min="1" max="99" step="1" value="7"><output></output></div>
+    <div class="row"><label>verso la consolle</label><input id="pplFace" type="range" min="0" max="1" step="0.05" value="0.8"><output></output></div>
+    <div class="row"><label>DJ in consolle</label><input id="pplDJ" type="checkbox" style="accent-color:var(--acc)"></div>
+    <div class="hint">Sagome alte 1,60–1,90 m, a distanza minima di circa 55 cm, evitando pilastri, colonne e consolle.</div>
+  </div>
+
+  <div class="sec"><b>Elementi</b>
+    <div class="row"><label>altezza colonne</label><input id="colH" type="range" min="1.5" max="5" step="0.05" value="3.0"><output></output></div>
+    <div class="btns" style="margin:6px 0"><button id="sampl" class="on">punti campionati</button></div>
+    <div class="row"><label>rotazione colonne (speculare)</label><input id="gRot" type="range" min="-180" max="180" step="1" value="0"><output></output></div>
+    <div class="row"><label>inclinazione verso centro</label><input id="gTilt" type="range" min="-45" max="45" step="0.5" value="0"><output></output></div>
+    <div class="row"><label>specularità colonne</label><select id="mirror" style="flex:1">
+      <option value="none">nessuna</option>
+      <option value="lr" selected>sx ↔ dx</option>
+      <option value="all">tutte e 4 (sx↔dx + centro↔fondo)</option>
+    </select></div>
+    <div class="btns" style="margin:4px 0 8px"><button id="p45">tutte a 45° verso il centro</button><button id="aim">orienta colonne verso consolle</button><button id="resetRT">azzera rot/incl</button></div>
+    <div style="margin-top:10px;color:var(--mut);font-size:10px;text-transform:uppercase;letter-spacing:.08em">elemento singolo</div>
+    <select id="elSel" style="margin:5px 0"></select>
+    <div class="row" id="rowX"><label>x</label><input id="elX" type="range" min="-11" max="9.5" step="0.05"><output></output></div>
+    <div class="row" id="rowY"><label>y (altezza)</label><input id="elY" type="range" min="0" max="4" step="0.01"><output></output></div>
+    <div class="row" id="rowZ"><label>z</label><input id="elZ" type="range" min="-6.5" max="6.5" step="0.05"><output></output></div>
+    <div class="row"><label>rotazione°</label><input id="elR" type="range" min="-180" max="180" step="1"><output></output></div>
+    <div class="row" id="rowT"><label>inclinazione°</label><input id="elT" type="range" min="-60" max="60" step="0.5"><output></output></div>
+    <div class="btns"><button id="elReset">azzera elemento</button></div>
+    <div class="hint">x = asse lungo (+ verso le statue), z = trasversale, ≈ metri. Rotazione sul proprio asse verticale (0 = LED verso il lato finestre); inclinazione dalla base, positiva in avanti (lato LED). Per le barre della consolle x/y/z sono spostamenti rispetto alla postazione (y = altezza da terra).</div>
+  </div>
+</div>
+
+<div id="prev"><span class="tag">render sorgente</span><div class="bar"><button id="prevMin" title="riduci">–</button><button id="prevClose" title="chiudi">×</button></div><canvas id="pc"></canvas></div>
+<button id="prevOpen">▣ render sorgente</button>
+
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {OBJLoader} from 'three/addons/loaders/OBJLoader.js';
+import {EffectComposer} from 'three/addons/postprocessing/EffectComposer.js';
+import {RenderPass} from 'three/addons/postprocessing/RenderPass.js';
+import {UnrealBloomPass} from 'three/addons/postprocessing/UnrealBloomPass.js';
+import {OutputPass} from 'three/addons/postprocessing/OutputPass.js';
+import {Muxer, ArrayBufferTarget} from 'mp4-muxer';
+import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
+
+const $=id=>document.getElementById(id);
+
+/* ---------- mapping del render 2D (coordinate a 2908x1198) ---------- */
+const VW=1454, VH=600, SX=VW/2908, SY=VH/1198;
+const lin=(a,b,n)=>Array.from({length:n},(_,i)=>a+(b-a)*i/(n-1));
+// segmenti: in immagine dall'alto in basso; li invertiamo per avere 0 = a terra
+const COLS={
+  Lb:{x:350, ys:lin(253,761,24), front:false},
+  Rb:{x:1999,ys:lin(257,767,24), front:false},
+  Lf:{x:171, ys:lin(639,1139,24),front:true},
+  Rf:{x:2173,ys:lin(627,1127,24),front:true},
+};
+const CON={l:{x:1105,ys:lin(576,749,8)}, r:{x:1294,ys:lin(576,749,8)}, b:{y:781,xs:lin(1166,1288,8)}};
+const LASER={x:1206,y:510,row:40};
+
+/* ---------- posizioni nello spazio (dalla pianta: rosso = colonne, giallo = consolle/laser) ---------- */
+const POS={
+  Lb:{x:1.83,z:-5.79,label:'colonna rossa sx (centro)'},
+  Rb:{x:2.31,z:5.47, label:'colonna rossa dx (centro)'},
+  Lf:{x:-8.82,z:-5.03,label:'colonna rossa sx (fondo)'},
+  Rf:{x:-8.52,z:5.69, label:'colonna rossa dx (fondo)'},
+  con:{x:1.90,z:0.30, label:'postazione consolle + laser (tutto)'},
+  bl:{label:'consolle · barra verticale sx',bar:'l',x:0,y:0,z:0},
+  br:{label:'consolle · barra verticale dx',bar:'r',x:0,y:0,z:0},
+  bb:{label:'consolle · barra orizzontale',bar:'b',x:0,y:0,z:0},
+};
+// zone come disegnate nella pianta (centro + raggi in metri)
+const ZONES=[
+  {c:'#ff2a1a',x:2.31,z:5.47,rx:1.0,rz:1.25},{c:'#ff2a1a',x:1.83,z:-5.79,rx:1.0,rz:1.35},
+  {c:'#ff2a1a',x:-8.52,z:5.69,rx:1.25,rz:0.9},{c:'#ff2a1a',x:-8.82,z:-5.03,rx:1.15,rz:0.9},
+  {c:'#ffe81a',x:1.74,z:0.49,rx:2.1,rz:2.3},
+];
+
+/* ---------- three ---------- */
+const canvas=$('c');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.0;
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x050506);
+const perspCam=new THREE.PerspectiveCamera(55,1,0.05,200);
+const orthoCam=new THREE.OrthographicCamera(-10,10,6,-6,-300,600);
+let camera=perspCam, ORTHO_H=9, lastIso=null; // semi-altezza del riquadro assonometrico in metri
+// composizione intera: comp ruota attorno al centro sala, compInner contiene tutto
+const comp=new THREE.Group(), compInner=new THREE.Group(); comp.add(compInner); scene.add(comp);
+const controls=new OrbitControls(camera,canvas);
+controls.enableDamping=true;
+controls.screenSpacePanning=true;
+controls.keyPanSpeed=18;
+controls.listenToKeyEvents(window);
+renderer.localClippingEnabled=true;
+
+const hemi=new THREE.HemisphereLight(0xfff4e6,0x30302c,0.12);
+scene.add(hemi);
+
+const composer=new EffectComposer(renderer);
+const renderPass=new RenderPass(scene,camera); composer.addPass(renderPass);
+const bloom=new UnrealBloomPass(new THREE.Vector2(1,1),1.0,0.55,0.18);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+let exporting=false;
+function setAspect(w,h){
+  perspCam.aspect=w/h; perspCam.updateProjectionMatrix();
+  const a=w/h; orthoCam.left=-ORTHO_H*a; orthoCam.right=ORTHO_H*a; orthoCam.top=ORTHO_H; orthoCam.bottom=-ORTHO_H; orthoCam.updateProjectionMatrix();
+}
+function resize(){
+  if(exporting) return;
+  const w=innerWidth,h=innerHeight;
+  renderer.setSize(w,h,false);composer.setSize(w,h);
+  setAspect(w,h);
+}
+addEventListener('resize',resize);resize();
+
+/* ---------- scansione ---------- */
+async function loadScan(){
+  await new Promise((res,rej)=>{ if(window.SCAN_GLB) return res(); const sc=document.createElement('script'); sc.src='scan.js'; sc.onload=res; sc.onerror=()=>rej(new Error('scan.js')); document.head.appendChild(sc); });
+  const bs=atob(window.SCAN_GLB); const u8=new Uint8Array(bs.length); for(let i=0;i<bs.length;i++) u8[i]=bs.charCodeAt(i); window.SCAN_GLB=null;
+  origScanBuf=u8.buffer;
+  await installGLB(origScanBuf.slice(0),{original:true});
+  if(+$('objRX').value===0 && +$('objRZ').value===0 && +$('objY').value===0) levelFloor();
+  $('load')?.remove();
+}
+let origScanBuf=null;
+// prende tutte le mesh, le fonde in un'unica geometria indicizzata (posizione + uv) e la installa come scansione
+function mergeForScan(meshes){
+  const parts=[];
+  for(const m of meshes){
+    m.updateMatrixWorld(true);
+    let g=m.geometry.clone(); if(g.index) g=g.toNonIndexed();
+    g.applyMatrix4(m.matrixWorld);
+    const n=g.attributes.position.count;
+    const out=new THREE.BufferGeometry();
+    out.setAttribute('position',g.attributes.position);
+    out.setAttribute('uv', g.attributes.uv || new THREE.BufferAttribute(new Float32Array(n*2),2));
+    parts.push(out);
+  }
+  const g=parts.length===1?parts[0]:mergeGeometries(parts);
+  const n=g.attributes.position.count, idx=new Uint32Array(n); for(let i=0;i<n;i++) idx[i]=i;
+  g.setIndex(new THREE.BufferAttribute(idx,1));
+  return g;
+}
+function installScan(geo,map,opts={}){
+  // unità: se la scansione è in cm o mm la porta in metri
+  geo.computeBoundingBox(); const bb=geo.boundingBox, diag=bb.max.distanceTo(bb.min);
+  let unit=1; if(!opts.original){ if(diag>5000) unit=0.001; else if(diag>300) unit=0.01; if(unit!==1) geo.scale(unit,unit,unit); }
+  geo.computeVertexNormals();
+  scanGeo=geo; scanMap=map||null;
+  if(scanMap){ scanMap.colorSpace=THREE.SRGBColorSpace; scanMap.anisotropy=8; scanMap.needsUpdate=true; }
+  if(!opts.original){
+    // limiti della sala per la divisione dei muri (percentili 1–99%) e centratura sul centro sala attuale
+    const P=geo.attributes.position.array, xs=[], zs=[];
+    for(let i=0;i<P.length;i+=3*7){ xs.push(P[i]); zs.push(P[i+2]); }
+    xs.sort((a,b)=>a-b); zs.sort((a,b)=>a-b);
+    const q=(A,f)=>A[Math.floor((A.length-1)*f)];
+    const x0=q(xs,0.01),x1=q(xs,0.99),z0=q(zs,0.01),z1=q(zs,0.99);
+    WALLB={x0,x1,z0,z1};
+    for(const id of ['objRX','objRY','objRZ']) $(id).value=0;
+    $('objS').value=1; objMirror=false; $('objFlip').classList.remove('on');
+    $('objX').value=(ROOM.cx-(x0+x1)/2).toFixed(3); $('objZ').value=(ROOM.cz-(z0+z1)/2).toFixed(3); $('objY').value=0;
+    for(const id of ['objRX','objRY','objRZ','objX','objY','objZ','objS']) $(id).dispatchEvent(new Event('input'));
+  } else WALLB={x0:ROOM.x0,x1:ROOM.x1,z0:ROOM.z0,z1:ROOM.z1};
+  buildScan();
+  return unit;
+}
+async function installGLB(buf,opts){
+  const gltf=await new Promise((res,rej)=>new GLTFLoader().parse(buf,'',res,rej));
+  const meshes=[]; let map=null;
+  gltf.scene.updateMatrixWorld(true);
+  gltf.scene.traverse(o=>{ if(o.isMesh){ meshes.push(o); if(!map && o.material?.map) map=o.material.map; } });
+  if(!meshes.length) throw new Error('nessuna mesh nel file');
+  const geo= opts.original ? (()=>{ const g=meshes[0].geometry; return g; })() : mergeForScan(meshes);
+  return installScan(geo,map,opts);
+}
+loadScan().catch(e=>{$('load').textContent='errore nel caricare la scansione: '+e.message});
+
+/* ---------- muri: la scansione è divisa in nucleo + 4 lati perimetrali ---------- */
+let scanGeo=null, scanMap=null;
+const ROOM={x0:-10.8,x1:9.2,z0:-6.1,z1:6.4,cx:-0.8,cz:0.15};
+let WALLB={x0:ROOM.x0,x1:ROOM.x1,z0:ROOM.z0,z1:ROOM.z1}; // limiti usati per riconoscere i muri della scansione corrente
+const scanGroup=new THREE.Group(); compInner.add(scanGroup);
+const cutPlane=new THREE.Plane(new THREE.Vector3(0,-1,0),2.2);
+const wallMeshes={}; // N(+x) S(-x) E(+z) W(-z)
+function buildScan(){
+  scanGroup.clear();
+  const pos=scanGeo.attributes.position.array, idx=scanGeo.index.array;
+  const band=+$('band').value, nf=idx.length/3;
+  const lists={core:[],N:[],S:[],E:[],W:[]};
+  for(let f=0;f<nf;f++){
+    const a=idx[f*3]*3,b=idx[f*3+1]*3,c=idx[f*3+2]*3;
+    const x=(pos[a]+pos[b]+pos[c])/3, y=(pos[a+1]+pos[b+1]+pos[c+1])/3, z=(pos[a+2]+pos[b+2]+pos[c+2])/3;
+    let key='core';
+    if(y>0.15){
+      const d={N:WALLB.x1-x,S:x-WALLB.x0,E:WALLB.z1-z,W:z-WALLB.z0};
+      let best='N'; for(const k in d) if(d[k]<d[best]) best=k;
+      if(d[best]<band) key=best;
+    }
+    const L=lists[key]; L.push(idx[f*3],idx[f*3+1],idx[f*3+2]);
+  }
+  const baseMat=new THREE.MeshStandardMaterial({map:scanMap,color:scanMap?0xffffff:0xb8b4ac,roughness:0.85,metalness:0,side:THREE.DoubleSide});
+  const wallMat=baseMat.clone(); wallMat.clippingPlanes=[]; 
+  for(const k in lists){
+    const g=new THREE.BufferGeometry();
+    g.setAttribute('position',scanGeo.attributes.position);
+    g.setAttribute('normal',scanGeo.attributes.normal);
+    g.setAttribute('uv',scanGeo.attributes.uv);
+    g.setIndex(new THREE.BufferAttribute(new Uint32Array(lists[k]),1));
+    const m=new THREE.Mesh(g,k==='core'?baseMat:wallMat);
+    scanGroup.add(m);
+    if(k!=='core') wallMeshes[k]=m;
+  }
+  wallMeshes.mat=wallMat;
+  updateWalls();
+}
+function updateWalls(){
+  if(!wallMeshes.mat) return;
+  const mode=$('walls').value;
+  cutPlane.constant=+$('cutH').value;
+  wallMeshes.mat.clippingPlanes = mode==='cut'?[cutPlane]:[];
+  wallMeshes.mat.needsUpdate=true;
+  const cam=scanGroup.worldToLocal(camera.position.clone());
+  for(const k of ['N','S','E','W']){
+    let vis=mode!=='none';
+    if(mode==='auto'){
+      // nasconde i lati che stanno tra la camera e il centro sala
+      if(k==='N') vis=!(cam.x>WALLB.x1-1.5);
+      if(k==='S') vis=!(cam.x<WALLB.x0+1.5);
+      if(k==='E') vis=!(cam.z>WALLB.z1-1.5);
+      if(k==='W') vis=!(cam.z<WALLB.z0+1.5);
+      // vista dall'alto: tutti visibili
+    }
+    wallMeshes[k].visible=vis;
+  }
+}
+
+/* ---------- colonne LED ---------- */
+const SEG=24;
+const segGeo=new THREE.BoxGeometry(0.11,1,0.11);
+const columns={};
+function makeColumn(key){
+  const grp=new THREE.Group();
+  const pole=new THREE.Mesh(new THREE.BoxGeometry(0.16,1,0.16),new THREE.MeshStandardMaterial({color:0x111111,roughness:0.6}));
+  grp.add(pole);
+  const base=new THREE.Mesh(new THREE.BoxGeometry(0.45,0.04,0.45),new THREE.MeshStandardMaterial({color:0x151515}));
+  base.position.y=0.02; grp.add(base);
+  const mat=new THREE.MeshBasicMaterial({toneMapped:false});
+  const inst=new THREE.InstancedMesh(segGeo,mat,SEG);
+  inst.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(SEG*3),3);
+  grp.add(inst);
+  const lights=[0,1].map(()=>{const l=new THREE.PointLight(0xffffff,0,6,1.8);grp.add(l);return l});
+  compInner.add(grp);
+  columns[key]={grp,pole,inst,lights,cols:new Float32Array(SEG*3),peak:80};
+}
+Object.keys(COLS).forEach(makeColumn);
+
+function layoutColumns(){
+  const H=+$('colH').value;
+  const dummy=new THREE.Object3D();
+  for(const k in columns){
+    const c=columns[k];
+    c.grp.position.set(POS[k].x,POS[k].y||0,POS[k].z);
+    const side=POS[k].z>=ROOM.cz?1:-1; // speculare dx/sx
+    const rot=(POS[k].rot||0)+side*(+$('gRot').value);
+    // inclinazione globale: verso il centro sala (lato z)
+    const toward=new THREE.Vector3(ROOM.cx-POS[k].x,0,ROOM.cz-POS[k].z); toward.x=0; toward.normalize();
+    c.grp.rotation.set(0,0,0);
+    c.grp.rotateY(THREE.MathUtils.degToRad(rot));
+    // incl locale: positiva = in avanti, verso il lato LED (-x locale)
+    c.grp.rotateZ(THREE.MathUtils.degToRad(POS[k].tilt||0));
+    const gT=THREE.MathUtils.degToRad(+$('gTilt').value);
+    if(gT){ const axis=new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0),toward).normalize(); c.grp.rotateOnWorldAxis(axis,gT); }
+    c.pole.scale.y=H; c.pole.position.y=H/2;
+    const step=H/SEG;
+    for(let i=0;i<SEG;i++){
+      dummy.position.set(-0.03,step*(i+0.5),0); dummy.scale.set(1,step*0.72,1); dummy.updateMatrix();
+      c.inst.setMatrixAt(i,dummy.matrix);
+    }
+    c.inst.instanceMatrix.needsUpdate=true;
+    c.lights[0].position.set(-0.25,H*0.25,0); c.lights[1].position.set(-0.25,H*0.75,0);
+  }
+}
+
+/* ---------- consolle + laser ---------- */
+const con=new THREE.Group(); compInner.add(con);
+// consolle = 3 barre LED da 1,2 m: 2 verticali + 1 orizzontale a terra (forma a U), 8 segmenti ciascuna
+const BAR=1.2, SEGL=BAR/8;
+const barMat=new THREE.MeshStandardMaterial({color:0x111111,roughness:0.5});
+// ogni barra è un gruppo con perno alla base: verticali al piede, orizzontale al centro
+const conSeg={}, barG={}, barR={};
+const BAR_BASE={l:[0,0,-BAR/2],r:[0,0,BAR/2],b:[0,0,0]};
+for(const k of ['l','r','b']){
+  const gT=new THREE.Group(); gT.position.set(...BAR_BASE[k]); con.add(gT); barG[k]=gT;
+  // la barra orizzontale ha un nodo di rotazione separato: il laser segue solo gli spostamenti
+  let g=gT; if(k==='b'){ g=new THREE.Group(); gT.add(g); } barR[k]=g;
+  const body=k==='b'?new THREE.Mesh(new THREE.BoxGeometry(0.05,0.05,BAR),barMat):new THREE.Mesh(new THREE.BoxGeometry(0.05,BAR,0.05),barMat);
+  body.position.set(0.02,k==='b'?0.025:BAR/2,0); g.add(body);
+  const inst=new THREE.InstancedMesh(new THREE.BoxGeometry(0.05,1,1),new THREE.MeshBasicMaterial({toneMapped:false}),8);
+  inst.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(24),3);
+  const d=new THREE.Object3D();
+  for(let i=0;i<8;i++){
+    if(k==='b'){d.position.set(0.02,0.056,-BAR/2+SEGL*(i+0.5)); d.scale.set(0.9,0.012,SEGL*0.78);} // LED sul lato superiore, luce verso l'alto
+    else{d.position.set(-0.01,SEGL*(i+0.5),0); d.scale.set(1,SEGL*0.78,0.05);}
+    d.updateMatrix(); inst.setMatrixAt(i,d.matrix);
+  }
+  g.add(inst); conSeg[k]=inst;
+}
+const conLight=new THREE.PointLight(0xffffff,0,6,1.6); conLight.position.set(-0.6,0.7,0); con.add(conLight);
+// luce della barra orizzontale: spot verso l'alto
+const bbSpot=new THREE.SpotLight(0xffffff,0,12,THREE.MathUtils.degToRad(38),0.6,1.4);
+bbSpot.position.set(0.02,0.08,0); barR.b.add(bbSpot);
+const bbTarget=new THREE.Object3D(); bbTarget.position.set(0.02,5,0); barR.b.add(bbTarget); bbSpot.target=bbTarget;
+
+// laser: gruppo proprio, figlio della barra orizzontale. lzPos = posizione, lzAim = orientamento (perno sulla sorgente)
+const lzPos=new THREE.Group(); barG.b.add(lzPos);
+const lzAim=new THREE.Group(); lzPos.add(lzAim);
+const head=new THREE.Mesh(new THREE.BoxGeometry(0.28,0.16,0.3),new THREE.MeshStandardMaterial({color:0x202022,metalness:0.4,roughness:0.4}));
+head.position.set(0,-0.08,0); lzAim.add(head);
+const lens=new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.03,0.02,16),new THREE.MeshBasicMaterial({color:0x99ffee,toneMapped:false}));
+lens.position.set(0,0.005,0); lzAim.add(lens);
+const stand=new THREE.Mesh(new THREE.CylinderGeometry(0.02,0.02,1),new THREE.MeshStandardMaterial({color:0x222222}));
+lzPos.add(stand);
+function layoutLaser(){
+  const y=+$('lzY').value;
+  lzPos.position.set(+$('lzX').value,y,+$('lzZ').value);
+  lzAim.rotation.set(0,0,0);
+  lzAim.rotateY(THREE.MathUtils.degToRad(+$('lzAz').value));
+  lzAim.rotateZ(THREE.MathUtils.degToRad(+$('lzInc').value)); // positivo = verso -x locale (pubblico)
+  stand.visible=$('lzStand').checked && y>0.2;
+  stand.scale.y=Math.max(0.01,y-0.16); stand.position.y=-(y-0.16)/2-0.16;
+}
+
+const MAXB=18, BEAM_L=14;
+const beamGeo=new THREE.CylinderGeometry(1,1,1,6,1,true); beamGeo.translate(0,0.5,0);
+const beams=[];
+for(let i=0;i<MAXB;i++){
+  const core=new THREE.Mesh(beamGeo,new THREE.MeshBasicMaterial({transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,toneMapped:false}));
+  const glow=new THREE.Mesh(beamGeo,new THREE.MeshBasicMaterial({transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,toneMapped:false}));
+  core.scale.set(0.006,BEAM_L,0.006); glow.scale.set(0.05,BEAM_L,0.05);
+  const g=new THREE.Group(); g.add(core,glow); g.visible=false;
+  lzAim.add(g); beams.push({g,core,glow});
+}
+const laserLight=new THREE.PointLight(0xffffff,0,8,1.5); laserLight.position.set(0,0.3,0); lzAim.add(laserLight);
+
+var peopleReady=false;
+function layoutAll(){
+  layoutColumns();
+  if(peopleReady) layoutPeople();
+  con.position.set(POS.con.x,0,POS.con.z);
+  con.rotation.set(0,THREE.MathUtils.degToRad(POS.con.rot||0),0);
+  for(const k of ['bl','br','bb']){
+    const g=barR[POS[k].bar], b0=BAR_BASE[POS[k].bar];
+    barG[POS[k].bar].position.set(b0[0]+POS[k].x, b0[1]+POS[k].y, b0[2]+POS[k].z);
+    g.rotation.set(0,0,0);
+    g.rotateY(THREE.MathUtils.degToRad(POS[k].rot||0));
+    g.rotateZ(THREE.MathUtils.degToRad(POS[k].tilt||0));
+  }
+  layoutLaser();
+}
+
+/* ---------- video + campionamento ---------- */
+const video=document.createElement('video');
+video.muted=true; video.loop=true; video.playsInline=true; video.crossOrigin='anonymous';
+const sc=document.createElement('canvas'); sc.width=VW; sc.height=VH;
+const sctx=sc.getContext('2d',{willReadFrequently:true});
+const pc=$('pc'); pc.width=VW/2; pc.height=VH/2; const pctx=pc.getContext('2d');
+let frame=null, blobURL=null;
+
+async function setClip(name){
+  if(name.startsWith('blob:')){ video.src=name; }
+  else{
+    const b=await fetch(name).then(r=>r.blob());
+    if(blobURL) URL.revokeObjectURL(blobURL);
+    blobURL=URL.createObjectURL(b);
+    video.src=blobURL;
+  }
+  try{await video.play(); $('play').textContent='❚❚ pausa';}catch(e){$('play').textContent='▶ play';}
+}
+$('clip').onchange=e=>setClip(e.target.value);
+$('play').onclick=()=>{ if(video.paused){video.play();$('play').textContent='❚❚ pausa'} else {video.pause();$('play').textContent='▶ play'} };
+let scrubbing=false;
+$('tl').addEventListener('input',e=>{scrubbing=true; if(video.duration) video.currentTime=video.duration*e.target.value/1000;});
+$('tl').addEventListener('change',()=>scrubbing=false);
+
+function px(X,Y){ // max 3x3 attorno al punto (coordinate 2908x1198)
+  const x=Math.round(X*SX), y=Math.round(Y*SY);
+  let r=0,g=0,b=0;
+  for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+    const i=((y+dy)*VW+(x+dx))*4, d=frame.data;
+    if(d[i]+d[i+1]+d[i+2]>r+g+b){r=d[i];g=d[i+1];b=d[i+2];}
+  }
+  return [r,g,b];
+}
+const BG=16;
+function norm(c,gain){ return c.map(v=>Math.max(0,(v-BG))/(255-BG)*gain); }
+
+function sample(){
+  if(video.readyState<2) return false;
+  sctx.drawImage(video,0,0,VW,VH);
+  frame=sctx.getImageData(0,0,VW,VH);
+  const spill=+$('spill').value, gF=+$('gainF').value;
+  // colonne
+  for(const k in COLS){
+    const def=COLS[k], c=columns[k], gain=def.front?gF:1.15;
+    const acc=[[0,0,0],[0,0,0]];
+    for(let i=0;i<SEG;i++){
+      const Y=def.ys[SEG-1-i];
+      const v=norm(px(def.x,Y),gain);
+      c.inst.instanceColor.setXYZ(i,v[0]*2.2,v[1]*2.2,v[2]*2.2);
+      const h=i<SEG/2?0:1; acc[h][0]+=v[0];acc[h][1]+=v[1];acc[h][2]+=v[2];
+    }
+    c.inst.instanceColor.needsUpdate=true;
+    acc.forEach((a,j)=>{
+      const m=Math.max(a[0],a[1],a[2],1e-4);
+      c.lights[j].color.setRGB(a[0]/m,a[1]/m,a[2]/m);
+      c.lights[j].intensity=spill*m/(SEG/2)*3;
+    });
+  }
+  // consolle
+  let ca=[0,0,0];
+  for(const k of ['l','r','b']){
+    const inst=conSeg[k];
+    for(let i=0;i<8;i++){
+      const v=norm(k==='b'?px(CON.b.xs[i],CON.b.y):px(CON[k].x,CON[k].ys[7-i]),k==='b'?2.0:1.15);
+      inst.instanceColor.setXYZ(i,v[0]*2,v[1]*2,v[2]*2); ca[0]+=v[0];ca[1]+=v[1];ca[2]+=v[2];
+    }
+    inst.instanceColor.needsUpdate=true;
+  }
+  const cm=Math.max(...ca,1e-4); conLight.color.setRGB(ca[0]/cm,ca[1]/cm,ca[2]/cm); conLight.intensity=spill*cm/24*2;
+  { let b=[0,0,0]; for(let i=0;i<8;i++){ b[0]+=conSeg.b.instanceColor.getX(i); b[1]+=conSeg.b.instanceColor.getY(i); b[2]+=conSeg.b.instanceColor.getZ(i); }
+    const bm=Math.max(...b,1e-4); bbSpot.color.setRGB(b[0]/bm,b[1]/bm,b[2]/bm); bbSpot.intensity=spill*bm/16*25; }
+  // laser: scansione di una riga sopra la sorgente
+  const y=Math.round(LASER.row*SY), x0=Math.round((LASER.x-260)*SX), x1=Math.round((LASER.x+260)*SX);
+  const runs=[]; let cur=null;
+  for(let x=x0;x<=x1;x++){
+    const i=(y*VW+x)*4, d=frame.data, r=d[i],g=d[i+1],b=d[i+2], mx=Math.max(r,g,b);
+    if(mx>90){ if(!cur||x-cur.end>1){cur={s:x,end:x,r:0,g:0,b:0,n:0,mx:0};runs.push(cur);} cur.end=x;cur.r+=r;cur.g+=g;cur.b+=b;cur.n++;cur.mx=Math.max(cur.mx,mx); }
+  }
+  const fan=+$('fan').value, haze=+$('haze').value;
+  let la=[0,0,0], nb=0;
+  for(let i=0;i<MAXB;i++){
+    const B=beams[i], r=runs[i];
+    if(!r){B.g.visible=false;continue;}
+    B.g.visible=true; nb++;
+    const cx=((r.s+r.end)/2)/SX;
+    const a=Math.atan2(cx-LASER.x,LASER.y-LASER.row)*fan;
+    const col=new THREE.Color(r.r/r.n/255,r.g/r.n/255,r.b/r.n/255);
+    const m=Math.max(col.r,col.g,col.b); col.multiplyScalar(1/m);
+    const dir=new THREE.Vector3(0,Math.cos(a),Math.sin(a)).normalize();
+    B.g.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),dir);
+    B.core.material.color.copy(col).multiplyScalar(3); B.core.material.opacity=1;
+    B.glow.material.color.copy(col); B.glow.material.opacity=0.06+haze*0.35;
+    B.glow.scale.set(0.02+haze*0.08,BEAM_L,0.02+haze*0.08);
+    la[0]+=col.r;la[1]+=col.g;la[2]+=col.b;
+  }
+  const lm=Math.max(...la,1e-4); laserLight.color.setRGB(la[0]/lm,la[1]/lm,la[2]/lm); laserLight.intensity=nb?spill*0.6:0;
+  // anteprima
+  pctx.drawImage(sc,0,0,pc.width,pc.height);
+  if(showSamples) drawSamples();
+  if(!scrubbing && video.duration) $('tl').value=Math.round(video.currentTime/video.duration*1000);
+  return true;
+}
+let showSamples=true;
+function drawSamples(){
+  const s=0.5;
+  pctx.fillStyle='rgba(255,255,255,.75)';
+  const dot=(X,Y)=>pctx.fillRect(X*SX*s-1,Y*SY*s-1,2,2);
+  for(const k in COLS) COLS[k].ys.forEach(Y=>dot(COLS[k].x,Y));
+  CON.l.ys.forEach(Y=>dot(CON.l.x,Y)); CON.r.ys.forEach(Y=>dot(CON.r.x,Y)); CON.b.xs.forEach(X=>dot(X,CON.b.y));
+  pctx.strokeStyle='rgba(255,255,255,.5)'; pctx.beginPath();
+  pctx.moveTo((LASER.x-260)*SX*s,LASER.row*SY*s); pctx.lineTo((LASER.x+260)*SX*s,LASER.row*SY*s); pctx.stroke();
+}
+
+/* ---------- camere ---------- */
+const CAMS={
+  render:{p:[-10.2,1.9,0],t:[2.0,1.8,0]},
+  top:{p:[-0.6,24,0.3],t:[-0.6,0,0.3]},
+  stage:{p:[4.6,2.5,0.3],t:[-6,1.3,0]},
+  side:{p:[-1,4.5,-5.2],t:[-1,1.4,3]},
+};
+function orbitCenter(){
+  const c=$('orbC').value, h=+$('orbH').value;
+  if(c==='cur') return controls.target.clone();
+  if(c==='room') return compInner.localToWorld(new THREE.Vector3(ROOM.cx,h,ROOM.cz));
+  if(c==='lz'){ const v=new THREE.Vector3(); lzAim.getWorldPosition(v); return v; }
+  const P=POS[c]; return compInner.localToWorld(new THREE.Vector3(P.x,h,P.z));
+}
+// cambiando centro: sposta la vista mantenendo distanza e angolo
+function retarget(){
+  const t=orbitCenter(), d=t.clone().sub(controls.target);
+  controls.target.add(d); camera.position.add(d); controls.update();
+}
+// orbita propria: cerchio o ellisse attorno al centro scelto, sempre guardando il centro
+let orbiting=false, orbTheta=0;
+function orbRadii(){ return $('orbShape').value==='ellipse' ? [+$('orbRx').value,+$('orbRz').value] : [+$('orbR').value,+$('orbR').value]; }
+function orbThetaFromCamera(){
+  const [rx,rz]=orbRadii(), a=THREE.MathUtils.degToRad($('orbShape').value==='ellipse'?+$('orbA').value:0);
+  const dx=camera.position.x-controls.target.x, dz=camera.position.z-controls.target.z;
+  const lx=dx*Math.cos(a)+dz*Math.sin(a), lz=-dx*Math.sin(a)+dz*Math.cos(a);
+  orbTheta=Math.atan2(lz/rz,lx/rx);
+}
+function orbitStep(dt){
+  if(!orbiting) return;
+  orbTheta+= (+$('orbSpd').value)*2*Math.PI/60*dt;
+  const [rx,rz]=orbRadii(), a=THREE.MathUtils.degToRad($('orbShape').value==='ellipse'?+$('orbA').value:0);
+  const lx=rx*Math.cos(orbTheta), lz=rz*Math.sin(orbTheta);
+  const t=controls.target;
+  camera.position.set(t.x+lx*Math.cos(a)-lz*Math.sin(a), t.y+(+$('orbCamH').value), t.z+lx*Math.sin(a)+lz*Math.cos(a));
+  camera.lookAt(t);
+}
+function showOrbRows(){ const e=$('orbShape').value==='ellipse'; $('rowOrbR').style.display=e?'none':''; $('rowOrbRx').style.display=$('rowOrbRz').style.display=$('rowOrbA').style.display=e?'':'none'; }
+$('orbShape').addEventListener('change',()=>{ showOrbRows(); if(orbiting) orbThetaFromCamera(); });
+showOrbRows();
+function stopOrbit(){ orbiting=false; controls.autoRotate=false; controls.enabled=true; document.querySelectorAll('[data-orbit]').forEach(b=>b.classList.remove('on')); }
+function setOrbit(kind){
+  const on=document.querySelector(`[data-orbit=${kind}]`);
+  if(on.classList.contains('on')){ stopOrbit(); return; }
+  stopOrbit();
+  document.querySelectorAll('[data-cam]').forEach(b=>b.classList.remove('on'));
+  const t=orbitCenter();
+  controls.target.copy(t);
+  const setv=(id,v)=>{ const e=$(id); e.value=v; e.dispatchEvent(new Event('input')); };
+  if(kind==='in'){ setv('orbR',7); setv('orbRx',8); setv('orbRz',4); setv('orbCamH',1.8); }
+  else{ setv('orbR',17); setv('orbRx',19); setv('orbRz',12); setv('orbCamH',9.6); if($('walls').value==='all'){ $('walls').value='auto'; } }
+  orbTheta=Math.PI; orbiting=true; orbitStep(0);
+  updateWalls(); on.classList.add('on');
+}
+document.querySelectorAll('[data-orbit]').forEach(b=>b.onclick=()=>setOrbit(b.dataset.orbit));
+function setCam(k){
+  stopOrbit();
+  const c=CAMS[k]; camera.position.copy(compInner.localToWorld(new THREE.Vector3(...c.p))); controls.target.copy(compInner.localToWorld(new THREE.Vector3(...c.t)));
+  document.querySelectorAll('[data-iso]').forEach(b=>b.classList.remove('on')); lastIso=null;
+  if(k==='top'){camera.position.x-=0.02;} controls.update();
+  document.querySelectorAll('[data-cam]').forEach(b=>b.classList.toggle('on',b.dataset.cam===k));
+}
+document.querySelectorAll('[data-cam]').forEach(b=>b.onclick=()=>setCam(b.dataset.cam));
+setCam('render');
+
+/* ---------- UI ---------- */
+function bindRange(id,fn){const el=$(id),out=el.nextElementSibling;const u=()=>{out.textContent=(+el.value).toFixed(el.step<1?2:0);fn&&fn(+el.value)};el.oninput=u;u();}
+bindRange('amb',v=>hemi.intensity=v);
+bindRange('orbSpd');
+for(const id of ['orbR','orbRx','orbRz','orbA','orbCamH']) bindRange(id,()=>{ if(orbiting) orbitStep(0); });
+$('orbC').onchange=retarget;
+// scelta del centro con un clic nella scena (funziona in qualsiasi vista, anche "pianta")
+let picking=false;
+const pickMark=new THREE.Mesh(new THREE.SphereGeometry(0.12,16,12),new THREE.MeshBasicMaterial({color:0xffd23a,toneMapped:false,depthTest:false,transparent:true}));
+pickMark.renderOrder=999; pickMark.visible=false; scene.add(pickMark);
+let pickFade=0;
+$('orbPick').onclick=e=>{ picking=!picking; e.target.classList.toggle('on',picking); canvas.style.cursor=picking?'crosshair':''; };
+let pickDown=null;
+canvas.addEventListener('pointerdown',e=>{ if(picking) pickDown=[e.clientX,e.clientY]; },true);
+canvas.addEventListener('pointerup',e=>{
+  if(!picking||!pickDown) return;
+  const moved=Math.hypot(e.clientX-pickDown[0],e.clientY-pickDown[1]); pickDown=null;
+  if(moved>5) return; // era un trascinamento della vista
+  const r=canvas.getBoundingClientRect();
+  ndc.set(((e.clientX-r.left)/r.width)*2-1, -((e.clientY-r.top)/r.height)*2+1);
+  ray.setFromCamera(ndc,camera);
+  const meshes=scanGroup.children.filter(m=>m.visible);
+  let p=null;
+  const hits=ray.intersectObjects(meshes,false);
+  if(hits.length) p=hits[0].point.clone();
+  else { dragPlane.set(new THREE.Vector3(0,1,0),0); if(ray.ray.intersectPlane(dragPlane,hit)) p=hit.clone(); }
+  if(!p) return;
+  // in pianta il clic cade sul pavimento: alza il centro all'altezza scelta
+  if(p.y<0.3) p.y=+$('orbH').value;
+  const d=p.clone().sub(controls.target); controls.target.add(d); camera.position.add(d); controls.update();
+  $('orbC').value='cur';
+  pickMark.position.copy(p); pickMark.visible=true; pickFade=2.5;
+  picking=false; $('orbPick').classList.remove('on'); canvas.style.cursor='';
+});
+let booted=false;
+bindRange('orbH',()=>{ if(booted && $('orbC').value!=='cur'&&$('orbC').value!=='lz') retarget(); });
+bindRange('bloom',v=>bloom.strength=v);
+bindRange('spill');bindRange('gainF');bindRange('fan');bindRange('haze');
+bindRange('colH',()=>layoutColumns());
+bindRange('gRot',()=>layoutColumns());
+bindRange('gTilt',()=>layoutColumns());
+bindRange('cutH',()=>updateWalls());
+bindRange('band',()=>{ if(scanGeo) buildScan(); });
+$('walls').onchange=updateWalls;
+$('p45').onclick=()=>{
+  for(const k in COLS){
+    const P=POS[k];
+    const dx=Math.sign(ROOM.cx-P.x)||1, dz=Math.sign(ROOM.cz-P.z)||1;
+    // faccia LED in diagonale (45°) verso il centro sala
+    P.rot=Math.round(THREE.MathUtils.radToDeg(Math.atan2(dz,-dx))*10)/10;
+  }
+  $('gRot').value=0; $('gRot').dispatchEvent(new Event('input'));
+  showEl(); layoutAll();
+};
+$('aim').onclick=()=>{
+  for(const k in COLS){
+    // la faccia LED è -x locale: ruota perché punti verso la consolle
+    const dx=POS.con.x-POS[k].x, dz=POS.con.z-POS[k].z;
+    POS[k].rot=Math.round(THREE.MathUtils.radToDeg(Math.atan2(dz,-dx))*10)/10;
+  }
+  $('gRot').value=0; $('gRot').dispatchEvent(new Event('input'));
+  syncInputs(); layoutAll();
+};
+$('resetRT').onclick=()=>{
+  for(const k in POS){POS[k].rot=0; POS[k].tilt=0;}
+  $('gRot').value=0; $('gTilt').value=0; $('gRot').dispatchEvent(new Event('input')); $('gTilt').dispatchEvent(new Event('input'));
+  syncInputs(); layoutAll();
+};
+let panMode=false;
+$('panmode').onclick=e=>{
+  panMode=!panMode; e.target.classList.toggle('on',panMode);
+  controls.mouseButtons.LEFT = panMode?THREE.MOUSE.PAN:THREE.MOUSE.ROTATE;
+  controls.mouseButtons.RIGHT= panMode?THREE.MOUSE.ROTATE:THREE.MOUSE.PAN;
+  controls.touches.ONE = panMode?THREE.TOUCH.PAN:THREE.TOUCH.ROTATE;
+};
+$('recenter').onclick=()=>{
+  const t=compInner.localToWorld(new THREE.Vector3(POS.con.x,1.4,POS.con.z)), d=t.clone().sub(controls.target);
+  controls.target.add(d); camera.position.add(d); controls.update();
+};
+$('sampl').onclick=e=>{showSamples=!showSamples;e.target.classList.toggle('on',showSamples)};
+
+const elSel=$('elSel');
+for(const k in POS){ POS[k].rot=POS[k].rot||0; POS[k].tilt=POS[k].tilt||0; const o=document.createElement('option'); o.value=k; o.textContent=POS[k].label; elSel.appendChild(o); }
+{ const o=document.createElement('option'); o.value='lz'; o.textContent='laser (sorgente)'; elSel.appendChild(o); }
+const EL={x:$('elX'),y:$('elY'),z:$('elZ'),rot:$('elR'),tilt:$('elT')};
+const LZMAP={x:'lzX',y:'lzY',z:'lzZ',rot:'lzAz',tilt:'lzInc'};
+const fmt=(ax,v)=>(+v).toFixed(ax==='rot'||ax==='tilt'?1:3);
+function showEl(){
+  const k=elSel.value;
+  if(k==='lz'){
+    $('rowX').style.display=$('rowZ').style.display=$('rowT').style.display='';
+    for(const ax in EL){ const src=$(LZMAP[ax]); EL[ax].min=src.min; EL[ax].max=src.max; EL[ax].step=src.step; EL[ax].value=src.value; EL[ax].nextElementSibling.textContent=fmt(ax,src.value); }
+    $('rowX').querySelector('label').textContent='x (avanti/dietro)'; $('rowZ').querySelector('label').textContent='z (laterale)';
+    $('elR').closest('.row').querySelector('label').textContent='direzione°';
+    return;
+  }
+  $('elR').closest('.row').querySelector('label').textContent='rotazione°';
+  const P=POS[k], isBar=!!P.bar;
+  if(P.y===undefined) P.y=0;
+  // passi fini per consolle/barre, normali per le colonne
+  EL.x.step=EL.y.step=EL.z.step= (isBar||k==='con')?0.005:0.01; EL.rot.step=EL.tilt.step=0.1;
+  // barre: x/y/z sono spostamenti rispetto alla postazione consolle
+  EL.x.min=isBar?-2:-11; EL.x.max=isBar?2:9.5;
+  EL.z.min=isBar?-2:-6.5; EL.z.max=isBar?2:6.5;
+  EL.y.min=isBar?-0.5:0; EL.y.max=isBar?3:4;
+  $('rowX').querySelector('label').textContent=isBar?'x (avanti/dietro)':'x';
+  $('rowZ').querySelector('label').textContent=isBar?'z (laterale)':'z';
+  $('rowT').style.display=k==='con'?'none':'';
+  EL.rot.min=-180; EL.rot.max=180; EL.tilt.min=-60; EL.tilt.max=60;
+  for(const ax in EL){ if(P[ax]!==undefined){ EL[ax].value=P[ax]; EL[ax].nextElementSibling.textContent=fmt(ax,P[ax]);} }
+}
+const MIR_LR={Lb:'Rb',Rb:'Lb',Lf:'Rf',Rf:'Lf'}, MIR_FB={Lb:'Lf',Lf:'Lb',Rb:'Rf',Rf:'Rb'};
+const wrap=a=>((a+540)%360)-180;
+function applyMirror(k){
+  const mode=$('mirror').value; if(mode==='none'||!MIR_LR[k]) return;
+  const P=POS[k];
+  // sx↔dx: specchio rispetto all'asse longitudinale della sala (z = centro)
+  const q=POS[MIR_LR[k]];
+  q.x=P.x; q.y=P.y; q.z=2*ROOM.cz-P.z; q.rot=wrap(-P.rot); q.tilt=P.tilt;
+  if(mode==='all'){
+    // centro↔fondo: stesse rotazione/inclinazione specchiate sull'asse trasversale (posizioni invariate)
+    for(const a of [k,MIR_LR[k]]){ const f=POS[MIR_FB[a]], s=POS[a]; f.rot=wrap(180-s.rot); f.tilt=s.tilt; f.y=s.y; }
+  }
+}
+for(const ax in EL){
+  EL[ax].addEventListener('input',()=>{ const k=elSel.value;
+    if(k==='lz'){ const src=$(LZMAP[ax]); src.value=EL[ax].value; src.dispatchEvent(new Event('input')); EL[ax].nextElementSibling.textContent=fmt(ax,EL[ax].value); return; }
+    POS[k][ax]=+EL[ax].value; applyMirror(k); EL[ax].nextElementSibling.textContent=fmt(ax,EL[ax].value); layoutAll(); });
+}
+elSel.onchange=showEl;
+for(const id of ['lzX','lzY','lzZ','lzAz','lzInc']) bindRange(id,()=>{ layoutLaser(); if(typeof elSel!=='undefined' && elSel.value==='lz' && document.activeElement?.id!==id) {} });
+$('lzStand').onchange=layoutLaser;
+const LZ0={lzX:0.1,lzY:1.73,lzZ:0,lzAz:0,lzInc:0};
+$('lzReset').onclick=()=>{ for(const id in LZ0){ $(id).value=LZ0[id]; $(id).dispatchEvent(new Event('input')); } };
+document.querySelectorAll('[data-lz]').forEach(b=>b.onclick=()=>{ $('lzInc').value=b.dataset.lz; $('lzInc').dispatchEvent(new Event('input')); });
+$('elReset').onclick=()=>{ if(elSel.value==='lz'){ $('lzReset').click(); showEl(); return; } const P=POS[elSel.value]; P.rot=0; P.tilt=0; P.y=0; if(P.bar){P.x=0;P.z=0;} showEl(); layoutAll(); };
+function syncInputs(){ showEl(); }
+showEl();
+layoutAll();
+setClip('v1.mp4');
+
+/* ---------- tastini reset accanto a ogni cursore ---------- */
+for(const k in POS){ POS[k].y=POS[k].y||0; POS[k].rot=POS[k].rot||0; POS[k].tilt=POS[k].tilt||0; }
+const POS0=JSON.parse(JSON.stringify(POS));
+const EL_IDS={elX:'x',elY:'y',elZ:'z',elR:'rot',elT:'tilt'};
+document.querySelectorAll('#panel .row input[type=range]').forEach(inp=>{
+  if(inp.id==='tl') return;
+  const b=document.createElement('button'); b.className='rz'; b.textContent='↺'; b.title='torna al valore iniziale';
+  b.onclick=()=>{
+    const ax=EL_IDS[inp.id];
+    if(ax && elSel.value==='lz'){ const id=LZMAP[ax], src=$(id); src.value=src.defaultValue; src.dispatchEvent(new Event('input')); showEl(); return; }
+    if(ax){ const k=elSel.value; const v=POS0[k][ax]??0; POS[k][ax]=v; inp.value=v; showEl(); layoutAll(); return; }
+    inp.value=inp.defaultValue; inp.dispatchEvent(new Event('input'));
+  };
+  inp.closest('.row').appendChild(b);
+});
+$('resetAll').onclick=()=>{
+  stopOrbit(); setCam('render');
+  document.querySelectorAll('#panel .row input[type=range]').forEach(inp=>{ if(!EL_IDS[inp.id]){ inp.value=inp.defaultValue; inp.dispatchEvent(new Event('input')); } });
+  for(const k in POS) Object.assign(POS[k],JSON.parse(JSON.stringify(POS0[k])));
+  objMirror=false; $('objFlip').classList.remove('on'); layoutScan();
+  $('lzStand').checked=true; $('walls').value='all'; updateWalls(); showEl(); layoutAll();
+};
+
+/* ---------- composizione intera ---------- */
+function layoutComp(){
+  const d=THREE.MathUtils.degToRad;
+  comp.position.set(ROOM.cx+(+$('cmpX').value), +$('cmpY').value, ROOM.cz+(+$('cmpZ').value));
+  compInner.position.set(-ROOM.cx,0,-ROOM.cz);
+  comp.rotation.order='YXZ';
+  comp.rotation.set(d(+$('cmpRX').value),d(+$('cmpRY').value),d(+$('cmpRZ').value));
+  comp.updateMatrixWorld(true);
+}
+for(const id of ['cmpRX','cmpRY','cmpRZ','cmpX','cmpY','cmpZ']) bindRange(id,layoutComp);
+document.querySelectorAll('[data-c90]').forEach(b=>b.onclick=()=>{ const e=$(b.dataset.c90); let v=+e.value+90; if(v>180) v-=360; e.value=v; e.dispatchEvent(new Event('input')); });
+layoutComp();
+
+/* ---------- vista assonometrica (camera ortografica) ---------- */
+function useCamera(cam){
+  if(cam===camera) return;
+  const tgt=controls.target.clone();
+  if(cam===orthoCam){
+    // mantiene direzione; la scala del riquadro segue la distanza della vista prospettica
+    orthoCam.position.copy(perspCam.position); orthoCam.up.set(0,1,0);
+    ORTHO_H=Math.max(2,perspCam.position.distanceTo(tgt)*Math.tan(THREE.MathUtils.degToRad(perspCam.fov/2)));
+    orthoCam.zoom=1;
+  } else {
+    perspCam.position.copy(orthoCam.position);
+    // riporta la distanza coerente con lo zoom ortografico
+    const dist=(ORTHO_H/orthoCam.zoom)/Math.tan(THREE.MathUtils.degToRad(perspCam.fov/2));
+    const dir=perspCam.position.clone().sub(tgt).normalize(); perspCam.position.copy(tgt).addScaledVector(dir,dist);
+  }
+  camera=cam; controls.object=cam; renderPass.camera=cam;
+  setAspect(innerWidth,innerHeight); camera.lookAt(tgt); controls.update();
+  $('axo').classList.toggle('on',cam===orthoCam);
+}
+$('axo').onclick=()=>useCamera(camera===orthoCam?perspCam:orthoCam);
+function isoView(az){
+  stopOrbit(); useCamera(orthoCam);
+  ORTHO_H=13; orthoCam.zoom=1; setAspect(innerWidth,innerHeight);
+  if($('walls').value==='all'){ $('walls').value='auto'; }
+  document.querySelectorAll('[data-cam]').forEach(b=>b.classList.remove('on'));
+  const el=THREE.MathUtils.degToRad(+$('isoEl').value), a=THREE.MathUtils.degToRad(az), t=controls.target, D=60;
+  camera.position.set(t.x+D*Math.cos(el)*Math.cos(a), t.y+D*Math.sin(el), t.z+D*Math.cos(el)*Math.sin(a));
+  camera.lookAt(t); controls.update();
+  document.querySelectorAll('[data-iso]').forEach(b=>b.classList.toggle('on',+b.dataset.iso===az));
+  lastIso=az;
+}
+document.querySelectorAll('[data-iso]').forEach(b=>b.onclick=()=>isoView(+b.dataset.iso));
+bindRange('isoEl',()=>{ if(lastIso!==null && camera===orthoCam && !orbiting) isoView(lastIso); });
+
+/* ---------- trasformazione scansione ---------- */
+let objMirror=false;
+function layoutScan(){
+  const d=THREE.MathUtils.degToRad;
+  scanGroup.rotation.order='YXZ';
+  scanGroup.rotation.set(d(+$('objRX').value),d(+$('objRY').value),d(+$('objRZ').value));
+  scanGroup.position.set(+$('objX').value,+$('objY').value,+$('objZ').value);
+  const k=+$('objS').value; scanGroup.scale.set(objMirror?-k:k,k,k);
+  scanGroup.updateMatrixWorld(true);
+}
+for(const id of ['objRX','objRY','objRZ','objX','objY','objZ','objS']) bindRange(id,layoutScan);
+document.querySelectorAll('[data-r90]').forEach(b=>b.onclick=()=>{ const e=$(b.dataset.r90); let v=+e.value+90; if(v>180) v-=360; e.value=v; e.dispatchEvent(new Event('input')); });
+$('objFlip').onclick=e=>{ objMirror=!objMirror; e.target.classList.toggle('on',objMirror); layoutScan(); };
+
+/* ---------- livellamento automatico del pavimento ---------- */
+function floorFit(){
+  // punti della scansione nel sistema della composizione (dopo la trasformazione OBJ attuale)
+  scanGroup.updateMatrix();
+  const M=scanGroup.matrix, pos=scanGeo.attributes.position.array, v=new THREE.Vector3();
+  const P=[]; for(let i=0;i<pos.length;i+=9){ v.set(pos[i],pos[i+1],pos[i+2]).applyMatrix4(M); P.push(v.x,v.y,v.z); }
+  // quota del pavimento = picco dell'istogramma nella parte bassa
+  let ymin=Infinity,ymax=-Infinity; for(let i=1;i<P.length;i+=3){ ymin=Math.min(ymin,P[i]); ymax=Math.max(ymax,P[i]); }
+  const B=200, h=new Array(B).fill(0), lim=ymin+(ymax-ymin)*0.4;
+  for(let i=1;i<P.length;i+=3){ if(P[i]<=lim){ h[Math.min(B-1,Math.floor((P[i]-ymin)/(lim-ymin)*B))]++; } }
+  let pk=0; for(let b=1;b<B;b++) if(h[b]>h[pk]) pk=b;
+  let y0=ymin+(pk+0.5)/B*(lim-ymin), tol=0.25, a=0,bz=0,c=y0;
+  // minimi quadrati y = a·x + b·z + c, con scarto progressivo dei punti lontani dal piano
+  for(let it=0;it<5;it++){
+    let n=0,sx=0,sz=0,sy=0,sxx=0,szz=0,sxz=0,sxy=0,szy=0;
+    for(let i=0;i<P.length;i+=3){ const x=P[i],y=P[i+1],z=P[i+2]; if(Math.abs(y-(a*x+bz*z+c))>tol) continue;
+      n++; sx+=x; sz+=z; sy+=y; sxx+=x*x; szz+=z*z; sxz+=x*z; sxy+=x*y; szy+=z*y; }
+    if(n<50) break;
+    const A=[[sxx,sxz,sx],[sxz,szz,sz],[sx,sz,n]], Y=[sxy,szy,sy];
+    const det=m=>m[0][0]*(m[1][1]*m[2][2]-m[1][2]*m[2][1])-m[0][1]*(m[1][0]*m[2][2]-m[1][2]*m[2][0])+m[0][2]*(m[1][0]*m[2][1]-m[1][1]*m[2][0]);
+    const D=det(A); if(Math.abs(D)<1e-9) break;
+    const col=(k)=>A.map((r,i)=>r.map((q,j)=>j===k?Y[i]:q));
+    a=det(col(0))/D; bz=det(col(1))/D; c=det(col(2))/D;
+    tol=Math.max(0.03,tol*0.55);
+  }
+  return {a,b:bz,c};
+}
+function levelFloor(){
+  if(!scanGeo) return;
+  const d2r=THREE.MathUtils.radToDeg;
+  for(let it=0;it<4;it++){
+    const f=floorFit();
+    const tryAxis=(id,delta)=>{ const e=$(id), old=+e.value; e.value=old+delta; layoutScan();
+      const g=floorFit(); const before=Math.abs(id==='objRX'?f.b:f.a), after=Math.abs(id==='objRX'?g.b:g.a);
+      if(after>before){ e.value=old-delta; layoutScan(); } };
+    tryAxis('objRZ',-d2r(Math.atan(f.a)));
+    tryAxis('objRX', d2r(Math.atan(f.b)));
+  }
+  const f=floorFit();
+  $('objY').value=(+$('objY').value)-f.c; layoutScan();
+  for(const id of ['objRX','objRZ','objY']) $(id).dispatchEvent(new Event('input'));
+  const g=floorFit();
+  $('levelMsg').textContent=`Pavimento in piano: pendenza residua ${(Math.hypot(g.a,g.b)*100).toFixed(2)}%, quota ${(g.c*100).toFixed(1)} cm.`;
+}
+$('objLevel').onclick=levelFloor;
+
+/* ---------- import ---------- */
+$('impScanBtn').onclick=()=>$('impScan').click();
+$('impVidBtn').onclick=()=>$('impVid').click();
+const base=n=>n.split(/[\\/]/).pop().toLowerCase();
+$('impScan').onchange=async e=>{
+  const files=[...e.target.files]; e.target.value=''; if(!files.length) return;
+  const msg=t=>$('impMsg').textContent=t;
+  try{
+    const glb=files.find(f=>/\.(glb|gltf)$/i.test(f.name));
+    const obj=files.find(f=>/\.obj$/i.test(f.name));
+    let unit=1;
+    if(glb){
+      msg('carico '+glb.name+'…');
+      unit=await installGLB(await glb.arrayBuffer(),{});
+      msg(`Importato ${glb.name}`+(unit!==1?` (convertito in metri ×${unit})`:'')+'.');
+    } else if(obj){
+      msg('carico '+obj.name+'…');
+      const imgs=files.filter(f=>/\.(jpe?g|png|webp)$/i.test(f.name));
+      const mtl=files.find(f=>/\.mtl$/i.test(f.name));
+      let texFile=null;
+      if(mtl){ const t=await mtl.text(); const m=t.match(/^\s*map_Kd\s+(.+)$/mi); if(m){ const want=base(m[1].trim()); texFile=imgs.find(f=>base(f.name)===want)||null; } }
+      if(!texFile && imgs.length) texFile=imgs[0];
+      const group=new OBJLoader().parse(await obj.text());
+      const meshes=[]; group.traverse(o=>{ if(o.isMesh) meshes.push(o); });
+      if(!meshes.length) throw new Error('nessuna mesh nell\'OBJ');
+      let map=null;
+      if(texFile){ const img=new Image(); img.src=URL.createObjectURL(texFile); await img.decode(); map=new THREE.Texture(img); }
+      unit=installScan(mergeForScan(meshes),map,{});
+      msg(`Importato ${obj.name}`+(texFile?` con texture ${texFile.name}`:' (senza texture)')+(unit!==1?`, convertito in metri ×${unit}`:'')+'. Ho centrato la scansione sul centro sala e messo in piano il pavimento: usa "Scansione OBJ · assi" per gli aggiustamenti.');
+    } else { msg('Nessun .obj o .glb tra i file scelti.'); return; }
+    levelFloor();
+  }catch(err){ msg('Import non riuscito: '+(err.message||err)); }
+};
+$('impOrig').onclick=async()=>{
+  if(!origScanBuf) return;
+  await installGLB(origScanBuf.slice(0),{original:true});
+  for(const id of ['objRX','objRY','objRZ','objX','objY','objZ']) { $(id).value=0; } $('objS').value=1;
+  for(const id of ['objRX','objRY','objRZ','objX','objY','objZ','objS']) $(id).dispatchEvent(new Event('input'));
+  levelFloor(); $('impMsg').textContent='Ripristinata la scansione originale.';
+};
+$('impVid').onchange=e=>{
+  const files=[...e.target.files]; e.target.value=''; if(!files.length) return;
+  let first=null;
+  for(const f of files){
+    const url=URL.createObjectURL(f), o=document.createElement('option');
+    o.value=url; o.textContent='importato · '+f.name; $('clip').appendChild(o); first=first||url;
+  }
+  $('clip').value=first; setClip(first);
+  $('impMsg').textContent=`Aggiunti ${files.length} render al menu Render.`;
+};
+
+/* ---------- persone ---------- */
+const personGeo=(()=>{
+  const body=new THREE.CapsuleGeometry(0.19,0.78,4,10); body.scale(1,1,0.62); body.translate(0,0.95,0);   // 0.37 → 1.53
+  const legs=new THREE.CylinderGeometry(0.15,0.11,0.62,10); legs.scale(1,1,0.6); legs.translate(0,0.31,0);  // 0 → 0.62
+  const neck=new THREE.CylinderGeometry(0.05,0.06,0.1,8); neck.translate(0,1.55,0);
+  const head=new THREE.SphereGeometry(0.11,12,10); head.scale(1,1.15,1); head.translate(0,1.66,0);           // fino a ~1.79
+  return mergeGeometries([body.toNonIndexed(),legs.toNonIndexed(),neck.toNonIndexed(),head.toNonIndexed()]);
+})();
+const MAXP=260;
+const people=new THREE.InstancedMesh(personGeo,new THREE.MeshStandardMaterial({color:0x56524e,roughness:0.85,metalness:0}),MAXP);
+people.count=0; people.frustumCulled=false; compInner.add(people);
+const dj=new THREE.Mesh(personGeo,people.material); dj.visible=false; compInner.add(dj);
+function rng(seed){ return ()=>{ seed|=0; seed=seed+0x6D2B79F5|0; let t=Math.imul(seed^seed>>>15,1|seed); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+const OBST=[ // pilastri isolati (rettangoli in pianta)
+  {x0:2.3,x1:5.3,z0:-2.9,z1:-1.6},{x0:2.2,x1:5.1,z0:1.7,z1:3.0}];
+function layoutPeople(){
+  const N=+$('pplN').value, R=rng(+$('pplSeed').value*7919), face=+$('pplFace').value;
+  const area=$('pplArea').value, m=new THREE.Matrix4(), q=new THREE.Quaternion(), e=new THREE.Euler(), sc=new THREE.Vector3(), ps=new THREE.Vector3();
+  const xMin=ROOM.x0+0.9, xMax= area==='front'? POS.con.x-1.3 : ROOM.x1-0.9, zMin=ROOM.z0+0.9, zMax=ROOM.z1-0.9;
+  const placed=[];
+  const blocked=(x,z)=>{
+    for(const o of OBST) if(x>o.x0-0.35&&x<o.x1+0.35&&z>o.z0-0.35&&z<o.z1+0.35) return true;
+    if(Math.hypot(x-POS.con.x,z-POS.con.z)<1.4) return true;
+    for(const k in COLS) if(Math.hypot(x-POS[k].x,z-POS[k].z)<0.7) return true;
+    for(const p of placed) if((x-p[0])**2+(z-p[1])**2<0.55*0.55) return true;
+    return false;
+  };
+  let n=0, tries=0;
+  while(n<N && tries<N*400){
+    tries++;
+    const x=xMin+R()*(xMax-xMin), z=zMin+R()*(zMax-zMin);
+    if(blocked(x,z)) continue;
+    placed.push([x,z]);
+    const yawFace=Math.atan2(POS.con.x-x, POS.con.z-z);
+    const yaw=yawFace*face + (R()*2-1)*Math.PI*(1-face);
+    const h=0.915+R()*0.17;
+    e.set(0,yaw,0); q.setFromEuler(e); sc.set(0.92+R()*0.16,h,0.92+R()*0.16); ps.set(x,0,z);
+    m.compose(ps,q,sc); people.setMatrixAt(n,m); n++;
+  }
+  people.count=n; people.instanceMatrix.needsUpdate=true;
+  if(people.computeBoundingSphere) people.computeBoundingSphere();
+  // DJ dietro le barre della consolle, rivolto verso il pubblico
+  dj.visible=$('pplDJ').checked;
+  const back=new THREE.Vector3(0.55,0,0).applyAxisAngle(new THREE.Vector3(0,1,0),THREE.MathUtils.degToRad(POS.con.rot||0));
+  dj.position.set(POS.con.x+back.x,0,POS.con.z+back.z);
+  dj.rotation.y=THREE.MathUtils.degToRad(POS.con.rot||0)-Math.PI/2;
+}
+for(const id of ['pplN','pplSeed','pplFace']) bindRange(id,layoutPeople);
+$('pplArea').onchange=layoutPeople; $('pplDJ').onchange=layoutPeople;
+peopleReady=true;
+layoutPeople();
+
+/* ---------- laser: pad XY e trascinamento nella scena ---------- */
+const pad=$('lzPad'), pctx2=pad.getContext('2d');
+let padRange=2; // metri dal centro al bordo del pad
+function drawPad(){
+  const W=pad.width, c=W/2, k=c/padRange;
+  pctx2.fillStyle='#111'; pctx2.fillRect(0,0,W,W);
+  pctx2.strokeStyle='#262626'; pctx2.lineWidth=1;
+  for(let m=-Math.floor(padRange);m<=padRange;m+=padRange>3?1:0.5){ const q=c+m*k; pctx2.beginPath();pctx2.moveTo(q,0);pctx2.lineTo(q,W);pctx2.moveTo(0,q);pctx2.lineTo(W,q);pctx2.stroke(); }
+  pctx2.strokeStyle='#444'; pctx2.beginPath(); pctx2.moveTo(c,0);pctx2.lineTo(c,W);pctx2.moveTo(0,c);pctx2.lineTo(W,c); pctx2.stroke();
+  // barre consolle (riferimento, nel sistema della barra orizzontale)
+  pctx2.strokeStyle='#7a5cff'; pctx2.lineWidth=3; pctx2.beginPath(); pctx2.moveTo(c-0.6*k,c); pctx2.lineTo(c+0.6*k,c); pctx2.stroke();
+  // laser: ↑ = -x locale (pubblico), → = +z locale
+  const lx=+$('lzX').value, lz=+$('lzZ').value, X=c+lz*k, Y=c+lx*k;
+  pctx2.fillStyle='#29ffd5'; pctx2.beginPath(); pctx2.arc(X,Y,5,0,7); pctx2.fill();
+  pctx2.fillStyle='#777'; pctx2.font='9px monospace'; pctx2.fillText(`±${padRange} m`,4,W-5); pctx2.fillText('pubblico ↑',W-58,10);
+}
+let padDrag=null;
+function padSet(e){
+  const r=pad.getBoundingClientRect(), W=pad.width, c=W/2, k=c/padRange;
+  const px=(e.clientX-r.left)*W/r.width, py=(e.clientY-r.top)*W/r.height;
+  let nz=(px-c)/k, nx=(py-c)/k;
+  if(e.shiftKey && padDrag){ nz=padDrag.z+(nz-padDrag.pz)*0.1; nx=padDrag.x+(nx-padDrag.px)*0.1; }
+  $('lzX').value=nx.toFixed(3); $('lzZ').value=nz.toFixed(3);
+  $('lzX').dispatchEvent(new Event('input')); $('lzZ').dispatchEvent(new Event('input'));
+}
+pad.addEventListener('pointerdown',e=>{
+  pad.setPointerCapture(e.pointerId);
+  const r=pad.getBoundingClientRect(), W=pad.width, c=W/2, k=c/padRange;
+  padDrag={x:+$('lzX').value,z:+$('lzZ').value,px:((e.clientY-r.top)*W/r.height-c)/k,pz:((e.clientX-r.left)*W/r.width-c)/k};
+  if(!e.shiftKey) padSet(e);
+});
+pad.addEventListener('pointermove',e=>{ if(padDrag) padSet(e); });
+pad.addEventListener('pointerup',()=>{ padDrag=null; });
+pad.addEventListener('wheel',e=>{ e.preventDefault(); padRange=Math.min(6,Math.max(0.5,padRange*(e.deltaY>0?1.2:1/1.2))); padRange=Math.round(padRange*10)/10; drawPad(); },{passive:false});
+['lzX','lzZ','lzAz'].forEach(id=>$(id).addEventListener('input',drawPad));
+drawPad();
+
+// trascinamento diretto nella scena 3D, sul piano orizzontale all'altezza della sorgente
+let sceneDrag=false, dragging=false;
+const ray=new THREE.Raycaster(), ndc=new THREE.Vector2(), dragPlane=new THREE.Plane(), hit=new THREE.Vector3();
+$('lzDrag').onclick=e=>{ sceneDrag=!sceneDrag; e.target.classList.toggle('on',sceneDrag); canvas.style.cursor=sceneDrag?'move':''; };
+function scenePoint(e){
+  const r=canvas.getBoundingClientRect();
+  ndc.set(((e.clientX-r.left)/r.width)*2-1, -((e.clientY-r.top)/r.height)*2+1);
+  ray.setFromCamera(ndc,camera);
+  // punto indicato sul pavimento: il laser va sulla sua verticale (altezza invariata)
+  dragPlane.set(new THREE.Vector3(0,1,0),0);
+  return ray.ray.intersectPlane(dragPlane,hit)?hit:null;
+}
+canvas.addEventListener('pointerdown',e=>{
+  if(!sceneDrag||e.button!==0) return;
+  dragging=true; controls.enabled=false; canvas.setPointerCapture(e.pointerId);
+},true);
+canvas.addEventListener('pointermove',e=>{
+  if(!dragging) return;
+  const p=scenePoint(e); if(!p) return;
+  const wp=new THREE.Vector3(); lzPos.getWorldPosition(wp); p.y=wp.y;
+  const loc=barG.b.worldToLocal(p.clone());
+  $('lzX').value=loc.x.toFixed(3); $('lzZ').value=loc.z.toFixed(3);
+  $('lzX').dispatchEvent(new Event('input')); $('lzZ').dispatchEvent(new Event('input'));
+});
+canvas.addEventListener('pointerup',()=>{ if(dragging){ dragging=false; controls.enabled=true; if(elSel.value==='lz') showEl(); } });
+
+/* ---------- anteprima render sorgente ---------- */
+$('prevMin').onclick=()=>{ $('prev').classList.toggle('min'); $('prevMin').textContent=$('prev').classList.contains('min')?'▢':'–'; };
+$('prevClose').onclick=()=>{ $('prev').style.display='none'; $('prevOpen').style.display='block'; };
+$('prevOpen').onclick=()=>{ $('prev').style.display=''; $('prev').classList.remove('min'); $('prevMin').textContent='–'; $('prevOpen').style.display='none'; };
+
+/* ---------- preset ---------- */
+const SKIP=new Set(['exRes','exDur','elSel','pName','pList','pImport','elX','elY','elZ','elR','elT']);
+function getState(){
+  const ui={};
+  document.querySelectorAll('#panel input[id], #panel select[id]').forEach(e=>{ if(SKIP.has(e.id)) return; ui[e.id]= e.type==='checkbox'?e.checked:e.value; });
+  const orbit=document.querySelector('[data-orbit].on')?.dataset.orbit||null;
+  ui.objMirror=objMirror;
+  ui.__ortho = camera===orthoCam ? {H:ORTHO_H, zoom:orthoCam.zoom} : null;
+  return {v:2, ui, pos:JSON.parse(JSON.stringify(POS)), cam:{p:camera.position.toArray(),t:controls.target.toArray()}, orbit,
+          prev:$('prev').style.display==='none'?'closed':($('prev').classList.contains('min')?'min':'open')};
+}
+async function applyState(st){
+  if(!st||!st.ui) return;
+  const clipChanged = st.ui.clip && st.ui.clip!==$('clip').value && [...$('clip').options].some(o=>o.value===st.ui.clip);
+  if('objMirror' in st.ui){ objMirror=!!st.ui.objMirror; $('objFlip').classList.toggle('on',objMirror); }
+  for(const id in st.ui){
+    const e=$(id); if(!e||SKIP.has(id)||id==='clip') continue;
+    if(e.type==='checkbox'){ e.checked=!!st.ui[id]; e.dispatchEvent(new Event('change')); }
+    else { e.value=st.ui[id]; e.dispatchEvent(new Event(e.tagName==='SELECT'?'change':'input')); }
+  }
+  for(const k in st.pos) if(POS[k]) Object.assign(POS[k],st.pos[k]);
+  if(clipChanged){ $('clip').value=st.ui.clip; await setClip(st.ui.clip); }
+  stopOrbit();
+  if(st.ui.__ortho){ useCamera(orthoCam); ORTHO_H=st.ui.__ortho.H; orthoCam.zoom=st.ui.__ortho.zoom; setAspect(innerWidth,innerHeight); } else useCamera(perspCam);
+  if(st.cam){ camera.position.fromArray(st.cam.p); controls.target.fromArray(st.cam.t); camera.lookAt(controls.target); }
+  if(st.orbit){ document.querySelector(`[data-orbit=${st.orbit}]`).classList.add('on'); showOrbRows(); orbiting=true; orbThetaFromCamera(); }
+  document.querySelectorAll('[data-cam]').forEach(b=>b.classList.remove('on'));
+  controls.update();
+  if(st.prev==='closed') $('prevClose').click(); else { $('prevOpen').click(); if(st.prev==='min') $('prevMin').click(); }
+  showEl(); layoutAll(); updateWalls();
+}
+const PKEY='luci-spazio-presets-v1';
+let presets={};
+try{ presets=JSON.parse(localStorage.getItem(PKEY)||'{}')||{}; }catch(e){ presets={}; }
+function storePresets(){ try{ localStorage.setItem(PKEY,JSON.stringify(presets)); return true; }catch(e){ $('pMsg').textContent='Questo browser non conserva i preset: usa "esporta .json".'; return false; } }
+function refreshList(sel){
+  const L=$('pList'); L.innerHTML='';
+  const names=Object.keys(presets);
+  if(!names.length){ const o=document.createElement('option'); o.textContent='— nessun preset —'; o.value=''; L.appendChild(o); return; }
+  names.forEach(n=>{ const o=document.createElement('option'); o.value=n; o.textContent=n; L.appendChild(o); });
+  if(sel) L.value=sel;
+}
+refreshList();
+$('pSave').onclick=()=>{
+  const n=$('pName').value.trim()||('preset '+new Date().toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}));
+  presets[n]=getState(); const ok=storePresets(); refreshList(n); $('pName').value='';
+  if(ok) $('pMsg').textContent=`Salvato "${n}".`;
+};
+$('pLoad').onclick=()=>{ const n=$('pList').value; if(presets[n]){ applyState(presets[n]); $('pMsg').textContent=`Caricato "${n}".`; } };
+$('pList').ondblclick=$('pLoad').onclick;
+$('pDel').onclick=()=>{ const n=$('pList').value; if(!presets[n]) return; delete presets[n]; storePresets(); refreshList(); $('pMsg').textContent=`Eliminato "${n}".`; };
+$('pExport').onclick=async()=>{
+  const data=JSON.stringify({app:'luci-spazio',presets,corrente:getState()},null,1);
+  if(!downloads){ $('pMsg').textContent='Salvataggio file non disponibile in questa vista.'; return; }
+  try{ await downloads.save({filename:'preset_luci_spazio.json',data}); $('pMsg').textContent='Preset esportati.'; }
+  catch(e){ $('pMsg').textContent= e?.code==='declined'?'Esportazione annullata.':'Esportazione non riuscita ('+(e?.code||e)+').'; }
+};
+$('pImportBtn').onclick=()=>$('pImport').click();
+$('pImport').onchange=async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  try{
+    const j=JSON.parse(await f.text());
+    if(j.presets){ Object.assign(presets,j.presets); storePresets(); refreshList(); $('pMsg').textContent=`Importati ${Object.keys(j.presets).length} preset.`; }
+    else if(j.ui){ const n=f.name.replace(/\.json$/,''); presets[n]=j; storePresets(); refreshList(n); $('pMsg').textContent=`Importato "${n}".`; }
+  }catch(err){ $('pMsg').textContent='File non valido.'; }
+  e.target.value='';
+};
+
+/* ---------- export MP4 ---------- */
+let downloads=null;
+(async()=>{ try{ if(window.claude?.use) downloads=await window.claude.use('downloads'); }catch(e){} })();
+let rec=null, recTimer=null;
+function pickMime(){
+  const c=['video/mp4;codecs=avc1.640033','video/mp4;codecs=avc1.640028','video/mp4;codecs=avc1','video/mp4','video/webm;codecs=vp9','video/webm'];
+  return c.find(m=>window.MediaRecorder&&MediaRecorder.isTypeSupported(m));
+}
+function setRenderSize(w,h,pr){
+  renderer.setPixelRatio(pr); renderer.setSize(w,h,false); composer.setPixelRatio?.(pr); composer.setSize(w,h);
+  setAspect(w,h);
+}
+async function pickCodec(W,H){
+  if(!('VideoEncoder' in window)) return null;
+  for(const codec of ['avc1.640033','avc1.640032','avc1.640028','avc1.4d0033','avc1.42003e']){
+    const cfg={codec,width:W,height:H,bitrate:W*H>2.5e6?30e6:18e6,framerate:30,avc:{format:'avc'}};
+    try{ const r=await VideoEncoder.isConfigSupported(cfg); if(r.supported) return cfg; }catch(e){}
+  }
+  return null;
+}
+let abortExport=false;
+async function startExport(){
+  const r=$('exRes').value;
+  let [W,H]= r==='win'?[innerWidth,innerHeight]:r.split('x').map(Number);
+  W-=W%2; H-=H%2;
+  const cfg=await pickCodec(W,H);
+  if(!cfg) return startRealtimeExport();
+  const FPS=30, dur=$('exDur').value;
+  const t0= dur==='full'?0:video.currentTime;
+  const total= dur==='full'?video.duration:Math.min(+dur, video.duration*10);
+  const N=Math.round(total*FPS);
+  exporting=true; abortExport=false; video.pause(); video.loop=true;
+  setRenderSize(W,H,1);
+  $('exGo').style.display='none'; $('exStop').style.display='';
+  const muxer=new Muxer({target:new ArrayBufferTarget(),video:{codec:'avc',width:W,height:H,frameRate:FPS},fastStart:'in-memory'});
+  let encErr=null;
+  const enc=new VideoEncoder({output:(c,m)=>muxer.addVideoChunk(c,m),error:e=>encErr=e});
+  enc.configure(cfg);
+  for(let f=0; f<N && !abortExport && !encErr; f++){
+    let t=t0+f/FPS; if(video.duration) t%=video.duration;
+    video.currentTime=t;
+    await new Promise(res=>{ const done=()=>res(); video.addEventListener('seeked',done,{once:true}); setTimeout(done,1500); });
+    sample();
+    if(orbiting) orbitStep(1/FPS); else controls.update(1/FPS);
+    if($('walls').value==='auto') updateWalls();
+    composer.render();
+    const vf=new VideoFrame(canvas,{timestamp:Math.round(f*1e6/FPS),duration:Math.round(1e6/FPS)});
+    enc.encode(vf,{keyFrame:f%(FPS*2)===0}); vf.close();
+    while(enc.encodeQueueSize>4) await new Promise(r=>setTimeout(r,5));
+    if(f%5===0){ $('exMsg').textContent=`● export ${f}/${N} fotogrammi (${(f/FPS).toFixed(1)} / ${total.toFixed(1)} s) — ${W}×${H}`; await new Promise(r=>setTimeout(r,0)); }
+  }
+  try{ await enc.flush(); }catch(e){ encErr=encErr||e; }
+  enc.close();
+  if(encErr){ exporting=false; restoreAfterExport(); $('exMsg').textContent='Errore encoder: '+encErr.message; return; }
+  muxer.finalize();
+  const blob=new Blob([muxer.target.buffer],{type:'video/mp4'});
+  finishExport(blob,'video/mp4');
+}
+function restoreAfterExport(){
+  exporting=false; renderer.setPixelRatio(Math.min(devicePixelRatio,1.75)); resize();
+  $('exGo').style.display=''; $('exStop').style.display='none';
+  video.play().catch(()=>{}); $('play').textContent='❚❚ pausa';
+}
+async function startRealtimeExport(){
+  const mime=pickMime();
+  if(!mime){ $('exMsg').textContent='Questo browser non registra video dal canvas.'; return; }
+  const r=$('exRes').value;
+  const [W,H]= r==='win'?[innerWidth,innerHeight]:r.split('x').map(Number);
+  exporting=true; setRenderSize(W,H,1);
+  const dur=$('exDur').value;
+  if(dur==='full'){
+    video.loop=false; video.currentTime=0;
+    await new Promise(res=>video.addEventListener('seeked',res,{once:true}));
+  }
+  try{ await video.play(); }catch(e){}
+  $('play').textContent='❚❚ pausa';
+  const stream=canvas.captureStream(30);
+  const chunks=[];
+  rec=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:W*H>2.5e6?28e6:16e6});
+  rec.ondataavailable=e=>{ if(e.data.size) chunks.push(e.data); };
+  rec.onstop=()=>finishExport(new Blob(chunks,{type:mime}),mime);
+  rec.start(500);
+  const t0=performance.now();
+  const total= dur==='full'?video.duration:+dur;
+  $('exGo').style.display='none'; $('exStop').style.display='';
+  recTimer=setInterval(()=>{
+    const t=(performance.now()-t0)/1000;
+    $('exMsg').textContent=`● registrazione ${t.toFixed(1)} / ${total.toFixed(1)} s — ${W}×${H}`;
+    if(dur!=='full' && t>=total) stopExport();
+  },200);
+  if(dur==='full') video.addEventListener('ended',stopExport,{once:true});
+}
+function stopExport(){
+  abortExport=true;
+  if(!rec||rec.state==='inactive') return;
+  clearInterval(recTimer); rec.stop();
+}
+async function finishExport(blob,mime){
+  window._lastExport=blob; rec=null; video.loop=true; restoreAfterExport();
+  const ext=mime.includes('mp4')?'mp4':'webm';
+  const clip=$('clip').selectedOptions[0].textContent.split(' (')[0].replace(/[^\w]+/g,'_');
+  const name=`luci_spazio_${clip}.${ext}`;
+  const mb=(blob.size/1048576).toFixed(1);
+  if(ext!=='mp4') $('exMsg').textContent=`Il browser non supporta MP4: salvo in WebM (${mb} MB).`;
+  if(!downloads){ $('exMsg').textContent=`Video pronto (${mb} MB) ma il salvataggio non è disponibile in questa vista: apri l'artifact su claude.ai.`; return; }
+  try{
+    await downloads.save({filename:name,data:blob});
+    $('exMsg').textContent=`Salvato ${name} (${mb} MB).`;
+  }catch(e){
+    $('exMsg').textContent= e?.code==='declined' ? 'Salvataggio annullato.' : `Salvataggio non riuscito (${e?.code||e}).`;
+  }
+}
+$('exGo').onclick=startExport;
+$('exStop').onclick=stopExport;
+
+/* ---------- ultimo stato: salvato da solo e ripristinato all'apertura ---------- */
+const LKEY='luci-spazio-last-v1';
+let lastSaved='';
+function autosave(){
+  if(exporting) return;
+  try{ const j=JSON.stringify(getState()); if(j!==lastSaved){ localStorage.setItem(LKEY,j); lastSaved=j; } }catch(e){}
+}
+try{ const j=localStorage.getItem(LKEY); if(j){ const st=JSON.parse(j);
+  // stato salvato dalla versione precedente: le persone erano azzerate dal ricaricamento, le rimetto
+  if((st.v||1)<2 && st.ui && +st.ui.pplN===0) st.ui.pplN='60';
+  applyState(st); lastSaved=j; } }catch(e){}
+setInterval(autosave,1500);
+addEventListener('pagehide',autosave);
+booted=true;
+/* ---------- loop ---------- */
+const orbClock=new THREE.Clock();
+function loop(){
+  requestAnimationFrame(loop);
+  if(pickFade>0){ pickFade-=1/60; pickMark.material.opacity=Math.min(1,pickFade); if(pickFade<=0) pickMark.visible=false; }
+  if(exporting && !rec) return;
+  sample();
+  const dt=Math.min(0.1,orbClock.getDelta());
+  if(orbiting) orbitStep(dt); else controls.update();
+  if($('walls').value==='auto') updateWalls();
+  composer.render();
+}
+loop();
+</script>
+</body>
+</html>
