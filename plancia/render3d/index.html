@@ -40,9 +40,9 @@
 </style>
 <script type="importmap">
 {"imports":{
-  "three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
-  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
-  "mp4-muxer":"https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.3/build/mp4-muxer.mjs"
+  "three":"./vendor/three/build/three.module.js",
+  "three/addons/":"./vendor/three/examples/jsm/",
+  "mp4-muxer":"./vendor/mp4-muxer.mjs"
 }}
 </script>
 </head>
@@ -62,6 +62,18 @@
       <option value="v4.mp4">render 13:43 (15 s)</option>
     </select>
     <div class="row" style="margin-top:7px"><button id="play">❚❚ pausa</button><input id="tl" type="range" min="0" max="1000" value="0"></div>
+  </div>
+
+  <div class="sec"><b>Sorgente delle luci</b>
+    <select id="srcMode" style="width:100%">
+      <option value="frames">stato luci della Plancia (registrato col ⏺ del Render)</option>
+      <option value="video">pixel di un video del Render</option>
+    </select>
+    <div id="frBox">
+      <div class="row" style="margin-top:7px"><select id="frFile" style="flex:1"></select><button id="frReload" title="aggiorna l'elenco">↻</button></div>
+      <div class="hint" id="frMsg">Registra un video col ⏺ del Render nella Plancia: lo stato delle luci arriva qui da solo.</div>
+      <div id="frMap"></div>
+    </div>
   </div>
 
   <div class="sec"><b>Importa</b>
@@ -583,9 +595,9 @@ async function setClip(name){
   try{await video.play(); $('play').textContent='❚❚ pausa';}catch(e){$('play').textContent='▶ play';}
 }
 $('clip').onchange=e=>setClip(e.target.value);
-$('play').onclick=()=>{ if(video.paused){video.play();$('play').textContent='❚❚ pausa'} else {video.pause();$('play').textContent='▶ play'} };
+$('play').onclick=()=>{ if(FR.mode==='frames'){ FR.playing=!FR.playing; $('play').textContent=FR.playing?'❚❚ pausa':'▶ play'; return; } if(video.paused){video.play();$('play').textContent='❚❚ pausa'} else {video.pause();$('play').textContent='▶ play'} };
 let scrubbing=false;
-$('tl').addEventListener('input',e=>{scrubbing=true; if(video.duration) video.currentTime=video.duration*e.target.value/1000;});
+$('tl').addEventListener('input',e=>{scrubbing=true; if(FR.mode==='frames'){ if(FR.doc) FR.t=FR.doc.duration*e.target.value/1000; return; } if(video.duration) video.currentTime=video.duration*e.target.value/1000;});
 $('tl').addEventListener('change',()=>scrubbing=false);
 
 function px(X,Y){ // max 3x3 attorno al punto (coordinate 2908x1198)
@@ -676,6 +688,108 @@ function drawSamples(){
   pctx.strokeStyle='rgba(255,255,255,.5)'; pctx.beginPath();
   pctx.moveTo((LASER.x-260)*SX*s,LASER.row*SY*s); pctx.lineTo((LASER.x+260)*SX*s,LASER.row*SY*s); pctx.stroke();
 }
+
+/* ---------- stato luci della Plancia (17/11): /api/light-frames, src/62-light-frames.js ---------- */
+// Ogni elemento della scena (colonne, barre della consolle, laser) prende colore e livello da
+// una fixture della Plancia, fotogramma per fotogramma: niente pixel, niente impaginazione fissa.
+const FR={mode:'frames',doc:null,file:'',map:{},t:0,playing:true,idx:0};
+const FR_ENT=[['Lb','colonna sx (centro)'],['Rb','colonna dx (centro)'],['Lf','colonna sx (fondo)'],['Rf','colonna dx (fondo)'],
+  ['l','consolle · barra verticale sx'],['r','consolle · barra verticale dx'],['b','consolle · barra orizzontale'],['laser','laser']];
+const hexRGB=h=>h&&h.length>=6?[parseInt(h.slice(0,2),16)/255,parseInt(h.slice(2,4),16)/255,parseInt(h.slice(4,6),16)/255]:[0,0,0];
+const fxLabel=f=>`${f.name||f.id} · ${({bar:f.vertical?'barra in piedi':'barra',par:'PAR',mh:'testa',blinder:'blinder',wall:'LED wall',laser:'laser'})[f.type]||f.type}${f.group?' · '+f.group:''}`;
+function frSetMode(m){ FR.mode=m==='video'?'video':'frames'; $('srcMode').value=FR.mode; $('frBox').style.display=FR.mode==='frames'?'':'none';
+  $('clip').disabled=FR.mode==='frames'; if(FR.mode==='frames') video.pause(); else video.play().catch(()=>{}); }
+async function frList(){
+  try{ const j=await fetch('/api/light-frames',{cache:'no-store'}).then(r=>r.json()); const files=j.files||[];
+    $('frFile').innerHTML=files.length?files.map(f=>`<option value="${f.file}">${f.file.replace(/\.json$/,'')} · ${(f.size/1048576).toFixed(1)} MB</option>`).join(''):'<option value="">nessuna registrazione</option>';
+    if(FR.file&&files.some(f=>f.file===FR.file)) $('frFile').value=FR.file;
+    return files;
+  }catch(e){ $('frMsg').textContent='Elenco non disponibile: apri il Render 3D dalla Plancia.'; return []; }
+}
+// collegamento automatico, da correggere a mano se serve: colonne = barre in piedi (sx con x<0,
+// dalla piu' vicina al palco), consolle = barre orizzontali da sinistra, laser = il primo laser
+function frAuto(doc){
+  const fx=doc.fixtures, lit=fx.filter(f=>['bar','par','mh','blinder'].includes(f.type));
+  const cols=fx.filter(f=>f.type==='bar'&&f.vertical).length>=2?fx.filter(f=>f.type==='bar'&&f.vertical):lit;
+  const L=cols.filter(f=>f.x<0).sort((a,b)=>a.y-b.y), R=cols.filter(f=>f.x>=0).sort((a,b)=>a.y-b.y);
+  const hb=fx.filter(f=>f.type==='bar'&&!f.vertical).sort((a,b)=>a.x-b.x);
+  const want={Lb:L[0],Lf:L[1]||L[0],Rb:R[0],Rf:R[1]||R[0],l:hb[0],r:hb[hb.length-1],b:hb[1]||hb[0],laser:fx.find(f=>f.type==='laser')};
+  for(const [k] of FR_ENT) if(!(k in FR.map)||!fx.some(f=>f.id===FR.map[k])) FR.map[k]=want[k]?.id||'';
+}
+function frMapUI(){
+  const fx=FR.doc?.fixtures||[];
+  $('frMap').innerHTML=FR_ENT.map(([k,l])=>`<div class="row"><label style="min-width:42%">${l}</label><select id="frm_${k}" data-k="${k}" style="flex:1"><option value="">— spenta —</option>${fx.filter(f=>k==='laser'?f.type==='laser':f.type!=='laser'&&f.type!=='speaker').map(f=>`<option value="${f.id}">${fxLabel(f)}</option>`).join('')}</select></div>`).join('');
+  $('frMap').querySelectorAll('select').forEach(sel=>{ sel.value=FR.map[sel.dataset.k]||''; sel.onchange=()=>{ FR.map[sel.dataset.k]=sel.value; autosave?.(); }; });
+}
+async function frLoad(file){
+  if(!file) return;
+  $('frMsg').textContent='Carico '+file+'…';
+  try{ const doc=await fetch('/api/light-frames/'+encodeURIComponent(file),{cache:'no-store'}).then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); });
+    if(doc.app!=='plancia-light-frames'||!doc.frames?.length) throw new Error('file non valido');
+    FR.doc=doc; FR.file=file; FR.t=0; FR.idx=0; frAuto(doc); frMapUI(); $('frFile').value=file;
+    $('frMsg').textContent=`${doc.project||'progetto'} · ${doc.duration.toFixed(1)} s · ${doc.frames.length} fotogrammi · ${doc.fixtures.length} fixture. Collega ogni elemento a una luce della Plancia.`;
+  }catch(e){ $('frMsg').textContent='Non caricato: '+(e.message||e); }
+}
+// ultimo fotogramma con t <= adesso (si riparte dall'ultimo trovato: si va quasi sempre avanti)
+function frFrame(t){
+  const F=FR.doc.frames, ms=t*1000; let i=Math.min(FR.idx,F.length-1);
+  if(F[i].t>ms) i=0;
+  while(i+1<F.length&&F[i+1].t<=ms) i++;
+  FR.idx=i; return F[i];
+}
+function frSample(){
+  if(!FR.doc) return false;
+  const fr=frFrame(FR.t), gF=+$('gainF').value/2.2;
+  const rec=k=>{ const id=FR.map[k]; return id?fr.f[id]||null:null; };
+  // n segmenti dal basso (o da sinistra): i pixel della barra se ci sono, altrimenti colore x livello
+  const segs=(r,n,g=1)=>{
+    if(!r) return Array.from({length:n},()=>[0,0,0]);
+    if(r.px?.length) return Array.from({length:n},(_,i)=>{ const [h,k]=r.px[Math.min(r.px.length-1,Math.floor(i*r.px.length/n))]; return hexRGB(h).map(v=>v*k*g); });
+    const c=hexRGB(r.c), k=r.k??0; return Array.from({length:n},()=>c.map(v=>v*k*g));
+  };
+  const S={cols:{},con:{},lz:[]};
+  for(const k in COLS) S.cols[k]=segs(rec(k),SEG,COLS[k].front?1.15*gF:1.15);
+  for(const k of ['l','r','b']) S.con[k]=segs(rec(k),8,k==='b'?2:1.15);
+  const lz=rec('laser'), half=((FR.doc.fixtures.find(f=>f.id===FR.map.laser)?.spread)||40)/2*Math.PI/180;
+  if(lz?.p?.length){ const on=lz.p.filter(q=>q[2]); const step=Math.max(1,on.length/MAXB);
+    for(let i=0;i<MAXB&&Math.floor(i*step)<on.length;i++){ const q=on[Math.floor(i*step)]; S.lz.push({a:q[0]/100*half,e:q[1]/100*half,col:hexRGB(q[2])}); } }
+  applyLights(S);
+  if(!scrubbing) $('tl').value=Math.round(FR.t/Math.max(.001,FR.doc.duration)*1000);
+  return true;
+}
+// colori gia' normalizzati (0..~1) -> colonne, consolle e raggi, come fa sample() coi pixel
+function applyLights(S){
+  const spill=+$('spill').value;
+  for(const k in COLS){
+    const c=columns[k], acc=[[0,0,0],[0,0,0]];
+    for(let i=0;i<SEG;i++){ const v=S.cols[k][i]; c.inst.instanceColor.setXYZ(i,v[0]*2.2,v[1]*2.2,v[2]*2.2); const h=i<SEG/2?0:1; acc[h][0]+=v[0];acc[h][1]+=v[1];acc[h][2]+=v[2]; }
+    c.inst.instanceColor.needsUpdate=true;
+    acc.forEach((a,j)=>{ const m=Math.max(a[0],a[1],a[2],1e-4); c.lights[j].color.setRGB(a[0]/m,a[1]/m,a[2]/m); c.lights[j].intensity=spill*m/(SEG/2)*3; });
+  }
+  let ca=[0,0,0];
+  for(const k of ['l','r','b']){ const inst=conSeg[k];
+    for(let i=0;i<8;i++){ const v=S.con[k][i]; inst.instanceColor.setXYZ(i,v[0]*2,v[1]*2,v[2]*2); ca[0]+=v[0];ca[1]+=v[1];ca[2]+=v[2]; }
+    inst.instanceColor.needsUpdate=true; }
+  const cm=Math.max(...ca,1e-4); conLight.color.setRGB(ca[0]/cm,ca[1]/cm,ca[2]/cm); conLight.intensity=spill*cm/24*2;
+  { const b=[0,0,0]; for(const v of S.con.b){ b[0]+=v[0];b[1]+=v[1];b[2]+=v[2]; } const bm=Math.max(...b,1e-4); bbSpot.color.setRGB(b[0]/bm,b[1]/bm,b[2]/bm); bbSpot.intensity=spill*bm/16*25; }
+  const fan=+$('fan').value, haze=+$('haze').value; let la=[0,0,0], nb=0;
+  for(let i=0;i<MAXB;i++){
+    const B=beams[i], r=S.lz[i];
+    if(!r){ B.g.visible=false; continue; }
+    B.g.visible=true; nb++;
+    const col=new THREE.Color(...r.col), m=Math.max(col.r,col.g,col.b,1e-4); col.multiplyScalar(1/m);
+    const a=r.a*fan, e=r.e*fan, dir=new THREE.Vector3(-Math.sin(e),Math.cos(a)*Math.cos(e),Math.sin(a)*Math.cos(e)).normalize();
+    B.g.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),dir);
+    B.core.material.color.copy(col).multiplyScalar(3); B.core.material.opacity=1;
+    B.glow.material.color.copy(col); B.glow.material.opacity=0.06+haze*0.35; B.glow.scale.set(0.02+haze*0.08,BEAM_L,0.02+haze*0.08);
+    la[0]+=col.r;la[1]+=col.g;la[2]+=col.b;
+  }
+  const lm=Math.max(...la,1e-4); laserLight.color.setRGB(la[0]/lm,la[1]/lm,la[2]/lm); laserLight.intensity=nb?spill*0.6:0;
+}
+function sampleAny(){ return FR.mode==='frames'?frSample():sample(); }
+$('srcMode').onchange=e=>{ frSetMode(e.target.value); if(FR.mode==='frames'&&!FR.doc) frList().then(f=>{ if(f[0]) frLoad(f[0].file); }); autosave?.(); };
+$('frFile').onchange=e=>frLoad(e.target.value);
+$('frReload').onclick=()=>frList();
 
 /* ---------- camere ---------- */
 const CAMS={
@@ -1188,11 +1302,11 @@ $('prevOpen').onclick=()=>{ $('prev').style.display=''; $('prev').classList.remo
 const SKIP=new Set(['exRes','exDur','elSel','pName','pList','pImport','elX','elY','elZ','elR','elT']);
 function getState(){
   const ui={};
-  document.querySelectorAll('#panel input[id], #panel select[id]').forEach(e=>{ if(SKIP.has(e.id)) return; ui[e.id]= e.type==='checkbox'?e.checked:e.value; });
+  document.querySelectorAll('#panel input[id], #panel select[id]').forEach(e=>{ if(SKIP.has(e.id)||e.id==='srcMode'||e.id.startsWith('fr')) return; ui[e.id]= e.type==='checkbox'?e.checked:e.value; });
   const orbit=document.querySelector('[data-orbit].on')?.dataset.orbit||null;
   ui.objMirror=objMirror;
   ui.__ortho = camera===orthoCam ? {H:ORTHO_H, zoom:orthoCam.zoom} : null;
-  return {v:2, ui, pos:JSON.parse(JSON.stringify(POS)), cam:{p:camera.position.toArray(),t:controls.target.toArray()}, orbit,
+  return {v:2, ui, fr:{mode:FR.mode,file:FR.file,map:FR.map}, pos:JSON.parse(JSON.stringify(POS)), cam:{p:camera.position.toArray(),t:controls.target.toArray()}, orbit,
           prev:$('prev').style.display==='none'?'closed':($('prev').classList.contains('min')?'min':'open')};
 }
 async function applyState(st){
@@ -1205,6 +1319,7 @@ async function applyState(st){
     else { e.value=st.ui[id]; e.dispatchEvent(new Event(e.tagName==='SELECT'?'change':'input')); }
   }
   for(const k in st.pos) if(POS[k]) Object.assign(POS[k],st.pos[k]);
+  if(st.fr){ FR.map={...(st.fr.map||{})}; frSetMode(st.fr.mode||'frames'); if(st.fr.mode==='frames'&&st.fr.file&&st.fr.file!==FR.file) frLoad(st.fr.file); }
   if(clipChanged){ $('clip').value=st.ui.clip; await setClip(st.ui.clip); }
   stopOrbit();
   if(st.ui.__ortho){ useCamera(orthoCam); ORTHO_H=st.ui.__ortho.H; orthoCam.zoom=st.ui.__ortho.zoom; setAspect(innerWidth,innerHeight); } else useCamera(perspCam);
@@ -1253,7 +1368,9 @@ $('pImport').onchange=async e=>{
 };
 
 /* ---------- export MP4 ---------- */
-let downloads=null;
+// salvataggio come download del browser (nella Plancia); l'artifact di claude.ai usa il suo
+let downloads={save:async({filename,data})=>{const b=data instanceof Blob?data:new Blob([data],{type:'application/json'}),a=document.createElement('a');
+  a.href=URL.createObjectURL(b);a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),60000)}};
 (async()=>{ try{ if(window.claude?.use) downloads=await window.claude.use('downloads'); }catch(e){} })();
 let rec=null, recTimer=null;
 function pickMime(){
@@ -1279,9 +1396,9 @@ async function startExport(){
   W-=W%2; H-=H%2;
   const cfg=await pickCodec(W,H);
   if(!cfg) return startRealtimeExport();
-  const FPS=30, dur=$('exDur').value;
-  const t0= dur==='full'?0:video.currentTime;
-  const total= dur==='full'?video.duration:Math.min(+dur, video.duration*10);
+  const FPS=30, dur=$('exDur').value, FRM=FR.mode==='frames'&&FR.doc, D=FRM?FR.doc.duration:video.duration;
+  const t0= dur==='full'?0:(FRM?FR.t:video.currentTime);
+  const total= dur==='full'?D:Math.min(+dur, D*10);
   const N=Math.round(total*FPS);
   exporting=true; abortExport=false; video.pause(); video.loop=true;
   setRenderSize(W,H,1);
@@ -1291,10 +1408,12 @@ async function startExport(){
   const enc=new VideoEncoder({output:(c,m)=>muxer.addVideoChunk(c,m),error:e=>encErr=e});
   enc.configure(cfg);
   for(let f=0; f<N && !abortExport && !encErr; f++){
-    let t=t0+f/FPS; if(video.duration) t%=video.duration;
-    video.currentTime=t;
-    await new Promise(res=>{ const done=()=>res(); video.addEventListener('seeked',done,{once:true}); setTimeout(done,1500); });
-    sample();
+    let t=t0+f/FPS;
+    if(FRM){ FR.t=t%D; frSample(); }
+    else{ if(video.duration) t%=video.duration;
+      video.currentTime=t;
+      await new Promise(res=>{ const done=()=>res(); video.addEventListener('seeked',done,{once:true}); setTimeout(done,1500); });
+      sample(); }
     if(orbiting) orbitStep(1/FPS); else controls.update(1/FPS);
     if($('walls').value==='auto') updateWalls();
     composer.render();
@@ -1352,7 +1471,7 @@ function stopExport(){
 async function finishExport(blob,mime){
   window._lastExport=blob; rec=null; video.loop=true; restoreAfterExport();
   const ext=mime.includes('mp4')?'mp4':'webm';
-  const clip=$('clip').selectedOptions[0].textContent.split(' (')[0].replace(/[^\w]+/g,'_');
+  const clip=(FR.mode==='frames'&&FR.file?FR.file.replace(/\.json$/,''):$('clip').selectedOptions[0].textContent.split(' (')[0]).replace(/[^\w]+/g,'_');
   const name=`luci_spazio_${clip}.${ext}`;
   const mb=(blob.size/1048576).toFixed(1);
   if(ext!=='mp4') $('exMsg').textContent=`Il browser non supporta MP4: salvo in WebM (${mb} MB).`;
@@ -1378,6 +1497,11 @@ try{ const j=localStorage.getItem(LKEY); if(j){ const st=JSON.parse(j);
   // stato salvato dalla versione precedente: le persone erano azzerate dal ricaricamento, le rimetto
   if((st.v||1)<2 && st.ui && +st.ui.pplN===0) st.ui.pplN='60';
   applyState(st); lastSaved=j; } }catch(e){}
+// stato luci: ?frames=<file> (dalla Plancia dopo una registrazione), altrimenti quello di prima o il piu' recente
+(async()=>{ const want=new URLSearchParams(location.search).get('frames'); const files=await frList();
+  if(want){ frSetMode('frames'); await frLoad(want); }
+  else{ if(!FR.mode||FR.mode==='frames'){ frSetMode('frames'); if(!FR.doc){ const f=files.find(x=>x.file===FR.file)||files[0]; if(f) await frLoad(f.file); } } }
+})();
 setInterval(autosave,1500);
 addEventListener('pagehide',autosave);
 booted=true;
@@ -1387,8 +1511,9 @@ function loop(){
   requestAnimationFrame(loop);
   if(pickFade>0){ pickFade-=1/60; pickMark.material.opacity=Math.min(1,pickFade); if(pickFade<=0) pickMark.visible=false; }
   if(exporting && !rec) return;
-  sample();
   const dt=Math.min(0.1,orbClock.getDelta());
+  if(FR.mode==='frames'&&FR.doc&&FR.playing&&!scrubbing) FR.t=(FR.t+dt)%Math.max(.001,FR.doc.duration);
+  sampleAny();
   if(orbiting) orbitStep(dt); else controls.update();
   if($('walls').value==='auto') updateWalls();
   composer.render();

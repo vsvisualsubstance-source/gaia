@@ -896,3 +896,9 @@ button{cursor:pointer}
 /* fine di un blocco della timeline (17/11): bordo destro da trascinare */
 .tl-rz{position:absolute;top:0;right:0;bottom:0;width:14px;cursor:ew-resize;touch-action:none;background:linear-gradient(90deg,transparent 40%,color-mix(in srgb,var(--ic) 70%,transparent) 40% 55%,transparent 55%)}
 .tl-rz:hover{background:color-mix(in srgb,var(--ic) 45%,transparent)}
+/* Render 3D (src/63-render3d.js): iframe unico posato sopra il widget */
+.r3d-box{display:flex;flex-direction:column;height:100%;gap:6px}
+.r3d-bar{display:flex;align-items:center;gap:8px;justify-content:space-between}
+.r3d-bar .hint{opacity:.7;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.r3d-slot{flex:1;min-height:0;border-radius:6px;background:#050506}
+.r3d-frame{position:fixed;display:none;border:0;border-radius:6px;z-index:5;background:#050506}
