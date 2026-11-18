@@ -300,6 +300,37 @@ class TestScene(unittest.TestCase):
         many = SC.clean_scene({"layers": [{"scene": dot}] * 9})
         self.assertEqual(len(many["layers"]), SC.MAX_LAYERS)
 
+    def test_registrazione_patchdeck(self):
+        # 18/11: l'uscita di PatchDeck diventa una scena animata (tratti spezzati al buio e al cambio di colore)
+        gw = G.Gateway.__new__(G.Gateway)
+        gw.recording, gw.client, gw.sources, gw.cubes, gw.status_dirty = None, None, {}, {}, False
+        out = []
+        gw._finish_record_orig = gw._finish_record
+        msg = gw._start_record({"source": "patchdeck", "seconds": 2, "req": "r1"})
+        self.assertIn("fotogrammi", msg)
+        rec = gw.recording
+        self.assertEqual(rec["n"], 50)                        # 2 s a 25 fps (tetto)
+        frame = [(-1, 0, 0, 0, 0), (-1, 0, 255, 0, 0), (0, 0, 255, 0, 0), (0, 0, 0, 255, 0), (1, 0, 0, 255, 0), (1, 0, 0, 0, 0), (0, 1, 0, 0, 255), (0.5, 1, 0, 0, 255)]
+        st = G.Gateway._frame_strokes(frame, 1000)
+        self.assertEqual([s["rgb"] for s in st], [[1.0, 0, 0], [0, 1.0, 0], [0, 0, 1.0]])
+        self.assertEqual(st[1]["pts"][0], [0, 0])             # il verde riparte da dove finiva il rosso
+        big = [(i / 1000, 0, 255, 255, 255) for i in range(1000)]
+        self.assertLessEqual(sum(len(s["pts"]) for s in G.Gateway._frame_strokes(big, 100)), 100)
+        sent = []
+        class C:
+            def publish(self, topic, payload): sent.append((topic, payload))
+        gw.client = C()
+        for i in range(60):
+            rec["next"] = 0
+            gw._record_frame(rec, frame)
+        self.assertIsNone(gw.recording)
+        import json as J
+        res = J.loads(sent[0][1])
+        self.assertTrue(res["ok"]); self.assertEqual(res["req"], "r1")
+        self.assertEqual(len(res["scene"]["frames"]), 50); self.assertEqual(res["scene"]["frame_fps"], 25)
+        with self.assertRaises(ValueError):
+            gw._start_record({"source": "scene"})
+
     def test_preset_master_scena(self):
         # 18/11: la scena porta le sue impostazioni di scansione, nei limiti; le chiavi ignote spariscono
         line = {"strokes": [{"pts": [[-1, 0], [1, 0]]}], "render": {"pps": 99999, "blank_shift": 3.4, "gain_r": 0.5, "zone": [0, 0, 1, 1], "master": "x"}}

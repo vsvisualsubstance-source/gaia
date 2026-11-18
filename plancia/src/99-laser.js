@@ -41,6 +41,33 @@ function lzResults(d){
 // nota TD 49). Un solo set per sorgente, condiviso dai cubi in
 // quella modalita' (PatchDeck sceglie il cubo con laser_target).
 const LZ_SRC_LABEL={patchdeck:'PatchDeck',yolo:'TD Yolo'};
+// 18/11: l'uscita di PatchDeck/YOLO registrata dal gateway (action record) diventa una scena laser;
+// la aggiunge solo il tablet che l'ha chiesta (req), il fotogramma singolo anche come SVG
+let LZ_REC=null;
+function lzRecord(cid,mode){
+  uiChoose(`Registra l'uscita di ${LZ_SRC_LABEL[mode]||mode} come scena laser`,[{label:'Fotogramma (scena fissa, anche SVG)',value:0},{label:'5 s',value:5},{label:'10 s',value:10},{label:'20 s',value:20}],
+    {hint:'Parte dal primo fotogramma acceso. Più lunga = meno punti per fotogramma (in tutto 120 fotogrammi e 12000 punti al massimo).'}).then(v=>{
+    if(v==null)return;const req='rq-'+uid();LZ_REC={req,svg:v===0,at:Date.now()};
+    lzCmd({action:'record',source:mode,seconds:v,req},'record');showInfo(v?`Laser: registro ${v} s di ${LZ_SRC_LABEL[mode]}…`:`Laser: fotogramma di ${LZ_SRC_LABEL[mode]}…`);
+    setTimeout(()=>{if(LZ_REC?.req===req){LZ_REC=null;showError('Registrazione laser: nessuna risposta dal gateway.')}},(v+15)*1000)})}
+onMqtt('gaia/devices/+/laser_recording',p=>{
+  if(!p||!LZ_REC||p.req!==LZ_REC.req)return;const want=LZ_REC;LZ_REC=null;
+  if(!p.ok||!p.scene){showError('Registrazione laser: '+(p.msg||'non riuscita'));return}
+  const sc={...p.scene,id:'rec-'+uid()};L.laserScenes=[...laserScenes(),sc];save();
+  showInfo(`Scena "${sc.name}" registrata (${sc.frames?`${p.seconds} s, ${sc.frames.length} fotogrammi`:'fotogramma'}): è fra le scene laser.`);
+  if(want.svg)lzSvgDownload(sc);
+});
+// tratti della scena (primo fotogramma) come SVG: y in alto come sul laser
+function lzSvgDownload(sc){
+  const st=(sc.frames?.[0]?.strokes||sc.strokes||[]),hx=c=>'#'+(c||[1,1,1]).slice(0,3).map(v=>Math.round(Math.max(0,Math.min(1,+v||0))*255).toString(16).padStart(2,'0')).join('');
+  const paths=st.map(s=>`<path d="${s.pts.map((p,i)=>(i?'L':'M')+(+p[0]).toFixed(4)+' '+(-p[1]).toFixed(4)).join(' ')}${s.closed?' Z':''}" stroke="${hx(s.rgb||sc.color?.rgb)}"/>`).join(String.fromCharCode(10));
+  const svg=`<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-1 -1 2 2" width="1000" height="1000"><rect x="-1" y="-1" width="2" height="2" fill="#000"/><g fill="none" stroke-width="0.008" stroke-linecap="round" stroke-linejoin="round">
+${paths}
+</g></svg>`;
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));a.download=(sc.name||'laser').replace(/[^\w\- ]+/g,'-').trim().replace(/\s+/g,'_')+'.svg';
+  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),60000);
+}
 function lzSourceDev(mode){
   const hasLaser=id=>Object.keys(G.devices?.[id]?.params||{}).some(k=>/^laser_/.test(k));
   if(mode==='patchdeck')return Object.keys(G.pdm||{}).find(id=>G.pdm[id]?.laser_params)||Object.keys(G.pdm||{})[0]||'td-pd-pc-win';
@@ -119,6 +146,7 @@ function lzCardHtml(c,d){
     <p class="hint">${c.online?`${esc(c.model||'LaserCube')} fw ${esc(c.fw||'?')} · ${c.charging?'in carica':c.battery!=null?`batteria ${c.battery}%`:''} · ${c.temp_c??'?'} °C`:'Il gateway non riceve risposta: rete, alimentazione, modalità LAN Client.'}${warn.length?` · <b class="lz-warn">${warn.join(' · ')}</b>`:''}</p>
     <div class="lz-modes">${LZ_MODES.map(([m,l])=>`<button class="${c.mode===m?'on':''}" data-lz="mode" data-lz-v="${m}" data-lz-c="${c.id}">${l}</button>`).join('')}</div>
     <p class="hint">${esc(LZ_MODE_HINT[c.mode]||'')}${c.mode==='scene'?(c.scene?` <b class="lz-ok">Scena: ${esc(c.scene.name)}</b>`:' <b class="lz-warn">Nessuna scena scelta.</b>'):c.mode!=='off'&&c.mode!=='test'?lzSourceHint(d,c.mode):''}</p>
+    ${['patchdeck','yolo'].includes(c.mode)?`<div class="lz-row"><button class="btn sm" data-lz="record" data-lz-c="${c.id}" data-lz-v="${c.mode}" title="Registra quello che ${LZ_SRC_LABEL[c.mode]} manda al laser: diventa una scena laser, usabile anche senza ${LZ_SRC_LABEL[c.mode]}"${LZ_REC?' disabled':''}>${LZ_REC?'⏺ Registro…':'⏺ Registra come scena'}</button></div>`:''}
     <button class="lz-arm${c.armed?' on':''}" data-lz="${c.armed?'disarm':'arm'}" data-lz-c="${c.id}"${c.mode==='off'||!c.online?' disabled':''}>${c.armed?'DISARMA':'ARMA'}<i>${live}</i></button>
     ${lzSlider(c.id,'master','Master',c.master??1)}
     ${lzSlider(c.id,'max_intensity','Intensità massima',c.max_intensity??.5)}
@@ -202,6 +230,7 @@ function laserDown(e,el,w){
   else if(a==='scan'){lzCmd({action:'scan'});showInfo('Laser: ricerca dei cubi sulla rete…')}
   else if(a==='add'||a==='addip'){(v?Promise.resolve(v):uiPrompt('IP del cubo (LAN Client, es. 192.168.1.61):')).then(ip=>{if(ip)lzCmd({action:'add_cube',ip:ip.trim()},'add_cube')})}
   else if(a==='rename'){uiPrompt('Nome del cubo:',c?.name||'').then(n=>{if(n)lzSet(cid,'name',n)})}
+  else if(a==='record'){if(LZ_REC){showError('Registrazione già in corso.');return}lzRecord(cid,v)}
   else if(a==='psave'&&c){uiPrompt('Nome del preset master (punti al secondo, blank shift, colori, intensità):','').then(n=>{n=(n||'').trim();if(!n)return;
     const values=Object.fromEntries(LZ_PRESET_KEYS.map(k=>[k,+(k==='pps'?c.pps:c[k])]).filter(([k,v])=>Number.isFinite(v)));
     L.laserPresets=[...laserPresets(),{id:'lp-'+uid(),name:n.slice(0,40),values}];save();showInfo(`Preset "${n}" salvato dalle impostazioni di ${c.name||cid}.`);paintLaser(el,w,true)})}

@@ -21,6 +21,7 @@ Avvio: C:\\gaia\\venv\\Scripts\\python.exe laser_gateway.py
 (servizio "laser" dell'agent; MQTT_HOST/MQTT_PORT arrivano dall'agent).
 """
 import json
+import uuid
 import logging
 import math
 import os
@@ -431,6 +432,7 @@ class Gateway:
         self.stopping = False
         self.status_dirty = True
         self.sources = {}          # nome -> {"ts", "frames", "points", "from"}
+        self.recording = None      # registrazione di una sorgente esterna in corso (_start_record)
         self.partial = {}          # (src, tgt, seq) -> {idx: punti}
         self.found = []
         self.last_result = None
@@ -499,6 +501,9 @@ class Gateway:
                         del self.partial[k]
 
     def _on_frame(self, src, tgt, pts, ip):
+        rec = self.recording
+        if rec and rec["source"] == src:
+            self._record_frame(rec, pts)
         s = self.sources.setdefault(src, {"frames": 0})
         if "ts" not in s:
             self.status_dirty = True
@@ -507,6 +512,87 @@ class Gateway:
         for c in list(self.cubes.values()):
             if c.mode == src and tgt in ("*", c.id):
                 c.set_frame(render(pts, c.conf, c.pps))
+
+    # 18/11: l'uscita di PatchDeck (o YOLO) registrata per N secondi diventa una scena animata
+    # (stesso formato degli ILDA importati: frames + frame_fps, tratti col loro colore), cosi' le
+    # scene si usano anche senza PatchDeck. seconds = 0: un fotogramma solo.
+    def _start_record(self, cmd):
+        src = cmd.get("source") or "patchdeck"
+        if src not in ("patchdeck", "yolo"):
+            raise ValueError("si registra solo da patchdeck o yolo")
+        if self.recording:
+            raise ValueError("registrazione gia' in corso")
+        secs = max(0.0, min(30.0, float(cmd.get("seconds") or 0)))
+        fps = SC.MAX_FRAMES / secs if secs else 1.0
+        fps = max(1.0, min(25.0, fps))
+        n = 1 if not secs else max(1, min(SC.MAX_FRAMES, int(round(secs * fps))))
+        self.recording = {"source": src, "secs": secs, "fps": fps, "n": n, "frames": [], "next": 0.0,
+                          "start": now(), "req": cmd.get("req"), "name": str(cmd.get("name") or "")[:48],
+                          "per_frame": max(40, SC.MAX_FRAME_POINTS // n)}
+        log.info("registrazione %s: %d fotogrammi a %.1f fps", src, n, fps)
+        return f"registro {src}: {n} fotogrammi"
+
+    @staticmethod
+    def _frame_strokes(pts, budget):
+        """punti (x, y, r, g, b 0..255) -> tratti accesi [{pts, rgb}], spezzati al buio o al cambio di colore"""
+        strokes, cur, col = [], None, None
+        for x, y, r, g, b in pts:
+            if not (r or g or b):
+                cur = None
+                continue
+            c = (round(r / 255, 2), round(g / 255, 2), round(b / 255, 2))
+            if cur is None or c != col:
+                cur, col = [], c
+                strokes.append({"pts": cur, "rgb": list(c), "closed": False})
+                if len(strokes) > 1 and strokes[-2]["pts"]:      # continuita' fra colori diversi
+                    cur.append(list(strokes[-2]["pts"][-1]))
+            cur.append([max(-1.0, min(1.0, x)), max(-1.0, min(1.0, y))])
+        strokes = [s for s in strokes if len(s["pts"]) >= 2]
+        total = sum(len(s["pts"]) for s in strokes)
+        if total > budget:                                   # meno punti, tenendo i capi di ogni tratto
+            k = total / budget
+            for s in strokes:
+                p = s["pts"]
+                keep = max(2, int(len(p) / k))
+                s["pts"] = [p[round(i * (len(p) - 1) / (keep - 1))] for i in range(keep)]
+        while strokes and sum(len(s["pts"]) for s in strokes) > budget:
+            strokes.pop()
+        return strokes
+
+    def _record_frame(self, rec, pts):
+        t = now()
+        if t < rec["next"]:
+            return
+        rec["next"] = t + 1.0 / rec["fps"]
+        st = self._frame_strokes(pts, rec["per_frame"])
+        if st or rec["frames"]:                              # si parte dal primo fotogramma acceso
+            rec["frames"].append({"strokes": st or [{"pts": [[0, 0], [0, 0]], "rgb": [0, 0, 0], "closed": False}]})
+        if len(rec["frames"]) >= rec["n"]:
+            self._finish_record()
+
+    def _finish_record(self, why=""):
+        rec, self.recording = self.recording, None
+        if not rec:
+            return
+        frames = rec["frames"]
+        res = {"req": rec["req"], "source": rec["source"], "ok": bool(frames)}
+        if frames:
+            stamp = time.strftime("%d/%m %H:%M")
+            name = rec["name"] or f"{'PatchDeck' if rec['source'] == 'patchdeck' else 'YOLO'} {stamp}"
+            raw = {"id": "rec-" + uuid.uuid4().hex[:8], "name": name, "strokes": frames[0]["strokes"],
+                   "color": {"mode": "stroke", "rgb": [1, 1, 1]}, "anim": {"scale": 1.0}}
+            if len(frames) > 1:
+                raw.update(frames=frames, frame_fps=round(rec["fps"], 2))
+            try:
+                res["scene"] = SC.clean_scene(raw)
+                res["seconds"] = round(len(frames) / rec["fps"], 1) if len(frames) > 1 else 0
+            except ValueError as e:
+                res.update(ok=False, msg=str(e))
+        else:
+            res["msg"] = why or "nessun fotogramma acceso dalla sorgente"
+        log.info("registrazione %s finita: %s", rec["source"], "ok" if res["ok"] else res.get("msg"))
+        if self.client:
+            self.client.publish(f"gaia/devices/{DEVICE_ID}/laser_recording", json.dumps(res, separators=(",", ":")))
 
     def _test_frame(self, c):
         c.set_frame(render(circle(0.5, 600, (255, 255, 255)), c.conf, c.pps))
@@ -521,6 +607,9 @@ class Gateway:
             level, kick = self.audio_now()
             self.fx_angle = (self.fx_angle + self.fx["rotate"] * period) % 360.0
             self.fx_angle_y = (self.fx_angle_y + self.fx["rotate_y"] * period) % 360.0 if self.fx["rotate_y"] else 0.0
+            rec = self.recording
+            if rec and t0 - rec["start"] > rec["secs"] + 5:
+                self._finish_record("la sorgente non manda fotogrammi" if not rec["frames"] else "")
             if self.flash and t0 - self.flash_t0 > FLASH_MAX_S:   # rilascio mai arrivato: il flash si chiude da solo
                 log.warning("flash %s tenuto oltre %d s: chiuso", self.flash.get("name"), FLASH_MAX_S)
                 self.flash = None
@@ -703,6 +792,11 @@ class Gateway:
                 return "flash finito"
             self.flash, self.flash_t0 = SC.clean_scene(cmd.get("scene")), now()
             return f"flash {self.flash['name']}"
+        if action == "record":
+            return self._start_record(cmd)
+        if action == "record_stop":
+            self._finish_record("fermata a mano")
+            return "registrazione chiusa"
         if action == "set" and cmd.get("param") == "bpm":
             v = cmd.get("value")
             self.bpm = None if v in (None, "", 0) else max(20.0, min(400.0, float(v)))
