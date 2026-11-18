@@ -98,6 +98,18 @@ function lzMasksHtml(c){
     <button class="btn sm ghost" data-lz="maskadd" data-lz-c="${c.id}"${ms.length>=8?' disabled':''}>＋ Maschera</button>
     <p class="hint">Dentro una maschera il fascio si spegne (es. una persona, un oggetto, una zona del pubblico). Vale insieme alla zona di sicurezza, dopo rotazione e trapezio.</p>`;
 }
+// 18/11: preset master = impostazioni di scansione e colore del cubo (non posizione, zona, maschere).
+// Si applicano a un cubo (diventano sue) o si legano a una scena (valgono solo mentre e' in onda).
+const LZ_PRESET_KEYS=['pps','blank_shift','color_min','master','max_intensity','gain_r','gain_g','gain_b'];
+function laserPresets(){return Array.isArray(L.laserPresets)?L.laserPresets:[]}
+function lzPresetRow(c){
+  const ps=laserPresets(),sr=c.scene_render&&Object.keys(c.scene_render).length?c.scene_render:null;
+  return`<div class="lz-row lz-preset"><label class="ar-sl"><span>Preset master</span><select data-lzp-sel="${c.id}">${ps.length?ps.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join(''):'<option value="">— nessun preset —</option>'}</select></label>
+    <button class="btn sm" data-lz="papply" data-lz-c="${c.id}"${ps.length?'':' disabled'} title="Le impostazioni del preset diventano quelle del cubo">Applica</button>
+    <button class="btn sm ghost" data-lz="psave" data-lz-c="${c.id}" title="Salva le impostazioni attuali del cubo come preset">Salva come preset</button>
+    <button class="btn sm ghost danger" data-lz="pdel" data-lz-c="${c.id}"${ps.length?'':' disabled'}>Elimina</button></div>
+    ${sr?`<p class="hint lz-ok">In onda il preset della scena: ${Object.entries(sr).map(([k,v])=>`${k} ${k==='pps'?v:(+v).toFixed(2)}`).join(', ')}${c.pps_now?` · ${c.pps_now} punti/s`:''}</p>`:''}`;
+}
 function lzCardHtml(c,d){
   const warn=[!c.online&&'NON RISPONDE',c.online&&c.interlock===false&&'interlock aperto',c.temp_warn&&'temperatura alta',c.temp_fault&&'SURRISCALDATO'].filter(Boolean);
   const live=c.streaming?'IN USCITA':c.armed?(c.mode==='off'?'armato':'armato · in attesa della sorgente'):'disarmato';
@@ -122,6 +134,7 @@ function lzCardHtml(c,d){
     <details class="ar-cal lz-sec" data-sec="color"><summary>Colore e scansione</summary>
       ${lzSlider(c.id,'gain_r','Rosso',c.gain_r??1)}${lzSlider(c.id,'gain_g','Verde',c.gain_g??1)}${lzSlider(c.id,'gain_b','Blu',c.gain_b??1)}
       ${lzSlider(c.id,'color_min','Soglia minima dei diodi',c.color_min??0,0,.3)}${lzSlider(c.id,'blank_shift','Blank shift (campioni)',c.blank_shift??0,0,10,1)}
+      ${lzPresetRow(c)}
       <p class="hint">Rosso/Verde/Blu bilanciano il bianco del cubo. La soglia fa accendere i colori deboli che altrimenti restano spenti. Il blank shift ritarda il colore rispetto al movimento: alzalo se ai cambi di colore si vedono code o punti fuori posto. Si regolano guardando il cubo, su un test o una scena.</p></details>
   </div>`;
 }
@@ -189,6 +202,15 @@ function laserDown(e,el,w){
   else if(a==='scan'){lzCmd({action:'scan'});showInfo('Laser: ricerca dei cubi sulla rete…')}
   else if(a==='add'||a==='addip'){(v?Promise.resolve(v):uiPrompt('IP del cubo (LAN Client, es. 192.168.1.61):')).then(ip=>{if(ip)lzCmd({action:'add_cube',ip:ip.trim()},'add_cube')})}
   else if(a==='rename'){uiPrompt('Nome del cubo:',c?.name||'').then(n=>{if(n)lzSet(cid,'name',n)})}
+  else if(a==='psave'&&c){uiPrompt('Nome del preset master (punti al secondo, blank shift, colori, intensità):','').then(n=>{n=(n||'').trim();if(!n)return;
+    const values=Object.fromEntries(LZ_PRESET_KEYS.map(k=>[k,+(k==='pps'?c.pps:c[k])]).filter(([k,v])=>Number.isFinite(v)));
+    L.laserPresets=[...laserPresets(),{id:'lp-'+uid(),name:n.slice(0,40),values}];save();showInfo(`Preset "${n}" salvato dalle impostazioni di ${c.name||cid}.`);paintLaser(el,w,true)})}
+  else if(a==='papply'&&c){const sel=el.querySelector(`[data-lzp-sel="${cid}"]`),p=laserPresets().find(x=>x.id===sel?.value);if(!p){showError('Scegli un preset.');return}
+    for(const [k,v] of Object.entries(p.values))lzSet(cid,k,v);showInfo(`Preset "${p.name}" applicato a ${c.name||cid}: diventa la sua impostazione.`)}
+  else if(a==='pdel'){const sel=el.querySelector(`[data-lzp-sel="${cid}"]`),p=laserPresets().find(x=>x.id===sel?.value);if(!p)return;
+    const used=laserScenes().filter(s=>s.preset===p.id);
+    uiConfirm(`Eliminare il preset "${p.name}"?${used.length?` Lo usano ${used.length} scene: torneranno alle impostazioni del cubo.`:''}`,{ok:'Elimina'}).then(y=>{if(!y)return;
+      L.laserPresets=laserPresets().filter(x=>x.id!==p.id);for(const s of used)delete s.preset;save();paintLaser(el,w,true)})}
   else if(a==='ip'){uiPrompt('Nuovo IP del cubo:',c?.ip||'').then(ip=>{if(ip)lzSet(cid,'ip',ip.trim())})}
   else if(a==='remove'){uiConfirm(`Togliere ${c?.name||cid} dal gateway?`,{ok:'Togli'}).then(y=>{if(y)lzCmd({action:'remove_cube',cube:cid})})}
   else if(a==='tdtoggle'){const dev=b.dataset.lzDev,k=b.dataset.lzK;lzTdSet(dev,k,!G.devices?.[dev]?.params?.[k])}

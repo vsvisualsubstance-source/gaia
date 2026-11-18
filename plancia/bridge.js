@@ -404,7 +404,7 @@ const broadcast = (msg, except) => {
 // seguendo l'orologio dello show. Documento in layout.videoTimeline.
 const videoTimeline = require('./video-timeline').startVideoTimeline({ getDoc: () => persistedState?.layout?.videoTimeline, broadcast });
 // Timeline laser (ops/laser): stessa idea, verso il laser gateway. Scene in layout.laserScenes.
-const laserTimeline = require('./laser-timeline').startLaserTimeline({ getDoc: () => persistedState?.layout?.laserTimeline, getScenes: () => persistedState?.layout?.laserScenes || [], broadcast });
+const laserTimeline = require('./laser-timeline').startLaserTimeline({ getDoc: () => persistedState?.layout?.laserTimeline, getScenes: () => require('./laser-compose').scenesWithPresets(persistedState?.layout?.laserScenes, persistedState?.layout?.laserPresets), broadcast });
 // Movimento teste (head-motion-engine.js): scene in layout.headMotions, timeline in
 // layout.headTimeline, /mh/pantilt verso DMX Master sul canale OSC predefinito.
 const headMotion = require('./head-motion-engine').startHeadMotion({ tdId: () => dmxMaster.id(),
@@ -416,7 +416,7 @@ const headMotion = require('./head-motion-engine').startHeadMotion({ tdId: () =>
 const { laserLiveCommand } = require('./laser-live');
 const LASER_CMD_TOPIC = `gaia/device/${process.env.LASER_ID || 'laser-ops'}/command`;
 function laserLive(address, args) {
-  const cmd = laserLiveCommand(address, args, persistedState?.layout?.laserScenes || []);
+  const cmd = laserLiveCommand(address, args, require('./laser-compose').scenesWithPresets(persistedState?.layout?.laserScenes, persistedState?.layout?.laserPresets));
   if (!cmd) return false;
   if (!cmd.skip && midiMqtt) midiMqtt.publish(LASER_CMD_TOPIC, JSON.stringify(cmd));
   return true;

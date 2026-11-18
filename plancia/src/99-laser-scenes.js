@@ -112,13 +112,20 @@ function lzsSpinY(x,y,c,s){const f=1/(1-LZS_PERSPECTIVE*x*s);return[x*c*f,y*f]}
 // ---- scena composta (16/11): livelli che puntano ad altre scene, {ref,x,y,scale,rotate,bright}.
 // Al gateway e all'anteprima va con le scene dentro (come laser-compose.js del bridge).
 const LZS_MAX_LAYERS=4;
+// preset master della scena (18/11): viaggia come "render", il gateway lo usa finche' la scena e' in onda
+function lzsPresetRender(sc){const p=laserPresets().find(x=>x.id===sc?.preset);return p&&p.values&&Object.keys(p.values).length?{...p.values}:null}
 function lzsResolve(sc,scenes=laserScenes()){
+  if(sc&&!sc.render){const r=lzsPresetRender(sc);if(r)sc={...sc,render:r}}
   if(!sc||!Array.isArray(sc.layers)||sc.layers.some(l=>l.scene))return sc;
   const by=new Map(scenes.map(s=>[s.id,s]));
   return{id:sc.id,name:sc.name,layers:sc.layers.map(l=>({l,s:by.get(l.ref)})).filter(x=>x.s&&!x.s.layers)
     .map(({l,s})=>({scene:s,x:+l.x||0,y:+l.y||0,scale:l.scale??1,rotate:+l.rotate||0,bright:l.bright??1})),
+    ...(sc.render?{render:sc.render}:{}),
     ...(sc.audio?{audio:{amount:+sc.audio.amount||0,to:sc.audio.to==='brightness'?'brightness':'scale'}}:{})};
 }
+function lzsPresetSelect(id,cur){const ps=laserPresets();
+  return`<label>Preset master della scena<select id="${id}"><option value="">— impostazioni del cubo —</option>${ps.map(p=>`<option value="${esc(p.id)}"${p.id===cur?' selected':''}>${esc(p.name)}</option>`).join('')}</select></label>
+    <p class="hint">Per le scene complesse: frequenza, blank shift, colori e intensità solo mentre questa scena è in onda. I preset si salvano dalla scheda del cubo (Colore e scansione).</p>`}
 function lzsAnimate(sc,t,level=0,kick=0,bpm=0){
   if(sc?.layers){const out=[],au={amount:0,to:'scale',...(sc.audio||{})},react=Math.min(1,level+.5*kick)*au.amount;
     // audio della composta intera (18/11), sopra quello dei livelli: come laser_scene.py
@@ -494,6 +501,7 @@ function openLaserSceneEditor(orig){
     <div class="two">${sl('lsDraw','Scrittura progressiva (Hz, 0 = figura intera)',A.draw_hz,0,2,.01)}${sl('lsAudio','Audio dal controller',U.amount,0,1,.01)}</div>
     <label>L'audio muove<select id="lsAudioTo"><option value="scale"${U.to==='scale'?' selected':''}>la dimensione</option><option value="brightness"${U.to==='brightness'?' selected':''}>la luminosità</option></select></label>
     <p class="hint">L'audio arriva dai meter dei gruppi di DMX Master (livello e kick del controller): se DMX Master è spento la scena resta ferma sull'audio.</p>
+    ${lzsPresetSelect('lsPreset',sc.preset)}
     <div class="row"><span class="lzs-tg" id="lsTg"></span><button class="btn" id="lsTry">Prova sui cubi</button></div>
     <div class="cue-editor-actions"><button class="btn danger" id="lsDel">Elimina</button><button class="btn ghost" id="lsDup">Duplica</button><button class="btn primary" id="lsSave">Salva</button></div>
   </div>`;
@@ -505,7 +513,7 @@ function openLaserSceneEditor(orig){
       pulse_shape:$('#lsPulseSh').value,swing:+$('#lsSwing').value,swing_hz:+$('#lsSwingHz').value,swing_shape:$('#lsSwingSh').value};
     // a tempo: il riferimento e' il BPM del momento in cui lo si accende
     const on=$('#lsTempo').checked;if(on&&!sc.tempo?.sync){TP.bpm=liveBpm();$('#lsTempoRef').textContent=TP.bpm}sc.tempo={sync:on,bpm:TP.bpm};
-    sc.audio={amount:+$('#lsAudio').value,to:$('#lsAudioTo').value};paintWeight();return sc};
+    sc.audio={amount:+$('#lsAudio').value,to:$('#lsAudioTo').value};const pr=$('#lsPreset')?.value;if(pr)sc.preset=pr;else delete sc.preset;paintWeight();return sc};
   s.querySelectorAll('input[type=range]').forEach(r=>r.oninput=()=>{const b=$('#'+r.id+'V');if(b)b.textContent=(+r.value).toFixed(+r.step<1?2:0);read()});
   s.querySelectorAll('select,input[type=color],#lsName,#lsTempo').forEach(x=>x.oninput=read);
   paintWeight();
@@ -553,6 +561,7 @@ function openLaserCompEditor(orig,isNew=false){
         <label class="ar-sl"><span>Audio sulla composta intera<b id="lcAuV">${(+(sc.audio?.amount||0)).toFixed(2)}</b></span><input type="range" id="lcAu" min="0" max="1" step="0.01" value="${+(sc.audio?.amount||0)}"></label>
         <label>L'audio muove<select id="lcAuTo"><option value="scale"${sc.audio?.to!=='brightness'?' selected':''}>la dimensione</option><option value="brightness"${sc.audio?.to==='brightness'?' selected':''}>la luminosità</option></select></label>
         <p class="hint">Si somma all'audio dei livelli (che resta nella loro scena). Arriva dai meter dei gruppi di DMX Master.</p>
+        ${lzsPresetSelect('lcPreset',sc.preset)}
       </div></div>
       ${sc.layers.map((l,i)=>`<div class="lzs-ly"><div class="row"><b>Livello ${i+1}</b><select data-lyref="${i}">${base().map(x=>`<option value="${esc(x.id)}"${x.id===l.ref?' selected':''}>${esc(x.name)}</option>`).join('')}${base().some(x=>x.id===l.ref)?'':'<option selected value="">(scena tolta)</option>'}</select><span style="flex:1"></span><button class="btn sm ghost" data-lydel="${i}"${sc.layers.length<2?' disabled':''}>Togli</button></div>
         <div class="two">${sl(i,'x','Posizione orizzontale',l.x,-1,1,.01)}${sl(i,'y','Posizione verticale',l.y,-1,1,.01)}</div>
@@ -566,6 +575,7 @@ function openLaserCompEditor(orig,isNew=false){
     q('#lcName').oninput=e=>{sc.name=e.target.value.trim()||'Composta'};
     const au=()=>{sc.audio={amount:+q('#lcAu').value,to:q('#lcAuTo').value};q('#lcAuV').textContent=(+q('#lcAu').value).toFixed(2)};
     q('#lcAu').oninput=au;q('#lcAuTo').onchange=au;
+    q('#lcPreset').onchange=e=>{if(e.target.value)sc.preset=e.target.value;else delete sc.preset};
     s.querySelectorAll('[data-ly]').forEach(r=>r.oninput=()=>{const [i,k]=r.dataset.ly.split(':');sc.layers[+i][k]=+r.value;s.querySelector(`[data-v="${i}:${k}"]`).textContent=(+r.value).toFixed(+r.step<1?2:0);weight()});
     s.querySelectorAll('[data-lyref]').forEach(r=>r.onchange=()=>{sc.layers[+r.dataset.lyref].ref=r.value;weight()});
     s.querySelectorAll('[data-lydel]').forEach(b=>b.onclick=()=>{sc.layers.splice(+b.dataset.lydel,1);paint()});

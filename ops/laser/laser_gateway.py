@@ -180,9 +180,20 @@ class Cube:
     def mode(self):
         return self.conf.get("mode", "off")
 
+    def scene_render(self):
+        """preset master della scena in onda (flash compreso): vale sopra alle impostazioni del cubo (18/11)"""
+        if self.mode != "scene":
+            return {}
+        sc = self.gw.flash or self.conf.get("scene") or {}
+        return sc.get("render") or {}
+
+    def render_conf(self):
+        r = self.scene_render()
+        return {**self.conf, **r} if r else self.conf
+
     @property
     def pps(self):
-        p = int(self.conf.get("pps", P.PPS_DEFAULT))
+        p = int(self.scene_render().get("pps") or self.conf.get("pps", P.PPS_DEFAULT))
         if self.info and self.info.get("max_pps"):
             p = min(p, self.info["max_pps"])
         return max(P.PPS_MIN, p)
@@ -212,7 +223,8 @@ class Cube:
             "id": self.id, "name": self.conf.get("name", self.id), "ip": self.conf.get("ip"),
             "mode": self.mode, "armed": self.armed, "streaming": self.streaming,
             "online": self.online(), "frame_age_ms": int((now() - self.frame_ts) * 1000) if self.frame_ts else None,
-            "pps": self.pps, **{k: self.conf.get(k, d) for k, d in RENDER_DEFAULTS.items()},
+            "pps": int(self.conf.get("pps", P.PPS_DEFAULT)), "pps_now": self.pps, "scene_render": self.scene_render(),
+            **{k: self.conf.get(k, d) for k, d in RENDER_DEFAULTS.items()},
             "scene": {"id": self.conf["scene"]["id"], "name": self.conf["scene"]["name"]} if self.conf.get("scene") else None,
             "model": i.get("model"), "fw": i.get("fw"), "mac": i.get("mac"),
             "battery": i.get("battery"), "charging": i.get("charging"), "temp_c": i.get("temp_c"),
@@ -382,6 +394,14 @@ class Cube:
         self.rnum = (self.rnum + 1) & 0xFF
 
     def _stream_tick(self):
+        if self.pps != self.stream_pps:       # punti al secondo cambiati (scena col suo preset, o a mano): al volo
+            pps = self.pps
+            self._cmd(P.cmd_set_rate(pps))
+            used = self._used_now()
+            self.stream_pps, self.period = pps, P.SAMPLES_PER_PACKET / pps
+            if used is not None:
+                self.reply_used, self.reply_inflight, self.reply_time = max(0, used), 0, now()
+            log.info("%s: %d punti al secondo", self.id, pps)
         used = self._used_now()
         pkt = P.SAMPLES_PER_PACKET
         if used is None:
@@ -517,7 +537,7 @@ class Gateway:
                         else:
                             pts = SC.animate(sc, c.scene_t, level, kick, self.bpm_now())
                         pts = SC.apply_fx(pts, self.fx, t0, self.fx_angle, self.fx_angle_y)
-                        c.set_frame(render(pts, c.conf, c.pps))
+                        c.set_frame(render(pts, c.render_conf(), c.pps))
                 except Exception as e:          # una scena rotta non deve fermare gli altri cubi
                     log.warning("%s: scena non disegnabile (%s)", c.id, e)
             time.sleep(max(0.0, period - (now() - t0)))

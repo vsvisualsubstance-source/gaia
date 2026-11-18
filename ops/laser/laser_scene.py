@@ -103,6 +103,23 @@ def _clean_strokes(raw, limit):
 MAX_LAYERS = 4         # scena composta: livelli al massimo (ognuno toglie tempo di disegno agli altri)
 
 
+# 18/11: preset master di una scena (impostazioni di scansione del cubo finche' la scena e' in onda)
+RENDER_KEYS = {"pps": (6000, 35000, True), "blank_shift": (0, 10, True), "color_min": (0, 0.3, False),
+               "master": (0, 1, False), "max_intensity": (0, 1, False),
+               "gain_r": (0, 1, False), "gain_g": (0, 1, False), "gain_b": (0, 1, False)}
+
+
+def _clean_render(r):
+    """{"pps": 20000, "blank_shift": 3, ...}: solo le chiavi note, nei loro limiti; {} se niente."""
+    out = {}
+    for k, (lo, hi, is_int) in RENDER_KEYS.items():
+        v = (r or {}).get(k) if isinstance(r, dict) else None
+        if isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v):
+            v = max(lo, min(hi, v))
+            out[k] = int(round(v)) if is_int else float(v)
+    return out
+
+
 def _clean_layers(s):
     """Scena composta (16/11): {"id", "name", "layers": [{"scene": {scena}, "x", "y", "scale",
     "rotate", "bright"}]}. Ogni livello e' una scena normale con la sua animazione (anche a tempo),
@@ -123,6 +140,7 @@ def _clean_layers(s):
     au = s.get("audio") or {}
     # 18/11: reattivita' audio della composta intera (sopra quella dei livelli): grandezza o luminosita'
     return {"id": str(s.get("id") or "")[:64], "name": str(s.get("name") or "Composta")[:64], "layers": layers,
+            **({"render": _clean_render(s.get("render"))} if _clean_render(s.get("render")) else {}),
             "audio": {"amount": _num(au.get("amount"), 0, 1, 0),
                       "to": au.get("to") if au.get("to") in ("scale", "brightness") else "scale"}}
 
@@ -162,6 +180,7 @@ def clean_scene(s):
         **({"frames": frames, "frame_fps": _num(s.get("frame_fps"), 1, 60, 25)} if len(frames) > 1 else {}),
         "audio": {"amount": _num(au.get("amount"), 0, 1, 0),
                   "to": au.get("to") if au.get("to") in ("scale", "brightness") else "scale"},
+        **({"render": _clean_render(s.get("render"))} if _clean_render(s.get("render")) else {}),
     }
 
 

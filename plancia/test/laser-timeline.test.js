@@ -46,3 +46,12 @@ test('composta: l audio della composta arriva al gateway (18/11)', () => {
   assert.deepStrictEqual(r.audio, { amount: 0.7, to: 'brightness' });
   assert.strictEqual(resolveLaserScene({ id: 'c', layers: [{ ref: 'a' }] }, scenes).audio, undefined);
 });
+
+test('preset master: la scena porta le impostazioni del suo preset (18/11)', () => {
+  const { scenesWithPresets, resolveLaserScene } = require('../laser-compose');
+  const presets = [{ id: 'lp1', name: 'Complessa', values: { pps: 20000, blank_shift: 4 } }];
+  const scenes = scenesWithPresets([{ id: 'a', preset: 'lp1', strokes: [] }, { id: 'b', strokes: [] }, { id: 'c', preset: 'lp1', layers: [{ ref: 'b' }] }], presets);
+  assert.deepStrictEqual(scenes[0].render, { pps: 20000, blank_shift: 4 });
+  assert.strictEqual(scenes[1].render, undefined);
+  assert.deepStrictEqual(resolveLaserScene(scenes[2], scenes).render, { pps: 20000, blank_shift: 4 });
+});

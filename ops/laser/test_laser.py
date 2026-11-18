@@ -300,6 +300,15 @@ class TestScene(unittest.TestCase):
         many = SC.clean_scene({"layers": [{"scene": dot}] * 9})
         self.assertEqual(len(many["layers"]), SC.MAX_LAYERS)
 
+    def test_preset_master_scena(self):
+        # 18/11: la scena porta le sue impostazioni di scansione, nei limiti; le chiavi ignote spariscono
+        line = {"strokes": [{"pts": [[-1, 0], [1, 0]]}], "render": {"pps": 99999, "blank_shift": 3.4, "gain_r": 0.5, "zone": [0, 0, 1, 1], "master": "x"}}
+        sc = SC.clean_scene(line)
+        self.assertEqual(sc["render"], {"pps": 35000, "blank_shift": 3, "gain_r": 0.5})
+        self.assertNotIn("render", SC.clean_scene({"strokes": [{"pts": [[0, 0], [1, 0]]}]}))
+        comp = SC.clean_scene({"layers": [{"scene": line}], "render": {"pps": 12000}})
+        self.assertEqual(comp["render"], {"pps": 12000})
+
     def test_composta_audio(self):
         # 18/11: la composta ha la sua reattivita' audio, sopra quella dei livelli
         line = {"id": "l", "strokes": [{"pts": [[-1, 0], [1, 0]]}], "color": {"rgb": [0, 1, 0]}, "anim": {"scale": 1}}
