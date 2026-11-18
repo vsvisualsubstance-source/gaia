@@ -26,7 +26,8 @@ function lzDevId(){
 const lzDev=()=>{const d=G.devices?.[lzDevId()];return d&&!d.offline&&d.laser?d:null};
 const lzCube=cid=>lzDev()?.laser.cubes.find(c=>c.id===cid);
 function lzCmd(o,label){
-  const req=Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+  // il codice della richiesta del chiamante, se c'e' (la registrazione lo aspetta indietro, 18/11)
+  const req=o.req||Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   LZ_PENDING.set(req,label||o.action);setTimeout(()=>LZ_PENDING.delete(req),8000);
   if(!devCmd(lzDevId(),{...o,req}))showError('Laser: non collegato al broker di Gaia.');
 }
