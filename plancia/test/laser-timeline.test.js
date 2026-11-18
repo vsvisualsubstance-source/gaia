@@ -38,3 +38,11 @@ test('scena composta: al gateway con le scene dentro, livelli rotti saltati', ()
   const sc = cmds.find(x => x.action === 'scene').scene;
   assert.deepEqual(sc, { id: 'c', name: 'Linee e punti', layers: [{ scene: a, x: .2, y: 0, scale: .5, rotate: 0, bright: 1 }] });
 });
+
+test('composta: l audio della composta arriva al gateway (18/11)', () => {
+  const { resolveLaserScene } = require('../laser-compose');
+  const scenes = [{ id: 'a', strokes: [{ pts: [[0, 0], [1, 0]] }] }];
+  const r = resolveLaserScene({ id: 'c', name: 'C', layers: [{ ref: 'a' }], audio: { amount: 0.7, to: 'brightness' } }, scenes);
+  assert.deepStrictEqual(r.audio, { amount: 0.7, to: 'brightness' });
+  assert.strictEqual(resolveLaserScene({ id: 'c', layers: [{ ref: 'a' }] }, scenes).audio, undefined);
+});

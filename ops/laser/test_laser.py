@@ -300,6 +300,18 @@ class TestScene(unittest.TestCase):
         many = SC.clean_scene({"layers": [{"scene": dot}] * 9})
         self.assertEqual(len(many["layers"]), SC.MAX_LAYERS)
 
+    def test_composta_audio(self):
+        # 18/11: la composta ha la sua reattivita' audio, sopra quella dei livelli
+        line = {"id": "l", "strokes": [{"pts": [[-1, 0], [1, 0]]}], "color": {"rgb": [0, 1, 0]}, "anim": {"scale": 1}}
+        sc = SC.clean_scene({"id": "c", "layers": [{"scene": line, "scale": 0.5}], "audio": {"amount": 1, "to": "scale"}})
+        self.assertEqual(sc["audio"], {"amount": 1.0, "to": "scale"})
+        quiet, loud = SC.animate(sc, 0.0, level=0.0)[1][0], SC.animate(sc, 0.0, level=1.0)[1][0]
+        self.assertAlmostEqual(quiet, -0.5); self.assertAlmostEqual(loud, -0.8)      # +60% col suono pieno
+        sb = SC.clean_scene({"layers": [{"scene": line}], "audio": {"amount": 1, "to": "brightness"}})
+        self.assertEqual(SC.animate(sb, 0.0, level=0.0)[1][3], 0)                    # al buio senza suono
+        self.assertEqual(SC.animate(sb, 0.0, level=1.0)[1][3], 255)
+        self.assertEqual(SC.clean_scene({"layers": [{"scene": line}]})["audio"]["amount"], 0)   # di partenza: niente
+
 
 class TestRender(unittest.TestCase):
     def test_zone_keeps_beam_inside(self):

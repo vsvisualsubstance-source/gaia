@@ -116,12 +116,15 @@ function lzsResolve(sc,scenes=laserScenes()){
   if(!sc||!Array.isArray(sc.layers)||sc.layers.some(l=>l.scene))return sc;
   const by=new Map(scenes.map(s=>[s.id,s]));
   return{id:sc.id,name:sc.name,layers:sc.layers.map(l=>({l,s:by.get(l.ref)})).filter(x=>x.s&&!x.s.layers)
-    .map(({l,s})=>({scene:s,x:+l.x||0,y:+l.y||0,scale:l.scale??1,rotate:+l.rotate||0,bright:l.bright??1}))};
+    .map(({l,s})=>({scene:s,x:+l.x||0,y:+l.y||0,scale:l.scale??1,rotate:+l.rotate||0,bright:l.bright??1})),
+    ...(sc.audio?{audio:{amount:+sc.audio.amount||0,to:sc.audio.to==='brightness'?'brightness':'scale'}}:{})};
 }
 function lzsAnimate(sc,t,level=0,kick=0,bpm=0){
-  if(sc?.layers){const out=[];
-    for(const ly of lzsResolve(sc).layers){const r=ly.rotate*Math.PI/180,cr=Math.cos(r),sr=Math.sin(r),k=ly.scale,b=ly.bright;
-      for(const [x,y,R,G,B] of lzsAnimate(ly.scene,t*lzsTempoRate(ly.scene,bpm),level,kick))out.push([(x*cr-y*sr)*k+ly.x,(x*sr+y*cr)*k+ly.y,Math.floor(R*b),Math.floor(G*b),Math.floor(B*b)])}
+  if(sc?.layers){const out=[],au={amount:0,to:'scale',...(sc.audio||{})},react=Math.min(1,level+.5*kick)*au.amount;
+    // audio della composta intera (18/11), sopra quello dei livelli: come laser_scene.py
+    const gs=au.to==='scale'?1+.6*react:1,gb=au.to==='brightness'?(1-au.amount)+react:1;
+    for(const ly of lzsResolve(sc).layers){const r=ly.rotate*Math.PI/180,cr=Math.cos(r),sr=Math.sin(r),k=ly.scale*gs,b=ly.bright*gb;
+      for(const [x,y,R,G,B] of lzsAnimate(ly.scene,t*lzsTempoRate(ly.scene,bpm),level,kick))out.push([(x*cr-y*sr)*k+ly.x*gs,(x*sr+y*cr)*k+ly.y*gs,Math.min(255,Math.floor(R*b)),Math.min(255,Math.floor(G*b)),Math.min(255,Math.floor(B*b))])}
     return out}
   const a={rotate:0,rotate_y:0,scale:.8,pulse:0,pulse_hz:.5,orbit:0,orbit_hz:.2,draw_hz:0,pulse_shape:'sine',swing:0,swing_hz:.25,swing_shape:'sine',...(sc.anim||{})},au={amount:0,to:'scale',...(sc.audio||{})};
   let s=a.scale*(1-a.pulse*.5+a.pulse*.5*lzsWave(a.pulse_hz*t,a.pulse_shape)),bright=1;
@@ -547,6 +550,9 @@ function openLaserCompEditor(orig,isNew=false){
         <label>Nome<input id="lcName" value="${esc(sc.name)}"></label>
         <p class="hint">Più scene sullo stesso laser, ognuna con la sua animazione, colore e audio. Il laser le disegna una dopo l'altra nello stesso giro: ogni livello in più rende tutto più pesante.</p>
         <p class="hint lzs-wtxt" id="lcWeight"></p>
+        <label class="ar-sl"><span>Audio sulla composta intera<b id="lcAuV">${(+(sc.audio?.amount||0)).toFixed(2)}</b></span><input type="range" id="lcAu" min="0" max="1" step="0.01" value="${+(sc.audio?.amount||0)}"></label>
+        <label>L'audio muove<select id="lcAuTo"><option value="scale"${sc.audio?.to!=='brightness'?' selected':''}>la dimensione</option><option value="brightness"${sc.audio?.to==='brightness'?' selected':''}>la luminosità</option></select></label>
+        <p class="hint">Si somma all'audio dei livelli (che resta nella loro scena). Arriva dai meter dei gruppi di DMX Master.</p>
       </div></div>
       ${sc.layers.map((l,i)=>`<div class="lzs-ly"><div class="row"><b>Livello ${i+1}</b><select data-lyref="${i}">${base().map(x=>`<option value="${esc(x.id)}"${x.id===l.ref?' selected':''}>${esc(x.name)}</option>`).join('')}${base().some(x=>x.id===l.ref)?'':'<option selected value="">(scena tolta)</option>'}</select><span style="flex:1"></span><button class="btn sm ghost" data-lydel="${i}"${sc.layers.length<2?' disabled':''}>Togli</button></div>
         <div class="two">${sl(i,'x','Posizione orizzontale',l.x,-1,1,.01)}${sl(i,'y','Posizione verticale',l.y,-1,1,.01)}</div>
@@ -558,6 +564,8 @@ function openLaserCompEditor(orig,isNew=false){
     </div>`;
     const q=x=>s.querySelector(x),weight=()=>{const w=lzsWeight(sc),b=q('#lcWeight');b.textContent=lzsWeightText(w,sc);b.className='hint lzs-wtxt '+w.level};weight();
     q('#lcName').oninput=e=>{sc.name=e.target.value.trim()||'Composta'};
+    const au=()=>{sc.audio={amount:+q('#lcAu').value,to:q('#lcAuTo').value};q('#lcAuV').textContent=(+q('#lcAu').value).toFixed(2)};
+    q('#lcAu').oninput=au;q('#lcAuTo').onchange=au;
     s.querySelectorAll('[data-ly]').forEach(r=>r.oninput=()=>{const [i,k]=r.dataset.ly.split(':');sc.layers[+i][k]=+r.value;s.querySelector(`[data-v="${i}:${k}"]`).textContent=(+r.value).toFixed(+r.step<1?2:0);weight()});
     s.querySelectorAll('[data-lyref]').forEach(r=>r.onchange=()=>{sc.layers[+r.dataset.lyref].ref=r.value;weight()});
     s.querySelectorAll('[data-lydel]').forEach(b=>b.onclick=()=>{sc.layers.splice(+b.dataset.lydel,1);paint()});

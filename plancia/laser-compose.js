@@ -10,6 +10,7 @@ function resolveLaserScene(sc, scenes) {
   const byId = new Map((scenes || []).map(s => [s.id, s]));
   const layers = sc.layers.map(l => ({ l, s: byId.get(l.ref) })).filter(({ s }) => s && !s.layers)
     .map(({ l, s }) => ({ scene: s, x: +l.x || 0, y: +l.y || 0, scale: l.scale ?? 1, rotate: +l.rotate || 0, bright: l.bright ?? 1 }));
-  return { id: sc.id, name: sc.name, layers };
+  // 18/11: reattivita' audio della composta intera (laser_scene.py)
+  return { id: sc.id, name: sc.name, layers, ...(sc.audio ? { audio: { amount: +sc.audio.amount || 0, to: sc.audio.to === 'brightness' ? 'brightness' : 'scale' } } : {}) };
 }
 module.exports = { resolveLaserScene };

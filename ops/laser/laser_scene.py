@@ -120,7 +120,11 @@ def _clean_layers(s):
                        "bright": _num(ly.get("bright"), 0, 1, 1.0)})
     if not layers:
         raise ValueError("scena composta senza livelli")
-    return {"id": str(s.get("id") or "")[:64], "name": str(s.get("name") or "Composta")[:64], "layers": layers}
+    au = s.get("audio") or {}
+    # 18/11: reattivita' audio della composta intera (sopra quella dei livelli): grandezza o luminosita'
+    return {"id": str(s.get("id") or "")[:64], "name": str(s.get("name") or "Composta")[:64], "layers": layers,
+            "audio": {"amount": _num(au.get("amount"), 0, 1, 0),
+                      "to": au.get("to") if au.get("to") in ("scale", "brightness") else "scale"}}
 
 
 def clean_scene(s):
@@ -180,13 +184,17 @@ def animate(sc, t, level=0.0, kick=0.0, bpm=None):
     bpm serve ai livelli a tempo."""
     if sc.get("layers"):
         out = []
+        au = sc.get("audio") or {}
+        react = min(1.0, level + 0.5 * kick) * float(au.get("amount", 0))
+        gs = 1 + 0.6 * react if au.get("to", "scale") == "scale" else 1.0
+        gb = (1 - float(au.get("amount", 0))) + react if au.get("to") == "brightness" else 1.0
         for ly in sc["layers"]:
             sub = ly["scene"]
             r = math.radians(ly["rotate"])
-            cr, sr, k, br = math.cos(r), math.sin(r), ly["scale"], ly["bright"]
+            cr, sr, k, br = math.cos(r), math.sin(r), ly["scale"] * gs, ly["bright"] * gb
             for x, y, cr_, cg, cb in animate(sub, t * tempo_rate(sub, bpm), level, kick):
-                out.append(((x * cr - y * sr) * k + ly["x"], (x * sr + y * cr) * k + ly["y"],
-                            int(cr_ * br), int(cg * br), int(cb * br)))
+                out.append(((x * cr - y * sr) * k + ly["x"] * gs, (x * sr + y * cr) * k + ly["y"] * gs,
+                            min(255, int(cr_ * br)), min(255, int(cg * br)), min(255, int(cb * br))))
         return out
     a, au = sc["anim"], sc["audio"]
     s = a["scale"] * (1 - a["pulse"] * 0.5 + a["pulse"] * 0.5 * wave(a["pulse_hz"] * t, a.get("pulse_shape", "sine")))
