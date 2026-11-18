@@ -112,3 +112,4 @@ kiosk-profile/
 plancia/snapshots/
 video-gateway-wheels/
 .continueignore
+!plancia/render3d/vendor/three/build/
