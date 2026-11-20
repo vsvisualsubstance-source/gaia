@@ -113,7 +113,7 @@ async function startPlancia({ hooks = false, state = process.env.PLANCIA_STATE |
     await ev('window.confirm=()=>false;window.alert=()=>{};window.prompt=()=>null;1');
   };
   await open();
-  return { ev, send, shot, problems, reload: open, close: () => { try { ws.close(); } catch { /* chiuso */ } close(); }, port };
+  return { ev, send, shot, problems, reload: open, close: () => { try { ws.close(); } catch { /* chiuso */ } close(); }, port, tmp };
 }
 
 module.exports = { startPlancia, sleep };

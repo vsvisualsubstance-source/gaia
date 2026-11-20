@@ -31,6 +31,17 @@ La vecchia sorgente "pixel di un video del Render" resta disponibile, ma dipende
   - 1080 righe, 12-40 Mbit/s;
   - nessuna scritta (SIM, messaggi del LED wall, livelli delle teste).
 
+## Musica (20/11)
+
+Il ⏺ del Render salva nella registrazione anche lo stato dei deck A/B del motore audio (`audio` in `data/light-frames/*.json`): brano, posizione, play, tempo, volume (gain × fader × crossfader). Un evento solo quando qualcosa cambia; vale per la Console suonata a mano e per la traccia AUDIO della timeline.
+
+Nel Render 3D, con quella registrazione scelta in "Sorgente delle luci":
+- compare **♪ musica della registrazione** (casella e volume); i brani arrivano dalla libreria della Plancia (`/api/audio/file`);
+- in play la musica segue la barra del tempo (salti, giro dall'inizio, pausa); il browser la fa sentire dopo il primo tocco sulla pagina;
+- **● registra MP4** rifà il mix offline e lo mette nel video (AAC, altrimenti Opus); il messaggio finale dice "Con musica" o perché no.
+
+Senza motore audio collegato durante il ⏺, o con registrazioni di prima del 20/11, il Render 3D resta muto. Il brano deve essere nella libreria del PC che serve la Plancia. Test: `plancia/test/render3d-audio.js`.
+
 ## File
 
 | Cosa | Dove |

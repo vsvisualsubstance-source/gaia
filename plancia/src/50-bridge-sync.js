@@ -20,7 +20,7 @@ function connect(){
   if(m.type==='head_motion'){G.hmSt=m.state||null;return} // stato del motore del movimento teste
   if(m.type==='video'){VIDEO_ST=m.state||null;return} // stato della timeline video dal bridge
   if(m.type==='midi_in'){midiFromBridge(m);devMidiIn(m);return}     // MIDI in ingresso (eseguito dal bridge)
-  if(m.type==='audio_state'){auApplyState(m);AU.lastState=m;if(renderRec?.audio)recAudioSync(renderRec.audio,m);return}  // motore audio gaia-audio (Console Audio)
+  if(m.type==='audio_state'){auApplyState(m);AU.lastState=m;lfAudio(m);if(renderRec?.audio)recAudioSync(renderRec.audio,m);return}  // motore audio gaia-audio (Console Audio)
   if(m.type==='audio_tl'){G.audioTlSt=m.state||null;return}  // timeline audio eseguita dal bridge
   if(m.type==='audio_auto'){G.audioAuto=m.state||null;return}
   // analisi dei brani (audio-analyze.js nel bridge): a fine analisi la libreria si ricarica

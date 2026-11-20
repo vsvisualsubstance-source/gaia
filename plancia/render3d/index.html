@@ -72,6 +72,8 @@
     <div id="frBox">
       <div class="row" style="margin-top:7px"><select id="frFile" style="flex:1"></select><button id="frReload" title="aggiorna l'elenco">↻</button></div>
       <div class="hint" id="frMsg">Registra un video col ⏺ del Render nella Plancia: lo stato delle luci arriva qui da solo.</div>
+      <div class="row" id="frAuRow" style="margin-top:6px;display:none"><label style="flex:1"><input type="checkbox" id="frAudio" checked> ♪ musica della registrazione</label><input id="frAuVol" type="range" min="0" max="1.5" step="0.05" value="1" style="width:34%" title="volume"></div>
+      <div class="hint" id="frAuMsg"></div>
       <div id="frMap"></div>
     </div>
   </div>
@@ -595,7 +597,7 @@ async function setClip(name){
   try{await video.play(); $('play').textContent='❚❚ pausa';}catch(e){$('play').textContent='▶ play';}
 }
 $('clip').onchange=e=>setClip(e.target.value);
-$('play').onclick=()=>{ if(FR.mode==='frames'){ FR.playing=!FR.playing; $('play').textContent=FR.playing?'❚❚ pausa':'▶ play'; return; } if(video.paused){video.play();$('play').textContent='❚❚ pausa'} else {video.pause();$('play').textContent='▶ play'} };
+$('play').onclick=()=>{ FA.ctx?.resume?.().catch(()=>{}); if(FR.mode==='frames'){ FR.playing=!FR.playing; $('play').textContent=FR.playing?'❚❚ pausa':'▶ play'; return; } if(video.paused){video.play();$('play').textContent='❚❚ pausa'} else {video.pause();$('play').textContent='▶ play'} };
 let scrubbing=false;
 $('tl').addEventListener('input',e=>{scrubbing=true; if(FR.mode==='frames'){ if(FR.doc) FR.t=FR.doc.duration*e.target.value/1000; return; } if(video.duration) video.currentTime=video.duration*e.target.value/1000;});
 $('tl').addEventListener('change',()=>scrubbing=false);
@@ -726,7 +728,7 @@ async function frLoad(file){
   $('frMsg').textContent='Carico '+file+'…';
   try{ const doc=await fetch('/api/light-frames/'+encodeURIComponent(file),{cache:'no-store'}).then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); });
     if(doc.app!=='plancia-light-frames'||!doc.frames?.length) throw new Error('file non valido');
-    FR.doc=doc; FR.file=file; FR.t=0; FR.idx=0; frAuto(doc); frMapUI(); $('frFile').value=file;
+    FR.doc=doc; FR.file=file; FR.t=0; FR.idx=0; frAuto(doc); frMapUI(); $('frFile').value=file; faLoad(doc);
     $('frMsg').textContent=`${doc.project||'progetto'} · ${doc.duration.toFixed(1)} s · ${doc.frames.length} fotogrammi · ${doc.fixtures.length} fixture. Collega ogni elemento a una luce della Plancia.`;
   }catch(e){ $('frMsg').textContent='Non caricato: '+(e.message||e); }
 }
@@ -790,6 +792,119 @@ function sampleAny(){ return FR.mode==='frames'?frSample():sample(); }
 $('srcMode').onchange=e=>{ frSetMode(e.target.value); if(FR.mode==='frames'&&!FR.doc) frList().then(f=>{ if(f[0]) frLoad(f[0].file); }); autosave?.(); };
 $('frFile').onchange=e=>frLoad(e.target.value);
 $('frReload').onclick=()=>frList();
+
+/* ---------- musica della registrazione (20/11): doc.audio da 62-light-frames.js ---------- */
+// Eventi per deck A/B {t:ms, track, pos:s, playing, rate, g}: ognuno vale fino al successivo dello
+// stesso deck. I brani arrivano dalla libreria della Plancia (/api/audio/file). Mentre si guarda
+// suona in sincrono con FR.t; nell'export si rifa' il mix offline e va nell'MP4 (AAC).
+const FA={ctx:null,out:null,vol:null,ev:null,buf:new Map(),p:new Map(),decks:{},errors:new Set()};
+function faCtx(){
+  if(FA.ctx) return FA.ctx;
+  const AC=window.AudioContext||window.webkitAudioContext; if(!AC) return null;
+  const ctx=new AC(); FA.ctx=ctx; FA.vol=ctx.createGain(); FA.out=faLimiter(ctx); FA.out.connect(FA.vol); FA.vol.connect(ctx.destination);
+  return ctx;
+}
+// come il mix del video del Palco: limitatore a -3 dB dopo i deck
+function faLimiter(ctx){ const l=ctx.createDynamicsCompressor(); l.threshold.value=-3; l.knee.value=0; l.ratio.value=20; l.attack.value=.003; l.release.value=.15; return l; }
+function faTracks(){ return [...new Set((FR.doc?.audio||[]).filter(e=>e.track).map(e=>e.track))]; }
+function faMsg(){
+  const ids=faTracks(); if(!ids.length){ $('frAuMsg').textContent=''; return; }
+  const ok=ids.filter(id=>FA.buf.get(id)).length, wait=ids.filter(id=>!FA.buf.has(id)).length;
+  $('frAuMsg').textContent= wait?`♪ carico ${ids.length} brani…`
+    : `♪ ${ok}/${ids.length} brani pronti${FA.errors.size?' — '+[...FA.errors].join(', '):''}${FA.ctx?.state==='suspended'?' — tocca la pagina per sentirla':''}`;
+}
+function faLoad(doc){
+  faStop(); FA.ev=null; FA.errors.clear();
+  const ev={}; for(const e of doc.audio||[]) (ev[e.k]||(ev[e.k]=[])).push(e);
+  const ids=faTracks(); $('frAuRow').style.display=ids.length?'':'none';
+  if(!ids.length){ faMsg(); return; }
+  FA.ev=ev; const ctx=faCtx(); if(!ctx){ $('frAuMsg').textContent='♪ questo browser non riproduce audio'; return; }
+  for(const id of ids) if(!FA.p.has(id)) FA.p.set(id, fetch('/api/audio/file?id='+encodeURIComponent(id))
+    .then(r=>{ if(!r.ok) throw new Error(r.status===404?'brano non trovato nella libreria':'HTTP '+r.status); return r.arrayBuffer(); })
+    .then(b=>ctx.decodeAudioData(b)).then(b=>{ FA.buf.set(id,b); return b; })
+    .catch(e=>{ FA.errors.add(e.message||String(e)); FA.buf.set(id,null); return null; })
+    .finally(faMsg));
+  faMsg();
+}
+// stato voluto del deck all'istante t (s): {track,pos,rate,g} o null
+function faWant(evs,t){
+  const ms=t*1000; let e=null; for(const x of evs){ if(x.t<=ms) e=x; else break; }
+  return e&&e.playing&&e.track ? {track:e.track,pos:e.pos+(t-e.t/1000)*e.rate,rate:e.rate,g:e.g} : null;
+}
+function faHalt(d){ if(d.src){ try{ d.src.stop(); }catch(e){} d.src.disconnect(); d.src=null; } d.track=null; }
+function faStop(){ for(const d of Object.values(FA.decks)) faHalt(d); }
+function faTick(){
+  const on=FR.mode==='frames'&&FR.doc&&FA.ev&&FR.playing&&!scrubbing&&!exporting&&$('frAudio').checked;
+  if(!FA.ctx) return;
+  if(!on){ faStop(); return; }
+  const now=FA.ctx.currentTime; FA.vol.gain.value=+$('frAuVol').value;
+  for(const k in FA.ev){
+    const d=FA.decks[k]||(FA.decks[k]={g:null,src:null,track:null});
+    const w=faWant(FA.ev[k],FR.t), buf=w&&FA.buf.get(w.track);
+    if(!w||!buf||w.pos<0||w.pos>=buf.duration){ faHalt(d); continue; }
+    if(!d.g){ d.g=FA.ctx.createGain(); d.g.gain.value=0; d.g.connect(FA.out); }
+    d.g.gain.setTargetAtTime(w.g,now,.03);
+    // fuori sincrono oltre 1/4 di secondo (salto, giro dall'inizio, cambio brano o tempo): riparte
+    if(d.src&&d.track===w.track&&Math.abs(d.rate-w.rate)<1e-4&&Math.abs(d.off+(now-d.t0)*d.rate-w.pos)<.25) continue;
+    faHalt(d);
+    const s=FA.ctx.createBufferSource(); s.buffer=buf; s.playbackRate.value=w.rate; s.connect(d.g); s.start(now,w.pos);
+    Object.assign(d,{src:s,track:w.track,off:w.pos,t0:now,rate:w.rate});
+  }
+}
+window.__r3d={FR,FA,faRuns};   // per test/render3d-audio.js
+addEventListener('pointerdown',()=>{ if(FA.ctx?.state==='suspended') FA.ctx.resume().then(faMsg).catch(()=>{}); });
+// tratti continui di un deck (stesso brano, tempo e posizione che scorre): un solo player, il
+// guadagno cambia a punti. Tempi del documento in s.
+function faRuns(evs,D){
+  const runs=[]; let r=null;
+  for(let i=0;i<evs.length;i++){
+    const e=evs[i], t=e.t/1000, end=i+1<evs.length?evs[i+1].t/1000:D;
+    const cont=r&&e.playing&&e.track===r.track&&Math.abs(e.rate-r.rate)<1e-4&&Math.abs(r.pos+(t-r.s)*r.rate-e.pos)<.05;
+    if(cont){ r.g.push([t,e.g]); r.e=end; continue; }
+    r=null; if(!e.playing||!e.track) continue;
+    r={track:e.track,rate:e.rate,s:t,e:end,pos:e.pos,g:[[t,e.g]]}; runs.push(r);
+  }
+  return runs;
+}
+// mix offline della finestra [t0, t0+total] (con i giri se total supera la durata)
+async function faRender(t0,total,D){
+  if(!FA.ev||!$('frAudio').checked) return null;
+  await Promise.all([...FA.p.values()]);
+  const SR=48000, oc=new OfflineAudioContext(2,Math.max(1,Math.ceil(total*SR)),SR);
+  const vol=oc.createGain(); vol.gain.value=+$('frAuVol').value; const lim=faLimiter(oc); lim.connect(vol); vol.connect(oc.destination);
+  let any=false;
+  for(const k in FA.ev) for(const r of faRuns(FA.ev[k],D)){
+    const buf=FA.buf.get(r.track); if(!buf) continue;
+    for(let c=Math.floor(t0/D); c*D<t0+total; c++){
+      const a=Math.max(r.s+c*D,t0), b=Math.min(r.e+c*D,t0+total); if(b<=a) continue;
+      const pos=r.pos+(a-c*D-r.s)*r.rate; if(pos>=buf.duration) continue;
+      const g=oc.createGain(); g.connect(lim); g.gain.setValueAtTime(r.g[0][1],0);
+      for(const [t,v] of r.g){ const at=t+c*D-t0; if(at>a-t0&&at<b-t0) g.gain.setValueAtTime(v,at); }
+      const s=oc.createBufferSource(); s.buffer=buf; s.playbackRate.value=r.rate; s.connect(g); s.start(a-t0,pos); s.stop(b-t0); any=true;
+    }
+  }
+  return any?oc.startRendering():null;
+}
+async function faCodec(){
+  if(!('AudioEncoder' in window)) return null;
+  for(const [codec,mux] of [['mp4a.40.2','aac'],['opus','opus']]){
+    const cfg={codec,sampleRate:48000,numberOfChannels:2,bitrate:192000};
+    try{ if((await AudioEncoder.isConfigSupported(cfg)).supported) return {cfg,mux}; }catch(e){}
+  }
+  return null;
+}
+async function faEncode(ab,cfg,muxer){
+  let err=null; const enc=new AudioEncoder({output:(c,m)=>muxer.addAudioChunk(c,m),error:e=>err=e}); enc.configure(cfg);
+  const N=ab.length, C=1024, L=ab.getChannelData(0), R=ab.getChannelData(1);
+  for(let i=0;i<N&&!err;i+=C){
+    const n=Math.min(C,N-i), data=new Float32Array(n*2); data.set(L.subarray(i,i+n),0); data.set(R.subarray(i,i+n),n);
+    const ad=new AudioData({format:'f32-planar',sampleRate:48000,numberOfFrames:n,numberOfChannels:2,timestamp:Math.round(i*1e6/48000),data});
+    enc.encode(ad); ad.close();
+    if(enc.encodeQueueSize>32) await new Promise(r=>setTimeout(r,0));
+  }
+  try{ await enc.flush(); }catch(e){ err=err||e; } enc.close();
+  if(err) throw err;
+}
 
 /* ---------- camere ---------- */
 const CAMS={
@@ -1389,7 +1504,7 @@ async function pickCodec(W,H){
   }
   return null;
 }
-let abortExport=false;
+let abortExport=false, exNote='';
 async function startExport(){
   const r=$('exRes').value;
   let [W,H]= r==='win'?[innerWidth,innerHeight]:r.split('x').map(Number);
@@ -1400,10 +1515,18 @@ async function startExport(){
   const t0= dur==='full'?0:(FRM?FR.t:video.currentTime);
   const total= dur==='full'?D:Math.min(+dur, D*10);
   const N=Math.round(total*FPS);
-  exporting=true; abortExport=false; video.pause(); video.loop=true;
+  exporting=true; abortExport=false; video.pause(); video.loop=true; faStop();
+  // musica della registrazione: mix offline prima dei fotogrammi
+  let aud=null, acod=null; exNote='';
+  if(FRM&&FA.ev&&$('frAudio').checked){
+    $('exMsg').textContent='● preparo la musica…';
+    try{ acod=await faCodec(); aud=acod?await faRender(t0,total,D):null; exNote=acod?(aud?' Con musica.':' Senza musica: brani non disponibili.'):' Senza musica: il browser non codifica audio.'; }
+    catch(e){ aud=null; exNote=' Senza musica ('+(e.message||e)+').'; }
+  }
   setRenderSize(W,H,1);
   $('exGo').style.display='none'; $('exStop').style.display='';
-  const muxer=new Muxer({target:new ArrayBufferTarget(),video:{codec:'avc',width:W,height:H,frameRate:FPS},fastStart:'in-memory'});
+  const muxer=new Muxer({target:new ArrayBufferTarget(),video:{codec:'avc',width:W,height:H,frameRate:FPS},...(aud?{audio:{codec:acod.mux,numberOfChannels:2,sampleRate:48000}}:{}),fastStart:'in-memory',firstTimestampBehavior:'offset'});
+  if(aud){ try{ $('exMsg').textContent='● codifico la musica…'; await faEncode(aud,acod.cfg,muxer); }catch(e){ exporting=false; restoreAfterExport(); $('exMsg').textContent='Errore audio: '+(e.message||e); return; } }
   let encErr=null;
   const enc=new VideoEncoder({output:(c,m)=>muxer.addVideoChunk(c,m),error:e=>encErr=e});
   enc.configure(cfg);
@@ -1478,7 +1601,7 @@ async function finishExport(blob,mime){
   if(!downloads){ $('exMsg').textContent=`Video pronto (${mb} MB) ma il salvataggio non è disponibile in questa vista: apri l'artifact su claude.ai.`; return; }
   try{
     await downloads.save({filename:name,data:blob});
-    $('exMsg').textContent=`Salvato ${name} (${mb} MB).`;
+    $('exMsg').textContent=`Salvato ${name} (${mb} MB).${exNote}`; exNote='';
   }catch(e){
     $('exMsg').textContent= e?.code==='declined' ? 'Salvataggio annullato.' : `Salvataggio non riuscito (${e?.code||e}).`;
   }
@@ -1513,7 +1636,7 @@ function loop(){
   if(exporting && !rec) return;
   const dt=Math.min(0.1,orbClock.getDelta());
   if(FR.mode==='frames'&&FR.doc&&FR.playing&&!scrubbing) FR.t=(FR.t+dt)%Math.max(.001,FR.doc.duration);
-  sampleAny();
+  sampleAny(); faTick();
   if(orbiting) orbitStep(dt); else controls.update();
   if($('walls').value==='auto') updateWalls();
   composer.render();
