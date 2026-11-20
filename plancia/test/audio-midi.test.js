@@ -106,4 +106,7 @@ test('Z1 VU: al massimo ogni 200 ms e solo con cambi di almeno 3 passi', () => {
   assert.equal(meterDue(52, { v: 50, at: 1000 }, 1300), false, 'cambio piccolo');
   assert.equal(meterDue(53, { v: 50, at: 1000 }, 1300), true);
   assert.equal(meterDue(0, { v: 1, at: 1000 }, 1300), true, 'silenzio: si spegne');
+  assert.equal(meterDue(53, { v: 50, at: 1000 }, 1300, 1000), false, 'Z1 appena mossa: VU fermi');
+  assert.equal(meterDue(53, { v: 50, at: 1000 }, 1700, 1000), true, 'Z1 ferma da 0,7 s: VU di nuovo');
+  assert.equal(meterDue(50, undefined, 1100, 1000), false, 'anche il primo invio aspetta');
 });

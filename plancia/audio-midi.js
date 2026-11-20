@@ -147,15 +147,18 @@ function z1Leds(state, st) {
 // VU meter della Z1 (3:3, 3:4): al massimo 5 volte al secondo e solo se cambiano di almeno 3 passi.
 // 14/11/2026: con ~30 messaggi al secondo (ogni 66 ms) la Z1 si e' piantata suonando: niente MIDI
 // ne' in entrata ne' in uscita (VU fermi) finche' non si e' rimessa in modalita' MIDI (MODE + i due CUE).
-const METER_MS = 200, METER_STEP = 3;
-const meterDue = (v, last, now) => last == null || (now - last.at >= METER_MS && (Math.abs(v - last.v) >= METER_STEP || (v === 0 && last.v !== 0)));
+// 20/11/2026: tre blocchi in un giorno, tutti mentre si giravano i comandi della Z1 (fino a 66
+// messaggi/s in entrata) con i VU in uscita: la Z1 non regge il traffico nei due sensi insieme.
+// Per questo i VU tacciono mentre la Z1 manda e per Z1_QUIET_MS dopo l'ultimo suo messaggio.
+const METER_MS = 200, METER_STEP = 3, Z1_QUIET_MS = 600;
+const meterDue = (v, last, now, z1At = -Infinity) => now - z1At >= Z1_QUIET_MS && (last == null || (now - last.at >= METER_MS && (Math.abs(v - last.v) >= METER_STEP || (v === 0 && last.v !== 0))));
 
 // z1Out(): nome della porta MIDI in uscita della Z1 (scelta in devices-config.js); null = per nome
 function startAudioMidi({ engine, isTimeline = () => false, log = console.log, timed = (w, f) => f(), note = () => {}, z1Out = () => null }) {
   const st = { fx: { A: true, B: true }, filter: { A: 0, B: 0 }, cue: { A: false, B: false }, timeline: false };
   const lpd = { timeline: false, eng: null, pads: {} };
   let holdT = null;   // ripetizione del pad FINE tenuto
-  let out = null, outTried = 0, sent = {}, meterAt = {};
+  let out = null, outTried = 0, sent = {}, meterAt = {}, z1At = -Infinity;   // z1At = ultimo messaggio dalla Z1
   const openOut = () => {
     if (out || Date.now() - outTried < 10000) return out;
     outTried = Date.now();
@@ -178,7 +181,7 @@ function startAudioMidi({ engine, isTimeline = () => false, log = console.log, t
       for (const [k, v] of Object.entries(want)) {
         if (sent[k] === v) continue;
         const meter = k === '3:3' || k === '3:4';
-        if (meter && !meterDue(v, meterAt[k], now)) continue;
+        if (meter && !meterDue(v, meterAt[k], now, z1At)) continue;
         const [ch, cc] = k.split(':').map(Number);
         timed('MIDI LED Z1', () => out.send('cc', { controller: cc, value: v, channel: ch - 1 }));
         sent[k] = v;
@@ -193,6 +196,7 @@ function startAudioMidi({ engine, isTimeline = () => false, log = console.log, t
     onMidi(m, port, role) {
       role = role || (Z1_PORT.test(port || '') ? 'z1' : LPD8_PORT.test(port || '') ? 'lpd8' : '');
       if (role === 'z1') {
+        z1At = Date.now();
         st.timeline = !!isTimeline();
         for (const c of z1Commands(m, st)) engine.send(c);
         // tasto cuffia: la Z1 ha gia' cambiato il suo LED da sola; si rimanda lo stato vero
