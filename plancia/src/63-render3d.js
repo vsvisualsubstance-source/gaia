@@ -23,7 +23,7 @@ registerWidget('render3d',{oscAddress:false,size:[16,10],label:'Render 3D',shows
     const st=f.style,v=[r.left,r.top,r.width,r.height].map(x=>Math.round(x)+'px');
     if(st.left!==v[0])st.left=v[0];if(st.top!==v[1])st.top=v[1];if(st.width!==v[2])st.width=v[2];if(st.height!==v[3])st.height=v[3];if(st.display!=='block')st.display='block';
   },
-  help:()=>['Render 3D','La scansione 3D del locale con le luci dello show. Registra un video col ⏺ del Render (Palco): insieme al video la Plancia salva lo stato di ogni luce, che qui accende colonne, consolle e laser. Nel pannello collega ogni elemento a una luce, scegli la vista ed esporta un MP4 fotogramma per fotogramma.']});
+  help:()=>['Render 3D','Come si usa: 1) nel Palco premi ⏺ (Render) con la musica in play: si salvano luci, musica e contenuto di LED wall e proiettori. 2) Qui, in "Sorgente delle luci", scegli la registrazione e collega le colonne alle luci del Palco. 3) "Elementi del Palco": LED wall, schermi e proiettori vengono messi nello spazio; se non coincidono usa l’allineamento manuale (2 punti) e i ritocchi. 4) Proiettore: 📍 punta qui sceglie dove guarda, ◰ mappa 4 punti fa cadere l’immagine sui 4 punti cliccati (finisce nella pagina Mapping). 5) ● registra MP4 esporta il video con la musica. ⤢ apre il Render 3D in una scheda a parte (export più veloce).']});
 // 2026-11-17: pagina Render 3D nel suo gruppo (uiRev 22)
 function migrateUiRender3d(){
   if((L.uiRev||0)>=22)return;

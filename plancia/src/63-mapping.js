@@ -99,7 +99,7 @@ registerWidget('mapping',{oscAddress:false,size:[16,10],label:'Mapping',showsVal
     P.drawOverlay(g,m,fr.W,fr.H,{sel:Math.min(MP.sel.get(f.id)??0,P.handles(m).length-1),label:f.name||'PROIETTORE',dpr:fr.d});
     const c=m.corners.map(p=>'('+p[0].toFixed(3)+', '+p[1].toFixed(3)+')').join(' ');
     mappingMsg(el,`${s.live?'Sorgente dal vivo':'Immagine di prova'}${s.why?' ('+s.why+')':''} · ${m.mode==='corners'?'corner pin':'mesh '+m.n+'×'+m.n}: ${c}${o?.from==='render3d'?' · dal Render 3D':''} · trascina i punti, frecce 1 px (Maiusc 10), Tab punto successivo`)},
-  help:()=>['Mapping','Il mapping di ogni proiettore del Palco: corner pin (4 angoli) o mesh (griglia di punti per superfici non piane). Trascina i punti sull\'anteprima della sorgente del proiettore; "dal Render 3D" prende gli angoli calcolati con ◰ mappa 4 punti sul modello. Si salva nel progetto: lo usano il Render 3D e, in futuro, il motore video nativo.']});
+  help:()=>['Mapping','Come si usa: scegli il proiettore (quelli del Palco). Corner pin: trascina i 4 angoli dove deve cadere l’immagine; trascinando fuori dai punti sposti tutto. Mesh (da 2×2 a 8×8): piega anche i punti in mezzo, per superfici non piane. Precisione: tocca il riquadro, poi frecce = 1 px, Maiusc + frecce = 10 px, Tab = punto successivo. Reset riporta tutto ai bordi; ↻ 180° per il proiettore appeso; "dal Render 3D" prende gli angoli fatti con ◰ mappa 4 punti sul modello. L’anteprima mostra la sorgente del proiettore (NDI o URL) o l’immagine di prova. Si salva nel progetto e lo usa il Render 3D; per ora non manda l’immagine al proiettore vero (servirà il motore video nativo).']});
 // 2026-11-20: pagina Mapping nel gruppo Render 3D (uiRev 23)
 function migrateUiMapping(){
   if((L.uiRev||0)>=23)return;

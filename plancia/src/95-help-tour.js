@@ -15,6 +15,8 @@ const HELP_PAGES={
   Gaia:'Gaia: mood, pensieri e chat dell\'agente, luci della stanza.',
   PatchDeck:'PatchDeck: i due deck video, effetti e controller.',
   Mix:'Mixer audio: fader, effetti e pad.',
+  'Render 3D':'Lo show dentro la scansione 3D del locale: luci, musica, LED wall, schermi e proiettori presi da una registrazione del ⏺ del Palco. Si guarda, si sistema e si esporta in MP4.',
+  Mapping:'Il mapping di ogni proiettore del Palco: dove e come deformare l’immagine (corner pin o mesh) perché cada giusta sulla superficie. Si salva nel progetto e lo usa il Render 3D.',
 };
 function helpForWidget(w){const t=widgetType(w.type);return t?.help?t.help(w):[w.label||NAMES[w.type]||w.type,`Indirizzo ${w.addr||'—'}.`]}
 const HELP_BAR=[
