@@ -15,4 +15,13 @@ set GAIA_OSC_HOST=127.0.0.1
 set GAIA_OSC_PORT=9008
 node build-app.js
 if errorlevel 1 exit /b 1
+rem 20/11: se il bridge cade (es. driver MIDI durante un riattacco USB) si rilancia da solo;
+rem il log della caduta resta in plancia-caduto.log. Un secondo avvio (task lanciato col
+rem bridge gia' acceso) trova la porta occupata ed esce.
+:loop
 node bridge.js > plancia.log 2>&1
+copy /y plancia.log plancia-caduto.log >nul
+echo %date% %time% bridge uscito, rilancio>> plancia-riavvii.log
+ping -n 4 127.0.0.1 >nul
+netstat -ano | findstr /r /c:":%PORT% .*LISTENING" >nul && exit /b 0
+goto loop

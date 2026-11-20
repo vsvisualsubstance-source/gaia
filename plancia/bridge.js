@@ -531,7 +531,8 @@ function onMidi(m, port) {
 // (niente anelli). Con una porta virtuale di loopback limitare con MIDI_IN.
 const midiPorts = midiIn.startMidiIn({ onMessage: onMidi, timed: diag.timed, isOff: name => devCfgLib.roleOf(name, devCfg) === 'off',
   // la prima scansione gira dentro startMidiIn, prima che midiPorts esista: il resto al giro dopo
-  onPorts: inputs => { broadcast({ type: 'midi_ports', inputs }); setImmediate(() => { if (!midiOut) openMidiOut(); broadcast(devicesMsg()); }); } });
+  // porte cambiate: anche l'uscita dei LED della Z1 si riapre (dopo un riattacco la vecchia non arriva piu')
+  onPorts: inputs => { broadcast({ type: 'midi_ports', inputs }); setImmediate(() => { if (!midiOut) openMidiOut(); try { audioMidi.reopen(); } catch { /* non ancora pronto */ } broadcast(devicesMsg()); }); } });
 // finestra "Controller MIDI e schede audio" della Plancia (src/97-devices.js)
 function devicesMsg() {
   const open = midiPorts.ports();

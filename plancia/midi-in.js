@@ -103,11 +103,22 @@ function startMidiIn({ onMessage, onPorts = () => {}, exclude = [], isOff = () =
   const ex = exclude.filter(Boolean).map(s => s.toLowerCase());
   const open = new Map();
   const wanted = name => !ex.includes(name.toLowerCase()) && (!names || names.some(n => name.toLowerCase().includes(n))) && !isOff(name);
-  let seenList = [];
+  let seenList = [], prevList = null;
   const scan = () => {
     let list = [];
     try { list = timed('MIDI elenco porte', () => easymidi.getInputs()); } catch { /* nessun dispositivo */ }
     let changed = false;
+    // 20/11: si apre solo un elenco fermo da un giro (mentre un dispositivo si collega Windows
+    // mostra per un attimo nomi illeggibili, e aprirli ha fatto cadere il bridge)
+    const key = list.join('|'), stable = prevList === null || key === prevList;
+    prevList = key;
+    if (!stable) return list.length;
+    // elenco cambiato (dispositivo staccato e riattaccato, porte rinumerate): le porte aperte per
+    // nome restano legate al dispositivo vecchio e non ricevono piu' niente -> si riaprono tutte
+    if (seenList.length && key !== seenList.join('|') && open.size) {
+      for (const input of open.values()) { try { input.close(); } catch { /* gia' chiusa */ } }
+      open.clear(); changed = true; log('MIDI in: elenco porte cambiato, riapro');
+    }
     for (const name of list) if (!open.has(name) && wanted(name)) {
       try {
         const input = new easymidi.Input(name);
