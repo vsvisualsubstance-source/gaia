@@ -232,7 +232,7 @@ async function renderRecord(el,w){
     document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),60000);
     const audioMsg=!au?' Senza audio: motore audio non collegato.':heard?' Con audio.':' Senza audio: nessun brano in play durante la registrazione.';
     let lights='';
-    if(frames)try{const file=await lfUpload(frames,a.download.replace(/\.[^.]+$/,''));lights=` Stato luci per il Render 3D: ${file}.`;if(R3D.frame)r3dOpen(file)}catch(e){lights=` Stato luci non salvato sul server (${e.message}).`}
+    if(frames)try{const file=await lfUpload(frames,a.download.replace(/\.[^.]+$/,''));lights=` Stato luci per il Render 3D: ${file}${frames.audio?", con la musica":", senza musica (nessun brano in play)"}.`;if(R3D.frame)r3dOpen(file)}catch(e){lights=` Stato luci non salvato sul server (${e.message}).`}
     showInfo(`Video del Render salvato: ${a.download} (${(blob.size/1048576).toFixed(1)} MB, ${size}).${audioMsg}${lights}${errs.length?' Audio: '+errs.join(', '):''}`)};
   if(v.start&&show){tlAct(show,'start');await playShowClock(show)}
   mr.start(1000);lfStart(30);
