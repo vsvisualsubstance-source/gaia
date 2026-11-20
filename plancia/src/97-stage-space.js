@@ -150,8 +150,17 @@ function projectorPaint(g,f,x,y,w,h,t,level=.5,gap=.6){
   const src=f.sourceType||'procedural';
   if(src==='url'||src==='ndi'){g.save();g.globalCompositeOperation='source-over';g.fillStyle='#000';g.fillRect(x,y,w,h);g.restore();return drawVideoCover(g,wallVideoPlayers.get(f.id)?.video,x,y,w,h,1)}
   if(src!=='procedural')return false;
-  g.save();g.globalCompositeOperation='source-over';g.fillStyle='#000';g.fillRect(x,y,w,h);g.globalCompositeOperation='lighter';
-  const cols=48;drawLedProcedural(g,x,y,w,h,cols,Math.max(6,Math.round(cols*h/Math.max(1,w))),SH.wall.c,projectorLevel(),false,t,level,gap);g.restore();return true}
+  drawTestCard(g,x,y,w,h,f.name);return true}
+// "Immagine di prova" del proiettore (sorgente procedurale): barre colorate, cerchio, nome. Sempre
+// visibile, non dipende dalle luci; la stessa che il Render 3D usa senza contenuto registrato.
+function drawTestCard(g,x,y,w,h,name){
+  g.save();g.globalCompositeOperation='source-over';g.globalAlpha=1;g.fillStyle='#000';g.fillRect(x,y,w,h);
+  ['#ffffff','#ffe600','#00e5ff','#00e040','#ff2bd6','#ff2a1a','#2a4bff'].forEach((c,i)=>{g.fillStyle=c;g.fillRect(x+i*w/7,y,w/7+1,h*.62)});
+  g.fillStyle='#202020';g.fillRect(x,y+h*.62,w,h*.38);
+  g.strokeStyle='#fff';g.lineWidth=Math.max(1,w/180);g.strokeRect(x+1,y+1,w-2,h-2);
+  g.beginPath();g.arc(x+w/2,y+h/2,h*.3,0,7);g.stroke();
+  g.fillStyle='#fff';g.font=`bold ${Math.max(8,Math.round(h*.1))}px sans-serif`;g.textAlign='center';g.textBaseline='middle';g.fillText(name||'PROIETTORE',x+w/2,y+h*.81);
+  g.restore()}
 function drawScreensRender(g,project,zScale,t,level=.5){
   for(const sc of (L.fixtures||[]).filter(f=>f.type==='screen'&&f.enabled!==false)){
     const p=project(sc.x,sc.y,sc.z||0),rot=(sc.rot||0)*Math.PI/180;

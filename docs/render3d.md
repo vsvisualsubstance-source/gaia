@@ -59,7 +59,7 @@ La scala vale solo per le posizioni: le misure degli oggetti restano quelle del 
 
 ### Contenuto video (20/11)
 
-Il proiettore ha nel Palco lo stesso menu **Sorgente** del LED wall (procedurale, URL, NDI); nel Render del Palco la sua immagine si vede sullo schermo puntato. **Procedurale** = il motivo del widget "Contenuto LED" (tinta, gradiente, onde, pixel, strobo, logo) coi colori dello show; per il LED wall segue anche il gruppo DMX ledwall.
+Il proiettore ha nel Palco lo stesso menu **Sorgente** del LED wall (immagine di prova, URL, NDI); nel Render del Palco la sua immagine si vede sullo schermo puntato. Per il proiettore "procedurale" = **immagine di prova** (barre colorate, cerchio, nome), sempre visibile. Per il LED wall **procedurale** = immagine inventata dalla Plancia: griglia di pixel col colore e il livello veri del gruppo DMX ledwall, animata dal motivo del widget "Contenuto LED" (tinta, gradiente, onde, pixel, strobo, logo); non e' il video vero del muro (per quello: NDI).
 
 Durante il ⏺ la Plancia registra, accanto allo stato delle luci, un **video del contenuto** a tasselli: un rettangolo per ogni LED wall e proiettore (640×360, 480×270 sopra i 4 elementi), con dentro quello che mostra in quel momento: anteprima NDI/URL o motivo procedurale. File `data/light-frames/<nome>_contenuto.mp4` (webm se il browser non fa MP4), nominato in `media` del JSON (`{file, tiles:{id:[x,y,w,h]}, size, offset}`).
 

@@ -85,7 +85,7 @@ function lamp(g,x,y,r,col,a){const gr=g.createRadialGradient(x,y,0,x,y,r);
   gr.addColorStop(.55,rgba(col,a*.08));gr.addColorStop(1,rgba(col,0));g.fillStyle=gr;g.fillRect(x-r,y-r,r*2,r*2)}
 const wallVideoPlayers=new Map();
 function wallPreviewMessage(f,state=wallVideoPlayers.get(f.id)){
-  if(f.sourceType==='procedural'||!f.sourceType)return'Contenuto LED procedurale.';
+  if(f.sourceType==='procedural'||!f.sourceType)return f.type==='projector'?'Immagine di prova (barre colorate e nome).':'Contenuto LED procedurale.';
   if(f.sourceType!=='url'&&f.sourceType!=='ndi')return`${f.sourceType.toUpperCase()}: preview in attesa del Video Service.`;
   if(f.sourceType==='url'&&!f.sourceRef?.trim())return'Inserisci un URL diretto HTTP(S) a un video MP4/WebM.';
   if(f.sourceType==='ndi'&&!f.sourceRef?.trim())return'Inserisci il nome esatto della sorgente NDI (vedi "Cerca sorgenti NDI").';
@@ -234,8 +234,6 @@ function drawLedProcedural(g,x0,y0,w,h,cols,rows,c,b,live,t,level,gap=1.2){
 }
 // colore e livello del LED wall: uscita vera di DMX Master se c'e', altrimenti la simulazione
 function ledParams(f){const live=fixtureOutput(f,{model:null}),b=live?live.level:SH.led.bright*SH.g.ledwall*(SH.blackout?0:SH.master);return{live,b,c:live?live.color:SH.wall.c}}
-// livello del proiettore col contenuto procedurale: segue il master, non il gruppo LED wall
-const projectorLevel=()=>SH.led.bright*(SH.blackout?0:SH.master);
 function drawVideoCover(g,video,x,y,w,h,alpha){
   if(!video||video.readyState<2||!video.videoWidth||!video.videoHeight)return false;
   const sourceAspect=video.videoWidth/video.videoHeight,targetAspect=w/h;

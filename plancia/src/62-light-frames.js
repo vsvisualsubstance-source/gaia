@@ -76,7 +76,7 @@ function lfMediaPaint(t,level){
     if(src!=='procedural')continue;
     g.save();g.beginPath();g.rect(x,y,w,h);g.clip();g.globalCompositeOperation='lighter';
     if(wall){const {live,b,c}=ledParams(f),cols=36;drawLedProcedural(g,x,y,w,h,cols,Math.max(8,Math.round(cols/aspect)),c,b,live,t,level,w/cols*.12)}
-    else{const cols=48;drawLedProcedural(g,x,y,w,h,cols,Math.round(cols/aspect),SH.wall.c,projectorLevel(),false,t,level,w/cols*.05)}
+    else drawTestCard(g,x,y,w,h,f.name)
     g.restore();
   }
 }
