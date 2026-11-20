@@ -59,6 +59,7 @@ const appModules = [
   '98-device-panel.js',
   '62-light-frames.js',
   '63-render3d.js',
+  '63-mapping.js',
   '97-devices.js',
   '98-dmx-export.js',
   '99-laser.js',

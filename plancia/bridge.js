@@ -33,7 +33,8 @@ const R3D_DIR = path.join(__dirname, 'render3d'), R3D_DATA = path.join(path.dirn
 const lightFrames = require('./light-frames').create(path.join(path.dirname(STATE_FILE), 'light-frames'));
 const STATIC_ASSETS = {
   '/app.js': { file: 'app.js', contentType: 'text/javascript; charset=utf-8' },
-  '/plancia.css': { file: 'plancia.css', contentType: 'text/css; charset=utf-8' }
+  '/plancia.css': { file: 'plancia.css', contentType: 'text/css; charset=utf-8' },
+  '/mapping/mapping-core.js': { file: 'mapping/mapping-core.js', contentType: 'text/javascript; charset=utf-8' }
 };
 // OSC di regia verso DMX Master. host 'auto' = la DMX Master accesa (dmx-master.js):
 // la .73 se gira li', 127.0.0.1 se gira su questa macchina (OPS, touring).
@@ -376,6 +377,10 @@ const server = http.createServer((req, res) => {
       if (req.method === 'HEAD') { res.end(); return; }
       fs.createReadStream(pick, { start, end }).on('error', () => res.destroy()).pipe(res);
     });
+  } else if (req.url.split('?')[0] === '/api/mapping' && req.method === 'GET') {
+    // mapping dei proiettori del progetto (pagina Mapping, src/63-mapping.js): lo legge il Render 3D
+    res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+    res.end(JSON.stringify({ ok: true, revision: persistedRevision, mapping: persistedState?.layout?.mapping || { v: 1, out: {} } }));
   } else if (req.url.split('?')[0] === '/api/video-proxy' && (req.method === 'GET' || req.method === 'HEAD')) {
     // video URL di LED wall e proiettori (20/11): passa da qui cosi' e' "della stessa origine" della
     // pagina. Un video di un altro sito senza CORS "sporca" la tela del Render e il browser non la

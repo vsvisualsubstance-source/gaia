@@ -3,7 +3,7 @@ const tc=s=>{const f=Math.floor((s%1)*25),S=Math.floor(s);return[Math.floor(S/36
 let lastT=now();
 function loop(){
   const n=now(),dt=(n-lastT)/1000;lastT=n;
-  const previewVisible=stageRenderVisible();
+  const previewVisible=stageRenderVisible()||mappingVisible();   // Mapping: anche la sorgente dei proiettori
   syncWallVideoPlayers(previewVisible?(L.fixtures||[]):[]);
   [SH.wash,SH.back,SH.bar,SH.wall].forEach(T=>stepT(T,n));SH.heads.forEach(h=>stepT(h.T,n));
   // timeline

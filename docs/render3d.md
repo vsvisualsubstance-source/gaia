@@ -65,7 +65,7 @@ Durante il ⏺ la Plancia registra, accanto allo stato delle luci, un **video de
 
 Il Render 3D lo mette sul LED wall (con la luce del colore medio intorno) e nell'immagine del proiettore; segue la barra del tempo e nell'export va fotogramma per fotogramma. Senza video del contenuto (registrazioni di prima) resta il colore registrato del LED wall e l'immagine di prova del proiettore. Test: `plancia/test/render3d-media.js`.
 
-Dopo: i servizi di mapping di Regia per la geometria del proiettore.
+Mapping del proiettore (corner pin e mesh, pagina Mapping, 4 punti sul modello): vedi [mapping.md](mapping.md).
 
 ## File
 

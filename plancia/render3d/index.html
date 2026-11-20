@@ -39,6 +39,7 @@
   #tl{width:100%;accent-color:var(--acc)}
   .hint{color:var(--mut);font-size:10.5px;margin-top:6px}
 </style>
+<script src="/mapping/mapping-core.js"></script>
 <script type="importmap">
 {"imports":{
   "three":"./vendor/three/build/three.module.js",
@@ -974,9 +975,11 @@ function sqToQuad(q){
   const a=x1-x0+g*x1, b=x3-x0+h*x3, d=y1-y0+g*y1, e=y3-y0+h*y3;
   return (u,v)=>{ const w=g*u+h*v+1; return [(a*u+b*v+x0)/w,(d*u+e*v+y0)/w]; };
 }
-function prjWarp(it,corners){
-  const q=(corners||PRJ_DEF).map(([x,y])=>[PRJ_X+x*PRJ_W,PRJ_Y+y*PRJ_H]), H=sqToQuad(q), S=16, pos=[], uv=[], idx=[];
-  for(let j=0;j<=S;j++) for(let i=0;i<=S;i++){ const u=i/S, v=j/S, p=H(u,v); pos.push(p[0],p[1],0); uv.push(u,1-v); }
+// map = mapping nel formato comune (mapping/mapping-core.js: corner pin + mesh); null = immagine intera
+function prjWarp(it,map){
+  const PM=window.PlanciaMapping, m=PM?PM.fixMap(map||null):null, S=24, pos=[], uv=[], idx=[];
+  if(m){ const gr=PM.meshGrid(m,S); for(let k=0;k<gr.pts.length/2;k++){ pos.push(PRJ_X+gr.pts[k*2]*PRJ_W,PRJ_Y+gr.pts[k*2+1]*PRJ_H,0); uv.push(gr.uv[k*2],1-gr.uv[k*2+1]); } }
+  else{ const H=sqToQuad(PRJ_DEF.map(([x,y])=>[PRJ_X+x*PRJ_W,PRJ_Y+y*PRJ_H])); for(let j=0;j<=S;j++) for(let i=0;i<=S;i++){ const p=H(i/S,j/S); pos.push(p[0],p[1],0); uv.push(i/S,1-j/S); } }
   for(let j=0;j<S;j++) for(let i=0;i<S;i++){ const a=j*(S+1)+i; idx.push(a,a+S+1,a+1, a+1,a+S+1,a+S+2); }
   const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2)); g.setIndex(idx);
   if(it.wm.geometry) it.wm.geometry.dispose(); it.wm.geometry=g; it.dirty=true;
@@ -1071,10 +1074,12 @@ function palBuild(){
     cone.add(new THREE.Mesh(pg,cm), new THREE.LineSegments(new THREE.EdgesGeometry(pg),new THREE.LineBasicMaterial({color:0x9fe0ff,transparent:true,opacity:0.35,toneMapped:false})));
     cone.position.copy(pos); cone.lookAt(aim);
     PAL.grp.add(body,spot,spot.target,cone); const it={f,kind:'projector',spot,cone,dist,img:2*hw,screen:sc||null,tile,cc,cg:cc.getContext('2d'),ctex,rt,ws,wc,wm,pos,aim,aimed:!!ps.aim};
-    // mapping: 4 punti sul modello (ricalcolati da posizione e mira), altrimenti corner pin di Regia
-    it.corners=ps.pts?.length===4?ps.pts.map(p=>prjToImage(it,p).slice(0,2)):ps.reg?.corners||null;
-    it.mapSrc=ps.pts?.length===4?'modello':ps.reg?'regia':null;
-    prjWarp(it,it.corners);
+    // mapping: quello del progetto (pagina Mapping della Plancia); i 4 punti sul modello appena
+    // cliccati valgono finche' la Plancia non li ha salvati nel progetto
+    const pm=PMAP?.doc?.out?.[f.id]?.map||null;
+    if(ps.pts?.length===4){ it.corners=ps.pts.map(p=>prjToImage(it,p).slice(0,2)); it.mapSrc='modello'; prjWarp(it,{mode:'corners',corners:it.corners}); }
+    else if(pm){ it.map=window.PlanciaMapping?.fixMap(pm)||pm; it.corners=it.map.corners; it.mapSrc='progetto'; prjWarp(it,it.map); }
+    else{ it.corners=null; it.mapSrc=null; prjWarp(it,null); }
     PAL.grp.add(body,spot,spot.target,cone); PAL.items.push(it);
   }
   palPrjUI(); palMsg();
@@ -1161,8 +1166,8 @@ function palPrjMsg(extra){
   const k=PAL.prjPick;
   if(k&&k.id===it.f.id){ $('palPrjMsg').textContent=k.kind==='aim'?'Clicca nella scena dove deve guardare il proiettore.':`Clicca sul modello l'angolo ${k.pts.length+1} di 4: ${PRJ_CORNER[k.pts.length]} dell'immagine.`; return; }
   const aim=it.aimed?'punto scelto nella scena':it.screen?'centro di '+(it.screen.name||'schermo'):'davanti (nessuno schermo)';
-  const map=it.mapSrc==='modello'?'4 punti sul modello':it.mapSrc==='regia'?'corner pin di Regia ('+(PAL.prj[it.f.id]?.reg?.name||'')+')':'nessuno (immagine intera)';
-  const cp=it.corners?' Corner pin (per Regia o il mapping vero): '+it.corners.map(c=>'('+c[0].toFixed(3)+', '+c[1].toFixed(3)+')').join(' '):'';
+  const map=it.mapSrc==='modello'?'4 punti sul modello (non ancora nel progetto: serve la Plancia aperta)':it.mapSrc==='progetto'?'quello della pagina Mapping'+(it.map?.mode==='mesh'?' (mesh '+it.map.n+'×'+it.map.n+')':''):'nessuno (immagine intera)';
+  const cp=it.corners?' Corner pin: '+it.corners.map(c=>'('+c[0].toFixed(3)+', '+c[1].toFixed(3)+')').join(' '):'';
   const out=it.corners&&it.corners.some(c=>c[0]<-0.02||c[0]>1.02||c[1]<-0.02||c[1]>1.02)?' Attenzione: qualche angolo cade fuori dall\'immagine del proiettore (avvicinalo, cambia tiro o punta meglio).':'';
   $('palPrjMsg').textContent=`Punta: ${aim}. Mapping: ${map}.${cp}${out}${extra?' '+extra:''}`;
 }
@@ -1184,9 +1189,31 @@ canvas.addEventListener('pointerup',e=>{
   if(k.kind==='map'){ k.pts.push(pt); if(k.pts.length<4){ palPrjMsg(); return; } }
   PAL.prjPick=null; canvas.style.cursor=''; $('palAim').classList.remove('on'); $('palMap4').classList.remove('on');
   palPrjSet(k.id,ps=>{ if(k.kind==='aim') ps.aim=pt; else { ps.pts=k.pts; delete ps.reg; } });
+  if(k.kind==='map'){ const it=PAL.items.find(i=>i.kind==='projector'&&i.f.id===k.id); if(it?.corners) pmSend(k.id,it.corners); }
 });
+/* ---------- mapping del progetto (pagina Mapping della Plancia, src/63-mapping.js) ---------- */
+// letto da /api/mapping (ogni 1,5 s, solo se cambia); i 4 punti cliccati qui vanno alla Plancia
+// (BroadcastChannel 'plancia-mapping', anche dall'iframe): li salva nel progetto e risponde.
+var PMAP={doc:null,sig:'',pending:null};   // pending: salvato dalla Plancia, il bridge non lo ha ancora
+let PMBC=null; try{ PMBC=new BroadcastChannel('plancia-mapping'); }catch(e){}
+async function pmLoad(){
+  try{ const j=await fetch('/api/mapping',{cache:'no-store'}).then(r=>r.json()), P=PMAP.pending;
+    if(P){ const srv=JSON.stringify(j.mapping?.out?.[P.id]?.map||null); if(srv===JSON.stringify(P.map)||Date.now()>P.until) PMAP.pending=null; else { j.mapping=j.mapping||{v:1,out:{}}; j.mapping.out={...(j.mapping.out||{}),[P.id]:{...(j.mapping.out?.[P.id]||{}),map:P.map}}; } }
+    const sig=JSON.stringify(j.mapping||null);
+    if(sig!==PMAP.sig){ PMAP.sig=sig; PMAP.doc=j.mapping||null; if(PAL.items.some(i=>i.kind==='projector')) palBuild(); } }catch(e){}
+}
+function pmSend(id,corners){
+  if(!PMBC){ palPrjMsg('Senza BroadcastChannel: copia gli angoli nella pagina Mapping con "dal Render 3D".'); return; }
+  PMBC.postMessage({type:'r3d-corners',id,corners,apply:true});
+  clearTimeout(pmSend.t); pmSend.t=setTimeout(()=>palPrjMsg('La Plancia non ha risposto: aprila (stesso indirizzo) per salvare il mapping nel progetto, oppure "dal Render 3D" nella pagina Mapping.'),2000);
+}
+if(PMBC) PMBC.onmessage=e=>{ const m=e.data; if(m?.type!=='mapping-saved') return; clearTimeout(pmSend.t);
+  const p=PAL.prj[m.id]; if(p){ delete p.pts; autosave?.(); }
+  if(m.map) PMAP.pending={id:m.id,map:m.map,until:Date.now()+5000};
+  PMAP.sig=''; pmLoad(); };
+pmLoad(); setInterval(pmLoad,1500);
 
-window.__r3d={FR,FA,faRuns,PAL,palFit,MV,prjToImage,sqToQuad,camera:()=>camera,controls,compInner};   // per i test (test/render3d-*.js)
+window.__r3d={FR,FA,faRuns,PAL,palFit,MV,PMAP,pmLoad,pmSend,prjToImage,sqToQuad,camera:()=>camera,controls,compInner};   // per i test (test/render3d-*.js)
 addEventListener('pointerdown',()=>{ if(FA.ctx?.state==='suspended') FA.ctx.resume().then(faMsg).catch(()=>{}); });
 // tratti continui di un deck (stesso brano, tempo e posizione che scorre): un solo player, il
 // guadagno cambia a punti. Tempi del documento in s.

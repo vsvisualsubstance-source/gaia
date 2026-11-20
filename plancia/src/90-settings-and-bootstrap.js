@@ -200,5 +200,5 @@ function migrateUiAudioPage(){
 }
 // Avvio dell'app: lo chiama src/999-start.js, dopo che tutti i moduli sono stati valutati.
 function init(){
-  migrateLegacyHeadSelectors();migrateHeadPresetWidgets();migrateUiShowTimeline();migrateUiConsolePages();migrateUiAudioPage();migrateUiNoChase();migrateUiOneDmxV8();migrateUiLaserPage();migrateUiLaserScenes();migrateUiHeadMotion();migrateUiChase();migrateUiLaserFx();migrateUiLightFx();migrateUiTracks();migrateUiPageGroups();migrateUiTimelinePage();migrateUiHeadPages();migrateUiRigConfig();migrateUiChannelTest();migrateUiAudioTrack();migrateUiLaserTint();migrateUiLaserRotY();migrateUiRender3d();render(); initShow(); connect(); gStart(); requestAnimationFrame(loop);
+  migrateLegacyHeadSelectors();migrateHeadPresetWidgets();migrateUiShowTimeline();migrateUiConsolePages();migrateUiAudioPage();migrateUiNoChase();migrateUiOneDmxV8();migrateUiLaserPage();migrateUiLaserScenes();migrateUiHeadMotion();migrateUiChase();migrateUiLaserFx();migrateUiLightFx();migrateUiTracks();migrateUiPageGroups();migrateUiTimelinePage();migrateUiHeadPages();migrateUiRigConfig();migrateUiChannelTest();migrateUiAudioTrack();migrateUiLaserTint();migrateUiLaserRotY();migrateUiRender3d();migrateUiMapping();render(); initShow(); connect(); gStart(); requestAnimationFrame(loop);
 }

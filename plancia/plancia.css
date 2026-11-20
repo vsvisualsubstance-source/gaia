@@ -901,4 +901,14 @@ button{cursor:pointer}
 .r3d-bar{display:flex;align-items:center;gap:8px;justify-content:space-between}
 .r3d-bar .hint{opacity:.7;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .r3d-slot{flex:1;min-height:0;border-radius:6px;background:#050506}
+/* pagina Mapping (src/63-mapping.js) */
+.mp-box{position:absolute;inset:30px 8px 8px;display:flex;flex-direction:column;gap:6px;min-height:0}
+.mp-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.mp-bar select{max-width:220px}
+.mp-seg{display:inline-flex;gap:2px}
+.mp-bar .btn.on{outline:2px solid var(--acc,#ffb020)}
+.mp-view{flex:1;min-height:0;position:relative;display:flex;align-items:center;justify-content:center;background:#050506;border-radius:6px}
+.mp-view canvas{position:absolute;touch-action:none}
+.mp-ov{cursor:crosshair;outline:none}
+.mp-msg{font-size:12px;opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .r3d-frame{position:fixed;display:none;border:0;border-radius:6px;z-index:5;background:#050506}
