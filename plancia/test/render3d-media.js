@@ -16,15 +16,22 @@ async function main() {
   fs.mkdirSync(OUT, { recursive: true });
   const p = await startPlancia({ hooks: true });
   const fail = [];
+  let other = null;
   const check = (ok, msg) => { console.log(`${ok ? 'ok    ' : 'ERRORE'} ${msg}`); if (!ok) fail.push(msg); };
   try {
     fs.cpSync(SCAN, path.join(p.tmp, 'render3d'), { recursive: true });
+    // video su un altro sito senza CORS (come un link http qualunque): deve passare dal bridge
+    other = require('http').createServer((q, r) => { const file = path.join(SCAN, 'v1.mp4'), st = fs.statSync(file), m = /bytes=(d+)-(d*)/.exec(q.headers.range || '');
+      if (m) { const a = +m[1], b = m[2] ? +m[2] : st.size - 1; r.writeHead(206, { 'content-type': 'video/mp4', 'content-length': b - a + 1, 'content-range': `bytes ${a}-${b}/${st.size}`, 'accept-ranges': 'bytes' }); fs.createReadStream(file, { start: a, end: b }).pipe(r); }
+      else { r.writeHead(200, { 'content-type': 'video/mp4', 'content-length': st.size, 'accept-ranges': 'bytes' }); fs.createReadStream(file).pipe(r); } });
+    await new Promise(r => other.listen(0, '127.0.0.1', r));
+    const OTHER = `http://localhost:${other.address().port}`;
     // Palco: LED wall procedurale, proiettore con video URL (un video di prova servito dal bridge)
     const ok = await p.ev(`(async()=>{const T=window.__planciaTest,L=T.L;
       L.fixtures=(L.fixtures||[]).filter(f=>!['wall','projector','screen'].includes(f.type));
       L.fixtures.push({id:'led',type:'wall',name:'LED1',x:0,y:.5,z:0,w:6,h:3.5,rot:0,sourceType:'procedural',enabled:true});
       L.fixtures.push({id:'scr',type:'screen',name:'SCHERMO',x:-4,y:3,z:1,w:4,h:2.25,rot:0,enabled:true});
-      L.fixtures.push({id:'prj',type:'projector',name:'PROIETTORE',x:0,y:11,z:3,target:'scr',throw:1.5,sourceType:'url',sourceRef:location.origin+'/render3d/v1.mp4',enabled:true});
+      L.fixtures.push({id:'prj',type:'projector',name:'PROIETTORE',x:0,y:11,z:3,target:'scr',throw:1.5,sourceType:'url',sourceRef:'${OTHER}/v1.mp4',enabled:true});
       const SH=T.SH;SH.led.bright=1;SH.master=1;SH.blackout=false;SH.g.ledwall=1;SH.wall.c=[1,.2,.4];SH.led.mode=2;
       // la pagina del Palco in vista Render: la Plancia apre i video solo li'
       const i=L.pages.findIndex(pg=>pg.widgets.some(w=>w.type==='stage'&&w.view!=='plot'));if(i<0)return 'nessuna pagina Palco';
@@ -36,7 +43,9 @@ async function main() {
     const rec = await p.ev(`(async()=>{const T=window.__planciaTest;const cv=document.createElement('canvas');cv.width=960;cv.height=540;const g=cv.getContext('2d');
       T.lfStart(30);const t0=performance.now();
       while(performance.now()-t0<2200){T.drawRender(g,960,540,performance.now(),.6);await new Promise(r=>requestAnimationFrame(r))}
-      const doc=T.lfStop();const file=await T.lfUpload(doc,'prova_contenuto');return {file,media:doc.media,frames:doc.frames.length}})()`);
+      let clean=true;try{cv.toDataURL()}catch{clean=false}
+      const doc=T.lfStop();doc.__clean=clean;const file=await T.lfUpload(doc,'prova_contenuto');return {file,media:doc.media,frames:doc.frames.length,clean:doc.__clean}})()`);
+    check(rec.clean, 'il Render resta registrabile anche col video di un altro sito (passa dal bridge)');
     check(rec.media?.file && rec.media.tiles?.led && rec.media.tiles?.prj, `contenuto registrato e caricato: ${rec.media?.file} (${rec.frames} fotogrammi, tasselli ${Object.keys(rec.media?.tiles || {}).join(', ')})`);
     const base = await p.ev('location.origin');
     const head = await fetch(`${base}/api/light-frames/${encodeURIComponent(rec.media.file)}`, { headers: { range: 'bytes=0-99' } });
@@ -67,7 +76,7 @@ async function main() {
     check(blob > 50000, `export con il contenuto: ${(blob / 1048576).toFixed(2)} MB — ${await p.ev(`document.getElementById('exMsg').textContent`)}`);
     check(!p.problems.length, 'nessuna eccezione' + (p.problems.length ? ': ' + p.problems.slice(0, 3).join(' | ') : ''));
     console.log('screenshot in ' + OUT);
-  } finally { p.close(); }
+  } finally { p.close(); other?.close?.(); }
   if (fail.length) { console.log(`\n${fail.length} controlli falliti`); process.exitCode = 1; } else console.log('\ntutto ok');
 }
 main().catch(e => { console.error(e); process.exitCode = 1; });

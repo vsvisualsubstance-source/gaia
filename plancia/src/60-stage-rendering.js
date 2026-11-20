@@ -133,7 +133,8 @@ function createWallUrlState(f){
       'Formato o codec non supportato dal browser. Usa un MP4/H.264 o un WebM compatibile.':
       'Preview non disponibile: verifica URL e connessione.');
   });
-  video.src=url.href;video.load();
+  // un altro sito passa dal bridge (/api/video-proxy): senza, la tela del Render non si puo' piu' registrare
+  video.src=url.origin===location.origin?url.href:'/api/video-proxy?url='+encodeURIComponent(url.href);video.load();
   video.play().catch(error=>{
     if(error?.name==='NotAllowedError')setWallPreviewState(f,state,'blocked','Avvio automatico bloccato; fai clic sul pannello Render per avviare la preview.');
     else if(error?.name==='NotSupportedError')setWallPreviewState(f,state,'unsupported','Formato o codec non supportato dal browser. Usa un MP4/H.264 o un WebM compatibile.');

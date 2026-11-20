@@ -376,6 +376,11 @@ const server = http.createServer((req, res) => {
       if (req.method === 'HEAD') { res.end(); return; }
       fs.createReadStream(pick, { start, end }).on('error', () => res.destroy()).pipe(res);
     });
+  } else if (req.url.split('?')[0] === '/api/video-proxy' && (req.method === 'GET' || req.method === 'HEAD')) {
+    // video URL di LED wall e proiettori (20/11): passa da qui cosi' e' "della stessa origine" della
+    // pagina. Un video di un altro sito senza CORS "sporca" la tela del Render e il browser non la
+    // registra piu' (⏺ vuoto). Solo http(s), solo video, Range inoltrato (salti nel video).
+    videoProxy(req, res);
   } else if (req.url.split('?')[0] === '/api/video/library') {
     // cartella video di Regia (video-lib.js): elenco dei file
     const reply = (code, obj) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(obj)); };
@@ -390,6 +395,28 @@ const server = http.createServer((req, res) => {
     fs.createReadStream(path.join(__dirname, 'vendor', 'mqtt.min.js')).pipe(res);
   } else { res.writeHead(404); res.end(); }
 });
+function videoProxy(req, res, hops = 0, target = null) {
+  let url;
+  try { url = new URL(target || new URL(req.url, 'http://plancia').searchParams.get('url')); } catch { res.writeHead(400); res.end('url non valido'); return; }
+  if (!/^https?:$/.test(url.protocol)) { res.writeHead(400); res.end('solo http/https'); return; }
+  const mod = url.protocol === 'https:' ? require('https') : http;
+  const headers = { 'user-agent': 'Plancia' };
+  if (req.headers.range) headers.range = req.headers.range;
+  const up = mod.request(url, { method: req.method, headers, timeout: 15000 }, r => {
+    if ([301, 302, 303, 307, 308].includes(r.statusCode) && r.headers.location && hops < 4) { r.resume(); return videoProxy(req, res, hops + 1, new URL(r.headers.location, url).href); }
+    const type = String(r.headers['content-type'] || '');
+    if (r.statusCode < 400 && !/^(video\/|application\/octet-stream|binary\/)/.test(type)) { r.resume(); res.writeHead(415); res.end('non e\' un video: ' + type); return; }
+    const out = { 'content-type': /^video\//.test(type) ? type : 'video/mp4', 'cache-control': 'no-cache' };
+    for (const h of ['content-length', 'content-range', 'accept-ranges', 'last-modified', 'etag']) if (r.headers[h]) out[h] = r.headers[h];
+    res.writeHead(r.statusCode, out);
+    r.pipe(res);
+    res.on('close', () => r.destroy());
+  });
+  up.on('timeout', () => up.destroy(new Error('timeout')));
+  up.on('error', err => { if (!res.headersSent) { res.writeHead(502); res.end('video non raggiungibile: ' + err.message); } else res.destroy(); });
+  req.on('close', () => up.destroy());
+  up.end();
+}
 const wss = new WebSocketServer({ noServer: true });
 dmxMaster.onChange(() => { for (const c of wss.clients) if (c.readyState === 1) c.send(hello()); });
 // /mqtt: ponte verso il broker MQTT WebSocket di OPS (Docker, 127.0.0.1:19001).

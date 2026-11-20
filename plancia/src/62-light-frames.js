@@ -63,6 +63,8 @@ function lfMediaStart(){
 // video ritagliato con le proporzioni dell'elemento e steso su tutto il tassello
 function lfCover(g,video,x,y,w,h,aspect,alpha){
   if(!video||video.readyState<2||!video.videoWidth)return false;
+  // video di un altro sito (non passato dal bridge): disegnarlo bloccherebbe la registrazione di tutta la tela
+  if(video.currentSrc&&!video.currentSrc.startsWith(location.origin+'/')&&!video.currentSrc.startsWith('blob:'))return false;
   const va=video.videoWidth/video.videoHeight;let sx=0,sy=0,sw=video.videoWidth,sh=video.videoHeight;
   if(va>aspect){sw=sh*aspect;sx=(video.videoWidth-sw)/2}else{sh=sw/aspect;sy=(video.videoHeight-sh)/2}
   g.globalAlpha=clamp(alpha);g.drawImage(video,sx,sy,sw,sh,x,y,w,h);g.globalAlpha=1;return true;
