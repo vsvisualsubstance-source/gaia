@@ -58,7 +58,7 @@ async function main() {
     await sleep(1200);
     // pixel dei tasselli disegnati: muro (procedurale rosa) e proiettore (video)
     const px = await p.ev(`(()=>{const it=window.__r3d.PAL.items;const lum=(c,m=0)=>{const g=c.getContext('2d'),d=g.getImageData(c.width*m,c.height*m,c.width*(1-2*m),c.height*(1-2*m)).data;let s=0,r=0,b=0;for(let i=0;i<d.length;i+=16){s+=d[i]+d[i+1]+d[i+2];r+=d[i];b+=d[i+2]}const n=d.length/16;return {l:s/n/3,r:r/n,b:b/n}};
-      const w=it.find(i=>i.kind==='wall'),pj=it.find(i=>i.kind==='projector');return {wall:lum(w.cv),prj:lum(pj.cv,.36),map:!!w.mat.map}})()`);
+      const w=it.find(i=>i.kind==='wall'),pj=it.find(i=>i.kind==='projector');return {wall:lum(w.cv),prj:lum(pj.cc,.1),map:!!w.mat.map}})()`);
     check(px.map && px.wall.l > 10 && px.wall.r > px.wall.b, `LED wall col contenuto procedurale registrato (luminosità ${px.wall.l.toFixed(0)}, rosso ${px.wall.r.toFixed(0)} > blu ${px.wall.b.toFixed(0)})`);
     check(px.prj.l > 5, `proiettore con il video registrato (luminosità ${px.prj.l.toFixed(1)})`);
     // pausa e salto: il video segue la barra del tempo
