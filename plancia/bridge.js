@@ -330,15 +330,31 @@ const server = http.createServer((req, res) => {
       lightFrames.save(new URL(req.url, 'http://plancia').searchParams.get('name'), Buffer.concat(parts))
         .then(file => reply(200, { ok: true, file }), err => reply(400, { ok: false, error: err.message }));
     });
+  } else if (req.url.split('?')[0] === '/api/light-frames/media' && req.method === 'POST') {
+    // video del contenuto di LED wall e proiettori, registrato insieme allo stato delle luci
+    const reply = (code, obj) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(obj)); };
+    const q = new URL(req.url, 'http://plancia').searchParams, parts = []; let size = 0;
+    req.on('data', c => { size += c.length; if (size > lightFrames.MAX) { reply(413, { ok: false, error: 'troppo grande' }); req.destroy(); } else parts.push(c); });
+    req.on('end', () => {
+      if (size > lightFrames.MAX) return;
+      lightFrames.saveMedia(q.get('name'), q.get('ext'), Buffer.concat(parts)).then(file => reply(200, { ok: true, file }), err => reply(400, { ok: false, error: err.message }));
+    });
   } else if (req.url.split('?')[0] === '/api/light-frames') {
     lightFrames.list().then(files => { res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify({ ok: true, files })); });
-  } else if (req.url.startsWith('/api/light-frames/') && req.method === 'GET') {
+  } else if (req.url.startsWith('/api/light-frames/') && (req.method === 'GET' || req.method === 'HEAD')) {
+    // stato luci (JSON) o video del contenuto (mp4/webm, a pezzi: il Render 3D ci salta dentro)
     let file = null; try { file = lightFrames.path(decodeURIComponent(req.url.split('?')[0].slice('/api/light-frames/'.length))); } catch { /* 404 */ }
     if (!file) { res.writeHead(404); res.end(); return; }
+    const type = { json: 'application/json; charset=utf-8', mp4: 'video/mp4', webm: 'video/webm' }[file.split('.').pop()];
     fs.stat(file, (err, st) => {
-      if (err) { res.writeHead(404); res.end(); return; }
-      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'content-length': st.size, 'cache-control': 'no-cache' });
-      fs.createReadStream(file).pipe(res);
+      if (err || !st.isFile()) { res.writeHead(404); res.end(); return; }
+      const m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || ''), ranged = !!(m && (m[1] || m[2]));
+      let start = 0, end = st.size - 1;
+      if (ranged) { start = m[1] ? +m[1] : Math.max(0, st.size - +m[2]); end = m[1] && m[2] ? Math.min(+m[2], st.size - 1) : st.size - 1; }
+      const head = { 'content-type': type, 'content-length': end - start + 1, 'accept-ranges': 'bytes', 'cache-control': 'no-cache' };
+      res.writeHead(ranged ? 206 : 200, ranged ? { ...head, 'content-range': `bytes ${start}-${end}/${st.size}` } : head);
+      if (req.method === 'HEAD') { res.end(); return; }
+      fs.createReadStream(file, { start, end }).on('error', () => res.destroy()).pipe(res);
     });
   } else if (/^\/render3d(\/|$)/.test(req.url.split('?')[0]) && (req.method === 'GET' || req.method === 'HEAD')) {
     // Render 3D: render3d/ nel repo (pagina, vendor) poi data/render3d (scansione, video); niente ".."

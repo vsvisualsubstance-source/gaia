@@ -145,7 +145,14 @@ function drawProjectorPlot(g,f,x,y,s,col,selected,X,Y){
   g.fillStyle=col;g.beginPath();g.arc(s*.24,0,s*.1,0,Math.PI*2);g.fill();g.restore();
 }
 // ---- Render (prospettiva del palco) ----
-function drawScreensRender(g,project,zScale,t){
+// immagine del proiettore nel rettangolo: video (URL/NDI, se arrivato) o procedurale; false = niente da mostrare
+function projectorPaint(g,f,x,y,w,h,t,level=.5,gap=.6){
+  const src=f.sourceType||'procedural';
+  if(src==='url'||src==='ndi'){g.save();g.globalCompositeOperation='source-over';g.fillStyle='#000';g.fillRect(x,y,w,h);g.restore();return drawVideoCover(g,wallVideoPlayers.get(f.id)?.video,x,y,w,h,1)}
+  if(src!=='procedural')return false;
+  g.save();g.globalCompositeOperation='source-over';g.fillStyle='#000';g.fillRect(x,y,w,h);g.globalCompositeOperation='lighter';
+  const cols=48;drawLedProcedural(g,x,y,w,h,cols,Math.max(6,Math.round(cols*h/Math.max(1,w))),SH.wall.c,projectorLevel(),false,t,level,gap);g.restore();return true}
+function drawScreensRender(g,project,zScale,t,level=.5){
   for(const sc of (L.fixtures||[]).filter(f=>f.type==='screen'&&f.enabled!==false)){
     const p=project(sc.x,sc.y,sc.z||0),rot=(sc.rot||0)*Math.PI/180;
     // in 3D lo schermo e' un pannello in prospettiva (panelTransform), dal pubblico come sempre
@@ -153,7 +160,9 @@ function drawScreensRender(g,project,zScale,t){
     if(panel){g.save();const P=panelTransform(g,project,sc,sc.z||0,sc.w||5,sc.h||2.8);w=P.Wl;h=P.Hl;x0=0;y0=0;y1=h;cx=w/2}
     else{w=(sc.w||5)*p.scale*Math.max(.08,Math.abs(Math.cos(rot)));h=(sc.h||2.8)*(p.zs??zScale);x0=p.x-w/2;y1=p.y;y0=y1-h}
     g.globalCompositeOperation='source-over';g.fillStyle='#0a0c10';g.fillRect(x0-3,y0-3,w+6,h+6);
-    if(lit){const gr=g.createLinearGradient(x0,y0,x0+w,y1);gr.addColorStop(0,'#9fb4cf');gr.addColorStop(.5+.2*Math.sin(t*.0004),'#e7ecf3');gr.addColorStop(1,'#7f93ad');
+    const pj=lit&&(L.fixtures||[]).find(p=>p.type==='projector'&&p.enabled!==false&&p.target===sc.id);
+    if(pj&&projectorPaint(g,pj,x0,y0,w,h,t,level)){}
+    else if(lit){const gr=g.createLinearGradient(x0,y0,x0+w,y1);gr.addColorStop(0,'#9fb4cf');gr.addColorStop(.5+.2*Math.sin(t*.0004),'#e7ecf3');gr.addColorStop(1,'#7f93ad');
       g.globalAlpha=.85;g.fillStyle=gr;g.fillRect(x0,y0,w,h);g.globalAlpha=1}
     else{g.fillStyle='#2a2f38';g.fillRect(x0,y0,w,h)}
     g.fillStyle=lit?'#20262f':'#6b7480';g.font='10px JetBrains Mono, monospace';g.textAlign='center';g.fillText(sc.name||'SCHERMO',cx,y0+12);

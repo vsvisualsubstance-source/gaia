@@ -748,7 +748,7 @@ async function frLoad(file){
   $('frMsg').textContent='Carico '+file+'…';
   try{ const doc=await fetch('/api/light-frames/'+encodeURIComponent(file),{cache:'no-store'}).then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); });
     if(doc.app!=='plancia-light-frames'||!doc.frames?.length) throw new Error('file non valido');
-    FR.doc=doc; FR.file=file; FR.t=0; FR.idx=0; frAuto(doc); frMapUI(); $('frFile').value=file; faLoad(doc); palBuild();
+    FR.doc=doc; FR.file=file; FR.t=0; FR.idx=0; frAuto(doc); frMapUI(); $('frFile').value=file; faLoad(doc); mvLoad(doc); palBuild();
     $('frMsg').textContent=`${doc.project||'progetto'} · ${doc.duration.toFixed(1)} s · ${doc.frames.length} fotogrammi · ${doc.fixtures.length} fixture. Collega ogni elemento a una luce della Plancia.`;
   }catch(e){ $('frMsg').textContent='Non caricato: '+(e.message||e); }
 }
@@ -871,6 +871,41 @@ function faTick(){
     Object.assign(d,{src:s,track:w.track,off:w.pos,t0:now,rate:w.rate});
   }
 }
+/* ---------- contenuto video di LED wall e proiettori (20/11): doc.media della registrazione ---------- */
+// Un video a tasselli (uno per elemento) registrato col ⏺ insieme alle luci: tempo del video =
+// FR.t + media.offset. In play segue la barra del tempo; nell'export si cerca fotogramma per fotogramma.
+var MV={video:null,doc:null,ready:false,err:''};
+function mvClear(){ const v=MV.video; if(v){ v.pause(); v.removeAttribute('src'); v.load(); } Object.assign(MV,{video:null,doc:null,ready:false,err:''}); }
+function mvLoad(doc){
+  mvClear();
+  const m=doc.media; if(!m?.file||!m.tiles) return;
+  const v=document.createElement('video'); v.muted=true; v.playsInline=true; v.preload='auto';
+  v.addEventListener('loadeddata',()=>{ MV.ready=true; palMsg(); },{once:true});
+  v.addEventListener('error',()=>{ MV.err='video del contenuto non caricato'; palMsg(); });
+  v.src='/api/light-frames/'+encodeURIComponent(m.file);
+  MV.video=v; MV.doc=m;
+}
+const mvTime=t=>Math.max(0,t+(MV.doc?.offset||0));
+function mvSync(){
+  const v=MV.video; if(!v||!MV.ready||exporting) return;
+  const want=mvTime(FR.t), playing=FR.mode==='frames'&&FR.playing&&!scrubbing;
+  if(playing){ if(v.paused) v.play().catch(()=>{}); if(Math.abs(v.currentTime-want)>0.25&&!v.seeking) v.currentTime=want; }
+  else{ if(!v.paused) v.pause(); if(Math.abs(v.currentTime-want)>0.04&&!v.seeking) v.currentTime=want; }
+}
+async function mvSeek(t){
+  const v=MV.video; if(!v||!MV.ready) return;
+  if(!v.paused) v.pause();
+  const want=mvTime(t); if(Math.abs(v.currentTime-want)<0.004) return;
+  await new Promise(res=>{ const done=()=>res(); v.addEventListener('seeked',done,{once:true}); v.currentTime=want; setTimeout(done,1500); });
+}
+// colore medio di un tassello (luce che il muro butta intorno)
+const mvAvgCv=document.createElement('canvas'); mvAvgCv.width=mvAvgCv.height=4; const mvAvgG=mvAvgCv.getContext('2d',{willReadFrequently:true});
+function mvAvg(tile){
+  mvAvgG.drawImage(MV.video,tile[0],tile[1],tile[2],tile[3],0,0,4,4);
+  const d=mvAvgG.getImageData(0,0,4,4).data; const a=[0,0,0]; for(let i=0;i<d.length;i+=4){ a[0]+=d[i]; a[1]+=d[i+1]; a[2]+=d[i+2]; }
+  return a.map(v=>v/16/255);
+}
+
 /* ---------- elementi del Palco (20/11): LED wall, schermi, proiettori della registrazione ---------- */
 // Palco: x = destra/sinistra vista dal pubblico, y = profondita' (0 = fondo del palco, cresce verso il
 // pubblico), z = quota; metri. Scansione: x = verso la consolle, z = a destra, y = su.
@@ -949,6 +984,10 @@ function palBuild(){
         :new THREE.MeshStandardMaterial({color:0xf2f2f2,roughness:0.95,metalness:0,side:THREE.DoubleSide});
       g.add(new THREE.Mesh(new THREE.PlaneGeometry(w,h),mat));
       const it={f,kind:f.type,mat,g};
+      const tile=f.type==='wall'&&MV.doc?.tiles?.[f.id];
+      if(tile){ const cv=document.createElement('canvas'); cv.width=tile[2]; cv.height=tile[3];
+        const tex=new THREE.CanvasTexture(cv); tex.colorSpace=THREE.SRGBColorSpace; mat.map=tex; mat.needsUpdate=true;
+        Object.assign(it,{tile,cv,cg:cv.getContext('2d'),tex}); }
       if(f.type==='wall'){
         const back=new THREE.Mesh(new THREE.BoxGeometry(w+0.08,h+0.08,0.12),new THREE.MeshStandardMaterial({color:0x0b0b0c,roughness:0.7})); back.position.z=-0.065; g.add(back);
         // luce che il muro butta davanti a se'
@@ -967,7 +1006,12 @@ function palBuild(){
     body.position.copy(pos); body.lookAt(aim);
     const thr=Math.max(0.3,f.throw||1.5), tanH=0.5/thr, dist=pos.distanceTo(aim);
     const spot=new THREE.SpotLight(0xffffff,0,0,Math.atan(Math.SQRT2*tanH),0.02,0);
-    spot.position.copy(pos); spot.target.position.copy(aim); spot.map=palPattern(f.name);
+    spot.position.copy(pos); spot.target.position.copy(aim);
+    // immagine: il contenuto registrato (16:9 al centro del quadrato, come la prova) o l'immagine di prova
+    const tile=MV.doc?.tiles?.[f.id]; let pcv=null;
+    if(tile){ pcv=document.createElement('canvas'); pcv.width=pcv.height=512; const g=pcv.getContext('2d'); g.fillStyle='#000'; g.fillRect(0,0,512,512);
+      spot.map=new THREE.CanvasTexture(pcv); spot.map.colorSpace=THREE.SRGBColorSpace; }
+    else spot.map=palPattern(f.name);
     spot.castShadow=true; spot.shadow.mapSize.set(512,512); spot.shadow.camera.near=0.2; spot.shadow.camera.far=80;
     // fascio: piramide dall'obiettivo al punto mirato (solo guida)
     const hw=tanH*dist, hh=hw*9/16, v=[0,0,0, -hw,-hh,dist, hw,-hh,dist, hw,hh,dist, -hw,hh,dist];
@@ -975,7 +1019,7 @@ function palBuild(){
     const cone=new THREE.Group(), cm=new THREE.MeshBasicMaterial({color:0x9fe0ff,transparent:true,opacity:0.05,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide,toneMapped:false});
     cone.add(new THREE.Mesh(pg,cm), new THREE.LineSegments(new THREE.EdgesGeometry(pg),new THREE.LineBasicMaterial({color:0x9fe0ff,transparent:true,opacity:0.35,toneMapped:false})));
     cone.position.copy(pos); cone.lookAt(aim);
-    PAL.grp.add(body,spot,spot.target,cone); PAL.items.push({f,kind:'projector',spot,cone,dist,img:2*hw,screen:sc||null});
+    PAL.grp.add(body,spot,spot.target,cone); PAL.items.push({f,kind:'projector',spot,cone,dist,img:2*hw,screen:sc||null,tile,cv:pcv,cg:pcv?.getContext('2d'),tex:pcv?spot.map:null});
   }
   palMsg();
 }
@@ -987,7 +1031,8 @@ function palMsg(){
   const al=!T?'':T.n?`allineati con ${T.n} punti (${$('palMode').value==='manual'?'manuale':'colonne collegate'}), scala ${T.scale.toFixed(2)}${T.err!=null&&T.n>2?`, scarto medio ${T.err.toFixed(2)} m`:''}`
     :`posizione indicativa: ${$('palMode').value==='manual'?'clicca i 2 punti':'collega almeno 2 colonne'} o usa i ritocchi`;
   const pj=PAL.items.filter(i=>i.kind==='projector').map(i=>`${i.f.name}: ${i.dist.toFixed(1)} m, immagine ${i.img.toFixed(1)} m${i.screen?' su '+i.screen.name:''}`).join(' · ');
-  $('palMsg').textContent=`${cnt} · ${al}.${pj?' '+pj+'.':''}`;
+  const mv=MV.doc?(MV.err?` Contenuto video: ${MV.err}.`:MV.ready?' Contenuto video registrato.':' Carico il contenuto video…'):(els.some(f=>f.type!=='screen')?' Senza contenuto video (registrazione di prima del 20/11 o browser senza registrazione video).':'');
+  $('palMsg').textContent=`${cnt} · ${al}.${pj?' '+pj+'.':''}${mv}`;
 }
 // ogni fotogramma: colore del LED wall dalla registrazione, forza dei proiettori, visibilita'
 function palLights(fr){
@@ -995,7 +1040,16 @@ function palLights(fr){
   PAL.grp.visible=FR.mode==='frames'&&!!FR.doc&&$('palShow').checked;
   if(!PAL.items.length||!PAL.grp.visible) return;
   const gL=+$('palLed').value, gP=+$('palPrj').value, spill=+$('spill').value, cone=$('palCone').checked;
+  const vid=MV.ready&&MV.video&&MV.video.readyState>=2?MV.video:null;
   for(const it of PAL.items){
+    if(it.tile&&vid){
+      const [x,y,w,h]=it.tile;
+      if(it.kind==='wall'){ it.cg.drawImage(vid,x,y,w,h,0,0,it.cv.width,it.cv.height); it.tex.needsUpdate=true;
+        it.mat.color.setScalar(gL); const a=mvAvg(it.tile), m=Math.max(...a,1e-4);
+        it.spot.color.setRGB(a[0]/m,a[1]/m,a[2]/m); it.spot.intensity=spill*m*gL*8; continue; }
+      const N=512, W=Math.round(N/Math.SQRT2), H=Math.round(W*9/16);
+      it.cg.drawImage(vid,x,y,w,h,(N-W)/2,(N-H)/2,W,H); it.tex.needsUpdate=true;
+    } else if(it.tile&&it.kind==='wall'){ it.mat.color.setScalar(0.05*gL); it.spot.intensity=0; continue; }
     if(it.kind==='wall'){
       const r=fr?.f?.[it.f.id], c=r?.c?hexRGB(r.c):null, k=r?(r.k??0):0;
       // senza dati (sorgente video non ancora registrata): pannello appena acceso, per vederlo
@@ -1040,7 +1094,7 @@ $('palMirror').onchange=()=>{ palBuild(); autosave?.(); };
 for(const id of ['palDX','palDZ','palRot','palS','palY']) bindRange(id,()=>palBuild());
 bindRange('palLed'); bindRange('palPrj');
 
-window.__r3d={FR,FA,faRuns,PAL,palFit,camera:()=>camera,controls,compInner};   // per i test (test/render3d-*.js)
+window.__r3d={FR,FA,faRuns,PAL,palFit,MV,camera:()=>camera,controls,compInner};   // per i test (test/render3d-*.js)
 addEventListener('pointerdown',()=>{ if(FA.ctx?.state==='suspended') FA.ctx.resume().then(faMsg).catch(()=>{}); });
 // tratti continui di un deck (stesso brano, tempo e posizione che scorre): un solo player, il
 // guadagno cambia a punti. Tempi del documento in s.
@@ -1722,7 +1776,7 @@ async function startExport(){
   enc.configure(cfg);
   for(let f=0; f<N && !abortExport && !encErr; f++){
     let t=t0+f/FPS;
-    if(FRM){ FR.t=t%D; frSample(); }
+    if(FRM){ FR.t=t%D; await mvSeek(FR.t); frSample(); }
     else{ if(video.duration) t%=video.duration;
       video.currentTime=t;
       await new Promise(res=>{ const done=()=>res(); video.addEventListener('seeked',done,{once:true}); setTimeout(done,1500); });
@@ -1826,7 +1880,7 @@ function loop(){
   if(exporting && !rec) return;
   const dt=Math.min(0.1,orbClock.getDelta());
   if(FR.mode==='frames'&&FR.doc&&FR.playing&&!scrubbing) FR.t=(FR.t+dt)%Math.max(.001,FR.doc.duration);
-  sampleAny(); faTick();
+  mvSync(); sampleAny(); faTick();
   if(orbiting) orbitStep(dt); else controls.update();
   if($('walls').value==='auto') updateWalls();
   composer.render();

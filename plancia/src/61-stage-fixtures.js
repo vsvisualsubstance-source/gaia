@@ -469,7 +469,12 @@ function openFixEditor(w,f){
     ${f.type==='screen'?`<div class="two"><label>Larghezza (m)<input id="feW" type="number" min="0.5" max="40" step="0.1"></label><label>Altezza (m)<input id="feH" type="number" min="0.3" max="20" step="0.1"></label></div>
     <label>Rotazione (gradi)<input id="feRot" type="number" min="-180" max="180" step="5"></label><p class="hint">Altezza dal piano = bordo inferiore dello schermo. Nel Render si illumina quando un proiettore lo punta.</p>`:''}
     ${f.type==='projector'?`<label>Schermo puntato<select id="fePrTarget"><option value="">— nessuno —</option>${(L.fixtures||[]).filter(x=>x.type==='screen').map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('')}</select></label>
-    <div class="two"><label>Rapporto di tiro <em>distanza / larghezza immagine</em><input id="fePrThrow" type="number" min="0.2" max="10" step="0.05"></label><label>Rotazione senza schermo (gradi)<input id="feRot" type="number" min="-180" max="180" step="5"></label></div><p class="hint" id="fePrInfo"></p>`:''}
+    <div class="two"><label>Rapporto di tiro <em>distanza / larghezza immagine</em><input id="fePrThrow" type="number" min="0.2" max="10" step="0.05"></label><label>Rotazione senza schermo (gradi)<input id="feRot" type="number" min="-180" max="180" step="5"></label></div><p class="hint" id="fePrInfo"></p>
+    <label>Sorgente proiettore<select id="feSource"><option value="procedural">Procedurale (Contenuto LED)</option><option value="url">URL video diretto</option><option value="ndi">NDI (via Video Service)</option><option value="file">File (Video Service futuro)</option><option value="rtsp">RTSP (Video Service futuro)</option></select></label>
+    <label>Riferimento sorgente (URL o nome NDI)<input id="feSourceRef" spellcheck="false" autocapitalize="off"></label>
+    <div class="row" id="feNdiPick" hidden><button class="btn sm ghost" id="feNdiSearch">Cerca sorgenti NDI</button></div>
+    <p class="hint">Come per il LED wall. L'immagine si vede nel Render sullo schermo puntato e finisce nel Render 3D (registrata col ⏺). Procedurale: il motivo del widget "Contenuto LED" coi colori dello show.</p>
+    <p id="fePreviewStatus" class="hint preview-status" role="status" aria-live="polite"></p>`:''}
     ${f.type==='wall'?`<div class="two"><label>Lunghezza (m)<input id="feW" type="number" min="1" max="20" step="0.1"></label><label>Altezza (m)<input id="feH" type="number" min="0.5" max="10" step="0.1"></label></div>
     <label>Rotazione (gradi)<input id="feRot" type="number" min="-180" max="180" step="5"></label>
     <label>Sorgente LED<select id="feSource"><option value="procedural">Procedurale</option><option value="url">URL video diretto</option><option value="ndi">NDI (via Video Service)</option><option value="file">File (Video Service futuro)</option><option value="rtsp">RTSP (Video Service futuro)</option></select></label>
@@ -766,7 +771,7 @@ registerWidget('stage',{oscAddress:false,
       else if(w.view==='plot')stageDown(e,el,w);
       else if(e.target.closest('canvas'))svPanStart(e,el,w,()=>(L.fixtures||[]).forEach(f=>{
         const state=wallVideoPlayers.get(f.id);
-        if(f.type==='wall'&&state&&['blocked','error'].includes(state.status))retryWallVideo(f);
+        if((f.type==='wall'||f.type==='projector')&&state&&['blocked','error'].includes(state.status))retryWallVideo(f);
       }));
 },
   // ogni fotogramma: Render (luci, a tempo con level) o Pianta, e la riga di stato

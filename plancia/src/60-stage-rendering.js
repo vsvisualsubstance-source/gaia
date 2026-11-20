@@ -193,7 +193,7 @@ async function pickNdiSource(f){
   }catch(err){alert('Video Service non raggiungibile: '+err.message)}
 }
 function syncWallVideoPlayers(fixtures){
-  const wanted=new Map(fixtures.filter(f=>f.type==='wall'&&f.enabled!==false&&(f.sourceType==='url'||f.sourceType==='ndi')&&f.sourceRef?.trim()).map(f=>[f.id,f]));
+  const wanted=new Map(fixtures.filter(f=>(f.type==='wall'||f.type==='projector')&&f.enabled!==false&&(f.sourceType==='url'||f.sourceType==='ndi')&&f.sourceRef?.trim()).map(f=>[f.id,f]));
   for(const [id,state] of wallVideoPlayers){
     const f=wanted.get(id);
     if(f&&state.raw===f.sourceRef.trim()&&(f.sourceType==='ndi')===!!state.pc)continue;
@@ -210,6 +210,32 @@ function retryWallVideo(f){
     const state=createWallVideoState(f);wallVideoPlayers.set(f.id,state);
   }
 }
+// contenuto LED procedurale (widget "Contenuto LED", /led/mode): griglia cols x rows nel rettangolo,
+// colore c, livello b (live = uscita vera di DMX Master). Ritorna il livello medio. Lo usano il
+// Render del Palco e il contenuto registrato col ⏺ per il Render 3D (62-light-frames.js).
+function drawLedProcedural(g,x0,y0,w,h,cols,rows,c,b,live,t,level,gap=1.2){
+  const pw=w/cols,ph=h/rows,hsv=rgb2hsv(...c),hue=hsv[0],sat=hsv[1],val=Math.max(...c),timeHue=Math.sin(t*.0006)*.05;
+  let avg=0;
+  for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
+    let col=c,k=1;
+    if(live)k=b;
+    else switch(SH.led.mode){
+      case 1:col=hsv2rgb((hue+x/cols*.18+timeHue+1)%1,sat,val);k=.55+.45*Math.sin(x*.18+t*.0015);break;
+      case 2:k=Math.pow(.5+.5*Math.sin(x*.32+y*.22-t*.003),1.6);break;
+      case 3:k=hash(x*7+y,Math.floor(t/120))>.82?1:.06;break;
+      case 4:k=(Math.floor(t/80)%2)?1:0;break;
+      case 5:{const dx=(x-cols/2+.5)/(rows/2),dy=(y-rows/2+.5)/(rows/2),d=Math.hypot(dx,dy),an=Math.atan2(dy,dx);
+        k=Math.exp(-Math.pow((d-.62)*7,2))*(.6+.4*Math.sin(an*3+t*.002))+(d<.18?.9:0);k*=.85+.15*level;break}
+    }
+    k*=b;avg+=k;if(k<.02)continue;
+    g.fillStyle=rgba(col,1,k);g.fillRect(x0+x*pw+gap*.42,y0+y*ph+gap*.42,Math.max(1,pw-gap),Math.max(1,ph-gap));
+  }
+  return avg/(cols*rows);
+}
+// colore e livello del LED wall: uscita vera di DMX Master se c'e', altrimenti la simulazione
+function ledParams(f){const live=fixtureOutput(f,{model:null}),b=live?live.level:SH.led.bright*SH.g.ledwall*(SH.blackout?0:SH.master);return{live,b,c:live?live.color:SH.wall.c}}
+// livello del proiettore col contenuto procedurale: segue il master, non il gruppo LED wall
+const projectorLevel=()=>SH.led.bright*(SH.blackout?0:SH.master);
 function drawVideoCover(g,video,x,y,w,h,alpha){
   if(!video||video.readyState<2||!video.videoWidth||!video.videoHeight)return false;
   const sourceAspect=video.videoWidth/video.videoHeight,targetAspect=w/h;
@@ -276,7 +302,7 @@ function drawRender(g,W,H,t,level,w){
   lfBegin(t);   // stato delle luci per il Render 3D, solo mentre si registra (62-light-frames.js)
   g.globalCompositeOperation='lighter';
   glow(g,W/2,H*.35,W*.6,SH.back.c,.12*hz*M*SH.g.back);
-  drawScreensRender(g,project,zScale,t);drawProjectorsRender(g,project,zScale);g.globalCompositeOperation='lighter';
+  drawScreensRender(g,project,zScale,t,level);drawProjectorsRender(g,project,zScale);g.globalCompositeOperation='lighter';
   for(const wallF of wallFixtures){
     const wp=project(wallF.x,wallF.y,wallF.z),rot=(wallF.rot||0)*Math.PI/180;
     let wx0,wx1,wy0,wy1,panel=false;
@@ -285,8 +311,7 @@ function drawRender(g,W,H,t,level,w){
       wx0=wp.x-wallWidth/2;wx1=wp.x+wallWidth/2;wy1=wp.y;wy0=wy1-wallHeight}
     g.globalCompositeOperation='source-over';g.fillStyle='#07080b';g.fillRect(wx0-4,wy0-4,wx1-wx0+8,wy1-wy0+8);
     const cols=36,rows=Math.max(8,Math.round(cols*(wy1-wy0)/(wx1-wx0))),pw=(wx1-wx0)/cols,ph=(wy1-wy0)/rows;
-    const live=outputOf(wallF),b=live?live.level:SH.led.bright*SH.g.ledwall*(SH.blackout?0:SH.master);
-    const c=live?live.color:SH.wall.c;
+    const {live,b,c}=ledParams(wallF);
     let avg=0;
     if(wallF.sourceType==='url'||wallF.sourceType==='ndi'){
       const preview=wallVideoPlayers.get(wallF.id);
@@ -302,22 +327,8 @@ function drawRender(g,W,H,t,level,w){
       if(!renderRec)g.fillText(wallPreviewMessage(wallF).slice(0,64),wp.x,(wy0+wy1)/2);
     }else{
       g.globalCompositeOperation='lighter';
-      const hsv=rgb2hsv(...c), hue=hsv[0],sat=hsv[1],val=Math.max(...c),timeHue=Math.sin(t*.0006)*.05;
-      for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
-        let col=c,k=1;
-        if(live)k=b;
-        else switch(SH.led.mode){
-          case 1:col=hsv2rgb((hue+x/cols*.18+timeHue+1)%1,sat,val);k=.55+.45*Math.sin(x*.18+t*.0015);break;
-          case 2:k=Math.pow(.5+.5*Math.sin(x*.32+y*.22-t*.003),1.6);break;
-          case 3:k=hash(x*7+y,Math.floor(t/120))>.82?1:.06;break;
-          case 4:k=(Math.floor(t/80)%2)?1:0;break;
-          case 5:{const dx=(x-cols/2+.5)/(rows/2),dy=(y-rows/2+.5)/(rows/2),d=Math.hypot(dx,dy),an=Math.atan2(dy,dx);
-            k=Math.exp(-Math.pow((d-.62)*7,2))*(.6+.4*Math.sin(an*3+t*.002))+(d<.18?.9:0);k*=.85+.15*level;break}
-        }
-        k*=b;avg+=k;if(k<.02)continue;
-        g.fillStyle=rgba(col,1,k);g.fillRect(wx0+x*pw+.5,wy0+y*ph+.5,Math.max(1,pw-1.2),Math.max(1,ph-1.2));
-      }
-      avg/=cols*rows;if(panel){g.restore();panel=false}glow(g,wp.x,wp.y,W*.42,c,.35*avg*hz);
+      avg=drawLedProcedural(g,wx0,wy0,wx1-wx0,wy1-wy0,cols,rows,c,b,live,t,level);
+      if(panel){g.restore();panel=false}glow(g,wp.x,wp.y,W*.42,c,.35*avg*hz);
       addLit(wallF.x,wallF.y,(wallF.z||0)+(wallF.h||3.5)/2,c,avg,(wallF.w||6)*.45);lfSet(wallF,{c,k:avg});
     }
     if(panel)g.restore();
@@ -496,7 +507,7 @@ function drawRender(g,W,H,t,level,w){
     if(showPlaying&&level>.75&&hash(idx,Math.floor(t/400))>.8){g.strokeStyle='#020203';g.lineWidth=4;g.beginPath();g.moveTo(x+r,y+r);g.lineTo(x+r*2,y-r*2.5);g.stroke()}
     g.strokeStyle=rgba(bl>.05?[1,.9,.75]:fw,bl>.05?.6*bl:.3*fk);g.lineWidth=1.2;g.beginPath();g.arc(x,y,r,Math.PI*1.1,Math.PI*1.9);g.stroke();
   }
-  lfEnd();
+  lfEnd(t,level);
 }
 // Stato di interazione della Pianta per widget id -- MAI dentro l'oggetto
 // w stesso: w vive in L (salvato via JSON.stringify), hits/proj/selFix sono

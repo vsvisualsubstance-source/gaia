@@ -57,7 +57,15 @@ Il ⏺ del Render salva anche LED wall, schermi e proiettori del Palco: posizion
 
 La scala vale solo per le posizioni: le misure degli oggetti restano quelle del Palco (metri veri). Tutto resta salvato nel browser, punti manuali compresi. Registrazioni di prima del 20/11: niente rotazione né schermo puntato (valori di base). Test: `plancia/test/render3d-palco.js`.
 
-Da fare: contenuto video di LED wall e proiettori (registrato col ⏺); sorgente del proiettore nel Palco come per il LED wall. Dopo: i servizi di mapping di Regia per la geometria del proiettore.
+### Contenuto video (20/11)
+
+Il proiettore ha nel Palco lo stesso menu **Sorgente** del LED wall (procedurale, URL, NDI); nel Render del Palco la sua immagine si vede sullo schermo puntato. **Procedurale** = il motivo del widget "Contenuto LED" (tinta, gradiente, onde, pixel, strobo, logo) coi colori dello show; per il LED wall segue anche il gruppo DMX ledwall.
+
+Durante il ⏺ la Plancia registra, accanto allo stato delle luci, un **video del contenuto** a tasselli: un rettangolo per ogni LED wall e proiettore (640×360, 480×270 sopra i 4 elementi), con dentro quello che mostra in quel momento: anteprima NDI/URL o motivo procedurale. File `data/light-frames/<nome>_contenuto.mp4` (webm se il browser non fa MP4), nominato in `media` del JSON (`{file, tiles:{id:[x,y,w,h]}, size, offset}`).
+
+Il Render 3D lo mette sul LED wall (con la luce del colore medio intorno) e nell'immagine del proiettore; segue la barra del tempo e nell'export va fotogramma per fotogramma. Senza video del contenuto (registrazioni di prima) resta il colore registrato del LED wall e l'immagine di prova del proiettore. Test: `plancia/test/render3d-media.js`.
+
+Dopo: i servizi di mapping di Regia per la geometria del proiettore.
 
 ## File
 
