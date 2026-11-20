@@ -42,6 +42,23 @@ Nel Render 3D, con quella registrazione scelta in "Sorgente delle luci":
 
 Senza motore audio collegato durante il ⏺, o con registrazioni di prima del 20/11, il Render 3D resta muto. Il brano deve essere nella libreria del PC che serve la Plancia. Test: `plancia/test/render3d-audio.js`.
 
+## Elementi del Palco: LED wall, schermi, proiettori (20/11)
+
+Il ⏺ del Render salva anche LED wall, schermi e proiettori del Palco: posizione, misure, rotazione, schermo puntato, rapporto di tiro, sorgente. Il Render 3D li mette nella scansione (sezione **Elementi del Palco**):
+
+- **LED wall:** pannello con le misure vere, del colore registrato (sorgente procedurale), con la luce che butta davanti; con sorgente video per ora resta appena acceso (il contenuto video è il passo dopo).
+- **Schermo:** superficie bianca.
+- **Proiettore:** corpo, fascio (si spegne con "fasci") e immagine di prova proiettata davvero sulla scansione, puntata al centro dello schermo collegato; la larghezza viene dal rapporto di tiro e dalla distanza vera nello spazio. Il messaggio dice distanza e larghezza dell'immagine.
+
+**Allineamento Palco → scansione.** Coordinate diverse: il Palco ha x = destra/sinistra vista dal pubblico, y = profondità (0 = fondo palco); la scansione ha x verso la consolle, z a destra. Si calcola spostamento + rotazione + scala:
+- **automatico:** dalle colonne collegate in "Sorgente delle luci" (posizione nel Palco ↔ posizione nella scansione); con 3 o più colonne il messaggio dà lo scarto medio;
+- **manuale (2 punti):** per un Palco non in scala o senza colonne. Scegli un elemento del Palco, 📍, clic dove sta nella scansione; due volte, con punti lontani;
+- **ritocchi:** sposta avanti / di lato, ruota, scala, quota; "specchia" se il Palco risulta a specchio.
+
+La scala vale solo per le posizioni: le misure degli oggetti restano quelle del Palco (metri veri). Tutto resta salvato nel browser, punti manuali compresi. Registrazioni di prima del 20/11: niente rotazione né schermo puntato (valori di base). Test: `plancia/test/render3d-palco.js`.
+
+Da fare: contenuto video di LED wall e proiettori (registrato col ⏺); sorgente del proiettore nel Palco come per il LED wall. Dopo: i servizi di mapping di Regia per la geometria del proiettore.
+
 ## File
 
 | Cosa | Dove |

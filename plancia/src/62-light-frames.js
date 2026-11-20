@@ -3,7 +3,8 @@
 // (plancia/render3d) per accendere le fixture vere nella scansione del locale, senza leggere i
 // pixel del video. Formato (v 1):
 //   {app:'plancia-light-frames', v, fps, created, project, duration, stage:{width,depth,trussHeight},
-//    fixtures:[{id,type,name,group,x,y,z,vertical,w,h,aim,tilt,angle,spread,cube}],   metri, gradi
+//    fixtures:[{id,type,name,group,x,y,z,vertical,w,h,aim,tilt,angle,spread,cube, rot,target,throw,src,ref}],   metri, gradi
+//      (rot/target/throw/src/ref solo per wall, screen, projector: rotazione, schermo puntato, rapporto di tiro, sorgente)
 //    audio:[{t:ms, k:'A'|'B', track, pos:s, playing, rate, g}]   (lfAudio; solo col motore audio collegato)
 //    frames:[{t:ms, wash:{c,k}, f:{<id>:{c:'rrggbb', k, pan, tilt, zoom, px:[['rrggbb',k],..], p:[[x,y,'rrggbb'],..]}}}]}
 //   c/k = colore e livello (0..1) della luce; px = pixel delle barre LED (dal basso o da sinistra);
@@ -16,7 +17,8 @@ function lfStart(fps=30){
   const geom=L.stage||{};
   const fx=(L.fixtures||[]).filter(f=>f.enabled!==false).map(f=>{let aim=null;try{aim=fixtureAim(f)?.aim??null}catch{}
     return{id:f.id,type:f.type,name:f.name||f.label||'',group:f.group||'',x:+f.x||0,y:+f.y||0,z:+(f.mountToTruss?geom.trussHeight:f.z)||0,
-      vertical:!!f.vertical,w:+f.w||0,h:+f.h||0,aim,tilt:+f.tilt||0,angle:+f.angle||0,spread:+f.spread||0,cube:f.cube||''}});
+      vertical:!!f.vertical,w:+f.w||0,h:+f.h||0,aim,tilt:+f.tilt||0,angle:+f.angle||0,spread:+f.spread||0,cube:f.cube||'',
+      ...(['wall','screen','projector'].includes(f.type)?{rot:+f.rot||0,target:f.target||'',throw:+f.throw||0,src:f.sourceType||'procedural',ref:f.sourceRef||''}:{})}});
   LF={fps,t0:null,last:-1e9,cur:null,frames:[],fixtures:fx,stage:{width:+geom.width||0,depth:+geom.depth||0,trussHeight:+geom.trussHeight||0}};
   if(AU.live&&AU.lastState)lfAudio(AU.lastState,AU.liveAt);
 }

@@ -23,6 +23,7 @@
   button,select{background:#1c1d21;color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:5px 8px;font:inherit;cursor:pointer}
   button:hover,select:hover{border-color:#555}
   button.on{border-color:var(--acc);color:#fff}
+  button.ok{border-color:#3fb950}
   select{width:100%}
   .pos{display:grid;grid-template-columns:1fr 50px 50px 44px 44px;gap:3px;align-items:center}
   .pos input{width:100%;background:#141518;color:var(--txt);border:1px solid var(--line);border-radius:4px;padding:2px 4px;font:inherit}
@@ -76,6 +77,24 @@
       <div class="hint" id="frAuMsg"></div>
       <div id="frMap"></div>
     </div>
+  </div>
+
+  <div class="sec" id="palSec"><b>Elementi del Palco</b>
+    <div class="hint" id="palMsg">LED wall, schermi e proiettori della registrazione, messi nello spazio.</div>
+    <div class="row"><label>allineamento</label><select id="palMode" style="flex:1"><option value="auto">automatico (colonne collegate)</option><option value="manual">manuale (2 punti)</option></select></div>
+    <div id="palManual">
+      <div class="hint" style="margin:2px 0">Scegli un elemento del Palco, poi 📍 e clicca dove sta nella scansione. Due punti, il più lontani possibile.</div>
+      <div class="row"><select id="palP1" style="flex:1"></select><button id="palK1" title="clicca il punto nella scena">📍</button></div>
+      <div class="row"><select id="palP2" style="flex:1"></select><button id="palK2" title="clicca il punto nella scena">📍</button></div>
+    </div>
+    <div class="row"><label>sposta avanti</label><input id="palDX" type="range" min="-6" max="6" step="0.05" value="0"><output></output></div>
+    <div class="row"><label>sposta di lato</label><input id="palDZ" type="range" min="-6" max="6" step="0.05" value="0"><output></output></div>
+    <div class="row"><label>ruota</label><input id="palRot" type="range" min="-180" max="180" step="1" value="0"><output></output></div>
+    <div class="row"><label>scala</label><input id="palS" type="range" min="0.5" max="2" step="0.01" value="1"><output></output></div>
+    <div class="row"><label>quota</label><input id="palY" type="range" min="-2" max="4" step="0.05" value="0"><output></output></div>
+    <div class="row"><label>LED wall</label><input id="palLed" type="range" min="0" max="3" step="0.05" value="1"><output></output></div>
+    <div class="row"><label>proiettori</label><input id="palPrj" type="range" min="0" max="3" step="0.05" value="1"><output></output></div>
+    <div class="row" style="flex-wrap:wrap"><label><input type="checkbox" id="palShow" checked> mostra</label><label><input type="checkbox" id="palCone" checked> fasci</label><label><input type="checkbox" id="palMirror"> specchia</label></div>
   </div>
 
   <div class="sec"><b>Importa</b>
@@ -576,6 +595,7 @@ function layoutAll(){
     g.rotateZ(THREE.MathUtils.degToRad(POS[k].tilt||0));
   }
   layoutLaser();
+  if($('palMode')?.value==='auto') palBuild();   // le colonne spostate cambiano l'allineamento automatico
 }
 
 /* ---------- video + campionamento ---------- */
@@ -721,14 +741,14 @@ function frAuto(doc){
 function frMapUI(){
   const fx=FR.doc?.fixtures||[];
   $('frMap').innerHTML=FR_ENT.map(([k,l])=>`<div class="row"><label style="min-width:42%">${l}</label><select id="frm_${k}" data-k="${k}" style="flex:1"><option value="">— spenta —</option>${fx.filter(f=>k==='laser'?f.type==='laser':f.type!=='laser'&&f.type!=='speaker').map(f=>`<option value="${f.id}">${fxLabel(f)}</option>`).join('')}</select></div>`).join('');
-  $('frMap').querySelectorAll('select').forEach(sel=>{ sel.value=FR.map[sel.dataset.k]||''; sel.onchange=()=>{ FR.map[sel.dataset.k]=sel.value; autosave?.(); }; });
+  $('frMap').querySelectorAll('select').forEach(sel=>{ sel.value=FR.map[sel.dataset.k]||''; sel.onchange=()=>{ FR.map[sel.dataset.k]=sel.value; palBuild(); autosave?.(); }; });
 }
 async function frLoad(file){
   if(!file) return;
   $('frMsg').textContent='Carico '+file+'…';
   try{ const doc=await fetch('/api/light-frames/'+encodeURIComponent(file),{cache:'no-store'}).then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); });
     if(doc.app!=='plancia-light-frames'||!doc.frames?.length) throw new Error('file non valido');
-    FR.doc=doc; FR.file=file; FR.t=0; FR.idx=0; frAuto(doc); frMapUI(); $('frFile').value=file; faLoad(doc);
+    FR.doc=doc; FR.file=file; FR.t=0; FR.idx=0; frAuto(doc); frMapUI(); $('frFile').value=file; faLoad(doc); palBuild();
     $('frMsg').textContent=`${doc.project||'progetto'} · ${doc.duration.toFixed(1)} s · ${doc.frames.length} fotogrammi · ${doc.fixtures.length} fixture. Collega ogni elemento a una luce della Plancia.`;
   }catch(e){ $('frMsg').textContent='Non caricato: '+(e.message||e); }
 }
@@ -755,7 +775,7 @@ function frSample(){
   const lz=rec('laser'), half=((FR.doc.fixtures.find(f=>f.id===FR.map.laser)?.spread)||40)/2*Math.PI/180;
   if(lz?.p?.length){ const on=lz.p.filter(q=>q[2]); const step=Math.max(1,on.length/MAXB);
     for(let i=0;i<MAXB&&Math.floor(i*step)<on.length;i++){ const q=on[Math.floor(i*step)]; S.lz.push({a:q[0]/100*half,e:q[1]/100*half,col:hexRGB(q[2])}); } }
-  applyLights(S);
+  applyLights(S); palLights(fr);
   if(!scrubbing) $('tl').value=Math.round(FR.t/Math.max(.001,FR.doc.duration)*1000);
   return true;
 }
@@ -788,7 +808,7 @@ function applyLights(S){
   }
   const lm=Math.max(...la,1e-4); laserLight.color.setRGB(la[0]/lm,la[1]/lm,la[2]/lm); laserLight.intensity=nb?spill*0.6:0;
 }
-function sampleAny(){ return FR.mode==='frames'?frSample():sample(); }
+function sampleAny(){ const r=FR.mode==='frames'?frSample():sample(); if(!(FR.mode==='frames'&&FR.doc)) palLights(null); return r; }
 $('srcMode').onchange=e=>{ frSetMode(e.target.value); if(FR.mode==='frames'&&!FR.doc) frList().then(f=>{ if(f[0]) frLoad(f[0].file); }); autosave?.(); };
 $('frFile').onchange=e=>frLoad(e.target.value);
 $('frReload').onclick=()=>frList();
@@ -851,7 +871,176 @@ function faTick(){
     Object.assign(d,{src:s,track:w.track,off:w.pos,t0:now,rate:w.rate});
   }
 }
-window.__r3d={FR,FA,faRuns};   // per test/render3d-audio.js
+/* ---------- elementi del Palco (20/11): LED wall, schermi, proiettori della registrazione ---------- */
+// Palco: x = destra/sinistra vista dal pubblico, y = profondita' (0 = fondo del palco, cresce verso il
+// pubblico), z = quota; metri. Scansione: x = verso la consolle, z = a destra, y = su.
+// Palco -> scansione = similitudine 2D (rotazione, scala, spostamento; specchiata a richiesta), dalle
+// colonne collegate (auto) o da 2 punti cliccati (manuale), poi i ritocchi del pannello. Le misure
+// degli oggetti restano vere (metri): la scala vale solo per le posizioni, il Palco puo' non essere in scala.
+var PAL={grp:new THREE.Group(),items:[],T:null,pts:[null,null],pick:0};
+compInner.add(PAL.grp);
+renderer.shadowMap.enabled=true;   // l'immagine dei proiettori (SpotLight.map) passa dalle ombre di three
+const cmul=(a,b)=>[a[0]*b[0]-a[1]*b[1],a[0]*b[1]+a[1]*b[0]];
+const PAL_TYPES={wall:'LED wall',screen:'schermo',projector:'proiettore'};
+function palFixtures(){ return FR.doc?.fixtures||[]; }
+function palPairs(){
+  const fx=palFixtures(), byId=id=>fx.find(f=>f.id===id), out=[];
+  if($('palMode').value==='manual'){ for(const p of PAL.pts){ const f=p&&byId(p.id); if(f&&p.X!=null) out.push({a:[f.x,f.y],b:[p.X,p.Z]}); } }
+  else for(const k in COLS){ const f=byId(FR.map[k]); if(f) out.push({a:[f.x,f.y],b:[POS[k].x,POS[k].z]}); }
+  return out;
+}
+// minimi quadrati coi numeri complessi: (X + iZ) = c * (x + iy) + t, (x - iy) se specchiato
+function palFit(){
+  const mir=$('palMirror').checked, flip=a=>mir?[a[0],-a[1]]:a, P=palPairs().map(p=>({a:flip(p.a),b:p.b})), n=P.length;
+  const d=FR.doc?.stage?.depth||8;
+  let T=null;
+  if(n>=2){
+    const ma=[0,0],mb=[0,0]; for(const p of P){ ma[0]+=p.a[0]/n; ma[1]+=p.a[1]/n; mb[0]+=p.b[0]/n; mb[1]+=p.b[1]/n; }
+    let nr=0,ni=0,den=0;
+    for(const p of P){ const ax=p.a[0]-ma[0],ay=p.a[1]-ma[1],bx=p.b[0]-mb[0],by=p.b[1]-mb[1]; nr+=bx*ax+by*ay; ni+=by*ax-bx*ay; den+=ax*ax+ay*ay; }
+    if(den>1e-4){ const c=[nr/den,ni/den], ca=cmul(c,ma); T={c,t:[mb[0]-ca[0],mb[1]-ca[1]],n};
+      let e=0; for(const p of P){ const q=cmul(c,p.a); e+=Math.hypot(q[0]+T.t[0]-p.b[0],q[1]+T.t[1]-p.b[1]); } T.err=e/n; }
+  }
+  // senza punti: centro del palco al centro sala, palco verso la consolle (+x), pubblico verso il fondo
+  if(!T){ const c=[0,1], ca=cmul(c,flip([0,d/2])); T={c,t:[ROOM.cx-ca[0],ROOM.cz-ca[1]],n:0}; }
+  const rot=THREE.MathUtils.degToRad(+$('palRot').value), s=+$('palS').value, r=[Math.cos(rot)*s,Math.sin(rot)*s];
+  const pc=cmul(T.c,flip([0,d/2])), piv=[pc[0]+T.t[0],pc[1]+T.t[1]], dx=+$('palDX').value, dz=+$('palDZ').value;
+  T.map=(x,y)=>{ const q=cmul(T.c,flip([x,y])), w=cmul(r,[q[0]+T.t[0]-piv[0],q[1]+T.t[1]-piv[1]]); return [w[0]+piv[0]+dx,w[1]+piv[1]+dz]; };
+  T.dir=(x,y)=>{ const q=cmul(r,cmul(T.c,flip([x,y]))), L=Math.hypot(q[0],q[1])||1; return [q[0]/L,q[1]/L]; };
+  T.scale=Math.hypot(...T.c)*s;
+  return T;
+}
+// immagine di prova dei proiettori: 16:9 al centro di un quadrato (il cono della luce e' tondo)
+function palPattern(name){
+  const N=512, cv=document.createElement('canvas'); cv.width=cv.height=N; const g=cv.getContext('2d');
+  g.fillStyle='#000'; g.fillRect(0,0,N,N);
+  const W=Math.round(N/Math.SQRT2), H=Math.round(W*9/16), x0=(N-W)/2, y0=(N-H)/2;
+  ['#ffffff','#ffe600','#00e5ff','#00e040','#ff2bd6','#ff2a1a','#2a4bff'].forEach((c,i)=>{ g.fillStyle=c; g.fillRect(x0+i*W/7,y0,W/7+1,H*0.62); });
+  g.fillStyle='#202020'; g.fillRect(x0,y0+H*0.62,W,H*0.38);
+  g.strokeStyle='#fff'; g.lineWidth=2; g.strokeRect(x0+1,y0+1,W-2,H-2);
+  g.beginPath(); g.arc(N/2,N/2,H*0.3,0,7); g.stroke();
+  g.fillStyle='#fff'; g.font='bold 22px sans-serif'; g.textAlign='center'; g.fillText(name||'proiettore',N/2,y0+H*0.86);
+  const t=new THREE.CanvasTexture(cv); t.colorSpace=THREE.SRGBColorSpace; return t;
+}
+function palDispose(){
+  PAL.grp.traverse(o=>{ o.geometry?.dispose?.(); if(o.material) [].concat(o.material).forEach(m=>{ m.map?.dispose?.(); m.dispose?.(); }); if(o.isSpotLight){ o.map?.dispose?.(); o.shadow?.map?.dispose?.(); } });
+  PAL.grp.clear(); PAL.items=[];
+}
+function palOptions(){
+  const fx=palFixtures(), opts=fx.map(f=>`<option value="${f.id}">${f.name||f.id} · ${PAL_TYPES[f.type]||f.type}</option>`).join('');
+  [0,1].forEach(i=>{ const s=$('palP'+(i+1)); s.innerHTML='<option value="">— elemento del Palco —</option>'+opts; s.value=PAL.pts[i]?.id||'';
+    $('palK'+(i+1)).classList.toggle('ok',PAL.pts[i]?.X!=null); });
+  $('palManual').style.display=$('palMode').value==='manual'?'':'none';
+}
+function palBuild(){
+  if(!PAL) return;
+  palDispose(); palOptions();
+  const fx=palFixtures(), els=fx.filter(f=>PAL_TYPES[f.type]);
+  const T=PAL.T=palFit(), Y0=+$('palY').value;
+  const at=(f,up)=>{ const [X,Z]=T.map(f.x,f.y); return new THREE.Vector3(X,Y0+up,Z); };
+  // orientamento di un pannello: faccia verso dove guarda nel Palco (rot 0 = verso il pubblico)
+  const face=f=>{ const r=(f.rot||0)*Math.PI/180, [nx,nz]=T.dir(-Math.sin(r),Math.cos(r)), z=new THREE.Vector3(nx,0,nz), y=new THREE.Vector3(0,1,0);
+    return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(new THREE.Vector3().crossVectors(y,z),y,z)); };
+  for(const f of els){
+    if(f.type==='wall'||f.type==='screen'){
+      const w=f.w||(f.type==='wall'?6:5), h=f.h||(f.type==='wall'?3.5:2.8), g=new THREE.Group();
+      g.position.copy(at(f,(f.z||0)+h/2)); g.quaternion.copy(face(f));
+      const mat=f.type==='wall'?new THREE.MeshBasicMaterial({color:0x000000,toneMapped:false})
+        :new THREE.MeshStandardMaterial({color:0xf2f2f2,roughness:0.95,metalness:0,side:THREE.DoubleSide});
+      g.add(new THREE.Mesh(new THREE.PlaneGeometry(w,h),mat));
+      const it={f,kind:f.type,mat,g};
+      if(f.type==='wall'){
+        const back=new THREE.Mesh(new THREE.BoxGeometry(w+0.08,h+0.08,0.12),new THREE.MeshStandardMaterial({color:0x0b0b0c,roughness:0.7})); back.position.z=-0.065; g.add(back);
+        // luce che il muro butta davanti a se'
+        const spot=new THREE.SpotLight(0xffffff,0,22,THREE.MathUtils.degToRad(75),0.9,1.4), tg=new THREE.Object3D();
+        spot.position.set(0,0,0.15); tg.position.set(0,-h*0.3,5); g.add(spot,tg); spot.target=tg; it.spot=spot;
+      }
+      PAL.grp.add(g); PAL.items.push(it);
+    }
+  }
+  for(const f of els.filter(f=>f.type==='projector')){
+    const pos=at(f,f.z||3.5), sc=f.target&&fx.find(x=>x.id===f.target&&x.type==='screen');
+    // punta al centro dello schermo collegato; senza schermo: verso il palco (rot 0), un po' in giu'
+    let aim; if(sc) aim=at(sc,(sc.z||0)+(sc.h||2.8)/2);
+    else { const r=(f.rot||0)*Math.PI/180, [ax,az]=T.dir(Math.sin(r),-Math.cos(r)); aim=pos.clone().add(new THREE.Vector3(ax*8,-1.2,az*8)); }
+    const body=new THREE.Mesh(new THREE.BoxGeometry(0.42,0.18,0.36),new THREE.MeshStandardMaterial({color:0x2a2c30,roughness:0.5}));
+    body.position.copy(pos); body.lookAt(aim);
+    const thr=Math.max(0.3,f.throw||1.5), tanH=0.5/thr, dist=pos.distanceTo(aim);
+    const spot=new THREE.SpotLight(0xffffff,0,0,Math.atan(Math.SQRT2*tanH),0.02,0);
+    spot.position.copy(pos); spot.target.position.copy(aim); spot.map=palPattern(f.name);
+    spot.castShadow=true; spot.shadow.mapSize.set(512,512); spot.shadow.camera.near=0.2; spot.shadow.camera.far=80;
+    // fascio: piramide dall'obiettivo al punto mirato (solo guida)
+    const hw=tanH*dist, hh=hw*9/16, v=[0,0,0, -hw,-hh,dist, hw,-hh,dist, hw,hh,dist, -hw,hh,dist];
+    const pg=new THREE.BufferGeometry(); pg.setAttribute('position',new THREE.Float32BufferAttribute(v,3)); pg.setIndex([0,1,2, 0,2,3, 0,3,4, 0,4,1]);
+    const cone=new THREE.Group(), cm=new THREE.MeshBasicMaterial({color:0x9fe0ff,transparent:true,opacity:0.05,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide,toneMapped:false});
+    cone.add(new THREE.Mesh(pg,cm), new THREE.LineSegments(new THREE.EdgesGeometry(pg),new THREE.LineBasicMaterial({color:0x9fe0ff,transparent:true,opacity:0.35,toneMapped:false})));
+    cone.position.copy(pos); cone.lookAt(aim);
+    PAL.grp.add(body,spot,spot.target,cone); PAL.items.push({f,kind:'projector',spot,cone,dist,img:2*hw,screen:sc||null});
+  }
+  palMsg();
+}
+function palMsg(){
+  const els=palFixtures().filter(f=>PAL_TYPES[f.type]), T=PAL.T;
+  if(!FR.doc){ $('palMsg').textContent='Scegli una registrazione in "Sorgente delle luci".'; return; }
+  if(!els.length){ $('palMsg').textContent='Nessun LED wall, schermo o proiettore nella registrazione (aggiungili nel Palco e registra di nuovo col ⏺).'; return; }
+  const cnt=Object.keys(PAL_TYPES).map(k=>[k,els.filter(f=>f.type===k).length]).filter(x=>x[1]).map(([k,n])=>`${n} ${PAL_TYPES[k]}`).join(', ');
+  const al=!T?'':T.n?`allineati con ${T.n} punti (${$('palMode').value==='manual'?'manuale':'colonne collegate'}), scala ${T.scale.toFixed(2)}${T.err!=null&&T.n>2?`, scarto medio ${T.err.toFixed(2)} m`:''}`
+    :`posizione indicativa: ${$('palMode').value==='manual'?'clicca i 2 punti':'collega almeno 2 colonne'} o usa i ritocchi`;
+  const pj=PAL.items.filter(i=>i.kind==='projector').map(i=>`${i.f.name}: ${i.dist.toFixed(1)} m, immagine ${i.img.toFixed(1)} m${i.screen?' su '+i.screen.name:''}`).join(' · ');
+  $('palMsg').textContent=`${cnt} · ${al}.${pj?' '+pj+'.':''}`;
+}
+// ogni fotogramma: colore del LED wall dalla registrazione, forza dei proiettori, visibilita'
+function palLights(fr){
+  if(!PAL) return;
+  PAL.grp.visible=FR.mode==='frames'&&!!FR.doc&&$('palShow').checked;
+  if(!PAL.items.length||!PAL.grp.visible) return;
+  const gL=+$('palLed').value, gP=+$('palPrj').value, spill=+$('spill').value, cone=$('palCone').checked;
+  for(const it of PAL.items){
+    if(it.kind==='wall'){
+      const r=fr?.f?.[it.f.id], c=r?.c?hexRGB(r.c):null, k=r?(r.k??0):0;
+      // senza dati (sorgente video non ancora registrata): pannello appena acceso, per vederlo
+      if(!c){ it.mat.color.setRGB(0.04*gL,0.045*gL,0.06*gL); it.spot.intensity=0; continue; }
+      it.mat.color.setRGB(c[0]*k*gL*1.2,c[1]*k*gL*1.2,c[2]*k*gL*1.2);
+      const m=Math.max(...c,1e-4); it.spot.color.setRGB(c[0]/m,c[1]/m,c[2]/m); it.spot.intensity=spill*k*m*gL*8;
+    } else if(it.kind==='projector'){ it.spot.intensity=gP*3; it.cone.visible=cone&&gP>0; }
+  }
+}
+// i 2 punti dell'allineamento manuale: clic sulla scansione
+function palPickAt(e){
+  const r=canvas.getBoundingClientRect();
+  ndc.set(((e.clientX-r.left)/r.width)*2-1, -((e.clientY-r.top)/r.height)*2+1);
+  ray.setFromCamera(ndc,camera);
+  const hits=ray.intersectObjects(scanGroup.children.filter(m=>m.visible),false);
+  let p=hits.length?hits[0].point.clone():null;
+  if(!p){ dragPlane.set(new THREE.Vector3(0,1,0),0); if(ray.ray.intersectPlane(dragPlane,hit)) p=hit.clone(); }
+  return p;
+}
+let palDown=null;
+canvas.addEventListener('pointerdown',e=>{ if(PAL.pick) palDown=[e.clientX,e.clientY]; },true);
+canvas.addEventListener('pointerup',e=>{
+  if(!PAL.pick||!palDown) return;
+  const moved=Math.hypot(e.clientX-palDown[0],e.clientY-palDown[1]); palDown=null; if(moved>5) return;
+  const p=palPickAt(e); if(!p) return;
+  const i=PAL.pick-1, l=compInner.worldToLocal(p.clone());
+  PAL.pts[i]={id:$('palP'+(i+1)).value,X:+l.x.toFixed(3),Z:+l.z.toFixed(3)};
+  pickMark.position.copy(p); pickMark.visible=true; pickFade=2.5;
+  PAL.pick=0; document.querySelectorAll('#palSec [id^=palK]').forEach(b=>b.classList.remove('on')); canvas.style.cursor='';
+  palBuild(); autosave?.();
+});
+[1,2].forEach(n=>{
+  $('palK'+n).onclick=()=>{
+    if(!$('palP'+n).value){ $('palMsg').textContent=`Punto ${n}: prima scegli l'elemento del Palco.`; return; }
+    PAL.pick=PAL.pick===n?0:n; document.querySelectorAll('#palSec [id^=palK]').forEach(b=>b.classList.toggle('on',+b.id.slice(-1)===PAL.pick));
+    canvas.style.cursor=PAL.pick?'crosshair':''; if(PAL.pick) $('palMsg').textContent=`Punto ${n}: clicca nella scena dove sta "${$('palP'+n).selectedOptions[0].textContent}".`;
+  };
+  $('palP'+n).onchange=e=>{ const v=e.target.value, old=PAL.pts[n-1]; PAL.pts[n-1]=v?{id:v,X:old?.X??null,Z:old?.Z??null}:null; palBuild(); autosave?.(); };
+});
+$('palMode').onchange=()=>{ palBuild(); autosave?.(); };
+$('palMirror').onchange=()=>{ palBuild(); autosave?.(); };
+for(const id of ['palDX','palDZ','palRot','palS','palY']) bindRange(id,()=>palBuild());
+bindRange('palLed'); bindRange('palPrj');
+
+window.__r3d={FR,FA,faRuns,PAL,palFit,camera:()=>camera,controls,compInner};   // per i test (test/render3d-*.js)
 addEventListener('pointerdown',()=>{ if(FA.ctx?.state==='suspended') FA.ctx.resume().then(faMsg).catch(()=>{}); });
 // tratti continui di un deck (stesso brano, tempo e posizione che scorre): un solo player, il
 // guadagno cambia a punti. Tempi del documento in s.
@@ -1414,14 +1603,14 @@ $('prevClose').onclick=()=>{ $('prev').style.display='none'; $('prevOpen').style
 $('prevOpen').onclick=()=>{ $('prev').style.display=''; $('prev').classList.remove('min'); $('prevMin').textContent='–'; $('prevOpen').style.display='none'; };
 
 /* ---------- preset ---------- */
-const SKIP=new Set(['exRes','exDur','elSel','pName','pList','pImport','elX','elY','elZ','elR','elT']);
+const SKIP=new Set(['palP1','palP2','exRes','exDur','elSel','pName','pList','pImport','elX','elY','elZ','elR','elT']);
 function getState(){
   const ui={};
   document.querySelectorAll('#panel input[id], #panel select[id]').forEach(e=>{ if(SKIP.has(e.id)||e.id==='srcMode'||e.id.startsWith('fr')) return; ui[e.id]= e.type==='checkbox'?e.checked:e.value; });
   const orbit=document.querySelector('[data-orbit].on')?.dataset.orbit||null;
   ui.objMirror=objMirror;
   ui.__ortho = camera===orthoCam ? {H:ORTHO_H, zoom:orthoCam.zoom} : null;
-  return {v:2, ui, fr:{mode:FR.mode,file:FR.file,map:FR.map}, pos:JSON.parse(JSON.stringify(POS)), cam:{p:camera.position.toArray(),t:controls.target.toArray()}, orbit,
+  return {v:2, ui, fr:{mode:FR.mode,file:FR.file,map:FR.map}, pal:{pts:PAL.pts}, pos:JSON.parse(JSON.stringify(POS)), cam:{p:camera.position.toArray(),t:controls.target.toArray()}, orbit,
           prev:$('prev').style.display==='none'?'closed':($('prev').classList.contains('min')?'min':'open')};
 }
 async function applyState(st){
@@ -1434,6 +1623,7 @@ async function applyState(st){
     else { e.value=st.ui[id]; e.dispatchEvent(new Event(e.tagName==='SELECT'?'change':'input')); }
   }
   for(const k in st.pos) if(POS[k]) Object.assign(POS[k],st.pos[k]);
+  if(st.pal?.pts) PAL.pts=[st.pal.pts[0]||null,st.pal.pts[1]||null];
   if(st.fr){ FR.map={...(st.fr.map||{})}; frSetMode(st.fr.mode||'frames'); if(st.fr.mode==='frames'&&st.fr.file&&st.fr.file!==FR.file) frLoad(st.fr.file); }
   if(clipChanged){ $('clip').value=st.ui.clip; await setClip(st.ui.clip); }
   stopOrbit();
