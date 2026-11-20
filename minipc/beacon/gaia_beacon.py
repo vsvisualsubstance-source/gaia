@@ -35,9 +35,10 @@ MAGIC = b"GAIA_DISCOVER"
 
 # 20/11/2026: un client sulla STESSA macchina (es. TD DMX su OPS/touring) manda il broadcast
 # dall'interfaccia della via predefinita, cioe' spesso il Wi-Fi: senza questo riceverebbe l'IP del
-# Wi-Fi (che cambia con la rete del posto). A lui si risponde con l'IP della rete dello show
-# (LOCAL_HOST, default 192.168.1.240 se e' di questa macchina, altrimenti 127.0.0.1).
-LOCAL_HOST = os.environ.get("BEACON_LOCAL_HOST", "192.168.1.240")
+# Wi-Fi (che cambia con la rete del posto). A lui si risponde LOCAL_HOST, default 127.0.0.1: su
+# OPS/touring il broker gira in Docker (WSL mirrored) e dalla macchina stessa si raggiunge SOLO da
+# 127.0.0.1 (.240 e l'IP del Wi-Fi vanno in timeout, provato il 20/11: TD DMX era rimasto senza broker).
+LOCAL_HOST = os.environ.get("BEACON_LOCAL_HOST", "127.0.0.1")
 
 
 def _is_mine(ip: str) -> bool:
@@ -54,7 +55,7 @@ def _is_mine(ip: str) -> bool:
 
 def _answer_host(peer_ip: str) -> str:
     if _is_mine(peer_ip):
-        return LOCAL_HOST if _is_mine(LOCAL_HOST) else "127.0.0.1"
+        return LOCAL_HOST
     return _local_ip_towards(peer_ip)
 
 

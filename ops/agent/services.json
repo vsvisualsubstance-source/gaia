@@ -170,9 +170,9 @@
       "env_extra": {
         "PYTHONUNBUFFERED": "1",
         "MQTT_PORT": "11883",
-        "BEACON_LOCAL_HOST": "192.168.1.240"
+        "BEACON_LOCAL_HOST": "127.0.0.1"
       },
-      "_nota": "2026-11-20: beacon di discovery (UDP 8899, docs/discovery-protocol.md): i TD (gaia_client, Beacondiscovery) e i Pi trovano da soli il broker (.240:11883). UNO SOLO per rete: acceso sulla macchina dello show (touring), spento su OPS quando e' sullo stesso switch, se no i client saltano fra le due. Ai client della stessa macchina risponde con BEACON_LOCAL_HOST (la rete dello show, non il Wi-Fi). Firewall: UDP in ingresso per Python311 (gia' consentito su OPS)."
+      "_nota": "2026-11-20: beacon di discovery (UDP 8899, docs/discovery-protocol.md): i TD (gaia_client, Beacondiscovery) e i Pi trovano da soli il broker (.240:11883). UNO SOLO per rete: acceso sulla macchina dello show (touring), spento su OPS quando e' sullo stesso switch, se no i client saltano fra le due. Ai client della stessa macchina risponde BEACON_LOCAL_HOST = 127.0.0.1: col broker in Docker (WSL mirrored) dalla macchina stessa .240 non funziona. Firewall: UDP in ingresso per Python311 (gia' consentito su OPS)."
     }
   },
   "camera_consumers": [
