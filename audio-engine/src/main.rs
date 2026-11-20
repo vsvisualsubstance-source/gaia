@@ -27,6 +27,17 @@
 //! C:\gaia-docker-cfg\core-node-0\musica), --cache CARTELLA (default
 //! GAIA_AUDIO_CACHE o ./cache).
 
+// 20/11/2026: println!/eprintln! che non vanno in panic se l'uscita e' chiusa. Riavviando l'agent il
+// motore resta acceso (adottato) ma il suo stdout e' la pipe del vecchio agent, che non c'e' piu':
+// con i println! di std il thread che scriveva moriva al primo messaggio (es. l'orologio dello show,
+// fermo finche' non si riavviava il motore). Valgono in tutti i moduli dichiarati qui sotto.
+macro_rules! println {
+    ($($t:tt)*) => {{ use std::io::Write as _; let _ = writeln!(std::io::stdout(), $($t)*); }};
+}
+macro_rules! eprintln {
+    ($($t:tt)*) => {{ use std::io::Write as _; let _ = writeln!(std::io::stderr(), $($t)*); }};
+}
+
 mod analysis;
 mod clock;
 mod decode;
