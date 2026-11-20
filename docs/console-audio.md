@@ -409,6 +409,24 @@ Pagina operativa nuova (template "Console Audio"):
 - Senza motore la pagina usa un **motore simulato** (come
   `73-gaia-simulation.js`): si sviluppa e si prova la UI anche senza Rust.
 
+**Analisi dei brani dalla Plancia (20/11).** Pulsante **Analizza…** nella barra della Libreria
+(`plancia/audio-analyze.js`): il bridge lancia `gaia-audio.exe analyze --root <musica> --cache <cache>
+<cartella>` in un processo a parte, priorita' *sotto il normale* e meta' dei core (`RAYON_NUM_THREADS`):
+si puo' suonare intanto. Solo i brani nuovi o cambiati (gli altri sono in cache) oppure tutto da capo
+(le griglie corrette a mano restano). Una analisi alla volta; avanzamento su tutti i tablet
+(`{type:'audio_analyze', state}`, pulsante ANALISI n/tot nella barra, toccandolo si ferma); a fine
+analisi la libreria si ricarica da sola. HTTP: `GET /api/audio/roots` (cartelle con brani e analizzati),
+`GET /api/audio/dirs?path=` (dischi e cartelle di OPS da sfogliare). WS: `audio_analyze`
+`{action:'start', folder, force}` / `{action:'stop'}`, `audio_roots_set {roots, analyze?}`.
+
+**Cartelle musica in piu' (USB, altri dischi).** Oltre alla cartella principale nel docker
+(`GAIA_MUSIC`, default `C:\gaia-docker-cfg\core-node-0\musica`) si aggiungono cartelle di OPS da
+**Analizza… → ＋ Aggiungi cartella**, sfogliando i dischi dal tablet; elenco in
+`<cache>/music-roots.json`. I loro brani hanno nell'analisi il **percorso assoluto** (`E:/Musica/...`,
+il motore li carica cosi', id = FNV del percorso): se la chiavetta cambia lettera i brani vanno
+rianalizzati (nuovi id, playlist da rifare). Disco staccato: i brani restano in libreria in grigio
+("non collegata"), senza A/B. Prove: `test/audio-analyze.test.js`, `test/audio-analyze-ui.js`.
+
 ## Fasi
 
 1. **Protocollo + prototipo**: motore con 2 deck, EQ, filtro, crossfader,

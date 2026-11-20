@@ -22,7 +22,14 @@ function connect(){
   if(m.type==='midi_in'){midiFromBridge(m);devMidiIn(m);return}     // MIDI in ingresso (eseguito dal bridge)
   if(m.type==='audio_state'){auApplyState(m);AU.lastState=m;if(renderRec?.audio)recAudioSync(renderRec.audio,m);return}  // motore audio gaia-audio (Console Audio)
   if(m.type==='audio_tl'){G.audioTlSt=m.state||null;return}  // timeline audio eseguita dal bridge
-  if(m.type==='audio_auto'){G.audioAuto=m.state||null;return}  // autoplay della Console Audio (audio-auto.js nel bridge)
+  if(m.type==='audio_auto'){G.audioAuto=m.state||null;return}
+  // analisi dei brani (audio-analyze.js nel bridge): a fine analisi la libreria si ricarica
+  if(m.type==='audio_analyze'){const was=G.audioAnalyze,j=G.audioAnalyze=m.state||null;
+    if(was?.running&&j&&!j.running&&j.gen===was.gen){auLoadLibrary(true);
+      if(j.error)showError('Analisi non riuscita: '+j.error);
+      else showInfo(`Analisi ${j.stopped?'fermata':'finita'}: ${j.analyzed} brani nuovi, ${j.cached} già fatti${j.failed?`, ${j.failed} con errori (${j.errors?.[0]||''})`:''}.`)}
+    return}
+  if(m.type==='audio_roots_changed'){auLoadLibrary(true);return}  // autoplay della Console Audio (audio-auto.js nel bridge)
   if(m.type==='audio_grid'){auGridUpdate(m);return}  // griglia corretta dal motore
   if(m.type==='audio_playlists'){AU.playlists=Array.isArray(m.playlists)?m.playlists:[];return}  // playlist globali dal bridge
   if(m.type==='audio_error'){showError('Console Audio: '+(m.message||'errore del motore'));return}

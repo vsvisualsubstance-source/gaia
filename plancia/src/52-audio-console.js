@@ -25,7 +25,7 @@ const AU={tracks:[],playlists:[],libState:'',live:false,liveAt:0,out:null,meterM
 async function auLoadLibrary(refresh){
   AU.libState='Carico la libreria…';
   try{const r=await(await fetch('/api/audio/library'+(refresh?'?refresh=1':''))).json();
-    AU.tracks=r.ok?r.tracks:[];AU.libState=AU.tracks.length?'':'Nessuna traccia analizzata: su OPS "gaia-audio analyze" (audio-engine).'}
+    AU.tracks=r.ok?r.tracks:[];AU.libState=AU.tracks.length?'':'Nessuna traccia analizzata: tocca "Analizza…".'}
   catch{AU.tracks=[];AU.libState='Libreria non raggiungibile dal bridge.'}
 }
 function auB64(s){const b=atob(s),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u}
@@ -417,6 +417,60 @@ async function auPlaylistFromFolder(folder){
   if(!auSavePlaylists([...AU.playlists,p]))return null;
   showInfo(`Playlist "${p.name}" creata con ${tracks.length} brani da "${folder}".`);return p;
 }
+// 20/11: analisi dei brani dalla Plancia (audio-analyze.js nel bridge: gaia-audio analyze in un processo
+// a parte, bassa priorita') e cartelle musica in piu' oltre a quella del docker (USB, altri dischi di OPS)
+async function auRoots(){const r=await(await fetch('/api/audio/roots')).json();if(!r.ok)throw new Error(r.error);return r.roots}
+// cartella della libreria (relativa alla principale, o assoluta "E:/Musica/..") -> percorso su OPS
+function auFolderAbs(f,roots){return /^[A-Za-z]:\//.test(f)?f.replace(/\//g,'\\'):roots.find(r=>r.main).path+'\\'+f.replace(/\//g,'\\')}
+async function auAnalyzeMenu(){
+  const j=G.audioAnalyze;
+  if(j?.running){
+    if(await uiConfirm(`Analisi in corso: ${j.n} di ${j.tot||'?'} brani in "${j.folder}".\nFermarla? I brani già analizzati restano.`,{ok:'Ferma l\'analisi',cancel:'Lascia andare'}))emit({type:'audio_analyze',action:'stop'},true);
+    return}
+  let roots;try{roots=await auRoots()}catch(e){showError('Cartelle musica non raggiungibili: '+e.message);return}
+  const cur=AU.lib.folder;
+  const items=[...roots.map((r,i)=>({label:`${r.name}: ${r.online?`${r.analyzed} di ${r.files} analizzati`:'non collegata'}`,value:'r'+i,off:!r.online,on:r.online&&r.analyzed<r.files})),
+    ...(cur?[{label:`Solo la cartella "${cur}"`,value:'cur'}]:[]),
+    {label:'＋ Aggiungi cartella (USB, altro disco)…',value:'add'},
+    ...(roots.length>1?[{label:'Togli una cartella…',value:'rm'}]:[])];
+  const pick=await uiChoose('Analisi dei brani',items,{hint:'BPM, griglia e forma d\'onda dei brani nuovi o cambiati; quelli già fatti non si rifanno. Gira a parte e a bassa priorità: intanto si può suonare.'});
+  if(pick==null)return;
+  if(pick==='add'){await auAddRoot();return}
+  if(pick==='rm'){await auRemoveRoot(roots.filter(r=>!r.main));return}
+  const r=pick==='cur'?null:roots[+pick.slice(1)],folder=r?r.path:auFolderAbs(cur,roots),todo=r?r.files-r.analyzed:null;
+  const how=await uiChoose(`Analizzare "${r?r.name:cur}"`,[{label:`Solo i brani nuovi o cambiati${todo!=null?` (${todo})`:''}`,value:'new',on:true},{label:'Tutto da capo (lento; le griglie corrette a mano restano)',value:'force'}]);
+  if(!how)return;
+  emit({type:'audio_analyze',action:'start',folder,force:how==='force'},true);
+}
+// sfoglia le cartelle di OPS (dischi, poi sottocartelle) e aggiunge quella scelta come cartella musica
+async function auAddRoot(){
+  let p='';
+  for(;;){
+    let r;try{r=await(await fetch('/api/audio/dirs?path='+encodeURIComponent(p))).json()}catch(e){r={ok:false,error:e.message}}
+    if(!r.ok){showError('Cartella non leggibile: '+(r.error||'?'));if(!p)return;p='';continue}
+    const items=[...(r.path?[{label:`✓ Usa questa cartella${r.audio?` (${r.audio} brani qui)`:''}`,value:'__use',cls:'primary'},{label:'⬆ Su',value:'__up'}]:[]),...r.dirs.map(d=>({label:d.name,value:d.path}))];
+    const v=await uiChoose(r.path||'Quale disco? (chiavetta USB, disco esterno…)',items,{hint:'Sono le cartelle di OPS. Entra nella cartella della musica e tocca "Usa questa cartella": vale anche con le sottocartelle.'});
+    if(v==null)return;
+    if(v==='__up'){p=r.parent||'';continue}
+    if(v!=='__use'){p=v;continue}
+    const name=(await uiPrompt('Nome della cartella musica',r.path.split(/[\\/]/).filter(Boolean).pop()||r.path))?.trim();if(!name)return;
+    let roots;try{roots=(await auRoots()).filter(x=>!x.main).map(x=>({path:x.path,name:x.name}))}catch(e){showError(e.message);return}
+    const now=await uiConfirm(`"${name}" aggiunta alle cartelle musica.\nAnalizzare adesso i suoi brani?`,{ok:'Analizza',cancel:'Più tardi'});
+    emit({type:'audio_roots_set',roots:[...roots,{path:r.path,name}],...(now?{analyze:r.path}:{})},true);
+    return;
+  }
+}
+async function auRemoveRoot(list){
+  const v=await uiChoose('Togliere quale cartella musica?',list.map(r=>({label:`${r.name} (${r.path})`,value:r.path})));
+  if(v==null)return;const r=list.find(x=>x.path===v);
+  if(!await uiConfirm(`Togliere "${r.name}" dalle cartelle musica?\nI file non vengono toccati; i brani già analizzati restano in libreria.`,{ok:'Togli'}))return;
+  emit({type:'audio_roots_set',roots:list.filter(x=>x.path!==v).map(x=>({path:x.path,name:x.name}))},true);
+}
+function auAnaHtml(j){
+  if(!j?.running)return'';
+  const pct=j.tot?Math.round(j.n/j.tot*100):0;
+  const t=`Analisi di ${j.folder}${j.force?' (da capo)':''}: ${j.n} di ${j.tot||'?'} · ${j.analyzed} nuovi, ${j.cached} già fatti${j.failed?`, ${j.failed} errori`:''}${j.last?' · ora: '+j.last:''}. Tocca per fermarla.`;
+  return`<button class="au-vban on" data-au="analyze" title="${esc(t)}">ANALISI ${j.n}/${j.tot||'…'}<i style="width:${pct}%"></i></button>`}
 async function auAddToPlaylist(id){
   const t=AU.tracks.find(x=>x.id===id);if(!t)return;
   const pick=await uiChoose(`Aggiungi "${t.title}" a…`,[...AU.playlists.map(p=>({label:`${p.name} (${p.tracks.length})`,value:p.id,on:p.id===AU.lib.lastPl})),{label:'＋ Nuova playlist…',value:'__new'}]);
@@ -464,8 +518,10 @@ function auLibHtml(){
     <span class="au-auto"></span>
     <input type="search" placeholder="Cerca titolo, artista, cartella" data-au-s="q">
     <select data-au-s="folder"></select>
+    <span class="au-ana"></span>
     <span class="au-libn hint"></span>
-    <button class="btn sm ghost" data-au="libreload">Aggiorna</button></div>
+    <button class="btn sm ghost" data-au="libreload">Aggiorna</button>
+    <button class="btn sm ghost" data-au="analyze" title="Analizza i brani nuovi (BPM, griglia, forma d'onda); cartelle musica in più (USB, altri dischi)">Analizza…</button></div>
     <div class="au-libtab"></div></div>`}
 // Autoplay (audio-auto.js nel bridge): suona da solo dalla playlist scelta qui sopra o da tutta
 // la libreria, in ordine o a caso, con dissolvenza. Indipendente dalla timeline.
@@ -521,6 +577,8 @@ function auPaintLib(el){
     if(mb&&mb._sig!==msig){mb._sig=msig;mb.innerHTML=auModesHtml()}}
   {const ab=box.querySelector('.au-auto'),a=G.audioAuto,h=auAutoHtml(),sig=a?.active?JSON.stringify({...a,now:a.now&&{...a.now,pos:Math.floor(a.now.pos)}}):'off';
     if(ab&&ab._sig!==sig){ab._sig=sig;ab.innerHTML=h;ab.classList.toggle('on',!!a?.active)}}
+  {const ab=box.querySelector('.au-ana'),j=G.audioAnalyze,sig=JSON.stringify(j?.running?[j.n,j.tot,j.failed]:0);
+    if(ab&&ab._sig!==sig){ab._sig=sig;ab.innerHTML=auAnaHtml(j)}}
   if(AU.lib.view&&!auPlaylist(AU.lib.view))AU.lib.view='';   // playlist eliminata da un altro tablet
   const pl=auPlaylist(AU.lib.view);
   const vs=box.querySelector('[data-au-s=view]'),vsig=JSON.stringify([AU.lib.view,AU.playlists.map(p=>[p.id,p.name,p.tracks.length])]);
@@ -545,9 +603,9 @@ function auPaintLib(el){
   const ctl=t=>pl?`<td class="au-plctl"><button class="au-btn" data-au="plup" data-i="${t.plIndex}"${t.plIndex?'':' disabled'} title="Su">▲</button><button class="au-btn" data-au="pldown" data-i="${t.plIndex}"${t.plIndex<n-1?'':' disabled'} title="Giù">▼</button><button class="au-btn" data-au="plrm" data-i="${t.plIndex}" title="Togli dalla playlist">✕</button></td>`
     :`<td class="au-plctl"><button class="au-btn" data-au="pladd" data-id="${t.id}" title="Aggiungi a una playlist">＋</button></td>`;
   tab.innerHTML=`<table><thead><tr><th></th>${pl?'<th>#</th>':''}${th('title','Titolo')}${th('artist','Artista')}${th('bpm','BPM')}${th('seconds','Durata')}${th('confidence','Griglia')}${pl?'':th('folder','Cartella')}<th></th></tr></thead><tbody>
-    ${rows.slice(0,400).map(t=>`<tr${loaded.includes(t.id)?' class="on"':''}${t.missing?' class="au-miss"':''}><td class="au-load">${t.missing?'':`<button class="au-btn" data-au="load" data-deck="A" data-id="${t.id}">A</button><button class="au-btn" data-au="load" data-deck="B" data-id="${t.id}">B</button>`}</td>
+    ${rows.slice(0,400).map(t=>`<tr${loaded.includes(t.id)?' class="on"':''}${t.missing||t.offline?' class="au-miss"':''}${t.offline?' title="Disco non collegato"':''}><td class="au-load">${t.missing||t.offline?'':`<button class="au-btn" data-au="load" data-deck="A" data-id="${t.id}">A</button><button class="au-btn" data-au="load" data-deck="B" data-id="${t.id}">B</button>`}</td>
       ${pl?`<td class="num dim">${t.plIndex+1}</td>`:''}<td>${esc(t.title)}</td><td class="dim">${esc(t.artist)}</td><td class="num">${t.bpm?t.bpm.toFixed(2):'—'}</td><td class="num">${t.missing?'—':auFmt(t.seconds)}</td>
-      <td>${t.missing?'':t.locked?'<span class="au-gr ok">a mano</span>':t.variable?'<span class="au-gr bad" title="Il tempo cambia lungo il brano (suonato dal vivo): controlla la griglia">variabile</span>':t.confidence>=.4?`<span class="au-gr ok"${t.residual_ms!=null?` title="colpi di cassa a ${t.residual_ms} ms dalla griglia"`:''}>ok</span>`:'<span class="au-gr bad">incerta</span>'}</td>${pl?'':`<td class="dim">${esc(t.folder)}</td>`}${ctl(t)}</tr>`).join('')}
+      <td>${t.missing?'':t.locked?'<span class="au-gr ok">a mano</span>':t.variable?'<span class="au-gr bad" title="Il tempo cambia lungo il brano (suonato dal vivo): controlla la griglia">variabile</span>':t.confidence>=.4?`<span class="au-gr ok"${t.residual_ms!=null?` title="colpi di cassa a ${t.residual_ms} ms dalla griglia"`:''}>ok</span>`:'<span class="au-gr bad">incerta</span>'}</td>${pl?'':`<td class="dim">${esc(t.folder)}${t.offline?' · non collegata':''}</td>`}${ctl(t)}</tr>`).join('')}
     </tbody></table>${pl&&!n?'<p class="hint">Playlist vuota: torna a "Tutta la libreria" e aggiungi i brani con ＋.</p>':''}${rows.length>400?`<p class="hint">Prime 400 di ${rows.length}: cerca o scegli una cartella.</p>`:''}`;
 }
 
@@ -594,6 +652,7 @@ function auDown(e,el,w){
   else if(a==='load')auLoad(b.dataset.deck,b.dataset.id);
   else if(a==='sort'){const s=b.dataset.k;if(AU.lib.sort===s)AU.lib.dir*=-1;else{AU.lib.sort=s;AU.lib.dir=s==='bpm'||s==='confidence'?-1:1}}
   else if(a==='libreload')auLoadLibrary(true);
+  else if(a==='analyze')auAnalyzeMenu();
   else if(a==='plnew')uiChoose('Nuova playlist',[...(AU.lib.folder?[{label:`Dalla cartella "${AU.lib.folder}"`,value:'cur',on:true}]:[]),{label:'Da una cartella…',value:'dir',on:!AU.lib.folder},{label:'Vuota',value:'empty'}])
     .then(k=>k==='empty'?auNewPlaylist():k==='dir'?auPlaylistFromFolder():k==='cur'?auPlaylistFromFolder(AU.lib.folder):null).then(p=>{if(p)AU.lib.view=p.id});
   else if(a==='plmenu')auPlaylistMenu();

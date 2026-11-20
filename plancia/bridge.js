@@ -293,6 +293,12 @@ const server = http.createServer((req, res) => {
       if (req.method === 'HEAD') { res.end(); return; }
       fs.createReadStream(file, { start, end }).on('error', () => res.destroy()).pipe(res);
     }, err => { res.writeHead(404, { 'content-type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok: false, error: err.message })); });
+  } else if (req.url.split('?')[0] === '/api/audio/roots' || req.url.split('?')[0] === '/api/audio/dirs') {
+    // 20/11: cartelle musica (principale + USB/altri dischi) con quanti brani hanno l'analisi; cartelle di OPS da sfogliare
+    const u = new URL(req.url, 'http://plancia');
+    const reply = (code, obj) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(obj)); };
+    const job = u.pathname === '/api/audio/roots' ? audioAnalyze.roots().then(roots => ({ roots, job: audioAnalyze.state() })) : audioAnalyze.dirs(u.searchParams.get('path') || '');
+    job.then(out => reply(200, { ok: true, ...out }), err => reply(404, { ok: false, error: err.message }));
   } else if (req.url.split('?')[0] === '/api/audio/library' || req.url.split('?')[0] === '/api/audio/track') {
     // Console Audio: tracce analizzate da gaia-audio (audio-lib.js)
     const u = new URL(req.url, 'http://plancia'), q = u.searchParams;
@@ -434,6 +440,8 @@ const audioTl = require('./audio-timeline').startAudioTimeline({ getDoc: () => p
 // dalla timeline; se la traccia AUDIO sta guidando i deck (accesa e orologio vivo) aspetta
 const audioAuto = require('./audio-auto').startAudioAuto({ engine: audioEngine, lib: audioLib, broadcast,
   timelineActive: () => { const s = audioTl?.status(); return !!(s && s.active && s.clock); } });
+// Analisi dei brani dalla Plancia (audio-analyze.js): gaia-audio analyze in un processo a parte
+const audioAnalyze = require('./audio-analyze').startAudioAnalyze({ broadcast, onDone: () => audioLib.library(true) });
 // Controller DJ (Traktor Kontrol Z1) sulla Console Audio: comandi al motore, LED dallo stato
 const audioMidi = require('./audio-midi').startAudioMidi({ engine: audioEngine, timed: diag.timed, note: diag.note,
   z1Out: () => (typeof midiPorts === 'undefined' ? null : midiPorts.available().find(n => devCfgLib.roleOf(n, devCfg) === 'z1') || null), isTimeline: () => !!persistedState?.layout?.audioTimeline?.active || audioAuto.active() });
@@ -490,6 +498,7 @@ wss.on('connection', ws => {
   ws.send(JSON.stringify({ type: 'midi_ports', inputs: midiPorts.ports() }));
   audioLib.playlists().then(playlists => { if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'audio_playlists', playlists })); });
   ws.send(JSON.stringify({ type: 'audio_auto', state: audioAuto.state() }));
+  ws.send(JSON.stringify({ type: 'audio_analyze', state: audioAnalyze.state() }));
   ws.on('message', data => {
     let m; try { m = JSON.parse(data); } catch { return; }
     if (m.type === 'shared_state') {
@@ -508,6 +517,13 @@ wss.on('connection', ws => {
       // playlist della Console Audio: salvate dal bridge, rimandate a tutti i tablet
       audioLib.savePlaylists(m.playlists).then(playlists => broadcast({ type: 'audio_playlists', playlists }),
         err => { if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'audio_error', message: err.message })); });
+    } else if (m.type === 'audio_analyze') {
+      const fail = e => { if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'audio_error', message: 'Analisi: ' + e.message })); };
+      if (m.action === 'stop') audioAnalyze.stop();
+      else if (m.action === 'start') audioAnalyze.start({ folder: typeof m.folder === 'string' ? m.folder : '', force: !!m.force }).catch(fail);
+    } else if (m.type === 'audio_roots_set') {
+      // analyze: cartella appena aggiunta da analizzare subito (dopo il salvataggio, se no non e' ancora ammessa)
+      audioLib.saveMusicRoots(m.roots).then(() => audioLib.library(true)).then(() => { broadcast({ type: 'audio_roots_changed' }); if (typeof m.analyze === 'string') return audioAnalyze.start({ folder: m.analyze }); }).catch(e => { if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'audio_error', message: 'Cartelle musica: ' + e.message })); });
     } else if (m.type === 'audio_auto') {
       const err = audioAuto.command(m);
       if (err && ws.readyState === 1) ws.send(JSON.stringify({ type: 'audio_error', message: 'Autoplay: ' + err }));

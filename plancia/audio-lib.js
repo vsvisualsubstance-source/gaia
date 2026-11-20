@@ -36,8 +36,10 @@ function summary(t, id) {
   if (artist && title.toLowerCase().startsWith(artist.toLowerCase() + ' - ')) title = title.slice(artist.length + 3);
   // tag ID3v1 tagliato a 30 caratteri: se e' l'inizio del titolo del nome file, vale quello intero
   if (f.title.toLowerCase().startsWith(title.toLowerCase()) && f.title.length > title.length) title = f.title;
+  // 20/11: brani di una cartella musica in piu' (USB, altro disco): percorso assoluto "E:/Musica/..."
+  const ext = isAbs(t.path), folder = t.path.includes('/') ? t.path.slice(0, t.path.lastIndexOf('/')) : '';
   return {
-    id, path: t.path, folder: t.path.includes('/') ? t.path.slice(0, t.path.lastIndexOf('/')) : '',
+    id, path: t.path, folder, ...(ext ? { ext: true, offline: !dirOnline(folder) } : {}),
     title, artist, seconds: t.seconds,
     bpm: t.grid?.bpm || 0, first_beat: t.grid?.first_beat || 0, confidence: t.grid?.confidence || 0,
     locked: !!t.locked, rms_db: t.rms_db,
@@ -46,8 +48,18 @@ function summary(t, id) {
   };
 }
 
+// percorso dell'analisi: relativo alla cartella principale, oppure assoluto (cartelle in piu')
+const isAbs = p => /^[A-Za-z]:\//.test(String(p || '')) || String(p || '').startsWith('//');
+// disco non collegato: le sue cartelle non esistono (controllo una volta per cartella a ogni lettura)
+let dirSeen = new Map();
+function dirOnline(dir) {
+  if (!dirSeen.has(dir)) { let ok = false; try { ok = fs.statSync(dir).isDirectory(); } catch { /* staccato */ } dirSeen.set(dir, ok); }
+  return dirSeen.get(dir);
+}
+
 async function library(force) {
   if (!force && index && Date.now() - index.at < RESCAN_MS) return index.list;
+  dirSeen = new Map();
   let names = [];
   try { names = (await fs.promises.readdir(CACHE)).filter(n => n.endsWith('.json')); } catch { /* nessuna analisi ancora */ }
   const list = [];
@@ -72,11 +84,14 @@ async function track(id) {
 // (GAIA_MUSIC, default di gaia-audio). Mai fuori da quella cartella.
 const ROOT = path.resolve(process.env.GAIA_MUSIC || 'C:\\gaia-docker-cfg\\core-node-0\\musica');
 const AUDIO_TYPES = { '.mp3': 'audio/mpeg', '.flac': 'audio/flac', '.wav': 'audio/wav', '.m4a': 'audio/mp4', '.ogg': 'audio/ogg', '.aiff': 'audio/aiff', '.aif': 'audio/aiff' };
+const under = (file, base) => file.toLowerCase().startsWith(path.resolve(base).toLowerCase().replace(/[\\/]$/, '') + path.sep);
 async function trackFile(id, root = ROOT) {
   validId(id);
   const t = JSON.parse(await fs.promises.readFile(path.join(CACHE, id + '.json'), 'utf8'));
   const base = path.resolve(root), file = path.resolve(base, String(t.path || ''));
-  if (!file.toLowerCase().startsWith(base.toLowerCase() + path.sep)) throw new Error('percorso fuori dalla cartella della musica');
+  // solo dentro la cartella principale o una delle cartelle musica aggiunte
+  const extra = (await musicRoots()).map(r => r.path);
+  if (!under(file, base) && !extra.some(r => under(file, r))) throw new Error('percorso fuori dalla cartella della musica');
   const st = await fs.promises.stat(file);
   return { file, size: st.size, type: AUDIO_TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream' };
 }
@@ -128,4 +143,34 @@ async function savePlaylists(list) {
   return clean;
 }
 
-module.exports = { CACHE, library, track, trackFile, cues, saveCues, fromFilename, playlists, savePlaylists, cleanPlaylists };
+// Cartelle musica in piu' (20/11): oltre a quella principale (ROOT, nel docker) dischi USB o altre
+// cartelle di OPS. <cache>/music-roots.json = {roots: [{path, name}]}. I brani analizzati li' hanno
+// nell'analisi il percorso assoluto (il motore li carica cosi'): se il disco cambia lettera vanno rianalizzati.
+const ROOTS_FILE = () => path.join(CACHE, 'music-roots.json');
+const normDir = p => { let d = path.resolve(String(p || '')); if (/^[a-z]:/.test(d)) d = d[0].toUpperCase() + d.slice(1); return d; };
+function cleanRoots(list) {
+  if (!Array.isArray(list) || list.length > 20) throw new Error('cartelle musica: elenco non valido');
+  const seen = new Set(), main = normDir(ROOT).toLowerCase();
+  const out = [];
+  for (const r of list) {
+    const p = String(r?.path || '').trim();
+    if (!p || !path.isAbsolute(p) || p.length > 260) throw new Error('cartella non valida: ' + p);
+    const d = normDir(p), k = d.toLowerCase();
+    if (k === main || seen.has(k)) continue;
+    seen.add(k);
+    out.push({ path: d, name: String(r.name || '').trim().slice(0, 40) || path.basename(d) || d });
+  }
+  return out;
+}
+async function musicRoots() {
+  try { return cleanRoots(JSON.parse(await fs.promises.readFile(ROOTS_FILE(), 'utf8')).roots || []); } catch { return []; }
+}
+async function saveMusicRoots(list) {
+  const clean = cleanRoots(list);
+  await fs.promises.mkdir(CACHE, { recursive: true });
+  await fs.promises.writeFile(ROOTS_FILE() + '.tmp', JSON.stringify({ roots: clean }, null, 1));
+  await fs.promises.rename(ROOTS_FILE() + '.tmp', ROOTS_FILE());
+  return clean;
+}
+
+module.exports = { CACHE, ROOT, isAbs, normDir, musicRoots, saveMusicRoots, cleanRoots, library, track, trackFile, cues, saveCues, fromFilename, playlists, savePlaylists, cleanPlaylists };
