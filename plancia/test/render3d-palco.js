@@ -56,6 +56,20 @@ async function main() {
       const w=sc.getWorldPosition(sc.position.clone()),q=pj.getWorldPosition(pj.position.clone());c.position.copy(q).lerp(w,0.25).add({x:0,y:1.2,z:0});R.controls.target.copy(w);R.controls.update();return 1})()`);
     await sleep(1500); await p.shot(path.join(OUT, 'schermo.png'));
 
+    // mapping sul modello: i 4 angoli dello schermo come punti cliccati -> l'immagine cade esattamente li'
+    const mp = await p.ev(`(()=>{const R=window.__r3d,P=R.PAL,sc=P.items.find(i=>i.kind==='screen'),pj=P.items.find(i=>i.kind==='projector');
+      const g=sc.g,w=sc.f.w,h=sc.f.h,pts=[[-w/2,h/2],[w/2,h/2],[w/2,-h/2],[-w/2,-h/2]].map(([x,y])=>{const v=g.localToWorld(new g.position.constructor(x,y,0));R.compInner.worldToLocal(v);return [v.x,v.y,v.z]});
+      P.prj[pj.f.id]={pts};document.getElementById('palDX').dispatchEvent(new Event('input'));
+      const it=P.items.find(i=>i.kind==='projector');return {c:it.corners,src:it.mapSrc,msg:document.getElementById('palPrjMsg').textContent}})()`);
+    const c = mp.c || [];
+    check(mp.src === 'modello' && c.length === 4 && c.every(([x, y]) => x > 0 && x < 1 && y > 0 && y < 1) && c[0][0] < c[1][0] && c[3][0] < c[2][0] && c[0][1] < c[3][1],
+      `mapping dai 4 punti sul modello: angoli dentro l'immagine ${JSON.stringify(c)}`);
+    check(/4 punti sul modello/.test(mp.msg) && /Corner pin/.test(mp.msg), 'messaggio del proiettore: ' + mp.msg.slice(0, 160));
+    await p.ev(`(()=>{const R=window.__r3d,it=R.PAL.items,sc=it.find(i=>i.kind==='screen').g,pj=it.find(i=>i.kind==='projector').spot,c=R.camera();
+      const w=sc.getWorldPosition(sc.position.clone()),q=pj.getWorldPosition(pj.position.clone());c.position.copy(q).lerp(w,0.25).add({x:0,y:1.2,z:0});R.controls.target.copy(w);R.controls.update();return 1})()`);
+    await sleep(1500); await p.shot(path.join(OUT, 'mapping.png'));
+    await p.ev(`(()=>{const P=window.__r3d.PAL;P.prj={};document.getElementById('palDX').dispatchEvent(new Event('input'));return 1})()`);
+
     // Palco non in scala (0.6): l'automatico trova la scala, le misure degli oggetti restano vere
     await p.send('Page.navigate', { url: `${base}/render3d/?frames=${encodeURIComponent(f2)}` });
     n = 0; for (let i = 0; i < 80 && !n; i++) { await sleep(250); n = await p.ev(`window.__r3d?.PAL?.items?.length||0`).catch(() => 0); }

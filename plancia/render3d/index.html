@@ -94,6 +94,11 @@
     <div class="row"><label>quota</label><input id="palY" type="range" min="-2" max="4" step="0.05" value="0"><output></output></div>
     <div class="row"><label>LED wall</label><input id="palLed" type="range" min="0" max="3" step="0.05" value="1"><output></output></div>
     <div class="row"><label>proiettori</label><input id="palPrj" type="range" min="0" max="3" step="0.05" value="1"><output></output></div>
+    <div id="palPrjBox" style="display:none;margin:6px 0;padding-top:6px;border-top:1px solid var(--line)">
+      <div class="row"><label>proiettore</label><select id="palPrjSel" style="flex:1"></select></div>
+      <div class="btns"><button id="palAim" title="Clicca nella scena il punto dove deve guardare il proiettore">📍 punta qui</button><button id="palMap4" title="Clicca sul modello i 4 angoli dove deve cadere l'immagine: alto sx, alto dx, basso dx, basso sx">◰ mappa 4 punti</button><button id="palMapOff" title="Togli punto e mapping: torna allo schermo collegato o davanti">✕ togli</button></div>
+      <div class="hint" id="palPrjMsg"></div>
+    </div>
     <div class="row" style="flex-wrap:wrap"><label><input type="checkbox" id="palShow" checked> mostra</label><label><input type="checkbox" id="palCone" checked> fasci</label><label><input type="checkbox" id="palMirror"> specchia</label></div>
   </div>
 
@@ -912,7 +917,8 @@ function mvAvg(tile){
 // Palco -> scansione = similitudine 2D (rotazione, scala, spostamento; specchiata a richiesta), dalle
 // colonne collegate (auto) o da 2 punti cliccati (manuale), poi i ritocchi del pannello. Le misure
 // degli oggetti restano vere (metri): la scala vale solo per le posizioni, il Palco puo' non essere in scala.
-var PAL={grp:new THREE.Group(),items:[],T:null,pts:[null,null],pick:0};
+var PAL={grp:new THREE.Group(),items:[],T:null,pts:[null,null],pick:0,prj:{},rts:[],prjPick:null};
+// PAL.prj[id] = {aim:[x,y,z] punto mirato, pts:[[x,y,z]x4] angoli sul modello, reg:{corners,name} corner pin da Regia}
 compInner.add(PAL.grp);
 renderer.shadowMap.enabled=true;   // l'immagine dei proiettori (SpotLight.map) passa dalle ombre di three
 const cmul=(a,b)=>[a[0]*b[0]-a[1]*b[1],a[0]*b[1]+a[1]*b[0]];
@@ -946,6 +952,48 @@ function palFit(){
   return T;
 }
 // immagine di prova dei proiettori: 16:9 al centro di un quadrato (il cono della luce e' tondo)
+// Immagine del proiettore = render target quadrato (il cono della luce e' tondo): il contenuto 16:9
+// (video registrato o immagine di prova) ci viene disegnato deformato sui 4 angoli del mapping
+// (corner pin, come Regia: angoli normalizzati sull'immagine 16:9, 0,0 = alto sx). Senza mapping
+// sta al centro, largo 1/√2 del quadrato.
+const PRJ_N=512, PRJ_W=Math.round(PRJ_N/Math.SQRT2), PRJ_H=Math.round(PRJ_W*9/16), PRJ_X=(PRJ_N-PRJ_W)/2, PRJ_Y=(PRJ_N-PRJ_H)/2;
+const PRJ_DEF=[[0,0],[1,0],[1,1],[0,1]];
+function palCard(name){
+  const cv=document.createElement('canvas'); cv.width=640; cv.height=360; const g=cv.getContext('2d'), W=640, H=360;
+  ['#ffffff','#ffe600','#00e5ff','#00e040','#ff2bd6','#ff2a1a','#2a4bff'].forEach((c,i)=>{ g.fillStyle=c; g.fillRect(i*W/7,0,W/7+1,H*0.62); });
+  g.fillStyle='#202020'; g.fillRect(0,H*0.62,W,H*0.38);
+  g.strokeStyle='#fff'; g.lineWidth=4; g.strokeRect(2,2,W-4,H-4);
+  g.beginPath(); g.arc(W/2,H/2,H*0.3,0,7); g.stroke();
+  g.fillStyle='#fff'; g.font='bold 34px sans-serif'; g.textAlign='center'; g.fillText(name||'proiettore',W/2,H*0.86);
+  return cv;
+}
+// quadrato unitario -> quadrilatero (angoli in ordine alto sx, alto dx, basso dx, basso sx)
+function sqToQuad(q){
+  const [[x0,y0],[x1,y1],[x2,y2],[x3,y3]]=q, dx1=x1-x2, dx2=x3-x2, dx3=x0-x1+x2-x3, dy1=y1-y2, dy2=y3-y2, dy3=y0-y1+y2-y3;
+  const den=dx1*dy2-dx2*dy1||1e-9, g=(dx3*dy2-dx2*dy3)/den, h=(dx1*dy3-dx3*dy1)/den;
+  const a=x1-x0+g*x1, b=x3-x0+h*x3, d=y1-y0+g*y1, e=y3-y0+h*y3;
+  return (u,v)=>{ const w=g*u+h*v+1; return [(a*u+b*v+x0)/w,(d*u+e*v+y0)/w]; };
+}
+function prjWarp(it,corners){
+  const q=(corners||PRJ_DEF).map(([x,y])=>[PRJ_X+x*PRJ_W,PRJ_Y+y*PRJ_H]), H=sqToQuad(q), S=16, pos=[], uv=[], idx=[];
+  for(let j=0;j<=S;j++) for(let i=0;i<=S;i++){ const u=i/S, v=j/S, p=H(u,v); pos.push(p[0],p[1],0); uv.push(u,1-v); }
+  for(let j=0;j<S;j++) for(let i=0;i<S;i++){ const a=j*(S+1)+i; idx.push(a,a+S+1,a+1, a+1,a+S+1,a+S+2); }
+  const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2)); g.setIndex(idx);
+  if(it.wm.geometry) it.wm.geometry.dispose(); it.wm.geometry=g; it.dirty=true;
+}
+function prjRender(it){
+  const prev=renderer.getRenderTarget(); renderer.setRenderTarget(it.rt); renderer.render(it.ws,it.wc); renderer.setRenderTarget(prev); it.dirty=false;
+}
+// telecamera del proiettore (come la sua luce): da un punto della scena all'immagine 16:9 (0..1)
+function prjCam(it){
+  const c=new THREE.PerspectiveCamera(THREE.MathUtils.radToDeg(2*it.spot.angle),1,0.05,200);
+  c.position.copy(it.pos); c.up.set(0,1,0); c.lookAt(it.aim); c.updateMatrixWorld(); return c;
+}
+function prjToImage(it,p){
+  const n=new THREE.Vector3(...p).project(prjCam(it));
+  const cx=(n.x+1)/2*PRJ_N, cy=(1-n.y)/2*PRJ_N;
+  return [+((cx-PRJ_X)/PRJ_W).toFixed(4), +((cy-PRJ_Y)/PRJ_H).toFixed(4), n.z<1];
+}
 function palPattern(name){
   const N=512, cv=document.createElement('canvas'); cv.width=cv.height=N; const g=cv.getContext('2d');
   g.fillStyle='#000'; g.fillRect(0,0,N,N);
@@ -960,6 +1008,7 @@ function palPattern(name){
 function palDispose(){
   PAL.grp.traverse(o=>{ o.geometry?.dispose?.(); if(o.material) [].concat(o.material).forEach(m=>{ m.map?.dispose?.(); m.dispose?.(); }); if(o.isSpotLight){ o.map?.dispose?.(); o.shadow?.map?.dispose?.(); } });
   PAL.grp.clear(); PAL.items=[];
+  for(const it of PAL.rts) it.dispose(); PAL.rts=[];
 }
 function palOptions(){
   const fx=palFixtures(), opts=fx.map(f=>`<option value="${f.id}">${f.name||f.id} · ${PAL_TYPES[f.type]||f.type}</option>`).join('');
@@ -1000,18 +1049,20 @@ function palBuild(){
   for(const f of els.filter(f=>f.type==='projector')){
     const pos=at(f,f.z||3.5), sc=f.target&&fx.find(x=>x.id===f.target&&x.type==='screen');
     // punta al centro dello schermo collegato; senza schermo: verso il palco (rot 0), un po' in giu'
-    let aim; if(sc) aim=at(sc,(sc.z||0)+(sc.h||2.8)/2);
+    const ps=PAL.prj[f.id]||{};
+    let aim; if(ps.aim) aim=new THREE.Vector3(...ps.aim); else if(sc) aim=at(sc,(sc.z||0)+(sc.h||2.8)/2);
     else { const r=(f.rot||0)*Math.PI/180, [ax,az]=T.dir(Math.sin(r),-Math.cos(r)); aim=pos.clone().add(new THREE.Vector3(ax*8,-1.2,az*8)); }
     const body=new THREE.Mesh(new THREE.BoxGeometry(0.42,0.18,0.36),new THREE.MeshStandardMaterial({color:0x2a2c30,roughness:0.5}));
     body.position.copy(pos); body.lookAt(aim);
     const thr=Math.max(0.3,f.throw||1.5), tanH=0.5/thr, dist=pos.distanceTo(aim);
     const spot=new THREE.SpotLight(0xffffff,0,0,Math.atan(Math.SQRT2*tanH),0.02,0);
     spot.position.copy(pos); spot.target.position.copy(aim);
-    // immagine: il contenuto registrato (16:9 al centro del quadrato, come la prova) o l'immagine di prova
-    const tile=MV.doc?.tiles?.[f.id]; let pcv=null;
-    if(tile){ pcv=document.createElement('canvas'); pcv.width=pcv.height=512; const g=pcv.getContext('2d'); g.fillStyle='#000'; g.fillRect(0,0,512,512);
-      spot.map=new THREE.CanvasTexture(pcv); spot.map.colorSpace=THREE.SRGBColorSpace; }
-    else spot.map=palPattern(f.name);
+    // immagine: contenuto 16:9 (video registrato o prova) deformato dal mapping in un render target
+    const tile=MV.doc?.tiles?.[f.id], cc=tile?Object.assign(document.createElement('canvas'),{width:640,height:360}):palCard(f.name);
+    const ctex=new THREE.CanvasTexture(cc); ctex.colorSpace=THREE.SRGBColorSpace;
+    const rt=new THREE.WebGLRenderTarget(PRJ_N,PRJ_N); rt.texture.colorSpace=THREE.SRGBColorSpace; PAL.rts.push(rt);
+    const ws=new THREE.Scene(), wc=new THREE.OrthographicCamera(0,PRJ_N,0,PRJ_N,-1,1), wm=new THREE.Mesh(new THREE.BufferGeometry(),new THREE.MeshBasicMaterial({map:ctex,toneMapped:false}));
+    ws.add(wm); spot.map=rt.texture;
     spot.castShadow=true; spot.shadow.mapSize.set(512,512); spot.shadow.camera.near=0.2; spot.shadow.camera.far=80;
     // fascio: piramide dall'obiettivo al punto mirato (solo guida)
     const hw=tanH*dist, hh=hw*9/16, v=[0,0,0, -hw,-hh,dist, hw,-hh,dist, hw,hh,dist, -hw,hh,dist];
@@ -1019,9 +1070,14 @@ function palBuild(){
     const cone=new THREE.Group(), cm=new THREE.MeshBasicMaterial({color:0x9fe0ff,transparent:true,opacity:0.05,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide,toneMapped:false});
     cone.add(new THREE.Mesh(pg,cm), new THREE.LineSegments(new THREE.EdgesGeometry(pg),new THREE.LineBasicMaterial({color:0x9fe0ff,transparent:true,opacity:0.35,toneMapped:false})));
     cone.position.copy(pos); cone.lookAt(aim);
-    PAL.grp.add(body,spot,spot.target,cone); PAL.items.push({f,kind:'projector',spot,cone,dist,img:2*hw,screen:sc||null,tile,cv:pcv,cg:pcv?.getContext('2d'),tex:pcv?spot.map:null});
+    PAL.grp.add(body,spot,spot.target,cone); const it={f,kind:'projector',spot,cone,dist,img:2*hw,screen:sc||null,tile,cc,cg:cc.getContext('2d'),ctex,rt,ws,wc,wm,pos,aim,aimed:!!ps.aim};
+    // mapping: 4 punti sul modello (ricalcolati da posizione e mira), altrimenti corner pin di Regia
+    it.corners=ps.pts?.length===4?ps.pts.map(p=>prjToImage(it,p).slice(0,2)):ps.reg?.corners||null;
+    it.mapSrc=ps.pts?.length===4?'modello':ps.reg?'regia':null;
+    prjWarp(it,it.corners);
+    PAL.grp.add(body,spot,spot.target,cone); PAL.items.push(it);
   }
-  palMsg();
+  palPrjUI(); palMsg();
 }
 function palMsg(){
   const els=palFixtures().filter(f=>PAL_TYPES[f.type]), T=PAL.T;
@@ -1047,8 +1103,7 @@ function palLights(fr){
       if(it.kind==='wall'){ it.cg.drawImage(vid,x,y,w,h,0,0,it.cv.width,it.cv.height); it.tex.needsUpdate=true;
         it.mat.color.setScalar(gL); const a=mvAvg(it.tile), m=Math.max(...a,1e-4);
         it.spot.color.setRGB(a[0]/m,a[1]/m,a[2]/m); it.spot.intensity=spill*m*gL*8; continue; }
-      const N=512, W=Math.round(N/Math.SQRT2), H=Math.round(W*9/16);
-      it.cg.drawImage(vid,x,y,w,h,(N-W)/2,(N-H)/2,W,H); it.tex.needsUpdate=true;
+      it.cg.drawImage(vid,x,y,w,h,0,0,640,360); it.ctex.needsUpdate=true; it.dirty=true;
     } else if(it.tile&&it.kind==='wall'){ it.mat.color.setScalar(0.05*gL); it.spot.intensity=0; continue; }
     if(it.kind==='wall'){
       const r=fr?.f?.[it.f.id], c=r?.c?hexRGB(r.c):null, k=r?(r.k??0):0;
@@ -1056,7 +1111,7 @@ function palLights(fr){
       if(!c){ it.mat.color.setRGB(0.04*gL,0.045*gL,0.06*gL); it.spot.intensity=0; continue; }
       it.mat.color.setRGB(c[0]*k*gL*1.2,c[1]*k*gL*1.2,c[2]*k*gL*1.2);
       const m=Math.max(...c,1e-4); it.spot.color.setRGB(c[0]/m,c[1]/m,c[2]/m); it.spot.intensity=spill*k*m*gL*8;
-    } else if(it.kind==='projector'){ it.spot.intensity=gP*3; it.cone.visible=cone&&gP>0; }
+    } else if(it.kind==='projector'){ if(it.dirty) prjRender(it); it.spot.intensity=gP*3; it.cone.visible=cone&&gP>0; }
   }
 }
 // i 2 punti dell'allineamento manuale: clic sulla scansione
@@ -1094,7 +1149,44 @@ $('palMirror').onchange=()=>{ palBuild(); autosave?.(); };
 for(const id of ['palDX','palDZ','palRot','palS','palY']) bindRange(id,()=>palBuild());
 bindRange('palLed'); bindRange('palPrj');
 
-window.__r3d={FR,FA,faRuns,PAL,palFit,MV,camera:()=>camera,controls,compInner};   // per i test (test/render3d-*.js)
+const PRJ_CORNER=['alto sx','alto dx','basso dx','basso sx'];
+function palPrjUI(){
+  const pj=PAL.items.filter(i=>i.kind==='projector'), sel=$('palPrjSel'), was=sel.value;
+  $('palPrjBox').style.display=pj.length?'':'none'; if(!pj.length) return;
+  sel.innerHTML=pj.map(i=>`<option value="${i.f.id}">${i.f.name||i.f.id}</option>`).join('');
+  sel.value=pj.some(i=>i.f.id===was)?was:pj[0].f.id; palPrjMsg();
+}
+function palPrjMsg(extra){
+  const it=PAL.items.find(i=>i.kind==='projector'&&i.f.id===$('palPrjSel').value); if(!it){ $('palPrjMsg').textContent=''; return; }
+  const k=PAL.prjPick;
+  if(k&&k.id===it.f.id){ $('palPrjMsg').textContent=k.kind==='aim'?'Clicca nella scena dove deve guardare il proiettore.':`Clicca sul modello l'angolo ${k.pts.length+1} di 4: ${PRJ_CORNER[k.pts.length]} dell'immagine.`; return; }
+  const aim=it.aimed?'punto scelto nella scena':it.screen?'centro di '+(it.screen.name||'schermo'):'davanti (nessuno schermo)';
+  const map=it.mapSrc==='modello'?'4 punti sul modello':it.mapSrc==='regia'?'corner pin di Regia ('+(PAL.prj[it.f.id]?.reg?.name||'')+')':'nessuno (immagine intera)';
+  const cp=it.corners?' Corner pin (per Regia o il mapping vero): '+it.corners.map(c=>'('+c[0].toFixed(3)+', '+c[1].toFixed(3)+')').join(' '):'';
+  const out=it.corners&&it.corners.some(c=>c[0]<-0.02||c[0]>1.02||c[1]<-0.02||c[1]>1.02)?' Attenzione: qualche angolo cade fuori dall\'immagine del proiettore (avvicinalo, cambia tiro o punta meglio).':'';
+  $('palPrjMsg').textContent=`Punta: ${aim}. Mapping: ${map}.${cp}${out}${extra?' '+extra:''}`;
+}
+function palPrjSet(id,fn){ const p=PAL.prj[id]||(PAL.prj[id]={}); fn(p); palBuild(); autosave?.(); }
+$('palPrjSel').onchange=()=>palPrjMsg();
+const prjStart=kind=>{ const id=$('palPrjSel').value; if(!id) return; PAL.prjPick=PAL.prjPick?.id===id&&PAL.prjPick.kind===kind?null:{kind,id,pts:[]};
+  $('palAim').classList.toggle('on',PAL.prjPick?.kind==='aim'); $('palMap4').classList.toggle('on',PAL.prjPick?.kind==='map'); canvas.style.cursor=PAL.prjPick?'crosshair':''; palPrjMsg(); };
+$('palAim').onclick=()=>prjStart('aim');
+$('palMap4').onclick=()=>prjStart('map');
+$('palMapOff').onclick=()=>{ PAL.prjPick=null; canvas.style.cursor=''; palPrjSet($('palPrjSel').value,p=>{ delete p.aim; delete p.pts; delete p.reg; }); };
+let prjDown=null;
+canvas.addEventListener('pointerdown',e=>{ if(PAL.prjPick) prjDown=[e.clientX,e.clientY]; },true);
+canvas.addEventListener('pointerup',e=>{
+  const k=PAL.prjPick; if(!k||!prjDown) return;
+  const moved=Math.hypot(e.clientX-prjDown[0],e.clientY-prjDown[1]); prjDown=null; if(moved>5) return;
+  const p=palPickAt(e); if(!p) return;
+  const l=compInner.worldToLocal(p.clone()), pt=[+l.x.toFixed(3),+l.y.toFixed(3),+l.z.toFixed(3)];
+  pickMark.position.copy(p); pickMark.visible=true; pickFade=2.5;
+  if(k.kind==='map'){ k.pts.push(pt); if(k.pts.length<4){ palPrjMsg(); return; } }
+  PAL.prjPick=null; canvas.style.cursor=''; $('palAim').classList.remove('on'); $('palMap4').classList.remove('on');
+  palPrjSet(k.id,ps=>{ if(k.kind==='aim') ps.aim=pt; else { ps.pts=k.pts; delete ps.reg; } });
+});
+
+window.__r3d={FR,FA,faRuns,PAL,palFit,MV,prjToImage,sqToQuad,camera:()=>camera,controls,compInner};   // per i test (test/render3d-*.js)
 addEventListener('pointerdown',()=>{ if(FA.ctx?.state==='suspended') FA.ctx.resume().then(faMsg).catch(()=>{}); });
 // tratti continui di un deck (stesso brano, tempo e posizione che scorre): un solo player, il
 // guadagno cambia a punti. Tempi del documento in s.
@@ -1657,14 +1749,14 @@ $('prevClose').onclick=()=>{ $('prev').style.display='none'; $('prevOpen').style
 $('prevOpen').onclick=()=>{ $('prev').style.display=''; $('prev').classList.remove('min'); $('prevMin').textContent='–'; $('prevOpen').style.display='none'; };
 
 /* ---------- preset ---------- */
-const SKIP=new Set(['palP1','palP2','exRes','exDur','elSel','pName','pList','pImport','elX','elY','elZ','elR','elT']);
+const SKIP=new Set(['palP1','palP2','palPrjSel','exRes','exDur','elSel','pName','pList','pImport','elX','elY','elZ','elR','elT']);
 function getState(){
   const ui={};
   document.querySelectorAll('#panel input[id], #panel select[id]').forEach(e=>{ if(SKIP.has(e.id)||e.id==='srcMode'||e.id.startsWith('fr')) return; ui[e.id]= e.type==='checkbox'?e.checked:e.value; });
   const orbit=document.querySelector('[data-orbit].on')?.dataset.orbit||null;
   ui.objMirror=objMirror;
   ui.__ortho = camera===orthoCam ? {H:ORTHO_H, zoom:orthoCam.zoom} : null;
-  return {v:2, ui, fr:{mode:FR.mode,file:FR.file,map:FR.map}, pal:{pts:PAL.pts}, pos:JSON.parse(JSON.stringify(POS)), cam:{p:camera.position.toArray(),t:controls.target.toArray()}, orbit,
+  return {v:2, ui, fr:{mode:FR.mode,file:FR.file,map:FR.map}, pal:{pts:PAL.pts,prj:PAL.prj}, pos:JSON.parse(JSON.stringify(POS)), cam:{p:camera.position.toArray(),t:controls.target.toArray()}, orbit,
           prev:$('prev').style.display==='none'?'closed':($('prev').classList.contains('min')?'min':'open')};
 }
 async function applyState(st){
@@ -1678,6 +1770,7 @@ async function applyState(st){
   }
   for(const k in st.pos) if(POS[k]) Object.assign(POS[k],st.pos[k]);
   if(st.pal?.pts) PAL.pts=[st.pal.pts[0]||null,st.pal.pts[1]||null];
+  if(st.pal?.prj&&typeof st.pal.prj==='object') PAL.prj=st.pal.prj;
   if(st.fr){ FR.map={...(st.fr.map||{})}; frSetMode(st.fr.mode||'frames'); if(st.fr.mode==='frames'&&st.fr.file&&st.fr.file!==FR.file) frLoad(st.fr.file); }
   if(clipChanged){ $('clip').value=st.ui.clip; await setClip(st.ui.clip); }
   stopOrbit();
