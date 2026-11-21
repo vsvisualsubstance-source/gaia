@@ -38,6 +38,18 @@ document.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{
   if(t==='timeline')w.addr='/show'+(n>1?n:'');
   page().widgets.push(w); save(); stage.appendChild(build(w)); select(w.id);
 });
+// Console Audio (2026-11-21): i quattro widget del template sotto a quelli della pagina,
+// oppure una pagina a parte (gruppo Video e audio)
+function addConsoleAudio(newPage){
+  const ps=TPL.consoleaudio.pages();
+  if(newPage){const p=ps[0],n=L.pages.filter(x=>x.name.startsWith('Console Audio')).length;if(n)p.name='Console Audio '+(n+1);
+    L.pages.push(p);pi=L.pages.length-1;selId=null;save();render();showInfo('Aggiunta la pagina "'+p.name+'".');return}
+  const y0=page().widgets.reduce((m,w)=>Math.max(m,w.y+w.h),0);
+  for(const w of ps[0].widgets){w.y+=y0;page().widgets.push(w)}
+  selId=null;save();render();showInfo('Console Audio aggiunta in fondo alla pagina.');
+}
+$('#addConsole').onclick=()=>addConsoleAudio(false);
+$('#addConsolePage').onclick=()=>addConsoleAudio(true);
 function addPage(){L.pages.push(P('Pagina '+(L.pages.length+1),[]));pi=L.pages.length-1;selId=null;save();render()}
 
 /* ---------- ispettore ---------- */
