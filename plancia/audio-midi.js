@@ -151,6 +151,9 @@ function z1Leds(state, st) {
 // messaggi/s in entrata) con i VU in uscita: la Z1 non regge il traffico nei due sensi insieme.
 // Per questo i VU tacciono mentre la Z1 manda e per Z1_QUIET_MS dopo l'ultimo suo messaggio.
 const METER_MS = 200, METER_STEP = 3, Z1_QUIET_MS = 600;
+// 21/11/2026: quinto blocco anche cosi' (16:22, a 230 ms da un VU, all'inizio di un movimento):
+// VU della Z1 spenti del tutto; Z1_VU=1 nell'ambiente del bridge li riaccende.
+const Z1_VU = process.env.Z1_VU === '1';
 const meterDue = (v, last, now, z1At = -Infinity) => now - z1At >= Z1_QUIET_MS && (last == null || (now - last.at >= METER_MS && (Math.abs(v - last.v) >= METER_STEP || (v === 0 && last.v !== 0))));
 
 // z1Out(): nome della porta MIDI in uscita della Z1 (scelta in devices-config.js); null = per nome
@@ -178,10 +181,11 @@ function startAudioMidi({ engine, isTimeline = () => false, log = console.log, t
     if (!timed('MIDI apertura uscita Z1', openOut)) return;
     const want = z1Leds(s, st), now = Date.now();
     try {
-      for (const [k, v] of Object.entries(want)) {
-        if (sent[k] === v) continue;
+      for (let [k, v] of Object.entries(want)) {
         const meter = k === '3:3' || k === '3:4';
-        if (meter && !meterDue(v, meterAt[k], now, z1At)) continue;
+        if (meter && !Z1_VU) v = 0;   // VU spenti: un solo 0 all'apertura, se no il LED resta dov'era
+        if (sent[k] === v) continue;
+        if (meter && Z1_VU && !meterDue(v, meterAt[k], now, z1At)) continue;
         const [ch, cc] = k.split(':').map(Number);
         timed('MIDI LED Z1', () => out.send('cc', { controller: cc, value: v, channel: ch - 1 }));
         sent[k] = v;
