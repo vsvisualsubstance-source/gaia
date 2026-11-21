@@ -151,9 +151,10 @@ function z1Leds(state, st) {
 // messaggi/s in entrata) con i VU in uscita: la Z1 non regge il traffico nei due sensi insieme.
 // Per questo i VU tacciono mentre la Z1 manda e per Z1_QUIET_MS dopo l'ultimo suo messaggio.
 const METER_MS = 200, METER_STEP = 3, Z1_QUIET_MS = 600;
-// 21/11/2026: quinto blocco anche cosi' (16:22, a 230 ms da un VU, all'inizio di un movimento):
-// VU della Z1 spenti del tutto; Z1_VU=1 nell'ambiente del bridge li riaccende.
-const Z1_VU = process.env.Z1_VU === '1';
+// 21/11/2026: la Z1 si e' bloccata anche coi VU spenti (16:26, zero messaggi verso la Z1): non sono
+// loro. Era attaccata dietro l'hub interno del PC; su una porta diretta funziona. VU di nuovo accesi
+// (sempre col limite qui sopra); Z1_VU=0 nell'ambiente del bridge li spegne (un solo 0 all'apertura).
+const Z1_VU = process.env.Z1_VU !== '0';
 const meterDue = (v, last, now, z1At = -Infinity) => now - z1At >= Z1_QUIET_MS && (last == null || (now - last.at >= METER_MS && (Math.abs(v - last.v) >= METER_STEP || (v === 0 && last.v !== 0))));
 
 // z1Out(): nome della porta MIDI in uscita della Z1 (scelta in devices-config.js); null = per nome
