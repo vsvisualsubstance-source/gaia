@@ -44,7 +44,7 @@ function summary(t, id) {
     bpm: t.grid?.bpm || 0, first_beat: t.grid?.first_beat || 0, confidence: t.grid?.confidence || 0,
     locked: !!t.locked, rms_db: t.rms_db,
     // analisi 2: tempo che cambia (dal vivo) e scarto dei colpi dalla griglia
-    variable: !!t.grid?.variable, residual_ms: t.grid?.residual_ms ?? null,
+    variable: !!t.grid?.variable, residual_ms: t.grid?.residual_ms ?? null, tag_bpm: t.tag_bpm || null,
   };
 }
 

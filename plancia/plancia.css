@@ -912,3 +912,7 @@ button{cursor:pointer}
 .mp-ov{cursor:crosshair;outline:none}
 .mp-msg{font-size:12px;opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .r3d-frame{position:fixed;display:none;border:0;border-radius:6px;z-index:5;background:#050506}
+
+/* 23/11 Console Audio: brani gia' suonati nella sessione, rianalisi del brano */
+tr.au-played td{opacity:.55}.au-pl-tag{font-size:11px;padding:1px 6px;border-radius:9px;border:1px solid #4fd18b55;color:var(--ok);opacity:1}
+.au-rean{min-width:26px;padding:0 4px;font-size:13px;margin-left:4px}.au-played-btn.on{border-color:var(--ok);color:var(--ok)}

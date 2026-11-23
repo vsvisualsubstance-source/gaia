@@ -497,6 +497,37 @@ async function auPlaylistMenu(){
 }
 // cue della timeline audio che usano una playlist (pagina Timeline): 0 se il modulo non c'e'
 function auTimelineUses(id){return(L.audioTimeline?.cues||[]).filter(c=>c.src?.kind==='playlist'&&c.src.id===id).length}
+// 23/11: brani gia' suonati nella sessione (audio-played.js nel bridge: almeno 30 s in onda)
+async function auPlayedMenu(){
+  const n=Object.keys(G.audioPlayed?.played||{}).length,since=G.audioPlayed?.since;
+  const k=await uiChoose(`Brani suonati: ${n}${since?` dalle ${new Date(since).toLocaleString('it-IT',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}`:''}`,[
+    {label:AU.lib.hidePlayed?'Mostra anche i suonati':'Nascondi i suonati',value:'hide',on:true},
+    {label:'Nuova sessione (azzera i segni)',value:'reset',cls:'danger'}],{hint:'Un brano è suonato quando resta almeno 30 secondi in onda (play, fader aperto, crossfader dalla sua parte). La sessione resta finché non ne apri una nuova (o dopo 12 ore senza musica).'});
+  if(k==='hide'){AU.lib.hidePlayed=!AU.lib.hidePlayed}
+  else if(k==='reset'&&await uiConfirm('Nuova sessione: tutti i brani tornano “non suonati”.',{ok:'Nuova sessione'}))emit({type:'audio_played_reset'},true);
+}
+// 23/11: rianalisi avanzata di un brano letto male (BPM doppio/meta', griglia sbagliata): da capo,
+// con la gamma di tempo scelta (gaia-audio analyze --range); la griglia a mano si toglie solo se lo dici
+async function auReanalyze(id){
+  const t=AU.tracks.find(x=>x.id===id);if(!t)return;
+  if(G.audioAnalyze?.running){showError('C’è già un’analisi in corso: aspetta che finisca.');return}
+  const tag=t.tag_bpm&&t.tag_bpm>=50&&t.tag_bpm<=220?Math.round(t.tag_bpm):0;
+  const items=[
+    ...(tag?[{label:`Vicino al BPM scritto nel file: ${tag} (${tag-6}–${tag+6})`,value:`${tag-6}-${tag+6}`,on:true}]:[]),
+    {label:'Normale 88–175 (da capo)',value:'88-175',on:!tag},
+    {label:'Lento 60–110 · dub, reggae, hip hop, downtempo',value:'60-110'},
+    {label:'Medio 85–135 · house, pop, funk',value:'85-135'},
+    {label:'Veloce 120–180 · techno, dancehall, trance',value:'120-180'},
+    {label:'Molto veloce 150–200 · drum & bass, jungle',value:'150-200'},
+    {label:'Scrivo io il BPM giusto…',value:'ask'}];
+  let r=await uiChoose(`Rianalisi di “${t.title}” (ora ${t.bpm?t.bpm.toFixed(2):'—'} BPM)`,items,{hint:'Rifà l’analisi di questo brano da capo cercando il tempo solo nella gamma scelta: utile quando il BPM è il doppio o la metà di quello giusto, o la griglia non torna. Se il brano è su un deck, ricaricalo dopo.'});
+  if(!r)return;
+  if(r==='ask'){const v=parseFloat(String(await uiPrompt('BPM giusto (circa)',t.bpm?t.bpm.toFixed(0):'')||'').replace(',','.'));if(!(v>=50&&v<=220))return;const b=Math.round(v);r=`${Math.max(40,b-4)}-${Math.min(240,b+4)}`}
+  let unlock=false;
+  if(t.locked){if(!await uiConfirm('La griglia di questo brano è stata corretta a mano.\nLa sostituisco con la nuova analisi?',{ok:'Sostituisci',cancel:'Lascia stare'}))return;unlock=true}
+  emit({type:'audio_analyze',action:'track',id,range:r,unlock},true);
+  showInfo(`Rianalisi di “${t.title}” con BPM ${r.replace('-','–')}…`);
+}
 function auLibRows(){
   const q=AU.lib.q.trim().toLowerCase(),match=t=>!q||(t.title+' '+t.artist+' '+t.folder).toLowerCase().includes(q);
   const pl=auPlaylist(AU.lib.view);
@@ -504,7 +535,8 @@ function auLibRows(){
   if(pl){const byId=new Map(AU.tracks.map(t=>[t.id,t]));
     return pl.tracks.map((id,i)=>({...(byId.get(id)||{id,title:'(brano non più in libreria)',artist:'',folder:'',bpm:0,seconds:0,confidence:0,missing:true}),plIndex:i})).filter(match)}
   const f=AU.lib.folder;
-  let list=AU.tracks.filter(t=>(!f||t.folder===f)&&match(t));
+  const pl0=G.audioPlayed?.played||{};
+  let list=AU.tracks.filter(t=>(!f||t.folder===f)&&match(t)&&!(AU.lib.hidePlayed&&pl0[t.id]));
   const key=AU.lib.sort,dir=AU.lib.dir,val=t=>key==='bpm'?t.bpm:key==='seconds'?t.seconds:key==='confidence'?t.confidence:String(t[key]||'').toLowerCase();
   list=[...list].sort((a,b)=>{const x=val(a),y=val(b);return(x<y?-1:x>y?1:0)*dir});
   return list;
@@ -520,6 +552,7 @@ function auLibHtml(){
     <select data-au-s="folder"></select>
     <span class="au-ana"></span>
     <span class="au-libn hint"></span>
+    <button class="btn sm ghost au-played-btn" data-au="played" title="Brani già suonati in questa sessione: nascondili o apri una sessione nuova">✓ suonati</button>
     <button class="btn sm ghost" data-au="libreload">Aggiorna</button>
     <button class="btn sm ghost" data-au="analyze" title="Analizza i brani nuovi (BPM, griglia, forma d'onda); cartelle musica in più (USB, altri dischi)">Analizza…</button></div>
     <div class="au-libtab"></div></div>`}
@@ -593,8 +626,9 @@ function auPaintLib(el){
     :o?.ok?['MOTORE · '+o.device+(AU.lightsOut?(AU.lightsOut.ok?' · LUCI ✓':' · LUCI ✗'):''),'Motore gaia-audio collegato: uscita '+o.device+(o.rate?' a '+o.rate+' Hz':'')+(AU.cueOut?(AU.cueOut.ok?' · cuffia: '+AU.cueOut.device:' · cuffia NON aperta ('+(AU.cueOut.device||'')+': '+(AU.cueOut.error||'?')+')'):'')+(AU.lightsOut?(AU.lightsOut.ok?' · luci (DMX Master): '+AU.lightsOut.device+' a '+AU.lightsOut.rate+' Hz':' · uscita luci NON aperta ('+(AU.lightsOut.device||'')+': '+(AU.lightsOut.error||'?')+')'):'')]
     :['MOTORE · NESSUNA USCITA','Motore collegato ma senza scheda audio: '+(o?.error||'uscita non aperta')+'. Riprova da solo ogni 5 s.'];
   if(sim.textContent!==st){sim.textContent=st;sim.title=tip;sim.classList.toggle('live',!!(AU.live&&o?.ok))}
-  const rows=auLibRows(),loaded=['A','B'].map(k=>AU.decks[k].track?.id||'');
-  const sig=JSON.stringify([AU.libState,AU.lib,rows.length,rows.map(r=>r.id).join().length,rows[0]?.id,rows[rows.length-1]?.id,loaded,pl?.tracks]);
+  const rows=auLibRows(),loaded=['A','B'].map(k=>AU.decks[k].track?.id||''),played=G.audioPlayed?.played||{},nPlayed=Object.keys(played).length,ana=G.audioAnalyze?.running?G.audioAnalyze.file||'*':'';
+  {const pb=box.querySelector('.au-played-btn'),lab=`✓ ${nPlayed} suonat${nPlayed===1?'o':'i'}${AU.lib.hidePlayed?' · nascosti':''}`;if(pb&&pb.textContent!==lab){pb.textContent=lab;pb.classList.toggle('on',!!AU.lib.hidePlayed)}}
+  const sig=JSON.stringify([AU.libState,AU.lib,rows.length,rows.map(r=>r.id).join().length,rows[0]?.id,rows[rows.length-1]?.id,loaded,pl?.tracks,nPlayed,G.audioPlayed?.since,ana]);
   const tab=box.querySelector('.au-libtab');if(tab._sig===sig)return;tab._sig=sig;
   const tot=pl?pl.tracks.reduce((s,id)=>s+(AU.tracks.find(t=>t.id===id)?.seconds||0),0):0;
   box.querySelector('.au-libn').textContent=AU.libState||(pl?`${pl.tracks.length} brani · ${auFmt(tot)}`:`${rows.length} di ${AU.tracks.length} tracce`);
@@ -603,9 +637,9 @@ function auPaintLib(el){
   const ctl=t=>pl?`<td class="au-plctl"><button class="au-btn" data-au="plup" data-i="${t.plIndex}"${t.plIndex?'':' disabled'} title="Su">▲</button><button class="au-btn" data-au="pldown" data-i="${t.plIndex}"${t.plIndex<n-1?'':' disabled'} title="Giù">▼</button><button class="au-btn" data-au="plrm" data-i="${t.plIndex}" title="Togli dalla playlist">✕</button></td>`
     :`<td class="au-plctl"><button class="au-btn" data-au="pladd" data-id="${t.id}" title="Aggiungi a una playlist">＋</button></td>`;
   tab.innerHTML=`<table><thead><tr><th></th>${pl?'<th>#</th>':''}${th('title','Titolo')}${th('artist','Artista')}${th('bpm','BPM')}${th('seconds','Durata')}${th('confidence','Griglia')}${pl?'':th('folder','Cartella')}<th></th></tr></thead><tbody>
-    ${rows.slice(0,400).map(t=>`<tr${loaded.includes(t.id)?' class="on"':''}${t.missing||t.offline?' class="au-miss"':''}${t.offline?' title="Disco non collegato"':''}><td class="au-load">${t.missing||t.offline?'':`<button class="au-btn" data-au="load" data-deck="A" data-id="${t.id}">A</button><button class="au-btn" data-au="load" data-deck="B" data-id="${t.id}">B</button>`}</td>
-      ${pl?`<td class="num dim">${t.plIndex+1}</td>`:''}<td>${esc(t.title)}</td><td class="dim">${esc(t.artist)}</td><td class="num">${t.bpm?t.bpm.toFixed(2):'—'}</td><td class="num">${t.missing?'—':auFmt(t.seconds)}</td>
-      <td>${t.missing?'':t.locked?'<span class="au-gr ok">a mano</span>':t.variable?'<span class="au-gr bad" title="Il tempo cambia lungo il brano (suonato dal vivo): controlla la griglia">variabile</span>':t.confidence>=.4?`<span class="au-gr ok"${t.residual_ms!=null?` title="colpi di cassa a ${t.residual_ms} ms dalla griglia"`:''}>ok</span>`:'<span class="au-gr bad">incerta</span>'}</td>${pl?'':`<td class="dim">${esc(t.folder)}${t.offline?' · non collegata':''}</td>`}${ctl(t)}</tr>`).join('')}
+    ${rows.slice(0,400).map(t=>`<tr${loaded.includes(t.id)?' class="on"':played[t.id]?' class="au-played"':''}${t.missing||t.offline?' class="au-miss"':''}${t.offline?' title="Disco non collegato"':''}><td class="au-load">${t.missing||t.offline?'':`<button class="au-btn" data-au="load" data-deck="A" data-id="${t.id}">A</button><button class="au-btn" data-au="load" data-deck="B" data-id="${t.id}">B</button>`}</td>
+      ${pl?`<td class="num dim">${t.plIndex+1}</td>`:''}<td>${played[t.id]?`<span class="au-pl-tag" title="Già suonato in questa sessione">✓ ${new Date(played[t.id]).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})}</span> `:''}${esc(t.title)}</td><td class="dim">${esc(t.artist)}</td><td class="num">${t.bpm?t.bpm.toFixed(2):'—'}</td><td class="num">${t.missing?'—':auFmt(t.seconds)}</td>
+      <td>${t.missing?'':t.locked?'<span class="au-gr ok">a mano</span>':t.variable?'<span class="au-gr bad" title="Il tempo cambia lungo il brano (suonato dal vivo): controlla la griglia">variabile</span>':t.confidence>=.4?`<span class="au-gr ok"${t.residual_ms!=null?` title="colpi di cassa a ${t.residual_ms} ms dalla griglia"`:''}>ok</span>`:'<span class="au-gr bad">incerta</span>'}${t.missing||t.offline?'':` <button class="au-btn au-rean" data-au="reana" data-id="${t.id}" title="Rianalisi avanzata: BPM letto male? Rifà l’analisi di questo brano con la gamma di tempo giusta">⟳</button>`}</td>${pl?'':`<td class="dim">${esc(t.folder)}${t.offline?' · non collegata':''}</td>`}${ctl(t)}</tr>`).join('')}
     </tbody></table>${pl&&!n?'<p class="hint">Playlist vuota: torna a "Tutta la libreria" e aggiungi i brani con ＋.</p>':''}${rows.length>400?`<p class="hint">Prime 400 di ${rows.length}: cerca o scegli una cartella.</p>`:''}`;
 }
 
@@ -653,6 +687,8 @@ function auDown(e,el,w){
   else if(a==='sort'){const s=b.dataset.k;if(AU.lib.sort===s)AU.lib.dir*=-1;else{AU.lib.sort=s;AU.lib.dir=s==='bpm'||s==='confidence'?-1:1}}
   else if(a==='libreload')auLoadLibrary(true);
   else if(a==='analyze')auAnalyzeMenu();
+  else if(a==='reana')auReanalyze(b.dataset.id);
+  else if(a==='played')auPlayedMenu();
   else if(a==='plnew')uiChoose('Nuova playlist',[...(AU.lib.folder?[{label:`Dalla cartella "${AU.lib.folder}"`,value:'cur',on:true}]:[]),{label:'Da una cartella…',value:'dir',on:!AU.lib.folder},{label:'Vuota',value:'empty'}])
     .then(k=>k==='empty'?auNewPlaylist():k==='dir'?auPlaylistFromFolder():k==='cur'?auPlaylistFromFolder(AU.lib.folder):null).then(p=>{if(p)AU.lib.view=p.id});
   else if(a==='plmenu')auPlaylistMenu();

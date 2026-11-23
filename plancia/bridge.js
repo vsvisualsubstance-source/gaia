@@ -490,6 +490,8 @@ const audioAuto = require('./audio-auto').startAudioAuto({ engine: audioEngine, 
   timelineActive: () => { const s = audioTl?.status(); return !!(s && s.active && s.clock); } });
 // Analisi dei brani dalla Plancia (audio-analyze.js): gaia-audio analyze in un processo a parte
 const audioAnalyze = require('./audio-analyze').startAudioAnalyze({ broadcast, onDone: () => audioLib.library(true) });
+// Brani gia' suonati nella sessione (audio-played.js): segnati nella libreria della Console Audio
+const audioPlayed = require('./audio-played').startAudioPlayed({ engine: audioEngine, broadcast, file: path.join(path.dirname(STATE_FILE), 'audio-played.json') });
 // Controller DJ (Traktor Kontrol Z1) sulla Console Audio: comandi al motore, LED dallo stato
 const audioMidi = require('./audio-midi').startAudioMidi({ engine: audioEngine, timed: diag.timed, note: diag.note,
   z1Out: () => (typeof midiPorts === 'undefined' ? null : midiPorts.available().find(n => devCfgLib.roleOf(n, devCfg) === 'z1') || null), isTimeline: () => !!persistedState?.layout?.audioTimeline?.active || audioAuto.active() });
@@ -548,6 +550,7 @@ wss.on('connection', ws => {
   audioLib.playlists().then(playlists => { if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'audio_playlists', playlists })); });
   ws.send(JSON.stringify({ type: 'audio_auto', state: audioAuto.state() }));
   ws.send(JSON.stringify({ type: 'audio_analyze', state: audioAnalyze.state() }));
+  ws.send(JSON.stringify({ type: 'audio_played', state: audioPlayed.state() }));
   ws.on('message', data => {
     let m; try { m = JSON.parse(data); } catch { return; }
     if (m.type === 'shared_state') {
@@ -570,6 +573,12 @@ wss.on('connection', ws => {
       const fail = e => { if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'audio_error', message: 'Analisi: ' + e.message })); };
       if (m.action === 'stop') audioAnalyze.stop();
       else if (m.action === 'start') audioAnalyze.start({ folder: typeof m.folder === 'string' ? m.folder : '', force: !!m.force }).catch(fail);
+      else if (m.action === 'track') audioLib.library().then(ts => {   // rianalisi avanzata di un brano
+        const t = ts.find(x => x.id === m.id); if (!t) throw new Error('brano non in libreria');
+        return audioAnalyze.start({ file: t.path, range: typeof m.range === 'string' ? m.range : '', unlock: !!m.unlock });
+      }).catch(fail);
+    } else if (m.type === 'audio_played_reset') {
+      audioPlayed.reset();
     } else if (m.type === 'audio_roots_set') {
       // analyze: cartella appena aggiunta da analizzare subito (dopo il salvataggio, se no non e' ancora ammessa)
       audioLib.saveMusicRoots(m.roots).then(() => audioLib.library(true)).then(() => { broadcast({ type: 'audio_roots_changed' }); if (typeof m.analyze === 'string') return audioAnalyze.start({ folder: m.analyze }); }).catch(e => { if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'audio_error', message: 'Cartelle musica: ' + e.message })); });

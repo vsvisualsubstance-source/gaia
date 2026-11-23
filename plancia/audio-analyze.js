@@ -87,19 +87,26 @@ function startAudioAnalyze({ broadcast, onDone, log = console.log }) {
     return list;
   }
 
-  async function start({ folder, force }) {
+  // file: un brano solo (rianalisi avanzata, 23/11): sempre da capo, con la gamma di BPM scelta
+  // (range 'MIN-MAX', es. dub 60-100 invece del 168 doppio); unlock = toglie prima la griglia a mano
+  async function start({ folder, force, file, range, unlock }) {
     if (child) throw new Error('analisi gia\' in corso');
-    const dir = lib.normDir(folder || lib.ROOT);
-    if (!(await allowed(dir))) throw new Error('cartella fuori dalla musica: aggiungila prima come cartella musica');
-    if (!(await isDir(dir))) throw new Error('cartella non trovata (disco scollegato?): ' + dir);
+    const one = typeof file === 'string' && file ? path.resolve(path.isAbsolute(file) ? file : path.join(lib.normDir(lib.ROOT), file)) : null;
+    const dir = one || lib.normDir(folder || lib.ROOT);
+    if (!(await allowed(one ? path.dirname(one) : dir))) throw new Error('cartella fuori dalla musica: aggiungila prima come cartella musica');
+    if (one ? !(AUDIO.test(one) && fs.existsSync(one)) : !(await isDir(dir))) throw new Error((one ? 'brano' : 'cartella') + ' non trovato (disco scollegato?): ' + dir);
     if (!fs.existsSync(EXE)) throw new Error('motore non trovato: ' + EXE);
+    const rm = one && typeof range === 'string' ? range.match(/^(\d{2,3})-(\d{2,3})$/) : null;
+    const rg = rm && +rm[1] < +rm[2] ? range : null;
+    if (one && unlock) await new Promise(res => { const g = spawn(EXE, ['grid', '--root', lib.normDir(lib.ROOT), '--cache', lib.CACHE, one, '--unlock'], { cwd: path.dirname(EXE), windowsHide: true }); g.on('exit', res); g.on('error', res); });
+    if (one) force = true;
     const threads = Math.max(1, Math.floor(os.cpus().length / 2));
-    const args = ['analyze', '--root', lib.normDir(lib.ROOT), '--cache', lib.CACHE, ...(force ? ['--force'] : []), dir];
+    const args = ['analyze', '--root', lib.normDir(lib.ROOT), '--cache', lib.CACHE, ...(force ? ['--force'] : []), ...(rg ? ['--range', rg] : []), dir];
     child = spawn(EXE, args, { cwd: path.dirname(EXE), windowsHide: true, env: { ...process.env, RAYON_NUM_THREADS: String(threads) } });
     try { os.setPriority(child.pid, os.constants.priority.PRIORITY_BELOW_NORMAL); } catch { /* resta normale */ }
     gen++;
-    state = { running: true, gen, folder: dir, force: !!force, n: 0, tot: 0, analyzed: 0, cached: 0, failed: 0, errors: [], last: '', started: Date.now() };
-    log(`Analisi brani: ${dir}${force ? ' (da capo)' : ''}, ${threads} core`);
+    state = { running: true, gen, folder: dir, force: !!force, ...(one ? { file: path.basename(one), range: rg || '' } : {}), n: 0, tot: 0, analyzed: 0, cached: 0, failed: 0, errors: [], last: '', started: Date.now() };
+    log(`Analisi brani: ${dir}${force ? ' (da capo)' : ''}${rg ? ' BPM ' + rg : ''}, ${threads} core`);
     send();
     let buf = '', lastSend = 0;
     const line = l => {

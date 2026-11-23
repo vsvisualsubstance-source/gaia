@@ -23,6 +23,7 @@ function connect(){
   if(m.type==='audio_state'){auApplyState(m);AU.lastState=m;lfAudio(m);if(renderRec?.audio)recAudioSync(renderRec.audio,m);return}  // motore audio gaia-audio (Console Audio)
   if(m.type==='audio_tl'){G.audioTlSt=m.state||null;return}  // timeline audio eseguita dal bridge
   if(m.type==='audio_auto'){G.audioAuto=m.state||null;return}
+  if(m.type==='audio_played'){G.audioPlayed=m.state||null;return}   // brani gia' suonati nella sessione (audio-played.js)
   // analisi dei brani (audio-analyze.js nel bridge): a fine analisi la libreria si ricarica
   if(m.type==='audio_analyze'){const was=G.audioAnalyze,j=G.audioAnalyze=m.state||null;
     if(was?.running&&j&&!j.running&&j.gen===was.gen){auLoadLibrary(true);
