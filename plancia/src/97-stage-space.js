@@ -190,7 +190,13 @@ function drawProjectorsRender(g,project,zScale){
   for(const f of (L.fixtures||[]).filter(f=>f.type==='projector'&&f.enabled!==false)){
     const info=projectorInfo(f),p=project(f.x,f.y,f.z||3);
     g.globalCompositeOperation='source-over';g.fillStyle='#1c2027';g.strokeStyle='#9fe0ff';g.lineWidth=1;g.fillRect(p.x-7,p.y-5,14,10);g.strokeRect(p.x-7,p.y-5,14,10);
-    if(!info)continue;
+    if(!info){ // mapping sul 3D (nessuno schermo): solo il fascio nella direzione scelta, l'immagine la fa il Render 3D
+      const r=(f.rot||0)*Math.PI/180,d=6,hw=d*.5/Math.max(.3,f.throw||1.5),ax=Math.sin(r),ay=-Math.cos(r),z=Math.max(0,(f.z||3)-1.2);   // come il Render 3D: 0 = verso il palco
+      const q=[-1,1].map(s=>project(f.x+ax*d-s*ay*hw,f.y+ay*d+s*ax*hw,z)),m=project(f.x+ax*d,f.y+ay*d,z);
+      g.globalCompositeOperation='lighter';const gr=g.createLinearGradient(p.x,p.y,m.x,m.y);
+      gr.addColorStop(0,'rgba(220,235,255,.28)');gr.addColorStop(1,'rgba(220,235,255,0)');g.fillStyle=gr;
+      g.beginPath();g.moveTo(p.x,p.y);g.lineTo(q[0].x,q[0].y);g.lineTo(q[1].x,q[1].y);g.closePath();g.fill();
+      g.globalCompositeOperation='source-over';continue}
     const sc=info.screen,sp=project(sc.x,sc.y,sc.z||0),rot=(sc.rot||0)*Math.PI/180;
     // quattro angoli dello schermo: veri nello spazio in 3D, come sempre dal pubblico
     let corners;
