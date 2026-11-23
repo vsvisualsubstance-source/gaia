@@ -25,6 +25,8 @@ registerWidget('render3d',{oscAddress:false,size:[16,10],label:'Render 3D',shows
   },
   help:()=>['Render 3D','Come si usa: 1) nel Palco premi ⏺ (Render) con la musica in play: si salvano luci, musica e contenuto di LED wall e proiettori. 2) Qui, in "Sorgente delle luci", scegli la registrazione e collega le colonne alle luci del Palco. 3) "Elementi del Palco": LED wall, schermi e proiettori vengono messi nello spazio; se non coincidono usa l’allineamento manuale (2 punti) e i ritocchi. 4) Proiettore: 📍 punta qui sceglie dove guarda, ◰ mappa 4 punti fa cadere l’immagine sui 4 punti cliccati (finisce nella pagina Mapping). 5) ● registra MP4 esporta il video con la musica. ⤢ apre il Render 3D in una scheda a parte (export più veloce).']});
 // 2026-11-17: pagina Render 3D nel suo gruppo (uiRev 22)
+// template (⋯ → Aggiungi): la pagina si rimette anche dopo averla tolta (21/11 la pulizia LT l'aveva tolta)
+TPL.render3d={name:'Render 3D',desc:'Il palco in 3D a tutto schermo: luci, laser, ledwall e proiettori.',pages:()=>[{id:uid(),name:'Render 3D',widgets:[W('render3d',0,0,16,10,{label:'Render 3D'})]}]};
 function migrateUiRender3d(){
   if((L.uiRev||0)>=22)return;
   if(!L.pages.some(p=>p.widgets.some(w=>w.type==='render3d')))L.pages.push({id:uid(),name:'Render 3D',widgets:[W('render3d',0,0,16,10,{label:'Render 3D'})]});

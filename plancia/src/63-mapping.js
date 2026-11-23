@@ -101,6 +101,7 @@ registerWidget('mapping',{oscAddress:false,size:[16,10],label:'Mapping',showsVal
     mappingMsg(el,`${s.live?'Sorgente dal vivo':'Immagine di prova'}${s.why?' ('+s.why+')':''} · ${m.mode==='corners'?'corner pin':'mesh '+m.n+'×'+m.n}: ${c}${o?.from==='render3d'?' · dal Render 3D':''} · trascina i punti, frecce 1 px (Maiusc 10), Tab punto successivo`)},
   help:()=>['Mapping','Come si usa: scegli il proiettore (quelli del Palco). Corner pin: trascina i 4 angoli dove deve cadere l’immagine; trascinando fuori dai punti sposti tutto. Mesh (da 2×2 a 8×8): piega anche i punti in mezzo, per superfici non piane. Precisione: tocca il riquadro, poi frecce = 1 px, Maiusc + frecce = 10 px, Tab = punto successivo. Reset riporta tutto ai bordi; ↻ 180° per il proiettore appeso; "dal Render 3D" prende gli angoli fatti con ◰ mappa 4 punti sul modello. L’anteprima mostra la sorgente del proiettore (NDI o URL) o l’immagine di prova. Si salva nel progetto e lo usa il Render 3D; per ora non manda l’immagine al proiettore vero (servirà il motore video nativo).']});
 // 2026-11-20: pagina Mapping nel gruppo Render 3D (uiRev 23)
+TPL.mapping={name:'Mapping',desc:'Mapping video per proiettori e superfici.',pages:()=>[{id:uid(),name:'Mapping',widgets:[W('mapping',0,0,16,10,{label:'Mapping'})]}]};
 function migrateUiMapping(){
   if((L.uiRev||0)>=23)return;
   if(!L.pages.some(p=>p.widgets.some(w=>w.type==='mapping')))L.pages.push({id:uid(),name:'Mapping',widgets:[W('mapping',0,0,16,10,{label:'Mapping'})]});
