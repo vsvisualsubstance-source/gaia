@@ -226,7 +226,7 @@ function openHeadMotionCueEditor(w,cues,meta={}){
     L.headTimeline={...hmDoc(),engine:hmEngine(),bpm:hmBpm(),cues:cur.sort((a,b)=>a.time-b.time)};
     save();refreshShowTimelines();closeSheet();showInfo(`Timeline movimento salvata: ${cur.length} cue.`);
     // motore DMX Master: la traccia va con la timeline (campo motion di show_timeline)
-    if(hmEngine()==='td'&&isShowTimeline(w)&&showClock.authority){const doc=tdTimelineDoc();if(doc){w.cues=serializeCues(timelineFromTD(doc));w.duration=Math.max(1,+doc.length||w.duration);if(+doc.bpm>0)w.bpm=+doc.bpm;w.tdBaseRev=doc.rev}sendTimelineToTD(w)}
+    if(hmEngine()==='td'&&isShowTimeline(w)&&showClock.authority){const doc=tdOwnsTimeline(w)?tdTimelineDoc():null;if(doc){w.cues=serializeCues(timelineFromTD(doc));w.duration=Math.max(1,+doc.length||w.duration);if(+doc.bpm>0)w.bpm=+doc.bpm;w.tdBaseRev=doc.rev}sendTimelineToTD(w)}
   };
 }
 // campo motion di show_timeline (nota TD 57): scene usate + cue; null = traccia tolta

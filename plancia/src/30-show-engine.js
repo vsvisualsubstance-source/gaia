@@ -219,6 +219,12 @@ function renderCueEditor(w,cues,meta={}){
 const tdSceneCatalog=()=>{const c=tdParams().show_scene_catalog;return Array.isArray(c)?c:[]};
 // prima il topic retained gaia/devices/td-dmx-win/show_timeline, poi lo status
 const tdTimelineDoc=()=>{const d=G.tdTimeline||tdParams().show_timeline;return d&&Array.isArray(d.cues)?d:null};
+// 26/11: la timeline in DMX Master e' di QUESTO progetto? (rev = quella dell'ultimo invio/import da qui).
+// Se no (un altro progetto l'ha mandata, o un progetto nuovo), si mostra e si modifica la timeline del
+// progetto, non quella di TD: un progetto non si porta dietro le cue degli altri. Senza documento da TD
+// (contratto vecchio) resta come prima.
+function tdOwnsTimeline(w){const d=tdTimelineDoc();if(!d)return true;return!!w?.tdBaseRev&&d.rev===w.tdBaseRev}
+const tdFollows=w=>isShowTimeline(w)&&showClock.authority&&tdOwnsTimeline(w);
 // Editor aperto sulla timeline di TD (CUE_ED: widget + rev da cui parte +
 // modifiche locali). Rev nuova sul topic: senza modifiche l'editor si
 // ricarica da solo, con modifiche avvisa (nota TD 31, flusso punto 1).
@@ -246,7 +252,7 @@ function timelineToTD(w){
     return d;
   });
   // traccia SEQUENZE: i chase diventano cue "⟳ …" (63-chase-ui.js), rigenerate a ogni invio
-  const doc={v:1,name:w.label||'Timeline',bpm:+w.bpm>0?+w.bpm:null,length:w.duration,default_fade:2,
+  const doc={v:1,name:(L._projectName?L._projectName+' · ':'')+(w.label||'Timeline'),bpm:+w.bpm>0?+w.bpm:null,length:w.duration,default_fade:2,
     missing_scenes:'marker',source:'plancia',cues:withChaseCues(cues,w)};
   // traccia MOVIMENTO col motore di DMX Master (nota TD 57); undefined = TD non lo offre, non si tocca
   const motion=hmTimelineMotion();if(motion!==undefined)doc.motion=motion;
@@ -312,10 +318,12 @@ async function sendTimelineToTD(w){
 }
 function openCueEditor(w){
   // /show che segue TD: si modifica la timeline di DMX Master, non la bozza locale
-  const doc=isShowTimeline(w)&&showClock.authority?tdTimelineDoc():null;
+  const doc=tdFollows(w)?tdTimelineDoc():null;
   if(doc){renderCueEditor(w,timelineFromTD(doc),{td:true,duration:Math.max(1,+doc.length||w.duration),bpm:+doc.bpm>0?+doc.bpm:null,rev:doc.rev});return}
   const cues=parseCues(w).map(c=>({t:c.t,name:c.name,targets:cueTargets(c)}));
-  renderCueEditor(w,cues,{td:isShowTimeline(w)&&showClock.authority});
+  renderCueEditor(w,cues,{td:false});
+  const other=isShowTimeline(w)&&showClock.authority?tdTimelineDoc():null;
+  if(other)showInfo(`DMX Master ha un’altra timeline${other.name?` (“${other.name}”)`:''}: qui modifichi quella di questo progetto. “⇪ Invia a TD” la carica al suo posto.`);
 }
 function headControlWidgets(){
   return page().widgets.filter(w=>w.addr?.startsWith('/mh/')&&
@@ -533,11 +541,11 @@ function showClockRemoteOSC(address,args){
 }
 function isShowTimeline(w){return w.addr==='/show'}
 function timelineDuration(w){
-  const sample=isShowTimeline(w)&&showClock.authority?showClockSample():null;
+  const sample=tdFollows(w)?showClockSample():null;
   return sample&&Number.isFinite(+sample.state.length)&&+sample.state.length>0?+sample.state.length:(w.duration||1);
 }
 function timelineCues(w){
-  if(isShowTimeline(w)&&showClock.authority)return showClockCues()||[];
+  if(tdFollows(w))return showClockCues()||[];
   return parseCues(w);
 }
 // Pulsanti /dmx/scene: nomi dal catalogo di DMX Master quando c'e'

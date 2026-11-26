@@ -159,6 +159,7 @@ function fixCounts(){ // conteggi per tipo, usati da drawRender/legenda invece d
 // progetto e' uno SNAPSHOT esplicito, non il continuo autosave.
 const PROJKEY='plancia.projects.v1';
 const PROJECT_TEMPLATES=[
+  {tid:'tpl-empty',name:'Vuoto: nessuna luce, timeline vuota (si parte da zero)',empty:true},
   {tid:'tpl-demo',name:'Demo completo: un po\' di tutto, per provare ogni funzione',demo:true},
   {tid:'tpl-small',name:'Palco piccolo (4 teste)',rig:{heads:4,uplights:2,bars:2,wall:false,speakers:true}},
   {tid:'tpl-standard',name:'Palco standard (8 teste + LED wall)',rig:{heads:8,uplights:6,bars:8,wall:true,speakers:true}},
@@ -217,10 +218,21 @@ function projDelete(id){
   store.set(PROJKEY,projList().filter(x=>x.id!==id));
   if(L._projectId===id){delete L._projectId;delete L._projectName;save()}
 }
+// 26/11: progetto vuoto: niente luci, nessuna cue in nessuna traccia (non eredita le timeline di altri
+// progetti ne' quella caricata in DMX Master), uiRev attuale: le pagine automatiche non si aggiungono.
+function emptyProjectLayout(){
+  const tl=W('timeline',0,5,16,5,{label:'Timeline show',addr:'/show',duration:600,bpm:120,cues:'',color:SWATCH[0]});
+  return{pages:[
+    P('Regia',[W('cuestack',0,0,4,5,{label:'Scene GO',color:SWATCH[3]}),W('scenes',4,0,4,5,{label:'Scene a mano',addr:'/dmx/scene',items:'',cols:2,value:-1,color:SWATCH[0]}),
+      W('stage',8,0,8,4,{label:'Palco',view:'render'}),W('clock',8,4,4,1,{label:'Show',mode:'show',color:SWATCH[0]}),W('clock',12,4,4,1,{label:'Ora',mode:'tod',color:SWATCH[5]}),tl]),
+    P('Palco',[W('stage',0,0,16,10,{label:'Palco',view:'plot'})])],
+    fixtures:[],stage:stageDefaults(),uiRev:23,
+    fxTimeline:{cues:[]},chaseTimeline:{cues:[]},laserTimeline:{active:false,cues:[]},audioTimeline:{active:false,cues:[]},videoTimeline:{active:false,cues:[]},headTimeline:{cues:[]}};
+}
 function projLoadTemplate(tid){
   const t=PROJECT_TEMPLATES.find(x=>x.tid===tid);if(!t)return;
   const v=t.venue&&VENUES[t.venue];
-  L=t.demo?demoProjectLayout():v?{pages:TPL.full.pages(),fixtures:v.fixtures(),stage:{...stageDefaults(),...v.stage},groups:v.groups.map(g=>({...g})),models:Object.fromEntries((v.models||[]).map(m=>[m.model,modelPayload(m)])),uiRev:5}
+  L=t.empty?emptyProjectLayout():t.demo?demoProjectLayout():v?{pages:TPL.full.pages(),fixtures:v.fixtures(),stage:{...stageDefaults(),...v.stage},groups:v.groups.map(g=>({...g})),models:Object.fromEntries((v.models||[]).map(m=>[m.model,modelPayload(m)])),uiRev:5}
     :{pages:TPL.full.pages(),fixtures:defaultFixtures(t.rig),stage:stageDefaults(),uiRev:5};
   delete L._projectId;delete L._projectName;ensureStageData(L);
   pi=0;selId=null;save();render();initShow();checkProjectModelsSoon();

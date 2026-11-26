@@ -128,7 +128,7 @@ async function headsLaneTap(w,t,blk){
     if(pick==='__new')id=await captureHeadsScene();
     else if(pick.startsWith('__slot:'))id=await headColorScene('slot',+pick.slice(7));
     else if(pick.startsWith('__fl:'))id=await headColorScene('follow',pick.slice(5));
-    const doc=isShowTimeline(w)&&showClock.authority?tdTimelineDoc():null;
+    const doc=tdFollows(w)?tdTimelineDoc():null;
     let list=doc?timelineFromTD(doc):parseCues(w).map(c=>({t:c.t,name:c.name,targets:cueTargets(c)}));
     const same=c=>cue&&Math.abs(c.t-cue.t)<.01;
     if(pick==='__del')list=list.filter(c=>!same(c));

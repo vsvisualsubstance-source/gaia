@@ -184,7 +184,7 @@ function openFxCueEditor(w,cues,meta={}){
     const cur=read(),bad=cur.find(c=>!Number.isFinite(c.time)||c.time<0||c.time>=D);
     if(bad){showError(`Cue di effetti "${bad.label||'?'}": posizione tra 0:00 e prima di ${formatCueTime(D)}.`);return}
     L.fxTimeline={cues:cur.sort((a,b)=>a.time-b.time)};save();refreshShowTimelines();closeSheet();showInfo(`Effetti in timeline: ${cur.length} cue.`);
-    if(td){const doc=tdTimelineDoc();if(doc){w.cues=serializeCues(timelineFromTD(doc));w.duration=Math.max(1,+doc.length||w.duration);if(+doc.bpm>0)w.bpm=+doc.bpm;w.tdBaseRev=doc.rev}sendTimelineToTD(w)}
+    if(td){const doc=tdOwnsTimeline(w)?tdTimelineDoc():null;if(doc){w.cues=serializeCues(timelineFromTD(doc));w.duration=Math.max(1,+doc.length||w.duration);if(+doc.bpm>0)w.bpm=+doc.bpm;w.tdBaseRev=doc.rev}sendTimelineToTD(w)}
   };
 }
 // campo effects di show_timeline: effetti usati + cue; null = traccia tolta; undefined = TD non li offre

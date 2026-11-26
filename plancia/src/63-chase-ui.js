@@ -151,7 +151,7 @@ function paintChaseLane(el,w,D,t){
   const ph=el.querySelector('.tl-cph');if(ph&&D>0)ph.style.left=Math.max(0,Math.min(1,t/D))*100+'%';
 }
 // la timeline va a DMX Master con le cue dei chase rigenerate
-function chaseSendTimeline(w){const doc=tdTimelineDoc();if(doc){w.cues=serializeCues(timelineFromTD(doc));w.duration=Math.max(1,+doc.length||w.duration);if(+doc.bpm>0)w.bpm=+doc.bpm;w.tdBaseRev=doc.rev}sendTimelineToTD(w)}
+function chaseSendTimeline(w){const doc=tdOwnsTimeline(w)?tdTimelineDoc():null;if(doc){w.cues=serializeCues(timelineFromTD(doc));w.duration=Math.max(1,+doc.length||w.duration);if(+doc.bpm>0)w.bpm=+doc.bpm;w.tdBaseRev=doc.rev}sendTimelineToTD(w)}
 function openChaseCueEditor(w,cues,meta={}){
   const D=meta.duration||timelineDuration(w),s=$('#scrim');s.hidden=false;
   cues=cues||chaseDoc().cues.map(c=>({...c}));
