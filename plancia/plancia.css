@@ -928,3 +928,4 @@ tr.au-played td{opacity:.55}.au-pl-tag{font-size:11px;padding:1px 6px;border-rad
 .pill.warn i{background:#ffb23e;box-shadow:0 0 8px #ffb23e}
 .ch-tab{width:100%;border-collapse:collapse;font-size:13px}.ch-tab th,.ch-tab td{padding:4px 6px;border-bottom:1px solid var(--line);text-align:left}.ch-tab td.num{text-align:right;font-variant-numeric:tabular-nums}
 .ch-ok{color:var(--ok)}.ch-warn{color:#ffb23e}.ch-bad{color:var(--bad)}.ch-tab tr.ch-me td{background:#ffffff08}
+.sa-groups{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px;margin:4px 0}

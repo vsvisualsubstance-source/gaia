@@ -31,9 +31,25 @@ function wzFixtures(counts,st){
   return out;
 }
 // gruppi delle luci che ci sono davvero (i nomi di DMX Master restano quelli di sempre)
-function wzGroups(fixtures){
+function wzGroups(fixtures,extra=[]){
   const used=new Set(fixtures.filter(f=>FIX_TYPES[f.type]?.ch).map(f=>f.group));
-  return DEFAULT_GROUPS.filter(g=>used.has(g.group)).map(g=>({...g}));
+  // i gruppi legati ai motori di TD (front = rig_a, back = rig_b, mh = teste) ci devono essere sempre
+  return[...DEFAULT_GROUPS.filter(g=>used.has(g.group)||g.bind).map(g=>({...g})),...extra.filter(g=>used.has(g.group))];
+}
+// "Un fader per luce" (26/11): in DMX Master il livello e' del gruppo (rig), non della singola luce.
+// Ogni luce del gruppo diventa un gruppo suo (nome dalla luce: PAR1 -> par1), stesso tipo; le teste
+// restano un gruppo solo (un motore solo in TD). Torna i gruppi nuovi; cambia f.group delle luci.
+function splitPerFixture(fixtures,groups,group){
+  const parent=groups.find(g=>g.group===group)||DEFAULT_GROUPS.find(g=>g.group===group)||{kind:'chase'};
+  if(parent.kind==='heads')return[];
+  const taken=new Set([...groups.map(g=>g.group),...GROUP_RESERVED]),out=[];
+  for(const f of fixtures.filter(x=>x.group===group&&FIX_TYPES[x.type]?.ch)){
+    let base=String(f.name||f.type).toLowerCase().normalize('NFD').replace(/[^a-z0-9_]+/g,'_').replace(/^[^a-z]+/,'').replace(/_+$/,'').slice(0,14)||f.type;
+    if(base.length<2)base=f.type+base;
+    let n=base,k=2;while(taken.has(n))n=(base.slice(0,13)+'_'+k++).slice(0,16);
+    taken.add(n);out.push({group:n,kind:parent.kind==='level'?'level':'chase',label:f.name||n});f.group=n;
+  }
+  return out;
 }
 
 // ---- analisi ----
@@ -56,7 +72,8 @@ function stageAnalysis(lay=L){
       ...(lasers.length&&!has('laser')?[{k:'laser',label:'Laser'}]:[]),
       ...(dmx.length&&!has('rigconfig')?[{k:'rigconfig',label:'Config rig'}]:[]),
       ...(!has('render3d')?[{k:'render3d',label:'Render 3D'}]:[]),
-      ...(prj.length&&!has('mapping')?[{k:'mapping',label:'Mapping'}]:[])]};
+      ...(prj.length&&!has('mapping')?[{k:'mapping',label:'Mapping'}]:[]),
+      ...(groups.length>7&&!(lay.pages||[]).some(p=>p.name==='Fader luci')?[{k:'fader',label:`Fader luci (tutti i ${groups.length} gruppi)`}]:[])]};
 }
 // Regia su misura: scene, palco, orologi, timeline; fader del master e dei gruppi presenti; comandi in fondo
 function regiaFor(a){
@@ -77,7 +94,13 @@ function regiaFor(a){
   ws.push(lbo?{...lbo,id:uid(),x:14,y:8,w:2,h:2,label:'BLACKOUT laser'}:W('audiorigs',14,8,2,2,{label:'Audio',color:SWATCH[4]}));
   return P('Regia',ws);
 }
-const WZ_PAGE={audio:()=>TPL.audio.pages(),teste:()=>TPL.teste.pages(),laser:()=>TPL.laser.pages(),rigconfig:()=>TPL.rigconfig.pages(),
+// tutti i fader dei gruppi (quando in Regia non ci stanno): 8 per riga, larghi 2
+function faderPageFor(a){
+  const fad=[['Master','/dmx/master',SWATCH[0]],...a.groups.map((g,i)=>[g.label,'/dmx/group/'+g.group,SWATCH[(i+1)%SWATCH.length]])];
+  const per=fad.length>16?16:8,w=16/per,rows=Math.ceil(fad.length/per),h=Math.max(3,Math.floor(10/rows));
+  return P('Fader luci',fad.map(([label,addr,color],i)=>W('fader',(i%per)*w,Math.floor(i/per)*h,w,h,{label,addr,value:1,color})));
+}
+const WZ_PAGE={fader:a=>[faderPageFor(a)],audio:()=>TPL.audio.pages(),teste:()=>TPL.teste.pages(),laser:()=>TPL.laser.pages(),rigconfig:()=>TPL.rigconfig.pages(),
   render3d:()=>TPL.render3d.pages(),mapping:()=>TPL.mapping.pages(),consoleaudio:()=>TPL.consoleaudio.pages()};
 // timeline di preparazione senza le cue di esempio
 function wzTimelinePage(){const p=TPL.timeline.pages()[0];for(const w of p.widgets)if(w.type==='timeline'){w.cues='';w.duration=600;w.bpm=120}return p}
@@ -90,7 +113,8 @@ function openStageAnalysis(){
     <div class="top"><h3>🔍 Analisi del palco · ${esc(L._projectName||'layout')}</h3><button class="btn ghost" id="saClose">Chiudi</button></div>
     ${a.fx.length?`<h4>Cosa c'è</h4><ul class="sa-list">${Object.entries(a.counts).map(([t,n])=>li(lab(t),n)).join('')}</ul>
     <p class="hint">${a.dmx.length} luci DMX${a.universes.length?` in ${a.universes.length>1?'universi':'universo'} ${a.universes.join(', ')}`:''}.${a.problems.length?` <b class="pr-dirty">Patch: ${a.problems.length} problemi</b> (${esc(a.problems.slice(0,3).join('; '))}${a.problems.length>3?'…':''}).`:' Patch senza sovrapposizioni.'}</p>
-    ${a.groups.length?`<h4>Gruppi (un fader ciascuno in Regia)</h4><ul class="sa-list">${a.groups.map(g=>li(g.label,g.n)).join('')}</ul>`:''}
+    ${a.groups.length?`<h4>Gruppi (un fader ciascuno in Regia)</h4><div class="sa-groups">${a.groups.map(g=>`<div class="wz-row"><span><b>${g.n}</b> ${esc(g.label)}</span>${g.kind!=='heads'&&g.n>1?`<button class="btn sm ghost" data-sa-split="${esc(g.group)}" title="Ogni luce del gruppo diventa un gruppo suo, con il suo fader in Regia">Un fader per luce</button>`:''}</div>`).join('')}</div>
+    <p class="hint">In DMX Master il livello è del gruppo: per avere un fader per ogni luce, ogni luce diventa un gruppo suo (colore e audio restano separabili come sempre).</p>`:''}
     ${a.lasers.length?`<p class="hint">Laser: ${a.lasers.length}, ${a.lasers.filter(f=>f.cube).length} collegati a un LaserCube.${a.lasers.some(f=>!f.cube)?' Collega gli altri dalla Pianta (tocca il laser → LaserCube).':''}</p>`:''}
     ${a.walls.length||a.prj.length?`<p class="hint">Video: ${a.walls.length} LED wall, ${a.prj.length} proiettori (${a.prj.filter(f=>f.target).length} su schermo, ${a.prj.filter(f=>!f.target).length} mapping sul 3D).</p>`:''}`
     :'<p class="hint"><b>Il palco è vuoto.</b> Aggiungi le luci dalla Pianta (pagina Palco) o crea un progetto guidato.</p>'}
@@ -103,17 +127,40 @@ function openStageAnalysis(){
   const q=x=>s.querySelector(x);
   q('#saClose').onclick=closeSheet;
   q('#saPages').onclick=()=>{const ks=[...s.querySelectorAll('[data-sa-add]:checked')].map(i=>i.dataset.saAdd);if(!ks.length)return;
-    const ps=ks.flatMap(k=>WZ_PAGE[k]());L.pages.push(...ps);save();render();initShow();closeSheet();showInfo(`Aggiunte ${ps.length} pagine: ${ps.map(p=>p.name).join(', ')}.`)};
-  q('#saRegia').onclick=()=>{const i=L.pages.findIndex(p=>p.name==='Regia'),fresh=regiaFor(stageAnalysis());
-    if(i>=0){L.pagesBackup={...(L.pagesBackup||{}),['regia_'+new Date().toISOString().slice(0,16)]:JSON.parse(JSON.stringify(L.pages[i]))};fresh.id=L.pages[i].id;L.pages[i]=fresh;pi=i}
-    else{L.pages.unshift(fresh);pi=0}
-    const tl=L.pages.flatMap(p=>p.widgets).find(w=>w.type==='timeline'&&w.addr==='/show'&&!w.readonly);if(tl)syncShowWidgets(tl);
-    selId=null;save();render();initShow();closeSheet();showInfo('Regia su misura pronta. Salva il progetto da 📁 per tenerla.')};
+    const ps=ks.flatMap(k=>WZ_PAGE[k](a));L.pages.push(...ps);save();render();initShow();closeSheet();showInfo(`Aggiunte ${ps.length} pagine: ${ps.map(p=>p.name).join(', ')}.`)};
+  q('#saRegia').onclick=()=>{rebuildRegia();closeSheet();showInfo('Regia su misura pronta. Salva il progetto da 📁 per tenerla.')};
+  s.querySelectorAll('[data-sa-split]').forEach(b=>b.onclick=()=>saSplit(b.dataset.saSplit));
+}
+// Regia su misura al posto di quella che c'e' (copia in L.pagesBackup); con piu' di 7 gruppi anche "Fader luci"
+function rebuildRegia(){
+  const a=stageAnalysis(),i=L.pages.findIndex(p=>p.name==='Regia'),fresh=regiaFor(a);
+  if(i>=0){L.pagesBackup={...(L.pagesBackup||{}),['regia_'+new Date().toISOString().slice(0,16)]:JSON.parse(JSON.stringify(L.pages[i]))};fresh.id=L.pages[i].id;L.pages[i]=fresh;pi=i}
+  else{L.pages.unshift(fresh);pi=0}
+  const fp=L.pages.findIndex(p=>p.name==='Fader luci');
+  if(a.groups.length>7){const pg=faderPageFor(a);if(fp>=0){pg.id=L.pages[fp].id;L.pages[fp]=pg}else L.pages.splice(L.pages.indexOf(fresh)+1,0,pg)}
+  const tl=L.pages.flatMap(p=>p.widgets).find(w=>w.type==='timeline'&&w.addr==='/show'&&!w.readonly);if(tl)syncShowWidgets(tl);
+  selId=null;save();render();initShow();
+}
+// un fader per luce: gruppi nuovi nel progetto, Regia rifatta; se DMX Master c'e', gruppi e luci gia' in TD aggiornati
+async function saSplit(group){
+  const gl=(Array.isArray(L.groups)&&L.groups.length?L.groups:groupsOf()).map(g=>({...g}));
+  for(const d of DEFAULT_GROUPS)if(d.bind&&!gl.some(g=>g.bind===d.bind))gl.push({...d});   // progetti guidati di prima: front/back mancanti
+  const n=L.fixtures.filter(f=>f.group===group).length;
+  if(!await uiConfirm(`Le ${n} luci di "${groupLabel(group)}" diventano gruppi separati, ognuno col suo fader in Regia.${G.ok&&tdParams().dmx_groups?' I gruppi nuovi vanno anche a DMX Master.':''}`,{ok:'Un fader per luce'}))return;
+  const nw=splitPerFixture(L.fixtures,gl,group);if(!nw.length)return;
+  L.groups=[...gl,...nw];save();rebuildRegia();closeSheet();
+  showInfo(`${nw.length} gruppi nuovi: ${nw.map(g=>g.label).join(', ')}. Regia rifatta.`);
+  if(!(G.ok&&Array.isArray(tdParams().dmx_groups)))return;
+  sendGroupsToTD();
+  const inTd=L.fixtures.filter(f=>nw.some(g=>g.group===f.group)&&tdFixtureByUid(f.id));
+  for(let i=0;i<20;i++){await new Promise(r=>setTimeout(r,500));const have=new Set((tdParams().dmx_groups||[]).map(x=>x.group));
+    if(nw.every(g=>have.has(g.group))){for(const f of inTd)devCmd(dmxId(),{action:'set',param:'dmx_fixture_update',value:{...fixtureTdValue(f),on_conflict:'reject'}});return}}
+  showError('DMX Master non ha confermato i gruppi nuovi: le luci in TD restano nel gruppo di prima (riprova da Gruppi DMX).');
 }
 
 function openProjectWizard(){
   const s=$('#scrim');s.hidden=false;
-  const st={name:'',mode:'lights',stage:'medium',counts:Object.fromEntries(WZ_TYPES.map(([t])=>[t,0])),extra:{consoleaudio:false,render3d:true}};
+  const st={name:'',mode:'lights',stage:'medium',counts:Object.fromEntries(WZ_TYPES.map(([t])=>[t,0])),extra:{consoleaudio:false,render3d:true},indep:true};
   Object.assign(st.counts,{bar:4,par:4});
   const paint=()=>{
     const tot=Object.values(st.counts).reduce((x,y)=>x+y,0);
@@ -125,6 +172,7 @@ function openProjectWizard(){
       <div class="ac-f">3 · Quanto è grande il palco?<div class="px-chips">${Object.entries(WZ_STAGES).map(([k,v])=>`<button class="btn sm${st.stage===k?' primary':' ghost'}" data-wz-s="${k}">${esc(v.label)}</button>`).join('')}</div></div>
       <div class="ac-f">4 · Che luci e quante?</div>
       <div class="wz-grid">${WZ_TYPES.map(([t,l,max])=>`<div class="wz-row"><span>${esc(l)}</span><button class="btn sm ghost" data-wz-d="${t}" data-v="-1"${st.counts[t]?'':' disabled'}>−</button><b>${st.counts[t]}</b><button class="btn sm ghost" data-wz-d="${t}" data-v="1"${st.counts[t]<max?'':' disabled'}>＋</button></div>`).join('')}</div>
+      <label class="chk"><input type="checkbox" id="wzIndep"${st.indep?' checked':''}> Un fader per ogni luce <em>(ogni luce in un gruppo suo; le teste restano insieme)</em></label>
       <p class="hint">Le luci vanno in posizioni di partenza (barre in fondo, PAR davanti, teste sul truss, strobo ai lati) con la patch in fila dal canale 1. Poi le sposti nella Pianta e correggi indirizzi e modelli.</p>`:'<p class="hint">Progetto senza luci e con tutte le timeline vuote: Regia e Palco. Le luci si aggiungono dalla Pianta.</p>'}
       <div class="ac-f">${st.mode==='lights'?'5':'3'} · Pagine in più<div class="px-chips">
         <label class="chk"><input type="checkbox" id="wzCa"${st.extra.consoleaudio?' checked':''}> Console Audio</label>
@@ -133,6 +181,7 @@ function openProjectWizard(){
     const q=x=>s.querySelector(x);
     q('#wzClose').onclick=q('#wzCancel').onclick=closeSheet;
     q('#wzName').oninput=e=>{st.name=e.target.value};
+    if(q('#wzIndep'))q('#wzIndep').onchange=e=>{st.indep=e.target.checked};
     q('#wzCa').onchange=e=>{st.extra.consoleaudio=e.target.checked};q('#wzR3').onchange=e=>{st.extra.render3d=e.target.checked};
     s.querySelectorAll('[data-wz-m]').forEach(b=>b.onclick=()=>{st.mode=b.dataset.wzM;paint()});
     s.querySelectorAll('[data-wz-s]').forEach(b=>b.onclick=()=>{st.stage=b.dataset.wzS;paint()});
@@ -152,11 +201,14 @@ function wzCreate(name,st){
   const stage={...stageDefaults(),...(S?{width:S.width,depth:S.depth,trussHeight:S.trussHeight,audience:{x:0,y:S.depth+1,width:S.width+4,depth:Math.max(4,S.depth)},foh:{x:-1,y:S.depth+4,width:2,depth:1}}:{})};
   const fixtures=lights?wzFixtures(st.counts,stage):[];
   const base=lights?{}:emptyProjectLayout();
-  const lay={...base,fixtures,stage,uiRev:23,...(lights?{groups:wzGroups(fixtures)}:{}),
+  let extra=[];
+  if(lights&&st.indep)for(const g of [...new Set(fixtures.filter(f=>FIX_TYPES[f.type]?.ch&&f.type!=='mh').map(f=>f.group))])
+    extra.push(...splitPerFixture(fixtures,[...DEFAULT_GROUPS,...extra],g));
+  const lay={...base,fixtures,stage,uiRev:23,...(lights?{groups:wzGroups(fixtures,extra)}:{}),
     fxTimeline:{cues:[]},chaseTimeline:{cues:[]},laserTimeline:{active:false,cues:[]},audioTimeline:{active:false,cues:[]},videoTimeline:{active:false,cues:[]},headTimeline:{cues:[]}};
   if(lights){
     const a=stageAnalysis(lay);
-    lay.pages=[regiaFor(a),wzTimelinePage(),...TPL.palco.pages(),...a.missing.filter(m=>m.k!=='render3d'&&m.k!=='mapping').flatMap(m=>WZ_PAGE[m.k]()),
+    lay.pages=[regiaFor(a),wzTimelinePage(),...TPL.palco.pages(),...a.missing.filter(m=>m.k!=='render3d'&&m.k!=='mapping').flatMap(m=>WZ_PAGE[m.k](a)),
       ...(a.prj.length?WZ_PAGE.mapping():[])];
   }
   if(st.extra.consoleaudio)lay.pages.push(...WZ_PAGE.consoleaudio());
