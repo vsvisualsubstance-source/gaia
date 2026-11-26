@@ -44,6 +44,8 @@ pub struct ServeOpts {
     pub clock: Option<String>,
     pub clock_broker: String,
     pub clock_topic: String,
+    /// stato anche in UDP, 50 al secondo (clock.rs, UDP_DEFAULT): "none" = no
+    pub clock_udp: String,
 }
 
 type Clients = Arc<Mutex<Vec<Sender<String>>>>;
@@ -815,7 +817,7 @@ pub fn serve(o: ServeOpts) -> Result<(), String> {
     if let Some(id) = &o.clock {
         let (host, port) = crate::clock::parse_broker(&o.clock_broker)?;
         let counter = engine.lock().map_err(|_| "motore")?.counter.clone();
-        crate::clock::start(crate::clock::ClockOpts { id: id.clone(), topic: o.clock_topic.clone(), host, port }, counter);
+        crate::clock::start(crate::clock::ClockOpts { id: id.clone(), topic: o.clock_topic.clone(), host, port, udp: crate::clock::parse_udp(&o.clock_udp) }, counter);
     }
 
     let listener = TcpListener::bind(("127.0.0.1", o.port)).map_err(|e| format!("porta {}: {e}", o.port))?;

@@ -41,6 +41,22 @@ Topic sotto `gaia/show/clock/`:
 | `timeline` | TD DMX -> master, retained, a ogni cambio e ogni 10 s | `v, from, timeline, name, bpm, length, loop, active, track, cues[{time,label,scene,fade}]` (traccia principale) |
 | `report/<id>` | ogni follower -> Plancia, ogni 2 s (non retained) | salute: `id, name, kind, master, age_ms, rtt_ms, rtt_min_ms, jitter_ms, err_ms, err_max_ms, n, gap_max_ms, rate_hz` (`plancia/src/31-clock-health.js`; pannello ⏱ della Plancia). Lo mandano tablet e bridge; TD DMX e PatchDeck ancora no |
 
+### Stato in UDP (dal 26/11/2026)
+
+Il motore audio manda lo **stesso JSON** di `state` anche in UDP, **50 volte al secondo**, con in
+piu' `u` (contatore dei pacchetti, cresce sempre) e `"via":"udp"`. Niente broker in mezzo: chi lo
+riceve ha la posizione col solo ritardo della rete. Destinazioni di default (`--clock-udp`):
+`127.0.0.1:47810` e il gruppo multicast `239.255.42.99:47810` (TTL 1, resta nella LAN); `--clock-udp
+none` lo spegne, oppure una lista `IP:porta,...` (anche unicast verso un PC preciso).
+
+- Sulla stessa macchina ogni pacchetto arriva due volte (unicast e multicast): si tiene il primo
+  `u` e si scartano quelli non nuovi.
+- Per riceverlo da un'altra macchina: ascoltare UDP 47810 ed entrare nel gruppo 239.255.42.99;
+  sul PC che riceve il firewall deve lasciar entrare UDP 47810.
+- `seq` resta quello di MQTT (cambia ~1 volta al secondo): per i calcoli usare `u`.
+- Il bridge della Plancia lo ascolta e manda il rapporto "Bridge · UDP" nel pannello ⏱, accanto a
+  quello MQTT.
+
 `cmd` (solo dal motore) e' l'ultimo comando applicato: la riserva lo usa
 per la parte locale di GO/BACK/cue (richiamo della scena con la sua
 dissolvenza quando la timeline non e' Active).

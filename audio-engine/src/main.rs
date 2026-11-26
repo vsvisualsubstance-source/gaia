@@ -92,6 +92,7 @@ struct Opts {
     clock: Option<String>,
     clock_broker: String,
     clock_topic: String,
+    clock_udp: String,
     rest: Vec<String>,
 }
 
@@ -113,6 +114,7 @@ fn parse(args: &[String]) -> Result<Opts, String> {
         clock: None,
         clock_broker: "127.0.0.1:11883".into(),
         clock_topic: clock::TOPIC.into(),
+        clock_udp: clock::UDP_DEFAULT.into(),
         rest: Vec::new(),
     };
     let mut it = args.iter();
@@ -132,6 +134,7 @@ fn parse(args: &[String]) -> Result<Opts, String> {
             "--lights-net" => o.lights_net = true,
             "--clock" => o.clock = Some(it.next().ok_or("--clock senza nome")?.clone()),
             "--clock-broker" => o.clock_broker = it.next().ok_or("--clock-broker HOST:PORTA")?.clone(),
+            "--clock-udp" => o.clock_udp = it.next().ok_or("--clock-udp INDIRIZZI|none")?.clone(),
             "--clock-topic" => o.clock_topic = it.next().ok_or("--clock-topic senza prefisso")?.trim_end_matches('/').to_string(),
             "--range" => {
                 let v = it.next().ok_or("--range senza valori")?;
@@ -232,7 +235,7 @@ fn main() -> ExitCode {
             Ok(())
         }
         "analyze" => return analyze(&o),
-        "serve" => serve::serve(serve::ServeOpts { root: o.root, cache: o.cache, port: o.port, device: o.device, no_audio: o.no_audio, cue_device: o.cue_device, tap_device: o.tap_device, vban: o.vban, vban_name: o.vban_name, vban_in: o.vban_in, lights_net: o.lights_net, clock: o.clock, clock_broker: o.clock_broker, clock_topic: o.clock_topic }),
+        "serve" => serve::serve(serve::ServeOpts { root: o.root, cache: o.cache, port: o.port, device: o.device, no_audio: o.no_audio, cue_device: o.cue_device, tap_device: o.tap_device, vban: o.vban, vban_name: o.vban_name, vban_in: o.vban_in, lights_net: o.lights_net, clock: o.clock, clock_broker: o.clock_broker, clock_topic: o.clock_topic, clock_udp: o.clock_udp }),
         "grid" => grid(&o),
         "index" => {
             println!("{}", serde_json::to_string_pretty(&library::index(&o.root, &o.cache)).unwrap_or_default());

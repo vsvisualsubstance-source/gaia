@@ -376,6 +376,22 @@ pub struct ClockOpts {
     pub topic: String,
     pub host: String,
     pub port: u16,
+    /// destinazioni dello stato in UDP (UDP_HZ al secondo), vuoto = niente UDP
+    pub udp: Vec<std::net::SocketAddr>,
+}
+
+/// Stato anche in UDP (26/11/2026, docs/show-clock.md): lo stesso JSON di {topic}/state, UDP_HZ volte
+/// al secondo, piu' "u" (contatore dei pacchetti) e "via":"udp". Niente broker in mezzo: chi lo
+/// riceve (bridge, TD) ha la posizione con il solo ritardo della rete. Default: questa macchina e il
+/// gruppo multicast della LAN (TTL 1, non esce dalla rete locale).
+pub const UDP_DEFAULT: &str = "127.0.0.1:47810,239.255.42.99:47810";
+const UDP_HZ: f64 = 50.0;
+pub fn parse_udp(s: &str) -> Vec<std::net::SocketAddr> {
+    use std::net::ToSocketAddrs;
+    if s.trim().eq_ignore_ascii_case("none") {
+        return Vec::new();
+    }
+    s.split(',').filter_map(|a| a.trim().to_socket_addrs().ok().and_then(|mut i| i.next())).collect()
 }
 
 pub fn parse_broker(s: &str) -> Result<(String, u16), String> {
@@ -527,6 +543,18 @@ pub fn start(o: ClockOpts, audio: Arc<AudioCounter>) {
         let mut disc = Discipline { samples: Vec::new(), warm: None };
         let mut next_disc = 0.0;
         let mut warned = -1e9;
+        let udp = if o.udp.is_empty() {
+            None
+        } else {
+            std::net::UdpSocket::bind("0.0.0.0:0").ok().map(|u| {
+                let _ = u.set_multicast_ttl_v4(1);
+                let _ = u.set_nonblocking(true);
+                println!("orologio: stato anche in UDP verso {}", o.udp.iter().map(|a| a.to_string()).collect::<Vec<_>>().join(", "));
+                u
+            })
+        };
+        let mut next_udp = 0.0;
+        let mut udp_n: u64 = 0;
         loop {
             thread::sleep(Duration::from_millis(5));
             let t = now();
@@ -563,6 +591,27 @@ pub fn start(o: ClockOpts, audio: Arc<AudioCounter>) {
                 if t - at < 3.0 && t - warned > 10.0 {
                     warned = t;
                     eprintln!("orologio: ATTENZIONE anche {who} pubblica come master con la stessa priorita'");
+                }
+            }
+            if let Some(u) = &udp {
+                if t >= next_udp {
+                    next_udp = if t - next_udp > 0.1 { t } else { next_udp } + 1.0 / UDP_HZ;
+                    udp_n += 1;
+                    let mut st = s.tr.state(t);
+                    if let Some(m) = st.as_object_mut() {
+                        m.insert("v".into(), json!(1));
+                        m.insert("master".into(), json!(o.id));
+                        m.insert("prio".into(), json!(PRIO));
+                        m.insert("kind".into(), json!("audio"));
+                        m.insert("seq".into(), json!(s.seq));
+                        m.insert("u".into(), json!(udp_n));
+                        m.insert("via".into(), json!("udp"));
+                        m.insert("sent_ms".into(), json!(epoch_ms()));
+                    }
+                    let body = st.to_string();
+                    for a in &o.udp {
+                        let _ = u.send_to(body.as_bytes(), a);
+                    }
                 }
             }
             let sg = s.tr.signature(t);
