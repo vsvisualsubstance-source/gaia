@@ -39,6 +39,7 @@ Topic sotto `gaia/show/clock/`:
 | `command` | chiunque -> master | `{"action": "play"/"pause"/"toggle"/"stop"/"seek"/"go"/"back"/"cue", "value", "from"}` |
 | `ping` / `pong/<from>` | follower -> master -> follower | eco del ping, per la latenza |
 | `timeline` | TD DMX -> master, retained, a ogni cambio e ogni 10 s | `v, from, timeline, name, bpm, length, loop, active, track, cues[{time,label,scene,fade}]` (traccia principale) |
+| `report/<id>` | ogni follower -> Plancia, ogni 2 s (non retained) | salute: `id, name, kind, master, age_ms, rtt_ms, rtt_min_ms, jitter_ms, err_ms, err_max_ms, n, gap_max_ms, rate_hz` (`plancia/src/31-clock-health.js`; pannello ⏱ della Plancia). Lo mandano tablet e bridge; TD DMX e PatchDeck ancora no |
 
 `cmd` (solo dal motore) e' l'ultimo comando applicato: la riserva lo usa
 per la parte locale di GO/BACK/cue (richiamo della scena con la sua
@@ -78,6 +79,8 @@ default `127.0.0.1:11883` (`--clock-broker H:P`). `--clock-topic` cambia il
 prefisso dei topic, solo per le prove.
 
 ## Prossimi passi
+
+0. (fatto 26/11) Salute dell'orologio: rapporto `report/<id>` e pannello ⏱ nella Plancia; da fare il rapporto da TD (DMX, PatchDeck).
 
 1. Flusso UDP a 50 Hz sulla LAN per chi vuole precisione al millisecondo.
 2. Follower leggero per TD DMX su Pi.
