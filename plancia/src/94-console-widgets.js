@@ -82,12 +82,18 @@ function paintFixGrid(el,w,force){
         :'<p class="hint">Nessuna luce DMX nella patch: aggiungile dalla Pianta (pagina Palco).</p>'}</div>
       <div class="fg-foot">${!selF.length?'<p class="hint">Tocca una o più luci (o un gruppo + "Seleziona tutte"), poi una palette. Cambia solo il colore: livello, audio e strobo restano quelli del rig.</p>'
         :!chase.length?'<p class="hint">Hai selezionato solo teste mobili: il loro colore si sceglie dalla pagina Teste (programmatore).</p>'
-        :`<p class="hint"><b>${chase.length} luci</b>${heads?` (${heads} teste escluse: colore dalla pagina Teste)`:''} · palette: ${esc(common===null?'diverse':common||'segue il rig')}</p>${paletteChipsHtml(common??'__mixed__',`fgPal-${w.id}`)}
+        :`<p class="hint"><b>${chase.length} luci</b>${heads?` (${heads} teste escluse: colore dalla pagina Teste)`:''} · palette: ${esc(common===null?'diverse':common||'segue il rig')}</p>${paletteChipsHtml(common??'__mixed__',`fgPal-${w.id}`)}${fgSceneChipsHtml()}
         <p class="hint"><b>Audio</b> delle luci selezionate · modo: ${esc(aMode?AUDIO_MODE_IT[aMode]||aMode:'diversi')}</p>${audioControlsHtml(aMode,aGain,`fgAud-${w.id}`)}<p class="hint fg-msg"></p>`}</div>`;
   }
   // colori reali: aggiornati ad ogni giro, senza ricostruire le tessere
   box.querySelectorAll('[data-fg],[data-fg-first]').forEach(t=>{const f=all.find(x=>x.id===(t.dataset.fg||t.dataset.fgFirst));if(!f)return;const {c,k}=fgTileColor(f);const sw=t.querySelector('.fg-sw');
     if(sw._c!==c+k){sw._c=c+k;sw.style.background=c;sw.style.opacity=String(.35+.65*k)}});
+}
+// 26/11: "colore da una scena" per le luci selezionate: le scene del progetto che hanno colori
+function scenePaletteFor(sc,f){const pv=sc?.preview||{};return pv[f.group]?.palette||Object.values(pv).find(x=>x?.palette)?.palette||null}
+function fgSceneChipsHtml(){
+  const list=projScenes().filter(sc=>Object.values(sc.preview||{}).some(x=>x?.palette));
+  return list.length?`<p class="hint"><b>Colore di una scena</b> sulle luci selezionate (solo il colore: le altre luci restano come sono)</p><div class="pal-chips fg-scpal">${list.slice(0,24).map(sc=>`<button class="pal-chip" data-fg-scpal="${esc(sc.id)}">${esc(sc.label||sc.id)}</button>`).join('')}</div>`:'';
 }
 async function fixGridDown(e,el,w){
   const t=e.target,sel=fgSel(w),list=fgFixtures(w);
@@ -110,6 +116,16 @@ async function fixGridDown(e,el,w){
     e.preventDefault();const targets=(L.fixtures||[]).filter(f=>sel.has(f.id)&&fixtureHasPalette(f));
     try{const r=await setFixturesAudio(targets,{audio:aud.dataset.aud});showInfo(`Audio: ${AUDIO_MODE_IT[aud.dataset.aud]||aud.dataset.aud} su ${r.done} luci${r.notInTd?` · ${r.notInTd} non ancora su DMX Master`:''}.`)}
     catch(err){showError('Audio luci: '+err.message)}
+  }
+  else if(t.closest('[data-fg-scpal]')){
+    e.preventDefault();const sc=tdSceneById(t.closest('[data-fg-scpal]').dataset.fgScpal),targets=(L.fixtures||[]).filter(f=>sel.has(f.id)&&fixtureHasPalette(f));
+    if(!sc||!targets.length)return;
+    // il colore che la scena da' al gruppo di ogni luce; se la scena non tocca quel gruppo, il suo primo colore
+    const by=new Map();for(const f of targets){const p=scenePaletteFor(sc,f);if(p){if(!by.has(p))by.set(p,[]);by.get(p).push(f)}}
+    if(!by.size){showError(`"${sc.label||sc.id}" non ha colori da dare alle luci.`);return}
+    try{let n=0,out=0;for(const[p,fx]of by){const r=await setFixturesPalette(fx,p);n+=r.done;out+=r.notInTd.length}
+      showInfo(`Colori di "${sc.label||sc.id}" su ${n} luci (${[...by.keys()].join(', ')})${out?` · ${out} non ancora su DMX Master`:''}.`)}
+    catch(err){showError('Colore luci: '+err.message)}
   }
   else if(pal){
     e.preventDefault();const targets=(L.fixtures||[]).filter(f=>sel.has(f.id)&&fixtureHasPalette(f)),msg=el.querySelector('.fg-msg');

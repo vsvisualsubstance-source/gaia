@@ -80,12 +80,19 @@ function regiaFor(a){
   const fad=[['Master','/dmx/master',SWATCH[0]],...a.groups.slice(0,7).map((g,i)=>[g.label,'/dmx/group/'+g.group,SWATCH[(i+1)%SWATCH.length]])];
   // 8 colonne divise fra i fader: i primi prendono la colonna che avanza
   const base=Math.max(1,Math.floor(8/fad.length)),extra=Math.max(0,8-base*fad.length),fw=i=>base+(i<extra?1:0),fx=i=>Array.from({length:i},(_,k)=>fw(k)).reduce((s,v)=>s+v,0),heads=a.heads>0;
-  const ws=[W('cuestack',0,0,4,6,{label:'Scene GO',color:SWATCH[3]}),
+  // 26/11: con luci a colori la Regia ha il pannello Luci (colore e scena per singola luce) al posto
+  // del render (che resta nella pagina Palco); senza, come prima
+  const color=a.dmx.some(f=>f.type!=='mh');
+  const ws=color?[W('cuestack',0,0,3,6,{label:'Scene GO',color:SWATCH[3]}),
+    W('scenes',3,0,3,6,{label:'Scene a mano',addr:'/dmx/scene',items:'',cols:1,value:-1,color:SWATCH[0]}),
+    W('fixgrid',6,0,10,6,{label:'Luci · colore e scena per luce',color:SWATCH[2]}),
+    W('clock',8,6,4,heads?1:2,{label:'Show',mode:'show',color:SWATCH[0]}),W('clock',12,6,4,heads?1:2,{label:'Ora',mode:'tod',color:SWATCH[5]})]
+   :[W('cuestack',0,0,4,6,{label:'Scene GO',color:SWATCH[3]}),
     W('scenes',4,0,4,6,{label:'Scene a mano',addr:'/dmx/scene',items:'',cols:2,value:-1,color:SWATCH[0]}),
     W('stage',8,0,8,4,{label:'Palco',view:'render'}),
     W('clock',8,4,4,1,{label:'Show',mode:'show',color:SWATCH[0]}),W('clock',12,4,4,1,{label:'Ora',mode:'tod',color:SWATCH[5]}),
-    W('timeline',8,5,8,heads?2:3,{label:'Timeline show',addr:'/show',readonly:true,onlyTracks:['fx','laser'],duration:600,bpm:120,cues:'',color:SWATCH[0]}),
-    ...fad.map(([label,addr,color],i)=>W('fader',fx(i),6,fw(i),4,{label,addr,value:1,color}))];
+    W('timeline',8,5,8,heads?2:3,{label:'Timeline show',addr:'/show',readonly:true,onlyTracks:['fx','laser'],duration:600,bpm:120,cues:'',color:SWATCH[0]})];
+  ws.push(...fad.map(([label,addr,color],i)=>W('fader',fx(i),6,fw(i),4,{label,addr,value:1,color})));
   if(heads)ws.push(W('button',8,7,3,1,{label:'Teste: Home',addr:'/mh/home',color:SWATCH[2]}),W('button',11,7,3,1,{label:'Teste: strobo',addr:'/mh/strobe',mode:'toggle',color:SWATCH[5]}),W('button',14,7,2,1,{label:'Rilascia',addr:'/mh/release',color:SWATCH[1]}));
   ws.push(W('button',8,8,2,2,{label:'Blackout',addr:'/dmx/blackout',mode:'toggle',color:SWATCH[2]}),
     W('button',10,8,2,2,{label:'Flash strobo',addr:'/dmx/strobe',color:SWATCH[5]}),
