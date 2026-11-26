@@ -491,6 +491,8 @@ const audioAuto = require('./audio-auto').startAudioAuto({ engine: audioEngine, 
 // Analisi dei brani dalla Plancia (audio-analyze.js): gaia-audio analyze in un processo a parte
 const audioAnalyze = require('./audio-analyze').startAudioAnalyze({ broadcast, onDone: () => audioLib.library(true) });
 // Brani gia' suonati nella sessione (audio-played.js): segnati nella libreria della Console Audio
+// Salute dell'orologio dello show (clock-health.js): il bridge e' un follower, manda il suo rapporto
+const clockReport = require('./clock-health').startClockReport({ id: 'bridge-' + require('os').hostname().toLowerCase(), name: 'Bridge Plancia · ' + require('os').hostname() });
 const audioPlayed = require('./audio-played').startAudioPlayed({ engine: audioEngine, broadcast, file: path.join(path.dirname(STATE_FILE), 'audio-played.json') });
 // Controller DJ (Traktor Kontrol Z1) sulla Console Audio: comandi al motore, LED dallo stato
 const audioMidi = require('./audio-midi').startAudioMidi({ engine: audioEngine, timed: diag.timed, note: diag.note,

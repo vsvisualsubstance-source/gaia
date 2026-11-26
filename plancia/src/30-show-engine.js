@@ -460,13 +460,14 @@ function fireCue(w,i){
 }
 const SHOW_CLOCK_STATE='gaia/show/clock/state',SHOW_CLOCK_COMMAND='gaia/show/clock/command';
 const showClock={id:`plancia-${Math.random().toString(36).slice(2)}`,state:null,receivedAt:0,
-  osc:null,authority:false,hasMqtt:false,minRtt:null,rtts:[],pings:new Map(),pingSeq:0};
+  osc:null,authority:false,hasMqtt:false,minRtt:null,rtts:[],pings:new Map(),pingSeq:0,health:chMake()};
 // master: il TD DMX scelto, oppure un orologio con priorita' piu' alta (motore audio di OPS, prio 2,
 // docs/show-clock.md). "live" = almeno due seq dallo stesso master: solo allora, se tace, si continua a contare
 onMqtt(SHOW_CLOCK_STATE,(p,seg,obj)=>{
   if(obj&&p.v===1&&(p.master===dmxId()||+p.prio>1)&&Number.isFinite(+p.pos)&&typeof p.playing==='boolean'){
     const oldLength=showClock.state?.length,prev=showClock.state;
     const live=!!prev&&prev.master===p.master&&(!!prev.live||prev.seq!==p.seq);
+    chOnState(showClock.health,p,now());   // salute dell'orologio (31-clock-health.js)
     showClock.state={...p,pos:+p.pos,playing:p.playing,live};showClock.receivedAt=now();showClock.authority=true;showClock.hasMqtt=true;
     if(oldLength!==p.length)refreshShowTimelines();
   }
@@ -476,7 +477,7 @@ onMqtt('gaia/show/clock/pong/+',(p,seg,obj)=>{
   if(obj&&p.from===showClock.id){
     const sent=showClock.pings.get(+p.n);
     if(sent&&p.t0===sent.t0){const rtt=Math.max(0,now()-sent.at);showClock.pings.delete(+p.n);
-      showClock.rtts.push(rtt);if(showClock.rtts.length>10)showClock.rtts.shift();
+      showClock.rtts.push(rtt);if(showClock.rtts.length>10)showClock.rtts.shift();chOnRtt(showClock.health,rtt);
       showClock.minRtt=Math.min(...showClock.rtts)}
   }
 });

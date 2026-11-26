@@ -923,3 +923,8 @@ tr.au-played td{opacity:.55}.au-pl-tag{font-size:11px;padding:1px 6px;border-rad
 .sa-list{display:flex;flex-wrap:wrap;gap:6px 14px;list-style:none;padding:0;margin:4px 0}.sa-list b{color:var(--c,#ffb23e)}
 .sa-chips{display:flex;flex-wrap:wrap;gap:6px 14px;margin:4px 0}
 .sa-sheet h4{margin:12px 0 4px}.sa-sheet p{margin:4px 0}.sa-sheet .sa-list,.sa-sheet .sa-chips{margin:2px 0 6px}
+
+/* 26/11 salute dell'orologio */
+.pill.warn i{background:#ffb23e;box-shadow:0 0 8px #ffb23e}
+.ch-tab{width:100%;border-collapse:collapse;font-size:13px}.ch-tab th,.ch-tab td{padding:4px 6px;border-bottom:1px solid var(--line);text-align:left}.ch-tab td.num{text-align:right;font-variant-numeric:tabular-nums}
+.ch-ok{color:var(--ok)}.ch-warn{color:#ffb23e}.ch-bad{color:var(--bad)}.ch-tab tr.ch-me td{background:#ffffff08}

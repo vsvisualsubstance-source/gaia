@@ -11,6 +11,8 @@ const appModules = [
   '10-show-data.js',
   '20-layout-and-templates.js',
   '30-show-engine.js',
+  '31-clock-health.js',
+  '32-clock-panel.js',
   '40-widget-rendering.js',
   '41-widget-interactions.js',
   '42-control-widgets.js',

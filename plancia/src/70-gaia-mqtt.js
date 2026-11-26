@@ -153,6 +153,8 @@ setInterval(()=>{
   showClock.pings.set(seq,{at:t0,t0});
   for(const[k,v]of showClock.pings)if(t0-v.at>30000)showClock.pings.delete(k);
   G.client.publish('gaia/show/clock/ping',JSON.stringify(payload));
+  // rapporto sulla salute dell'orologio di questo tablet (pannello ⏱, 31-clock-health.js)
+  G.client.publish('gaia/show/clock/report/'+showClock.id,JSON.stringify({...chReport(showClock.health,now(),{id:showClock.id,name:chDeviceName(),kind:'tablet'}),ts:Date.now()}));
 },2000);
 // Node-RED: WebSocket /gaia (stesso flusso della dashboard) — fonte di riserva per mood e pensieri se gaia/td/canvas tace
 function nrConnect(){
