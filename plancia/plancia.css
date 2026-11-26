@@ -916,3 +916,10 @@ button{cursor:pointer}
 /* 23/11 Console Audio: brani gia' suonati nella sessione, rianalisi del brano */
 tr.au-played td{opacity:.55}.au-pl-tag{font-size:11px;padding:1px 6px;border-radius:9px;border:1px solid #4fd18b55;color:var(--ok);opacity:1}
 .au-rean{min-width:26px;padding:0 4px;font-size:13px;margin-left:4px}.au-played-btn.on{border-color:var(--ok);color:var(--ok)}
+
+/* 26/11 progetto guidato e analisi del palco */
+.wz-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px;margin:4px 0}
+.wz-row{display:flex;align-items:center;gap:8px;padding:4px 8px;border:1px solid var(--line);border-radius:7px}.wz-row span{flex:1}.wz-row b{min-width:2ch;text-align:center}
+.sa-list{display:flex;flex-wrap:wrap;gap:6px 14px;list-style:none;padding:0;margin:4px 0}.sa-list b{color:var(--c,#ffb23e)}
+.sa-chips{display:flex;flex-wrap:wrap;gap:6px 14px;margin:4px 0}
+.sa-sheet h4{margin:12px 0 4px}.sa-sheet p{margin:4px 0}.sa-sheet .sa-list,.sa-sheet .sa-chips{margin:2px 0 6px}

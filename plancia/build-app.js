@@ -52,6 +52,7 @@ const appModules = [
   '93-fixture-colors.js',
   '94-console-widgets.js',
   '95-help-tour.js',
+  '95-project-wizard.js',
   '96-audio-rigs.js',
   '96-rig-config.js',
   '96-channel-test.js',

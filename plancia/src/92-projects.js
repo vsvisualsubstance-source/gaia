@@ -64,6 +64,7 @@ function openProjects(){
         :`<p class="hint"><b>Nessun progetto aperto.</b> Stai lavorando sul layout autosalvato su OPS (${esc(projMeta(L))}). Dagli un nome per ritrovarlo.</p>`}
         <div class="row" id="prSaveAsRow"${cur?' hidden':''}><input id="prNewName" placeholder="Nome del progetto (es. BASE 31/10)" style="flex:1"><button class="btn primary" id="prSaveAs">Salva come nuovo progetto</button></div>
       </section>
+      <div class="row"><button class="btn primary" id="prWizard">✨ Nuovo progetto guidato</button><button class="btn" id="prAnalyze" title="Cosa c'è nel palco di questo progetto, pagine suggerite e Regia su misura">🔍 Analisi del palco</button></div>
       <h4>I tuoi progetti</h4>
       <div class="md-list">${list.length?list.map(p=>{const snap=store.get('plancia.project.'+p.id);return`<div class="md-row${p.id===L._projectId?' pr-on':''}">
         <b>${esc(p.name)}</b><span class="hint">${p.id===L._projectId?'<b>aperto</b> · ':''}${esc(projDate(p.updated))} · ${esc(projMeta(snap))}</span>
@@ -76,6 +77,7 @@ function openProjects(){
     </div>`;
     const q=sel=>s.querySelector(sel);
     q('#prClose').onclick=closeSheet;
+    q('#prWizard').onclick=openProjectWizard;q('#prAnalyze').onclick=openStageAnalysis;
     s.querySelectorAll('[data-ask]').forEach(b=>b.onclick=()=>{const a=ask;ask=null;a.buttons[+b.dataset.ask].run?.();paint()});
     if(q('#prSave'))q('#prSave').onclick=()=>{projUpdate(L._projectId);showInfo(`Progetto "${L._projectName}" salvato.`);paint();updateProjChip()};
     if(q('#prSaveAsShow'))q('#prSaveAsShow').onclick=()=>{q('#prSaveAsRow').hidden=false;q('#prNewName').focus()};
