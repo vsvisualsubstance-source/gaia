@@ -74,3 +74,27 @@ function migrateUiChannelTest(){
   if(!L.pages.some(p=>p.widgets.some(w=>w.type==='chtest'))){const at=L.pages.findIndex(p=>p.name==='Palco')+1||L.pages.length;L.pages.splice(at,0,TPL.chtest.pages()[0])}
   L.uiRev=18;save();
 }
+
+/* ---------- strobo comandata sui suoi canali (27/11/2026, show Lowtopic) ----------
+   DMX Master non ha un comando per il solo canale strobo di una luce (/dmx/strobe fa lampeggiare
+   tutte le luci): pulsante e fader con indirizzo /plancia/strobe/... mandano dmx_channel_test sui
+   canali della luce (dimmer pieno + frequenza sul canale "strobe" del modello). Indirizzi:
+     /plancia/strobe/go/<NOME LUCE>     pulsante: premuto = lampeggia, rilasciato = torna a DMX Master
+     /plancia/strobe/speed/<NOME LUCE>  fader: frequenza (0..1 -> 0..255 sul canale strobe)
+   Rilasciato si toglie il test: la luce torna a quello che dice DMX Master (fader Strobo, scene). */
+const STROBE_LOCAL={};
+function strobeLocal(w){
+  const [,,,kind,...rest]=String(w.addr).split('/'),name=decodeURIComponent(rest.join('/'));
+  const st=STROBE_LOCAL[name]||(STROBE_LOCAL[name]={speed:.5,on:false});
+  if(kind==='speed'){st.speed=Math.max(0,Math.min(1,+w.value||0));if(st.on)strobeLocalSend(name)}
+  else if(kind==='go'){st.on=(+w.value||0)>.5;strobeLocalSend(name)}
+}
+function strobeLocalSend(name){
+  const st=STROBE_LOCAL[name],f=(L.fixtures||[]).find(x=>x.name===name),t=f&&tdFixtureByUid(f.id);
+  if(!t){showError(`Strobo: "${name}" non è in DMX Master.`);return}
+  if(!st.on){devCmd(dmxId(),{action:'set',param:'dmx_channel_test',value:null});return}
+  const m=tdModels().find(x=>x.model===t.profile),ch=m?.channels||[],a=+t.address,values={};
+  ch.forEach((r,i)=>{values[a+i]=r==='dimmer'?255:r==='strobe'?Math.max(1,Math.round(st.speed*255)):0});
+  if(!ch.includes('strobe'))values[a]=255;
+  if(!devCmd(dmxId(),{action:'set',param:'dmx_channel_test',value:{port_id:t.port_id,values,ttl:600}}))showError('Strobo: non collegata a Gaia.');
+}

@@ -76,6 +76,7 @@ function argsOf(w){const t=widgetType(w.type);return t?.args?t.args(w):[out(w,w.
 const queue=new Map(); let raf=0;
 function send(w){if(!w.addr)return; queue.set(w.id,w); if(!raf) raf=requestAnimationFrame(flush)}
 function flush(){raf=0; for(const w of queue.values()){
+  if(String(w.addr).startsWith('/plancia/strobe/')){strobeLocal(w);continue}   // strobo comandata sui suoi canali (96-channel-test.js)
   const m={type:'osc',address:w.addr,args:argsOf(w),channel:w.oscChannel||'default'};
   emit(m); applyWidgets(m,w.id);
   if(w.midi&&w.midi.cc!==''&&w.midi.cc!=null) emit({type:'midi',ch:+w.midi.ch||1,cc:+w.midi.cc,value:Math.round((typeof w.value==='number'?w.value:0)*127)},true);
