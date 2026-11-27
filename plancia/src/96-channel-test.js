@@ -83,21 +83,29 @@ function migrateUiChannelTest(){
      /plancia/strobe/speed/<NOME LUCE>  fader: frequenza (0..1 -> 0..255 sul canale strobe)
    Rilasciato si toglie il test: la luce torna a quello che dice DMX Master (fader Strobo, scene). */
 const STROBE_LOCAL={};
-// TD ignora un valore uguale all'ultimo (il parametro non cambia): ogni pressione ha un ttl diverso
+// TD ignora un valore uguale all'ultimo (il parametro non cambia): ogni invio ha un ttl diverso
 let STROBE_N=0;
+// go = lampeggio alla velocita' del fader speed; flash = piena alla frequenza massima (tenuto);
+// level = fader d'intensita' (frequenza massima). Una COB "pura" si accende solo col canale strobo > 0.
 function strobeLocal(w){
   const [,,,kind,...rest]=String(w.addr).split('/'),name=decodeURIComponent(rest.join('/'));
-  const st=STROBE_LOCAL[name]||(STROBE_LOCAL[name]={speed:.5,on:false});
-  if(kind==='speed'){st.speed=Math.max(0,Math.min(1,+w.value||0));if(st.on)strobeLocalSend(name)}
-  else if(kind==='go'){st.on=(+w.value||0)>.5;strobeLocalSend(name)}
+  const st=STROBE_LOCAL[name]||(STROBE_LOCAL[name]={speed:.5,on:false,flash:false,level:0});
+  const v=Math.max(0,Math.min(1,+w.value||0));
+  if(kind==='speed'){st.speed=v;if(!st.on)return}
+  else if(kind==='go')st.on=v>.5;
+  else if(kind==='flash')st.flash=v>.5;
+  else if(kind==='level')st.level=v;
+  else return;
+  strobeLocalSend(name);
 }
 function strobeLocalSend(name){
   const st=STROBE_LOCAL[name],f=(L.fixtures||[]).find(x=>x.name===name),t=f&&tdFixtureByUid(f.id);
   if(!t){showError(`Strobo: "${name}" non è in DMX Master.`);return}
-  if(!st.on){devCmd(dmxId(),{action:'set',param:'dmx_channel_test',value:null});return}
+  const dim=st.on||st.flash?1:st.level,freq=st.on?st.speed:1;
+  if(dim<=0.004){devCmd(dmxId(),{action:'set',param:'dmx_channel_test',value:null});return}
   const m=tdModels().find(x=>x.model===t.profile),ch=m?.channels||[],a=+t.address,values={};
   // canale strobo: quello col ruolo "strobe" nel modello, se no il secondo (strobo a 5 canali: dimmer, strobo, ...)
   const si=ch.includes('strobe')?ch.indexOf('strobe'):1,di=ch.includes('dimmer')?ch.indexOf('dimmer'):0;
-  for(let i=0;i<Math.max(ch.length,2);i++)values[a+i]=i===di?255:i===si?Math.max(1,Math.round(st.speed*255)):0;
+  for(let i=0;i<Math.max(ch.length,2);i++)values[a+i]=i===di?Math.round(dim*255):i===si?Math.max(1,Math.round(freq*255)):0;
   if(!devCmd(dmxId(),{action:'set',param:'dmx_channel_test',value:{port_id:t.port_id,values,ttl:600+(STROBE_N++%60)}}))showError('Strobo: non collegata a Gaia.');
 }
