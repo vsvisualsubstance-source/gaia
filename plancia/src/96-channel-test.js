@@ -83,6 +83,8 @@ function migrateUiChannelTest(){
      /plancia/strobe/speed/<NOME LUCE>  fader: frequenza (0..1 -> 0..255 sul canale strobe)
    Rilasciato si toglie il test: la luce torna a quello che dice DMX Master (fader Strobo, scene). */
 const STROBE_LOCAL={};
+// TD ignora un valore uguale all'ultimo (il parametro non cambia): ogni pressione ha un ttl diverso
+let STROBE_N=0;
 function strobeLocal(w){
   const [,,,kind,...rest]=String(w.addr).split('/'),name=decodeURIComponent(rest.join('/'));
   const st=STROBE_LOCAL[name]||(STROBE_LOCAL[name]={speed:.5,on:false});
@@ -96,5 +98,5 @@ function strobeLocalSend(name){
   const m=tdModels().find(x=>x.model===t.profile),ch=m?.channels||[],a=+t.address,values={};
   ch.forEach((r,i)=>{values[a+i]=r==='dimmer'?255:r==='strobe'?Math.max(1,Math.round(st.speed*255)):0});
   if(!ch.includes('strobe'))values[a]=255;
-  if(!devCmd(dmxId(),{action:'set',param:'dmx_channel_test',value:{port_id:t.port_id,values,ttl:600}}))showError('Strobo: non collegata a Gaia.');
+  if(!devCmd(dmxId(),{action:'set',param:'dmx_channel_test',value:{port_id:t.port_id,values,ttl:600+(STROBE_N++%60)}}))showError('Strobo: non collegata a Gaia.');
 }
