@@ -143,6 +143,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
   <button class="btn tl" id="tl-stop" onclick="tlStop()" title="Pausa">■</button>
   <button class="btn tl" id="tl-edit" onclick="tlEdit()" title="Modifica la timeline scelta">✎</button>
   <button class="btn audio" id="audio-btn" onclick="toggleAudio()" title="Audio-reattività">🎤</button>
+  <button class="btn" id="pal-filter" onclick="togglePalFilter()" title="Colori: solo quelli della timeline scelta / tutti">🎨</button>
   <input type="range" id="brightness" min="0" max="100" value="100" oninput="onBrightness(this.value)">
   <button class="btn blackout" onclick="blackout()">⏻ OFF</button>
 </div>
@@ -266,6 +267,24 @@ function renderTimelines(presets) {
   });
 }
 
+// 27/11/2026: "solo i colori della timeline" (🎨): fra le palette si vedono solo quelle usate dalla
+// timeline caricata sulla luce (piu' il colore di adesso), cosi' non si sceglie per sbaglio un colore
+// di un altro show. Acceso di default; la scelta resta nel browser del Pi.
+let palOnly = true;
+try { palOnly = localStorage.getItem('dmx.palOnly') !== '0'; } catch (e) { /* niente */ }
+function togglePalFilter() {
+  palOnly = !palOnly;
+  try { localStorage.setItem('dmx.palOnly', palOnly ? '1' : '0'); } catch (e) { /* niente */ }
+  if (lastStatus) applyStatus(lastStatus);
+}
+function paletteFilter(names, presets) {
+  const tl = palOnly && lastTimelinePreset ? (presets || {})[lastTimelinePreset] : null;
+  if (!tl || !Array.isArray(tl.steps)) return names;
+  const used = new Set(tl.steps.map(s => s.palette).filter(Boolean));
+  if (lastPalette) used.add(lastPalette);
+  return names.filter(n => used.has(n));
+}
+
 function renderPalettes(names, rgbMap) {
   // Colore reale da status (palettes_rgb, 2026-10-05) se c'è -- cosi' una
   // palette personalizzata aggiunta dall'editor (web/dmx-editor.html) ha
@@ -296,7 +315,9 @@ function applyStatus(d) {
   lastTimelinePreset = fx.current_timeline_preset;
   lastAudioReactive = !!fx.audio_reactive;
   renderFixtures(fixtures);
-  renderPalettes(d.palettes || [], d.palettes_rgb);
+  renderPalettes(paletteFilter(d.palettes || [], d.timeline_presets), d.palettes_rgb);
+  const pf = document.getElementById('pal-filter');
+  if (pf) { pf.classList.toggle('active', palOnly); pf.title = palOnly ? `Colori: solo quelli della timeline${lastTimelinePreset ? ' "' + lastTimelinePreset + '"' : ''} (tocca per vederli tutti)` : 'Colori: tutti (tocca per vedere solo quelli della timeline)'; }
   renderTimelines(d.timeline_presets || {});
   const [r, g, b] = fx.output_rgb || [0, 0, 0];
   document.getElementById('swatch').style.background = `rgb(${r},${g},${b})`;
