@@ -96,7 +96,8 @@ function strobeLocalSend(name){
   if(!t){showError(`Strobo: "${name}" non è in DMX Master.`);return}
   if(!st.on){devCmd(dmxId(),{action:'set',param:'dmx_channel_test',value:null});return}
   const m=tdModels().find(x=>x.model===t.profile),ch=m?.channels||[],a=+t.address,values={};
-  ch.forEach((r,i)=>{values[a+i]=r==='dimmer'?255:r==='strobe'?Math.max(1,Math.round(st.speed*255)):0});
-  if(!ch.includes('strobe'))values[a]=255;
+  // canale strobo: quello col ruolo "strobe" nel modello, se no il secondo (strobo a 5 canali: dimmer, strobo, ...)
+  const si=ch.includes('strobe')?ch.indexOf('strobe'):1,di=ch.includes('dimmer')?ch.indexOf('dimmer'):0;
+  for(let i=0;i<Math.max(ch.length,2);i++)values[a+i]=i===di?255:i===si?Math.max(1,Math.round(st.speed*255)):0;
   if(!devCmd(dmxId(),{action:'set',param:'dmx_channel_test',value:{port_id:t.port_id,values,ttl:600+(STROBE_N++%60)}}))showError('Strobo: non collegata a Gaia.');
 }
